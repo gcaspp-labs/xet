@@ -25,6 +25,7 @@ Documentos do projeto:
 - Regras críticas exigem teste específico: assumir chamado com concorrência, apenas o responsável responde, um chamado aberto por contato e setor, idempotência de mensagens recebidas e enviadas, permissões por setor.
 - O WhatsApp é simulado por um adaptador falso que implementa o contrato de mensageria; o Whatsmeow real só é usado em testes manuais com número de teste.
 - Testes do backend rodam com `go test -race`.
+- Cada teste de integração obtém seu próprio banco com `testdb.New(t)` (clonado de um modelo já migrado), podendo rodar em paralelo sem compartilhar estado.
 
 ## Idempotência, concorrência e consistência (ACID)
 
@@ -49,7 +50,7 @@ Documentos do projeto:
 - Usar somente as bibliotecas listadas em `arquitetura.md`. Uma nova biblioteca exige justificativa registrada lá antes do uso.
 - As regras de negócio nunca importam o Whatsmeow diretamente; passam pela interface de mensageria.
 - Toda validação de permissão acontece no backend. A interface apenas reflete as regras.
-- SQL escrito em `backend/db/queries` e gerado com sqlc; mudanças de esquema somente por migração goose.
+- SQL escrito em `backend/db/queries` e gerado com `make sqlc` (o código gerado em `internal/db` não é editado à mão); mudanças de esquema somente por nova migração goose em `backend/db/migrations`, nunca alterando uma migração já mergeada.
 - Alterações relevantes de chamados (transferência, correção, horários, troca de empresa) sempre gravam auditoria.
 
 ## Commits
@@ -62,7 +63,8 @@ Documentos do projeto:
 
 Executados na raiz do repositório:
 
-- `make dev`: backend em `:8080` e frontend em `:5173`, com proxy de `/api` para o backend.
-- `make test`: testes de integração do backend (`go test -race`) e ponta a ponta (Playwright, em portas próprias 18080 e 15173).
+- `make dev`: banco de desenvolvimento em `:5433` (container `xet-dev-db`, dados persistidos), backend em `:8080` e frontend em `:5173`, com proxy de `/api` para o backend. `make dev-db-stop` para o banco.
+- `make sqlc`: gera o código Go das queries.
+- `make test`: testes de integração do backend (`go test -race`, PostgreSQL via testcontainers) e ponta a ponta (Playwright, em portas próprias 18080 e 15173, com banco próprio em `:15432` criado e removido a cada execução).
 - `make lint`: golangci-lint (via Docker) no backend; oxlint e Prettier no frontend.
 - `make up` / `make down` / `make logs`: sistema completo com Docker Compose; requer `deploy/.env` (copiar de `deploy/.env.example`).
