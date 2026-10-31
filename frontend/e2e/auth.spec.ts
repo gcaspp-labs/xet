@@ -23,10 +23,10 @@ test('campos vazios são validados antes do envio', async ({ page }) => {
 test('usuário entra, mantém a sessão ao recarregar e sai', async ({ page }) => {
   await login(page, admin.email, admin.password)
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByText(`Sessão iniciada como ${admin.name}.`)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
 
   await page.reload()
-  await expect(page.getByText(`Sessão iniciada como ${admin.name}.`)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Sair' }).click()
   await expect(page).toHaveURL(/\/login$/)

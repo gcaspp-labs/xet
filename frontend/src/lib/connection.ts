@@ -9,10 +9,10 @@ export type Connection = {
   pairing: boolean
 }
 
-const connectionKey = (sectorId: number) => ['sectors', sectorId, 'connection']
+export const connectionKey = (sectorId: number) => ['sectors', sectorId, 'connection']
 
-// Sem atualização automática até o WebSocket (T08): o estado é o do carregamento
-// da página, atualizado pelo botão da tela de conexão.
+// Atualizada pelos eventos do WebSocket; o botão da tela de conexão também
+// recarrega, para mostrar um QR code novo.
 export function useConnection(sectorId: number | undefined) {
   return useQuery({
     queryKey: connectionKey(sectorId ?? 0),
