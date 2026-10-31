@@ -8,6 +8,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 - Uma task só é considerada pronta quando todos os itens de "Pronto quando" estiverem atendidos, os testes passarem e a revisão for aprovada.
 - Status: `[ ]` pendente, `[~]` em andamento, `[x]` concluída.
 - Se durante uma task surgir uma decisão não prevista na spec, ela é registrada na spec antes de seguir.
+- O número identifica a task; a ordem de execução é a ordem desta lista. Tasks incluídas depois recebem o próximo número livre e entram na posição em que devem ser feitas.
 
 ## Fase 1 — Fundação
 
@@ -39,6 +40,14 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 - Tela de login no frontend, seguindo o `design.md`.
 
 **Pronto quando:** usuário loga e desloga; rotas protegidas recusam acesso sem sessão ou sem permissão no setor; testes cobrem as regras de permissão; a tela de login usa os tokens, fontes e logo do design system nos temas claro e escuro.
+
+### [x] T18 — Integração contínua
+
+- GitHub Actions a cada PR e a cada push na `main`, chamando os mesmos alvos do `Makefile` usados localmente.
+- Jobs em paralelo: lint, testes de integração do backend, testes ponta a ponta e conferência do código gerado (sqlc e `go mod tidy`).
+- Relatório do Playwright guardado como artefato quando os testes ponta a ponta falham.
+
+**Pronto quando:** o workflow roda no PR e todos os jobs passam; uma alteração não gerada pelo sqlc ou um `go.mod` desarrumado fazem o job de código gerado falhar.
 
 ### [ ] T04 — Administração
 
@@ -165,3 +174,14 @@ Ajustes para fazer antes de escalar para outros setores, levantados durante o pi
 - Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
 
 **Pronto quando:** login bloqueia após o limite de tentativas; senha comum é recusada; sessões expiradas são removidas sem depender de novo login; usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
+
+## Configurações pendentes
+
+Ajustes fora do código, feitos no GitHub por quem administra o repositório.
+
+### [ ] T19 — Proteção da branch main
+
+- Exigir PR para alterar a `main` (sem push direto).
+- Exigir os checks do CI (T18) verdes e a branch atualizada antes do merge.
+
+**Pronto quando:** um PR com check falhando não pode ser mergeado e push direto na `main` é recusado.
