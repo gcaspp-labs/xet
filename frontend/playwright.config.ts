@@ -20,7 +20,7 @@ export default defineConfig({
       command: 'go run ./cmd/server',
       cwd: '../backend',
       url: `http://localhost:${backendPort}/health`,
-      env: { HTTP_ADDR: `:${backendPort}` },
+      env: { HTTP_ADDR: `:${backendPort}`, DATABASE_URL: process.env.DATABASE_URL ?? '' },
     },
     {
       command: `npm run dev -- --port ${frontendPort} --strictPort`,

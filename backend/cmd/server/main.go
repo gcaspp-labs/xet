@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/gcaspp-labs/xet/backend/db/migrations"
 	"github.com/gcaspp-labs/xet/backend/internal/config"
 	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
 )
@@ -32,6 +37,23 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect database: %w", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	err = migrations.Up(ctx, sqlDB)
+	_ = sqlDB.Close()
+	if err != nil {
+		return err
+	}
+	logger.Info("database migrated")
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

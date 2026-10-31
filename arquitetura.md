@@ -89,13 +89,14 @@ O backend usa a biblioteca padrão do Go sempre que ela resolve bem; dependênci
 
 | Uso | Biblioteca |
 | --- | --- |
-| Linguagem | Go 1.23+ |
+| Linguagem | Go 1.26+ |
 | Roteador HTTP | `github.com/go-chi/chi/v5` |
 | Validação de entrada | `github.com/go-playground/validator/v10` |
 | PostgreSQL | `github.com/jackc/pgx/v5` |
 | WhatsApp | `go.mau.fi/whatsmeow` (sessões no PostgreSQL via `sqlstore`) |
 | WebSocket | `github.com/coder/websocket` |
 | Hash de senha | bcrypt de `golang.org/x/crypto` |
+| Migrações | `github.com/pressly/goose/v3`, como biblioteca: as migrações ficam embutidas no binário e são aplicadas ao iniciar o servidor e na preparação dos testes |
 | Testes de integração | `github.com/testcontainers/testcontainers-go` (PostgreSQL real) |
 | Conversão de áudio | `ffmpeg` (binário no container, chamado via `os/exec`) |
 
@@ -107,7 +108,7 @@ Resolvido com a biblioteca padrão ou com o banco, sem dependência:
 - Identificadores: gerados pelo PostgreSQL.
 - Testes: pacote `testing`.
 
-Ferramentas de desenvolvimento (não entram no binário): `sqlc` (queries tipadas), `goose` (migrações), `golangci-lint` (executado via Docker, versão fixada no `Makefile`).
+Ferramentas de desenvolvimento (não entram no binário, executadas via Docker com versão fixada no `Makefile`): `sqlc` (queries tipadas, `make sqlc`) e `golangci-lint`.
 
 ### Frontend (React)
 
@@ -138,7 +139,9 @@ O oxlint substitui o ESLint: é o padrão do template atual do Vite e o projeto 
 backend/            Serviço Go
   cmd/server/       Ponto de entrada
   internal/         Domínio, HTTP, mensageria, armazenamento
-  db/migrations/    Migrações (goose)
+  internal/db/      Código gerado pelo sqlc (não editar)
+  internal/testdb/  Bancos isolados para testes de integração
+  db/migrations/    Migrações (goose), embutidas no binário
   db/queries/       SQL para o sqlc
 frontend/           Aplicação React
 deploy/             Docker Compose, Caddyfile

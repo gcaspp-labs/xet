@@ -1,19 +1,26 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 )
 
 type Config struct {
-	HTTPAddr string
-	LogLevel slog.Level
+	HTTPAddr    string
+	DatabaseURL string
+	LogLevel    slog.Level
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr: getEnv("HTTP_ADDR", ":8080"),
+		HTTPAddr:    getEnv("HTTP_ADDR", ":8080"),
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+	}
+
+	if cfg.DatabaseURL == "" {
+		return Config{}, errors.New("DATABASE_URL is required")
 	}
 
 	if err := cfg.LogLevel.UnmarshalText([]byte(getEnv("LOG_LEVEL", "info"))); err != nil {

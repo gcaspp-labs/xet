@@ -21,7 +21,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** `docker compose up` sobe o sistema, `/health` responde e o frontend abre pelo Caddy; lint e testes rodam sem erro.
 
-### [ ] T02 — Banco de dados base
+### [x] T02 — Banco de dados base
 
 - goose e sqlc configurados.
 - Migrações iniciais conforme `modelo-dados.md`: setores, módulos, usuários e sessões.
