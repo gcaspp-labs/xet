@@ -14,6 +14,7 @@ Regra geral: o shadcn/ui fornece o comportamento e a acessibilidade dos componen
 
 - `tokens/tokens.css` é importado no `src/index.css` antes do Tailwind. Ele define as variáveis (`--ink`, `--paper`, `--accent`…) para o tema claro, o escuro pelo sistema operacional e os temas forçados por `data-theme`.
 - As variáveis do shadcn são mapeadas uma única vez para os tokens, sem bloco `.dark` próprio: como os tokens já mudam com o tema, o shadcn acompanha automaticamente.
+- O mapeamento é feito direto nas cores do Tailwind (`--color-*` em `@theme inline`), sem as variáveis intermediárias do shadcn: a variável `--accent` do shadcn colide com o token `--accent` do design system.
 - A variante `dark:` do Tailwind segue a mesma regra do design system: `data-theme="dark"`, ou tema escuro do sistema operacional sem `data-theme="light"`.
 - Tema claro é o padrão; o escuro segue o sistema operacional. Não há seletor de tema no piloto.
 
@@ -43,7 +44,7 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 ## Tipografia
 
 - Família IBM Plex, servida localmente pelo pacote Fontsource (`@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-serif`, `@fontsource/ibm-plex-mono`), sem depender do Google Fonts em tempo de execução. Substitui a fonte Geist instalada pelo shadcn.
-- Os estilos de texto do design system (`title-page`, `title-panel`, `body`, `label`, `caption`, `overline`, `table-head`, `kpi-value`, `mono-num`…) viram utilitários do Tailwind com os mesmos nomes, gerados a partir das classes `.t-*` do `tokens.css`.
+- Os estilos de texto do design system (`title-page`, `title-panel`, `body`, `label`, `caption`, `overline`, `table-head`, `kpi-value`, `mono-num`…) viram utilitários do Tailwind com os mesmos nomes, gerados a partir das classes `.t-*` do `tokens.css`. Os valores são copiados para `src/index.css` (`@utility`); ao atualizar o design system, conferir se mudaram.
 - `sans` para interface (corpo 14px), `serif` peso 600 para títulos, `mono` tabular para números, protocolos (`2026-000123`) e telefones.
 
 ## Componentes
@@ -77,7 +78,7 @@ Componentes sem equivalente no design system (ex.: balões de conversa, player d
 ## Marca e layout
 
 - Barra lateral: `glab-simbolo-escuro.svg` a 32px + "GCASPP LAB" e, abaixo, o nome do produto **"Central de Atendimento"**. "g-lab" só no rodapé.
-- Favicon: símbolo do polvo (`glab-simbolo.svg`).
+- Favicon: símbolo do polvo (`glab-simbolo.svg`), copiado para `frontend/public/favicon.svg`.
 - Tela de login: fundo `paper`, Panel central com a assinatura `gcaspp-lab-horizontal.svg`, sem barra lateral.
 - Aplicação: barra lateral fixa (`sidebar-width`), Topbar fixa, conteúdo com padding `space-30` no desktop e `space-16` no celular, largura máxima `content-max` (exceto a tela de conversas, que usa a largura toda).
 - Foco de teclado: outline sólido de 2px em `focus`, afastado 2px. Transições de 150–200ms, desligadas com `prefers-reduced-motion`.
