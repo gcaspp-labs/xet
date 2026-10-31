@@ -6,10 +6,12 @@ import {
   House,
   Landmark,
   LogOut,
+  QrCode,
   Users,
   type LucideIcon,
 } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { DisconnectionNote } from '@/components/DisconnectionNote'
 import {
   Sidebar,
   SidebarContent,
@@ -43,6 +45,7 @@ const directoryItems: NavItem[] = [
 // A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
 const adminItems: NavItem[] = [
   { to: '/modulos', label: 'Módulos', icon: Boxes, roles: ['supervisor', 'admin'] },
+  { to: '/conexao', label: 'Conexão', icon: QrCode, roles: ['supervisor', 'admin'] },
   { to: '/admin/setores', label: 'Setores', icon: Building2, roles: ['admin'] },
   { to: '/admin/usuarios', label: 'Usuários', icon: Users, roles: ['admin'] },
 ]
@@ -129,6 +132,7 @@ export default function AppLayout() {
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
+        <DisconnectionNote />
         <Outlet />
       </SidebarInset>
     </SidebarProvider>

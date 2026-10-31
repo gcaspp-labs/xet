@@ -100,7 +100,7 @@ func (s *Service) Create(ctx context.Context, actorID int64, in SectorInput) (db
 		changes.Set("name", nil, sector.Name)
 		changes.Set("phone", nil, sector.Phone)
 		changes.Set("provider", nil, sector.Provider)
-		return record(ctx, q, "sector", sector.ID, "sector_created", actorID, changes)
+		return record(ctx, q, "sector", sector.ID, "sector_created", &actorID, changes)
 	})
 	if err != nil {
 		return db.Sector{}, err
@@ -137,7 +137,7 @@ func (s *Service) Update(ctx context.Context, actorID, id int64, in SectorInput)
 		if err != nil {
 			return sectorError("update sector", err)
 		}
-		return record(ctx, q, "sector", id, "sector_updated", actorID, changes)
+		return record(ctx, q, "sector", id, "sector_updated", &actorID, changes)
 	})
 	if err != nil {
 		return db.Sector{}, err
@@ -178,7 +178,7 @@ func (s *Service) CreateModule(ctx context.Context, actorID, sectorID int64, nam
 		changes := audit.Changes{}
 		changes.Set("sector_id", nil, module.SectorID)
 		changes.Set("name", nil, module.Name)
-		return record(ctx, q, "module", module.ID, "module_created", actorID, changes)
+		return record(ctx, q, "module", module.ID, "module_created", &actorID, changes)
 	})
 	if err != nil {
 		return db.Module{}, err
@@ -215,7 +215,7 @@ func (s *Service) UpdateModule(ctx context.Context, actorID, sectorID, id int64,
 		if err != nil {
 			return moduleError("update module", err)
 		}
-		return record(ctx, q, "module", id, "module_updated", actorID, changes)
+		return record(ctx, q, "module", id, "module_updated", &actorID, changes)
 	})
 	if err != nil {
 		return db.Module{}, err
@@ -223,7 +223,8 @@ func (s *Service) UpdateModule(ctx context.Context, actorID, sectorID, id int64,
 	return module, nil
 }
 
-func record(ctx context.Context, q *db.Queries, entityType string, entityID int64, action string, actorID int64, changes audit.Changes) error {
+// record writes an audit log; a nil actor marks an action of the system.
+func record(ctx context.Context, q *db.Queries, entityType string, entityID int64, action string, actorID *int64, changes audit.Changes) error {
 	raw, err := changes.JSON()
 	if err != nil {
 		return err
@@ -232,7 +233,7 @@ func record(ctx context.Context, q *db.Queries, entityType string, entityID int6
 		EntityType: entityType,
 		EntityID:   entityID,
 		Action:     action,
-		ActorID:    &actorID,
+		ActorID:    actorID,
 		Changes:    raw,
 	}); err != nil {
 		return fmt.Errorf("audit: %w", err)

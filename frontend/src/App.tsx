@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
 import UsersPage from '@/pages/admin/UsersPage'
+import ConnectionPage from '@/pages/connection/ConnectionPage'
 import ContactsPage from '@/pages/directory/ContactsPage'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
 
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>
             <Route path="/modulos" element={<ModulesPage />} />
+            <Route path="/conexao" element={<ConnectionPage />} />
           </Route>
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/setores" element={<SectorsPage />} />

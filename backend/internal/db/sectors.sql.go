@@ -122,6 +122,43 @@ func (q *Queries) ListSectors(ctx context.Context) ([]Sector, error) {
 	return items, nil
 }
 
+const listSectorsToReconnect = `-- name: ListSectorsToReconnect :many
+select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at from sectors
+where active and provider = $1 and external_account_id is not null
+order by id
+`
+
+func (q *Queries) ListSectorsToReconnect(ctx context.Context, provider string) ([]Sector, error) {
+	rows, err := q.db.Query(ctx, listSectorsToReconnect, provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Sector
+	for rows.Next() {
+		var i Sector
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Phone,
+			&i.Provider,
+			&i.ExternalAccountID,
+			&i.ConnectionStatus,
+			&i.LastConnectedAt,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateSector = `-- name: UpdateSector :one
 update sectors
 set name = $1, phone = $2
@@ -137,6 +174,39 @@ type UpdateSectorParams struct {
 
 func (q *Queries) UpdateSector(ctx context.Context, arg UpdateSectorParams) (Sector, error) {
 	row := q.db.QueryRow(ctx, updateSector, arg.Name, arg.Phone, arg.ID)
+	var i Sector
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.Provider,
+		&i.ExternalAccountID,
+		&i.ConnectionStatus,
+		&i.LastConnectedAt,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateSectorConnection = `-- name: UpdateSectorConnection :one
+update sectors
+set connection_status = $1,
+    external_account_id = $2,
+    last_connected_at = case when $1 = 'connected'::connection_status then now() else last_connected_at end
+where id = $3
+returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at
+`
+
+type UpdateSectorConnectionParams struct {
+	ConnectionStatus  ConnectionStatus
+	ExternalAccountID *string
+	ID                int64
+}
+
+func (q *Queries) UpdateSectorConnection(ctx context.Context, arg UpdateSectorConnectionParams) (Sector, error) {
+	row := q.db.QueryRow(ctx, updateSectorConnection, arg.ConnectionStatus, arg.ExternalAccountID, arg.ID)
 	var i Sector
 	err := row.Scan(
 		&i.ID,

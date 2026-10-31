@@ -13,6 +13,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 )
 
@@ -20,6 +21,11 @@ type Options struct {
 	// SecureCookie sets the Secure flag on the session cookie. Disabled only
 	// in development over plain HTTP.
 	SecureCookie bool
+	// Messaging is the provider of the sector numbers.
+	Messaging messaging.Provider
+	// TestRoutes, when set, is mounted at /api/test. Only the fake messaging
+	// provider sets it, for the end-to-end tests.
+	TestRoutes http.Handler
 }
 
 type server struct {
@@ -49,6 +55,9 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 	r.Get("/health", health)
 
 	r.Route("/api", func(r chi.Router) {
+		if opts.TestRoutes != nil {
+			r.Mount("/test", opts.TestRoutes)
+		}
 		r.Post("/auth/login", s.login)
 		r.Post("/auth/logout", s.logout)
 
@@ -76,6 +85,14 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 				r.Get("/", s.listModules)
 				r.Post("/", s.createModule)
 				r.Put("/{moduleID}", s.updateModule)
+			})
+
+			// Conexão do número: supervisor do próprio setor e administrador.
+			r.Route("/sectors/{sectorID}/connection", func(r chi.Router) {
+				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin), requireSector("sectorID"))
+				r.Get("/", s.getConnection)
+				r.Post("/", s.connect)
+				r.Get("/qr.png", s.connectionQR)
 			})
 
 			// Órgãos: todos consultam; supervisor e administrador cadastram e editam.

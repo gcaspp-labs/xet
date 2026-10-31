@@ -35,6 +35,18 @@ O pacote `internal/messaging` define a interface e os tipos neutros; cada proved
 - **Conexão:** iniciar, encerrar e consultar status por setor. O pareamento por QR code é específico do Whatsmeow e fica fora do contrato comum, exposto apenas pelo adaptador Whatsmeow.
 - **Contato:** resolver telefone em identificador externo do contato.
 
+### Conexão do número
+
+- Ao iniciar, o serviço reconecta cada setor ativo que tem conta vinculada (`external_account_id`); as chaves ficam nas tabelas do `sqlstore` do Whatsmeow.
+- Conectar um setor sem conta vinculada inicia o pareamento: a API devolve o QR code como imagem PNG, gerada no backend, e a tela mostra a imagem. O código do QR muda a cada 20 segundos (o primeiro dura 60); depois de cerca de 2 minutos sem leitura, o pareamento expira e o setor volta a desconectado.
+- O adaptador traduz os estados de conexão em eventos `ConnectionChanged`; o domínio grava o estado no setor. Desvinculado pelo celular (`logged_out`), o setor perde a conta vinculada e só volta por novo QR code.
+- Até o WebSocket (T08), a tela de conexão e o alerta de desconexão mostram o estado do momento em que a página foi carregada; a tela de conexão tem um botão para atualizar.
+
+### Adaptador falso
+
+- `internal/messaging/fake` implementa o contrato para os testes de integração do backend.
+- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura do QR code e a desconexão do número. O padrão é `whatsmeow`, e em produção essas rotas não existem.
+
 ### Regras
 
 - Nada fora de `internal/messaging/<provedor>` importa bibliotecas do provedor.
@@ -104,6 +116,7 @@ O backend usa a biblioteca padrão do Go sempre que ela resolve bem; dependênci
 | Validação de entrada | `github.com/go-playground/validator/v10` |
 | PostgreSQL | `github.com/jackc/pgx/v5` |
 | WhatsApp | `go.mau.fi/whatsmeow` (sessões no PostgreSQL via `sqlstore`) |
+| QR code | `github.com/skip2/go-qrcode`: gera no backend a imagem PNG do QR code de pareamento do Whatsmeow. Gerar a imagem no servidor evita uma biblioteca de QR no frontend; a tela só exibe a imagem |
 | WebSocket | `github.com/coder/websocket` |
 | Hash de senha | bcrypt de `golang.org/x/crypto` |
 | Migrações | `github.com/pressly/goose/v3`, como biblioteca: as migrações ficam embutidas no binário e são aplicadas ao iniciar o servidor e na preparação dos testes |

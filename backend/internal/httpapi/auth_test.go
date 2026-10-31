@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,8 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
 )
@@ -25,19 +28,35 @@ import (
 const testPassword = "Senha@123"
 
 type testEnv struct {
-	t    *testing.T
-	pool *pgxpool.Pool
-	q    *db.Queries
-	url  string
+	t       *testing.T
+	pool    *pgxpool.Pool
+	q       *db.Queries
+	url     string
+	sectors *sector.Service
+	// whatsapp simulates the phones of the sector numbers.
+	whatsapp *fake.Adapter
 }
 
 // newTestEnv starts the API on a fresh database. extra registers routes used
 // only by the test, behind the same session middleware as the real ones.
 func newTestEnv(t *testing.T, extra func(s *server, r chi.Router)) *testEnv {
 	t.Helper()
-	pool := testdb.New(t)
+	return startServer(t, testdb.New(t), extra)
+}
+
+// startServer starts the API on the database; a second call on the same
+// database simulates a restart of the service.
+func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.Router)) *testEnv {
+	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	handler := NewRouter(logger, auth.NewService(pool), sector.NewService(pool), directory.NewService(pool), Options{SecureCookie: true})
+	sectors := sector.NewService(pool)
+	whatsapp := fake.New(func(ctx context.Context, ev messaging.Event) error {
+		if ev, ok := ev.(messaging.ConnectionChanged); ok {
+			return sectors.HandleConnection(ctx, ev)
+		}
+		return nil
+	})
+	handler := NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), Options{SecureCookie: true, Messaging: whatsapp})
 	if extra != nil {
 		s := &server{logger: logger, auth: auth.NewService(pool), opts: Options{SecureCookie: true}}
 		r := chi.NewRouter()
@@ -47,7 +66,7 @@ func newTestEnv(t *testing.T, extra func(s *server, r chi.Router)) *testEnv {
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testEnv{t: t, pool: pool, q: db.New(pool), url: srv.URL}
+	return &testEnv{t: t, pool: pool, q: db.New(pool), url: srv.URL, sectors: sectors, whatsapp: whatsapp}
 }
 
 func (e *testEnv) sector(name, phone string) db.Sector {
