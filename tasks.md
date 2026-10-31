@@ -35,9 +35,10 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 - Papéis: atendente e supervisor do próprio setor, administrador global; middleware de autorização por setor conforme a tabela de permissões de `modelo-dados.md`.
 - Redefinição de senha por administrador e supervisor.
 - Comando para criar o primeiro administrador.
-- Tela de login no frontend.
+- Aplicar o design system conforme `design.md`: dependência fixada, tokens mapeados para o shadcn, tema claro/escuro, fontes IBM Plex, favicon e logos.
+- Tela de login no frontend, seguindo o `design.md`.
 
-**Pronto quando:** usuário loga e desloga; rotas protegidas recusam acesso sem sessão ou sem permissão no setor; testes cobrem as regras de permissão.
+**Pronto quando:** usuário loga e desloga; rotas protegidas recusam acesso sem sessão ou sem permissão no setor; testes cobrem as regras de permissão; a tela de login usa os tokens, fontes e logo do design system nos temas claro e escuro.
 
 ### [ ] T04 — Administração
 
