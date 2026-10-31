@@ -1,0 +1,153 @@
+# Tasks — Piloto (Contabilidade)
+
+Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](spec.md), as decisões técnicas em [arquitetura.md](arquitetura.md), o modelo de dados em [modelo-dados.md](modelo-dados.md) e as regras de implementação em [CLAUDE.md](CLAUDE.md).
+
+## Como usar
+
+- As tasks são executadas uma por vez, na ordem, cada uma em sua própria branch (`task/NN-nome-curto`).
+- Uma task só é considerada pronta quando todos os itens de "Pronto quando" estiverem atendidos, os testes passarem e a revisão for aprovada.
+- Status: `[ ]` pendente, `[~]` em andamento, `[x]` concluída.
+- Se durante uma task surgir uma decisão não prevista na spec, ela é registrada na spec antes de seguir.
+
+## Fase 1 — Fundação
+
+### [ ] T01 — Estrutura do repositório
+
+- Criar repositório git, estrutura `backend/`, `frontend/` e `deploy/`.
+- Backend Go com chi, configuração por variáveis de ambiente, logs com slog e rota `/health`.
+- Frontend Vite + React + TypeScript + Tailwind + shadcn/ui.
+- Docker Compose com backend, PostgreSQL e Caddy servindo o frontend.
+- Lint e testes configurados nos dois lados; `Makefile` com comandos `dev`, `test`, `lint`.
+
+**Pronto quando:** `docker compose up` sobe o sistema, `/health` responde e o frontend abre pelo Caddy; lint e testes rodam sem erro.
+
+### [ ] T02 — Banco de dados base
+
+- goose e sqlc configurados.
+- Migrações iniciais conforme `modelo-dados.md`: setores, módulos, usuários e sessões.
+- Base de testes de integração com testcontainers.
+
+**Pronto quando:** migrações sobem e descem sem erro; um teste de integração grava e lê um setor.
+
+### [ ] T03 — Autenticação e papéis
+
+- Login com e-mail e senha (bcrypt), sessão em tabela no PostgreSQL com cookie seguro.
+- Papéis: atendente e supervisor do próprio setor, administrador global; middleware de autorização por setor conforme a tabela de permissões de `modelo-dados.md`.
+- Redefinição de senha por administrador e supervisor.
+- Comando para criar o primeiro administrador.
+- Tela de login no frontend.
+
+**Pronto quando:** usuário loga e desloga; rotas protegidas recusam acesso sem sessão ou sem permissão no setor; testes cobrem as regras de permissão.
+
+### [ ] T04 — Administração
+
+- Cadastro de setores (nome e número) e usuários (setor e papel).
+- Supervisor gerencia módulos do próprio setor.
+- Telas de administração.
+
+**Pronto quando:** administrador cadastra a Contabilidade e seus usuários; supervisor cadastra módulos; atendente não acessa a administração.
+
+### [ ] T05 — Órgãos e contatos
+
+- Cadastro de órgãos por supervisores e administradores (nome, CNPJ opcional com validação).
+- Cadastro de contatos (nome, telefone único) vinculados a um órgão pré-cadastrado.
+- Busca por nome, telefone e CNPJ.
+
+**Pronto quando:** cadastro e busca funcionam pelas três chaves; telefone duplicado é recusado; testes cobrem validação de CNPJ e busca.
+
+## Fase 2 — Conexão e recebimento
+
+### [ ] T06 — Camada de mensageria e Whatsmeow
+
+- Contrato de mensageria com tipos neutros conforme `arquitetura.md` e adaptador falso para testes.
+- Adaptador Whatsmeow em `internal/messaging/whatsmeow`, uma sessão por setor, sessões salvas no PostgreSQL.
+- Tela de conexão com QR code; status da conexão e alerta de desconexão no painel dos supervisores.
+- Reconexão automática ao reiniciar o serviço.
+
+**Pronto quando:** o número de teste conecta por QR code, sobrevive a reinício do serviço e a desconexão aparece no painel.
+
+### [ ] T07 — Recebimento de mensagens e chamados
+
+- Mensagem recebida cria chamado na fila do setor (com protocolo ano + sequência) ou entra no chamado aberto do contato.
+- Índice único: um chamado aberto por contato e setor.
+- Idempotência pelo `external_message_id`.
+- Números desconhecidos entram na fila; grupos ignorados.
+- Mensagens enviadas pelo celular registradas como "fora do sistema"; sem chamado aberto, criam chamado na fila.
+- Mídia baixada e salva na chegada; tipos não suportados registrados como aviso.
+
+**Pronto quando:** mensagens de texto e arquivo chegam e ficam gravadas; mensagem repetida não duplica; mensagem de grupo não gera chamado; testes cobrem cada regra.
+
+### [ ] T08 — Painel em tempo real e assumir chamado
+
+- WebSocket com eventos filtrados pelos setores do usuário.
+- Fila do setor, chamados por responsável e contagem de chamados ativos por atendente.
+- Assumir chamado com atualização condicional.
+
+**Pronto quando:** nova mensagem aparece no painel sem recarregar; teste de concorrência prova que apenas um atendente assume; usuário de outro setor não recebe eventos.
+
+## Fase 3 — Atendimento
+
+### [ ] T09 — Conversa
+
+- Enviar texto e arquivos; apenas o responsável responde (validado no backend); envio idempotente por `client_request_id`.
+- Status de entrega das mensagens.
+- Notas internas e campo "falou com".
+- Histórico por órgão e contato.
+
+**Pronto quando:** responsável conversa com o cliente pelo painel; outro atendente é bloqueado no backend mesmo chamando a API diretamente.
+
+### [ ] T10 — Áudio, imagens e vídeos
+
+- Player de áudio no painel.
+- Gravação de áudio no navegador, conversão com ffmpeg e envio como mensagem de voz.
+- Pré-visualização de imagens e vídeos.
+
+**Pronto quando:** áudio gravado chega ao celular como mensagem de voz; áudios, imagens e vídeos recebidos são exibidos no painel.
+
+### [ ] T11 — Iniciar conversa
+
+- Buscar contato e iniciar conversa pelo número do setor, criando chamado atribuído ao atendente.
+- Se já houver chamado aberto, direcionar para ele sem dar permissão de resposta.
+
+**Pronto quando:** os dois caminhos funcionam e têm teste.
+
+### [ ] T12 — Transferência entre atendentes
+
+- Transferir responsabilidade preservando histórico; registrar na auditoria.
+
+**Pronto quando:** novo responsável responde, o anterior não; a transferência aparece no histórico.
+
+### [ ] T13 — Encerramento
+
+- Formulário com assunto, resolução e módulos obrigatórios; cliente, atendente e setor automáticos; início e fim editáveis.
+- Troca de órgão no encerramento, apenas para o chamado.
+- Exigir vínculo cadastral para número desconhecido.
+- Alterações de horário registradas na auditoria.
+- Mensagem após o encerramento cria novo chamado.
+
+**Pronto quando:** chamado só encerra com os dados completos; testes cobrem obrigatoriedade, vínculo e novo chamado após encerramento.
+
+### [ ] T14 — Correções com auditoria
+
+- Corrigir atendimento encerrado com motivo, restrito a quem encerrou e aos supervisores.
+- Auditoria com autor, data, motivo e valores anteriores e novos.
+
+**Pronto quando:** correção sem motivo é recusada; atendente que não encerrou é bloqueado; a auditoria mostra a alteração.
+
+### [ ] T15 — Transferência entre setores
+
+- Preencher o formulário de encerramento completo na origem, encerrar a etapa e criar chamado vinculado na fila do destino.
+- Destino vê o histórico relacionado e envia a primeira mensagem (texto livre) ao assumir.
+
+**Pronto quando:** cenário validado com um segundo número de teste.
+
+## Fase 4 — Validação do piloto
+
+### [ ] T16 — Implantação e validação
+
+- Implantação no servidor da empresa com Docker Compose e HTTPS.
+- Percorrer todos os critérios de validação da spec com o número real da Contabilidade.
+- Testes ponta a ponta (Playwright) dos fluxos principais.
+- Teste de reconexão: queda de internet, reinício do servidor, desconexão do celular.
+
+**Pronto quando:** todos os critérios de validação da spec estão marcados como atendidos.
