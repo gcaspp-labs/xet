@@ -29,7 +29,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** migrações sobem e descem sem erro; um teste de integração grava e lê um setor.
 
-### [~] T03 — Autenticação e papéis
+### [x] T03 — Autenticação e papéis
 
 - Login com e-mail e senha (bcrypt), sessão em tabela no PostgreSQL com cookie seguro.
 - Papéis: atendente e supervisor do próprio setor, administrador global; middleware de autorização por setor conforme a tabela de permissões de `modelo-dados.md`.
