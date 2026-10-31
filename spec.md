@@ -44,7 +44,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 ## Órgãos e contatos
 
 - Os clientes atendidos são pessoas físicas, em geral servidores públicos, vinculadas a um órgão.
-- Os órgãos são pré-cadastrados por supervisores e administradores, com nome e CNPJ opcional (único quando informado).
+- Os órgãos são pré-cadastrados por supervisores e administradores, com nome e CNPJ opcional (único quando informado). O CNPJ é validado pelos dígitos verificadores e aceita o formato numérico e o alfanumérico emitido pela Receita Federal desde julho de 2026.
 - O contato é a pessoa que conversa pelo WhatsApp, com nome e telefone, vinculada a um órgão principal pré-cadastrado. É raro um contato representar mais de um órgão.
 - Cada chamado ficará vinculado ao contato e ao órgão. O órgão vem do cadastro do contato e pode ser alterado no formulário de encerramento quando o atendimento for de outro órgão; a alteração vale só para aquele chamado.
 - No piloto, órgãos e contatos serão cadastrados manualmente. A importação por planilha (CSV) fica para uma etapa posterior.

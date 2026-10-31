@@ -128,7 +128,7 @@ Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua sen
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `name` | text | Obrigatório |
-| `cnpj` | char(14) | Opcional; somente dígitos, validado; único quando informado (índice único parcial) |
+| `cnpj` | char(14) | Opcional; sem pontuação, com letras maiúsculas e dígitos (CNPJ numérico ou alfanumérico), validado pelos dígitos verificadores; único quando informado (índice único parcial) |
 
 ### `contacts` — Contato (pessoa física)
 
@@ -140,9 +140,13 @@ Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua sen
 | `organization_id` | bigint → `organizations` | Órgão principal; vazio para contato ainda não vinculado |
 | `registered` | boolean | `false` para contatos criados automaticamente a partir de número desconhecido; `true` após cadastro pelo atendente |
 
+Restrição: `registered` ⇒ `organization_id` preenchido (contato cadastrado pelo atendente sempre tem órgão).
+
 O cadastro de contatos e órgãos é único para todos os setores. Os órgãos são pré-cadastrados por supervisores e administradores; no atendimento, o atendente apenas vincula a pessoa a um órgão existente.
 
 Busca: por nome do contato ou do órgão (índice `pg_trgm` para busca parcial), por telefone e por CNPJ.
+
+CNPJ: desde julho de 2026 a Receita Federal emite CNPJ alfanumérico (IN RFB 2.229/2024): as 12 primeiras posições aceitam letras maiúsculas e dígitos, e os 2 dígitos verificadores continuam numéricos. A validação usa o cálculo do módulo 11 com o valor de cada caractere igual ao código ASCII menos 48, que vale também para o CNPJ numérico. CNPJ com todos os caracteres iguais é recusado.
 
 Atenção na implementação (T07): números brasileiros podem chegar com ou sem o nono dígito, e o WhatsApp pode identificar contatos por LID em vez do telefone. O casamento de mensagens recebidas deve usar o `external_contact_id` resolvido pelo adaptador, não comparação direta de texto do telefone.
 
