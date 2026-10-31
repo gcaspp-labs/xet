@@ -294,7 +294,7 @@ func (s *Service) CreateContact(ctx context.Context, in ContactInput) (Contact, 
 	var contact Contact
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		c, err := q.CreateContact(ctx, db.CreateContactParams{Name: in.Name, Phone: in.Phone, OrganizationID: &in.OrganizationID})
+		c, err := q.CreateContact(ctx, db.CreateContactParams{Name: in.Name, Phone: &in.Phone, OrganizationID: &in.OrganizationID})
 		if err != nil {
 			return constraintError("create contact", err)
 		}
@@ -317,7 +317,7 @@ func (s *Service) UpdateContact(ctx context.Context, id int64, in ContactInput) 
 	var contact Contact
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		_, err := q.UpdateContact(ctx, db.UpdateContactParams{ID: id, Name: in.Name, Phone: in.Phone, OrganizationID: &in.OrganizationID})
+		_, err := q.UpdateContact(ctx, db.UpdateContactParams{ID: id, Name: in.Name, Phone: &in.Phone, OrganizationID: &in.OrganizationID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrContactNotFound
 		}

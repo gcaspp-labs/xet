@@ -21,7 +21,7 @@ func toOrganizationResponse(o db.Organization) organizationResponse {
 type contactResponse struct {
 	ID           int64                 `json:"id"`
 	Name         string                `json:"name"`
-	Phone        string                `json:"phone"`
+	Phone        *string               `json:"phone"`
 	Registered   bool                  `json:"registered"`
 	Organization *organizationResponse `json:"organization"`
 }
