@@ -36,6 +36,10 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 
 - O administrador geral cadastra usuários, setores e permissões.
 - O supervisor gerencia a lista de módulos/sistemas do próprio setor. As listas serão cadastradas no sistema, sem necessidade de defini-las antes da implementação.
+- Setores são cadastrados e editados (nome e número). Nesta etapa não há desativação de setor.
+- Ao cadastrar um usuário, o administrador digita a senha inicial, que segue a mesma regra de complexidade da redefinição, e a repassa ao usuário.
+- Usuários não são excluídos, apenas desativados; desativar encerra as sessões abertas. O administrador não pode desativar a própria conta nem alterar o próprio papel, para não perder o acesso à administração.
+- A tela de usuários é exclusiva do administrador. A redefinição de senha pelo supervisor existe na API, mas ainda não tem tela.
 
 ## Órgãos e contatos
 
