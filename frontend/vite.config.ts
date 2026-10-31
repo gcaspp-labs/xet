@@ -13,6 +13,8 @@ export default defineConfig({
     },
   },
   server: {
+    // Permite abrir o servidor de desenvolvimento pelo nome MagicDNS do Tailscale.
+    allowedHosts: ['.ts.net'],
     proxy: {
       '/api': backendURL,
       '/health': backendURL,

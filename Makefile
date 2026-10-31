@@ -33,8 +33,9 @@ dev-create-admin: dev-db
 sqlc:
 	docker run --rm -u "$$(id -u):$$(id -g)" -v "$(CURDIR)/backend":/src -w /src $(SQLC_IMAGE) generate
 
+# Escuta em todas as interfaces para permitir testar pelo celular via Tailscale.
 dev-frontend:
-	cd frontend && npm run dev
+	cd frontend && npm run dev -- --host
 
 ## Testes: integração do backend e ponta a ponta com Playwright.
 test: test-backend test-e2e
