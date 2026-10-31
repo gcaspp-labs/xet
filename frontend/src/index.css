@@ -34,6 +34,9 @@
 @theme inline {
   --font-heading: var(--font-serif);
 
+  /* Abaixo de 760px a barra lateral vira gaveta (design.md). */
+  --breakpoint-md: 760px;
+
   --color-background: var(--paper);
   --color-foreground: var(--ink);
   --color-card: var(--surface);
@@ -63,6 +66,7 @@
 
   /* Tokens sem equivalente no shadcn. */
   --color-ink-faint: var(--ink-faint);
+  --color-sidebar-text-active: var(--sidebar-text-active);
   --color-line-soft: var(--line-soft);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);

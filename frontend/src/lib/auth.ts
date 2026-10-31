@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { z } from 'zod'
 import { api, ApiError } from '@/lib/api'
 
 export type Role = 'agent' | 'supervisor' | 'admin'
@@ -51,3 +52,21 @@ export function useLogout() {
     },
   })
 }
+
+// Mesma regra de senha do backend (spec.md): mínimo de 8 caracteres, com
+// maiúscula, minúscula, número e caractere especial; até 72 bytes (bcrypt).
+export const passwordSchema = z
+  .string()
+  .refine(
+    (value) =>
+      [...value].length >= 8 &&
+      /\p{Lu}/u.test(value) &&
+      /\p{Ll}/u.test(value) &&
+      /\p{N}/u.test(value) &&
+      /[^\p{L}\p{N}]/u.test(value),
+    'A senha precisa ter no mínimo 8 caracteres, com letra maiúscula, letra minúscula, número e caractere especial.',
+  )
+  .refine(
+    (value) => new TextEncoder().encode(value).length <= 72,
+    'A senha pode ter no máximo 72 caracteres.',
+  )
