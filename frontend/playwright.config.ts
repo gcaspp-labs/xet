@@ -25,6 +25,8 @@ export default defineConfig({
         HTTP_ADDR: `:${backendPort}`,
         DATABASE_URL: process.env.DATABASE_URL ?? '',
         COOKIE_SECURE: 'false',
+        // WhatsApp simulado; as rotas /api/test/messaging controlam o celular falso.
+        MESSAGING_PROVIDER: 'fake',
       },
     },
     {

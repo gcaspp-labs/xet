@@ -1,3 +1,5 @@
+import { format } from 'date-fns'
+import type { Sector } from '@/lib/admin'
 import type { Role } from '@/lib/auth'
 
 // Telefone com DDI no formato pt-BR: 5511999990000 → +55 (11) 99999-0000.
@@ -53,4 +55,19 @@ export function isValidCnpj(value: string) {
 // Remove a formatação do telefone, como o backend grava.
 export function normalizePhone(value: string) {
   return value.replace(/[\s()+.-]/g, '')
+}
+
+export const connectionLabels: Record<
+  Sector['connectionStatus'],
+  { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }
+> = {
+  connected: { label: 'Conectado', tone: 'success' },
+  connecting: { label: 'Conectando', tone: 'warning' },
+  disconnected: { label: 'Desconectado', tone: 'neutral' },
+  logged_out: { label: 'Requer QR code', tone: 'danger' },
+}
+
+// Data e hora no formato pt-BR: 02/03/2026 14:05.
+export function formatDateTime(value: string) {
+  return format(new Date(value), 'dd/MM/yyyy HH:mm')
 }

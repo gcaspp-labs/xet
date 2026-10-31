@@ -21,17 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Sector, useSaveSector, useSectors } from '@/lib/admin'
-import { formatPhone, normalizePhone } from '@/lib/format'
-
-const connectionLabels: Record<
-  Sector['connectionStatus'],
-  { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }
-> = {
-  connected: { label: 'Conectado', tone: 'success' },
-  connecting: { label: 'Conectando', tone: 'warning' },
-  disconnected: { label: 'Desconectado', tone: 'neutral' },
-  logged_out: { label: 'Requer QR code', tone: 'danger' },
-}
+import { connectionLabels, formatPhone, normalizePhone } from '@/lib/format'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do setor.'),
