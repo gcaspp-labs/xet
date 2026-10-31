@@ -147,11 +147,30 @@ type AuditLog struct {
 	CreatedAt  time.Time
 }
 
+type Contact struct {
+	ID                int64
+	Name              string
+	Phone             string
+	ExternalContactID *string
+	OrganizationID    *int64
+	Registered        bool
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
 type Module struct {
 	ID        int64
 	SectorID  int64
 	Name      string
 	Active    bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type Organization struct {
+	ID        int64
+	Name      string
+	Cnpj      *string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
