@@ -250,7 +250,7 @@ function Composer({ ticketId }: { ticketId: number }) {
           aria-label={file ? 'Legenda do arquivo' : 'Mensagem'}
           placeholder={file ? 'Legenda (opcional)' : 'Escreva a mensagem'}
           rows={1}
-          className="max-h-40"
+          className="max-h-40 min-h-9"
           value={text}
           onChange={(event) => changeText(event.target.value)}
           onKeyDown={onKeyDown}
