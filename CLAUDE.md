@@ -9,6 +9,7 @@ Documentos do projeto:
 
 ## Fluxo de trabalho
 
+- Cada task é implementada com a skill `/implementar-task NN`, em sessão com contexto zerado. A skill atualiza a main, cria a branch, implementa, valida e termina abrindo o PR.
 - Implementar uma task por vez, na ordem de `tasks.md`, em branch própria `task/NN-nome-curto`.
 - Antes de começar, marcar a task como `[~]`; ao concluir, como `[x]`.
 - A task só termina quando todos os itens de "Pronto quando" forem atendidos e os testes passarem. Não avançar para a próxima sem revisão.
