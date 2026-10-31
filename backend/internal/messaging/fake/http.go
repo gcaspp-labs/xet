@@ -59,6 +59,20 @@ func (a *Adapter) Handler() http.Handler {
 			})
 		})
 	})
+	// Delivery progress of sent messages, as the contact's phone reports it.
+	r.Post("/messaging/sectors/{sectorID}/status", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Status             messaging.DeliveryStatus `json:"status"`
+			ExternalMessageIDs []string                 `json:"externalMessageIds"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Status == "" {
+			http.Error(w, "status is required", http.StatusBadRequest)
+			return
+		}
+		a.control(w, r, func(sectorID int64) error {
+			return a.UpdateStatus(r.Context(), sectorID, body.Status, body.ExternalMessageIDs...)
+		})
+	})
 	r.Post("/messaging/sectors/{sectorID}/logout", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.LogOut(r.Context(), sectorID) })
 	})

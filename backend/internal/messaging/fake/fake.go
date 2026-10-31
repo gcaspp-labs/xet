@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 )
@@ -194,11 +195,26 @@ func (a *Adapter) send(sectorID int64, key string, msg any) (string, error) {
 		return id, nil
 	}
 	a.Sent = append(a.Sent, msg)
+	// Derived from the key, like Whatsmeow, so the ID survives a restart.
 	id := fmt.Sprintf("fake-msg-%d", len(a.Sent))
 	if key != "" {
+		id = "fake-msg-" + key
 		a.sent[key] = id
 	}
 	return id, nil
+}
+
+// SentMessages returns a copy of what was handed to the provider, in order.
+func (a *Adapter) SentMessages() []any {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]any(nil), a.Sent...)
+}
+
+// UpdateStatus simulates the contact's phone confirming the delivery or the
+// reading of sent messages.
+func (a *Adapter) UpdateStatus(ctx context.Context, sectorID int64, status messaging.DeliveryStatus, externalIDs ...string) error {
+	return a.handler(ctx, messaging.StatusUpdated{SectorID: sectorID, ExternalMessageIDs: externalIDs, Status: status, At: time.Now()})
 }
 
 func (a *Adapter) ResolveContact(_ context.Context, sectorID int64, phone string) (string, error) {

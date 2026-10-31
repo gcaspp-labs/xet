@@ -535,6 +535,14 @@ type Contact struct {
 	UpdatedAt         time.Time
 }
 
+type InternalNote struct {
+	ID        int64
+	TicketID  int64
+	AuthorID  int64
+	Body      string
+	CreatedAt time.Time
+}
+
 type MediaFile struct {
 	ID              int64
 	StorageKey      string
