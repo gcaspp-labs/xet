@@ -57,7 +57,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** administrador cadastra a Contabilidade e seus usuários; supervisor cadastra módulos; atendente não acessa a administração.
 
-### [ ] T05 — Órgãos e contatos
+### [x] T05 — Órgãos e contatos
 
 - Cadastro de órgãos por supervisores e administradores (nome, CNPJ opcional com validação).
 - Cadastro de contatos (nome, telefone único) vinculados a um órgão pré-cadastrado.

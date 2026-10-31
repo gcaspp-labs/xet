@@ -17,6 +17,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
 )
@@ -36,7 +37,7 @@ func newTestEnv(t *testing.T, extra func(s *server, r chi.Router)) *testEnv {
 	t.Helper()
 	pool := testdb.New(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	handler := NewRouter(logger, auth.NewService(pool), sector.NewService(pool), Options{SecureCookie: true})
+	handler := NewRouter(logger, auth.NewService(pool), sector.NewService(pool), directory.NewService(pool), Options{SecureCookie: true})
 	if extra != nil {
 		s := &server{logger: logger, auth: auth.NewService(pool), opts: Options{SecureCookie: true}}
 		r := chi.NewRouter()

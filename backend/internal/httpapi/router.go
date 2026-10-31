@@ -12,6 +12,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 )
 
@@ -22,20 +23,22 @@ type Options struct {
 }
 
 type server struct {
-	logger   *slog.Logger
-	auth     *auth.Service
-	sectors  *sector.Service
-	validate *validator.Validate
-	opts     Options
+	logger    *slog.Logger
+	auth      *auth.Service
+	sectors   *sector.Service
+	directory *directory.Service
+	validate  *validator.Validate
+	opts      Options
 }
 
-func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *sector.Service, opts Options) http.Handler {
+func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *sector.Service, directoryService *directory.Service, opts Options) http.Handler {
 	s := &server{
-		logger:   logger,
-		auth:     authService,
-		sectors:  sectorService,
-		validate: validator.New(validator.WithRequiredStructEnabled()),
-		opts:     opts,
+		logger:    logger,
+		auth:      authService,
+		sectors:   sectorService,
+		directory: directoryService,
+		validate:  validator.New(validator.WithRequiredStructEnabled()),
+		opts:      opts,
 	}
 
 	r := chi.NewRouter()
@@ -74,6 +77,19 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 				r.Post("/", s.createModule)
 				r.Put("/{moduleID}", s.updateModule)
 			})
+
+			// Órgãos: todos consultam; supervisor e administrador cadastram e editam.
+			r.Get("/organizations", s.listOrganizations)
+			r.Group(func(r chi.Router) {
+				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
+				r.Post("/organizations", s.createOrganization)
+				r.Put("/organizations/{organizationID}", s.updateOrganization)
+			})
+
+			// Contatos: o cadastro é único para todos os setores e aberto a todos os papéis.
+			r.Get("/contacts", s.listContacts)
+			r.Post("/contacts", s.createContact)
+			r.Put("/contacts/{contactID}", s.updateContact)
 		})
 	})
 

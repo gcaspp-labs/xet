@@ -60,3 +60,62 @@ export async function seedSector(baseURL: string) {
   await api.dispose()
   return result
 }
+
+// Dígito verificador do CNPJ (módulo 11, cada caractere vale o código ASCII menos 48).
+function cnpjCheckDigit(prefix: string) {
+  let sum = 0
+  let weight = 2
+  for (let i = prefix.length - 1; i >= 0; i--) {
+    sum += (prefix.charCodeAt(i) - 48) * weight
+    weight = weight === 9 ? 2 : weight + 1
+  }
+  const rest = sum % 11
+  return rest < 2 ? '0' : String(11 - rest)
+}
+
+// CNPJ válido e único por teste; com letras, gera um CNPJ alfanumérico.
+export function uniqueCnpj(alphanumeric = false) {
+  const digits = unique().id.slice(-8)
+  const base = alphanumeric
+    ? `${digits.slice(0, 2)}AB${digits.slice(2, 6)}C${digits.slice(6)}1`
+    : `${digits}0001`
+  const first = cnpjCheckDigit(base)
+  return base + first + cnpjCheckDigit(base + first)
+}
+
+export function formatCnpj(cnpj: string) {
+  return `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
+}
+
+type OrganizationData = { id: number; name: string; cnpj: string | null }
+
+// Cadastra órgãos e contatos pela API como administrador.
+export async function seedDirectory(
+  baseURL: string,
+  organizations: { name: string; cnpj?: string }[],
+  contacts: { name: string; phone: string; organization: number }[],
+) {
+  const api = await request.newContext({ baseURL })
+  const login = await api.post('/api/auth/login', {
+    data: { email: admin.email, password: admin.password },
+  })
+  expect(login.ok()).toBeTruthy()
+  const created: OrganizationData[] = []
+  for (const org of organizations) {
+    const response = await api.post('/api/organizations', { data: org })
+    expect(response.ok()).toBeTruthy()
+    created.push((await response.json()) as OrganizationData)
+  }
+  for (const contact of contacts) {
+    const response = await api.post('/api/contacts', {
+      data: {
+        name: contact.name,
+        phone: contact.phone,
+        organizationId: created[contact.organization].id,
+      },
+    })
+    expect(response.ok()).toBeTruthy()
+  }
+  await api.dispose()
+  return created
+}

@@ -21,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Sector, useSaveSector, useSectors } from '@/lib/admin'
-import { formatPhone } from '@/lib/format'
+import { formatPhone, normalizePhone } from '@/lib/format'
 
 const connectionLabels: Record<
   Sector['connectionStatus'],
@@ -37,7 +37,7 @@ const schema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do setor.'),
   phone: z
     .string()
-    .transform((value) => value.replace(/[\s()+.-]/g, ''))
+    .transform(normalizePhone)
     .refine((value) => /^\d{10,15}$/.test(value), 'Informe o número com DDI e DDD.'),
 })
 

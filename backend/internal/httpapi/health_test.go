@@ -13,7 +13,7 @@ import (
 
 func TestHealth(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := httptest.NewServer(httpapi.NewRouter(logger, nil, nil, httpapi.Options{}))
+	srv := httptest.NewServer(httpapi.NewRouter(logger, nil, nil, nil, httpapi.Options{}))
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/health", nil)
