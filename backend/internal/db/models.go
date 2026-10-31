@@ -135,6 +135,18 @@ func AllUserRoleValues() []UserRole {
 	}
 }
 
+type AuditLog struct {
+	ID         int64
+	TicketID   *int64
+	EntityType string
+	EntityID   int64
+	Action     string
+	ActorID    *int64
+	Reason     *string
+	Changes    []byte
+	CreatedAt  time.Time
+}
+
 type Module struct {
 	ID        int64
 	SectorID  int64

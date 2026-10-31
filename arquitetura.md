@@ -69,7 +69,7 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 - Senhas redefinidas por administradores e supervisores; sem recuperação automática.
 - Cookie `xet_session` com token aleatório de 32 bytes (somente o hash SHA-256 é gravado), `HttpOnly`, `SameSite=Lax` e `Secure` (desligável por `COOKIE_SECURE=false` no desenvolvimento sem HTTPS). Expiração deslizante de 12 horas, renovada a cada requisição autenticada.
 - Rotas da API ficam sob `/api`. Sem sessão válida a resposta é 401; com sessão, mas sem permissão (papel ou setor), 403.
-- O primeiro administrador é criado pelo comando `server create-admin` (nome, e-mail e senha), executado no próprio binário do backend.
+- O primeiro administrador é criado pelo comando `server create-admin` (nome, e-mail e senha), executado no próprio binário do backend; a senha é lida da entrada padrão para não ficar no histórico do shell (`make create-admin` / `make dev-create-admin`).
 
 ## Áudio e mídia
 
