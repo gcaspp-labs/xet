@@ -59,6 +59,12 @@ Depois, explore o código existente que a task vai tocar e siga os padrões já 
 3. Abra o PR para a `main` com `gh pr create`:
    - Título: `T$ARGUMENTS — <título da task>`.
    - Corpo em português com: resumo do que foi feito; checklist do "Pronto quando" com cada item marcado e como foi verificado; decisões tomadas e documentos alterados; o que não pôde ser verificado; sugestões fora do escopo.
-4. Responda ao usuário com o link do PR e o mesmo resumo, de forma curta.
+4. Deixe o ambiente de desenvolvimento pronto para o teste manual:
+   - Mantenha a branch da task em checkout.
+   - Suba `make dev` em segundo plano. Se já houver um `make dev` rodando de antes, reinicie-o: o backend roda com `go run` e não recarrega sozinho, então ficaria sem as mudanças da task.
+   - Confirme que `http://gc-11.tail9dcef6.ts.net:5173` responde e que a API tem as rotas novas.
+   - Se não for possível reiniciar (por exemplo, permissão negada), não contorne: avise o usuário que o `make dev` precisa ser reiniciado.
+5. Envie uma notificação push curta com o link do PR e o link de teste `http://gc-11.tail9dcef6.ts.net:5173`, dizendo se os checks do CI ainda vão rodar. Não coloque credenciais na notificação.
+6. Responda ao usuário com o link do PR, o link de teste e o mesmo resumo, de forma curta.
 
 Não faça merge do PR. A revisão e o merge são do usuário.
