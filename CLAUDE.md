@@ -9,6 +9,7 @@ Documentos do projeto:
 
 ## Fluxo de trabalho
 
+- Cada task é implementada com a skill `/implementar-task NN`, em sessão com contexto zerado. A skill atualiza a main, cria a branch, implementa, valida e termina abrindo o PR.
 - Implementar uma task por vez, na ordem de `tasks.md`, em branch própria `task/NN-nome-curto`.
 - Antes de começar, marcar a task como `[~]`; ao concluir, como `[x]`.
 - A task só termina quando todos os itens de "Pronto quando" forem atendidos e os testes passarem. Não avançar para a próxima sem revisão.
@@ -59,4 +60,9 @@ Documentos do projeto:
 
 ## Comandos
 
-Definidos na T01 (`make dev`, `make test`, `make lint`).
+Executados na raiz do repositório:
+
+- `make dev`: backend em `:8080` e frontend em `:5173`, com proxy de `/api` para o backend.
+- `make test`: testes de integração do backend (`go test -race`) e ponta a ponta (Playwright, em portas próprias 18080 e 15173).
+- `make lint`: golangci-lint (via Docker) no backend; oxlint e Prettier no frontend.
+- `make up` / `make down` / `make logs`: sistema completo com Docker Compose; requer `deploy/.env` (copiar de `deploy/.env.example`).

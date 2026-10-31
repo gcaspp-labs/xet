@@ -107,7 +107,7 @@ Resolvido com a biblioteca padrão ou com o banco, sem dependência:
 - Identificadores: gerados pelo PostgreSQL.
 - Testes: pacote `testing`.
 
-Ferramentas de desenvolvimento (não entram no binário): `sqlc` (queries tipadas), `goose` (migrações), `golangci-lint`.
+Ferramentas de desenvolvimento (não entram no binário): `sqlc` (queries tipadas), `goose` (migrações), `golangci-lint` (executado via Docker, versão fixada no `Makefile`).
 
 ### Frontend (React)
 
@@ -120,14 +120,17 @@ Ferramentas de desenvolvimento (não entram no binário): `sqlc` (queries tipada
 | Dados do servidor | TanStack Query |
 | Formulários | React Hook Form + Zod (validação) |
 | Estilo | Tailwind CSS |
-| Componentes | shadcn/ui (Radix UI) |
+| Componentes | shadcn/ui (estilo `base-nova`, sobre Base UI; padrão atual do shadcn) |
 | Ícones | lucide-react |
 | Notificações na tela | sonner |
 | Datas | date-fns (locale pt-BR) |
 | Tempo real | WebSocket nativo do navegador |
 | Gravação de áudio | MediaRecorder nativo do navegador |
 | Testes ponta a ponta | Playwright |
-| Lint e formatação | ESLint + Prettier |
+| Lint | oxlint |
+| Formatação | Prettier |
+
+O oxlint substitui o ESLint: é o padrão do template atual do Vite e o projeto usa TypeScript 7, ainda não suportado pelo typescript-eslint.
 
 ## Estrutura do repositório
 

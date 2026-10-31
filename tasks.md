@@ -11,7 +11,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 ## Fase 1 — Fundação
 
-### [ ] T01 — Estrutura do repositório
+### [x] T01 — Estrutura do repositório
 
 - Criar repositório git, estrutura `backend/`, `frontend/` e `deploy/`.
 - Backend Go com chi, configuração por variáveis de ambiente, logs com slog e rota `/health`.
