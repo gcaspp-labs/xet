@@ -6,7 +6,7 @@ DEV_DATABASE_URL ?= postgres://xet:xet@localhost:5440/xet?sslmode=disable
 E2E_DB_CONTAINER := xet-e2e-db
 E2E_DATABASE_URL := postgres://xet:xet@localhost:15432/xet?sslmode=disable
 
-.PHONY: dev dev-db dev-db-stop dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend up down logs create-admin dev-create-admin
+.PHONY: dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend up down logs create-admin dev-create-admin
 
 ## Desenvolvimento: banco em :5440, backend em :8090 e frontend em :5173 (com proxy para o backend).
 ## Portas fora das padrão (5432/5433/8080/8081) para conviver com outros projetos rodando na mesma máquina.
@@ -21,6 +21,19 @@ dev-db:
 
 dev-db-stop:
 	docker stop xet-dev-db
+
+## Reinicia o backend e o frontend de desenvolvimento em segundo plano, liberando
+## o terminal (log em /tmp/xet-dev.log). Necessário a cada mudança no backend,
+## que roda com go run e não recarrega sozinho.
+dev-restart: dev-db
+	-@fuser -k -TERM 8090/tcp 5173/tcp >/dev/null 2>&1
+	@for i in $$(seq 30); do fuser 8090/tcp 5173/tcp >/dev/null 2>&1 || break; sleep 1; done
+	@setsid nohup $(MAKE) -j2 dev-backend dev-frontend > /tmp/xet-dev.log 2>&1 < /dev/null &
+	@for i in $$(seq 120); do \
+		curl -sf -o /dev/null http://localhost:8090/health && curl -sf -o /dev/null http://localhost:5173 && \
+		echo "Ambiente de desenvolvimento no ar: http://localhost:5173 (log em /tmp/xet-dev.log)." && exit 0; \
+		sleep 1; \
+	done; echo "O ambiente não subiu em 2 minutos; veja /tmp/xet-dev.log." && exit 1
 
 dev-backend:
 	cd backend && DATABASE_URL="$(DEV_DATABASE_URL)" HTTP_ADDR=:8090 COOKIE_SECURE=false go run ./cmd/server
