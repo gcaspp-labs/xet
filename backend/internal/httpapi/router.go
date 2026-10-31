@@ -12,6 +12,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/sector"
 )
 
 type Options struct {
@@ -23,14 +24,16 @@ type Options struct {
 type server struct {
 	logger   *slog.Logger
 	auth     *auth.Service
+	sectors  *sector.Service
 	validate *validator.Validate
 	opts     Options
 }
 
-func NewRouter(logger *slog.Logger, authService *auth.Service, opts Options) http.Handler {
+func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *sector.Service, opts Options) http.Handler {
 	s := &server{
 		logger:   logger,
 		auth:     authService,
+		sectors:  sectorService,
 		validate: validator.New(validator.WithRequiredStructEnabled()),
 		opts:     opts,
 	}
@@ -51,6 +54,26 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, opts Options) htt
 			r.Get("/auth/me", s.me)
 			r.With(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin)).
 				Put("/users/{userID}/password", s.resetPassword)
+
+			r.Get("/sectors", s.listSectors)
+
+			// Administração: setores e usuários só pelo administrador.
+			r.Group(func(r chi.Router) {
+				r.Use(requireRole(db.UserRoleAdmin))
+				r.Post("/sectors", s.createSector)
+				r.Put("/sectors/{sectorID}", s.updateSector)
+				r.Get("/users", s.listUsers)
+				r.Post("/users", s.createUser)
+				r.Put("/users/{userID}", s.updateUser)
+			})
+
+			// Módulos: supervisor do próprio setor e administrador.
+			r.Route("/sectors/{sectorID}/modules", func(r chi.Router) {
+				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin), requireSector("sectorID"))
+				r.Get("/", s.listModules)
+				r.Post("/", s.createModule)
+				r.Put("/{moduleID}", s.updateModule)
+			})
 		})
 	})
 

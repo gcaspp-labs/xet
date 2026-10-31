@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -33,6 +34,10 @@ var (
 	ErrEmailTaken         = errors.New("email already in use")
 	ErrUserNotFound       = errors.New("user not found")
 	ErrForbidden          = errors.New("forbidden")
+	ErrInvalidUser        = errors.New("invalid user data")
+	ErrSectorRequired     = errors.New("sector required for agents and supervisors")
+	ErrSectorNotFound     = errors.New("sector not found")
+	ErrSelfLockout        = errors.New("admin cannot deactivate or change the role of their own account")
 )
 
 // User is the authenticated user attached to a request.
@@ -235,6 +240,174 @@ func (s *Service) CreateAdmin(ctx context.Context, name, email, password string)
 		return User{}, err
 	}
 	return User{ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role, SectorID: u.SectorID}, nil
+}
+
+// UserInput holds the fields an administrator sets on a user. Admins have no
+// sector; agents and supervisors need one.
+type UserInput struct {
+	Name     string
+	Email    string
+	Role     db.UserRole
+	SectorID *int64
+	Active   bool
+}
+
+func (in UserInput) normalize() (UserInput, error) {
+	in.Name = strings.TrimSpace(in.Name)
+	in.Email = strings.TrimSpace(in.Email)
+	if in.Name == "" || in.Email == "" || !in.Role.Valid() {
+		return in, ErrInvalidUser
+	}
+	if in.Role == db.UserRoleAdmin {
+		in.SectorID = nil
+	} else if in.SectorID == nil {
+		return in, ErrSectorRequired
+	}
+	return in, nil
+}
+
+// ListUsers returns every user, ordered by name.
+func (s *Service) ListUsers(ctx context.Context) ([]db.User, error) {
+	users, err := s.q.ListUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	return users, nil
+}
+
+// CreateUser registers an active user with the initial password typed by the
+// administrator, recording the audit log in the same transaction.
+func (s *Service) CreateUser(ctx context.Context, actor User, in UserInput, password string) (db.User, error) {
+	if !actor.HasRole(db.UserRoleAdmin) {
+		return db.User{}, ErrForbidden
+	}
+	in, err := in.normalize()
+	if err != nil {
+		return db.User{}, err
+	}
+	hash, err := HashPassword(password)
+	if err != nil {
+		return db.User{}, err
+	}
+
+	var u db.User
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		u, err = q.CreateUser(ctx, db.CreateUserParams{
+			Name:         in.Name,
+			Email:        in.Email,
+			PasswordHash: hash,
+			Role:         in.Role,
+			SectorID:     in.SectorID,
+		})
+		if err != nil {
+			return userError("create user", err)
+		}
+		changes := audit.Changes{}
+		changes.Set("name", nil, u.Name)
+		changes.Set("email", nil, u.Email)
+		changes.Set("role", nil, u.Role)
+		changes.Set("sector_id", nil, u.SectorID)
+		return recordUser(ctx, q, u.ID, "user_created", actor.ID, changes)
+	})
+	if err != nil {
+		return db.User{}, err
+	}
+	return u, nil
+}
+
+// UpdateUser changes a user's data, locking the row. Deactivating a user ends
+// their sessions in the same transaction. An administrator cannot deactivate
+// or change the role of their own account (spec.md).
+func (s *Service) UpdateUser(ctx context.Context, actor User, targetID int64, in UserInput) (db.User, error) {
+	if !actor.HasRole(db.UserRoleAdmin) {
+		return db.User{}, ErrForbidden
+	}
+	in, err := in.normalize()
+	if err != nil {
+		return db.User{}, err
+	}
+
+	var u db.User
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		before, err := q.GetUserForUpdate(ctx, targetID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+		if before.ID == actor.ID && (!in.Active || in.Role != before.Role) {
+			return ErrSelfLockout
+		}
+		changes := audit.Changes{}
+		changes.Set("name", before.Name, in.Name)
+		changes.Set("email", before.Email, in.Email)
+		changes.Set("role", before.Role, in.Role)
+		changes.Set("sector_id", before.SectorID, in.SectorID)
+		changes.Set("active", before.Active, in.Active)
+		if changes.Empty() {
+			u = before
+			return nil
+		}
+		u, err = q.UpdateUser(ctx, db.UpdateUserParams{
+			ID:       targetID,
+			Name:     in.Name,
+			Email:    in.Email,
+			Role:     in.Role,
+			SectorID: in.SectorID,
+			Active:   in.Active,
+		})
+		if err != nil {
+			return userError("update user", err)
+		}
+		if !u.Active {
+			if err := q.DeleteUserSessions(ctx, u.ID); err != nil {
+				return fmt.Errorf("delete sessions: %w", err)
+			}
+		}
+		return recordUser(ctx, q, u.ID, "user_updated", actor.ID, changes)
+	})
+	if err != nil {
+		return db.User{}, err
+	}
+	return u, nil
+}
+
+func recordUser(ctx context.Context, q *db.Queries, userID int64, action string, actorID int64, changes audit.Changes) error {
+	raw, err := changes.JSON()
+	if err != nil {
+		return err
+	}
+	if err := q.CreateAuditLog(ctx, db.CreateAuditLogParams{
+		EntityType: "user",
+		EntityID:   userID,
+		Action:     action,
+		ActorID:    &actorID,
+		Changes:    raw,
+	}); err != nil {
+		return fmt.Errorf("audit: %w", err)
+	}
+	return nil
+}
+
+// userError converts constraint violations into domain errors.
+func userError(op string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.ConstraintName {
+		case "users_email_key":
+			return ErrEmailTaken
+		case "users_sector_id_fkey":
+			return ErrSectorNotFound
+		case "users_admin_without_sector":
+			return ErrSectorRequired
+		case "users_email_check", "users_name_check":
+			return ErrInvalidUser
+		}
+	}
+	return fmt.Errorf("%s: %w", op, err)
 }
 
 // ValidatePassword enforces the password policy in spec.md: at least 8

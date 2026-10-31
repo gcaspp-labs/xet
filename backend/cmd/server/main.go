@@ -18,6 +18,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/config"
 	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
+	"github.com/gcaspp-labs/xet/backend/internal/sector"
 )
 
 func main() {
@@ -76,7 +77,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), httpapi.Options{SecureCookie: cfg.CookieSecure}),
+		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), sector.NewService(pool), httpapi.Options{SecureCookie: cfg.CookieSecure}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

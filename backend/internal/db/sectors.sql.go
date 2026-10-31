@@ -61,3 +61,94 @@ func (q *Queries) GetSector(ctx context.Context, id int64) (Sector, error) {
 	)
 	return i, err
 }
+
+const getSectorForUpdate = `-- name: GetSectorForUpdate :one
+select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at from sectors
+where id = $1
+for update
+`
+
+func (q *Queries) GetSectorForUpdate(ctx context.Context, id int64) (Sector, error) {
+	row := q.db.QueryRow(ctx, getSectorForUpdate, id)
+	var i Sector
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.Provider,
+		&i.ExternalAccountID,
+		&i.ConnectionStatus,
+		&i.LastConnectedAt,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listSectors = `-- name: ListSectors :many
+select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at from sectors
+order by lower(name)
+`
+
+func (q *Queries) ListSectors(ctx context.Context) ([]Sector, error) {
+	rows, err := q.db.Query(ctx, listSectors)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Sector
+	for rows.Next() {
+		var i Sector
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Phone,
+			&i.Provider,
+			&i.ExternalAccountID,
+			&i.ConnectionStatus,
+			&i.LastConnectedAt,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateSector = `-- name: UpdateSector :one
+update sectors
+set name = $1, phone = $2
+where id = $3
+returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at
+`
+
+type UpdateSectorParams struct {
+	Name  string
+	Phone string
+	ID    int64
+}
+
+func (q *Queries) UpdateSector(ctx context.Context, arg UpdateSectorParams) (Sector, error) {
+	row := q.db.QueryRow(ctx, updateSector, arg.Name, arg.Phone, arg.ID)
+	var i Sector
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.Provider,
+		&i.ExternalAccountID,
+		&i.ConnectionStatus,
+		&i.LastConnectedAt,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
