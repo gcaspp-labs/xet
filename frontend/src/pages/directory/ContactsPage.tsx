@@ -250,7 +250,7 @@ export default function ContactsPage() {
                     <TableCell>
                       <p className="body-strong">{contact.name}</p>
                       <p className="mono-num caption text-ink-faint">
-                        {formatPhone(contact.phone)}
+                        {contact.phone ? formatPhone(contact.phone) : 'Sem telefone'}
                       </p>
                     </TableCell>
                     <TableCell>

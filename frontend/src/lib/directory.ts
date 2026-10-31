@@ -10,7 +10,8 @@ export type Organization = {
 export type Contact = {
   id: number
   name: string
-  phone: string
+  // Vazio só em contato criado por mensagem sem telefone conhecido.
+  phone: string | null
   registered: boolean
   organization: Organization | null
 }
