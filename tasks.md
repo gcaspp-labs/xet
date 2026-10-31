@@ -49,7 +49,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** o workflow roda no PR e todos os jobs passam; uma alteração não gerada pelo sqlc ou um `go.mod` desarrumado fazem o job de código gerado falhar.
 
-### [~] T04 — Administração
+### [x] T04 — Administração
 
 - Cadastro de setores (nome e número) e usuários (setor e papel).
 - Supervisor gerencia módulos do próprio setor.
