@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -390,5 +391,38 @@ func TestEventsRequireAValidSession(t *testing.T) {
 	var closeErr websocket.CloseError
 	if !errors.As(err, &closeErr) || closeErr.Code != websocket.StatusPolicyViolation {
 		t.Fatalf("after logout: read error %v, want close with policy violation", err)
+	}
+}
+
+func TestNewQRCodeReachesTheConnectionScreen(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.sector("Contabilidade", "5511999990000")
+	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	token := e.login("sup@exemplo.com", testPassword)
+	events := e.subscribe(token)
+
+	e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
+	want := realtime.Event{Type: "connection", SectorID: contab.ID}
+	if ev := e.nextEvent(events); ev != want {
+		t.Fatalf("connect event = %+v, want %+v", ev, want)
+	}
+	_, first, _ := e.getQR(contab.ID, token)
+
+	// O WhatsApp troca o código: a tela é avisada mesmo sem mudança de estado.
+	if err := e.whatsapp.NextQR(t.Context(), contab.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ev := e.nextEvent(events); ev != want {
+		t.Fatalf("new qr event = %+v, want %+v", ev, want)
+	}
+	if c := e.connection(contab.ID, token); c["status"] != "connecting" || c["pairing"] != true {
+		t.Fatalf("connection after new qr = %v", c)
+	}
+	if _, second, _ := e.getQR(contab.ID, token); bytes.Equal(first, second) {
+		t.Fatal("qr code image did not change")
+	}
+	if actions := e.connectionAudit(contab.ID); len(actions) != 0 {
+		t.Fatalf("new qr code audited: %v", actions)
 	}
 }

@@ -5,7 +5,7 @@ import { seedSector, signIn, userPassword } from './fixtures'
 async function phone(
   request: APIRequestContext,
   sectorId: number,
-  action: 'pair' | 'drop' | 'logout',
+  action: 'pair' | 'qr' | 'drop' | 'logout',
 ) {
   const response = await request.post(`/api/test/messaging/sectors/${sectorId}/${action}`)
   expect(response.ok()).toBeTruthy()
@@ -36,6 +36,11 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   await expect
     .poll(() => qr.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
     .toBeGreaterThan(0)
+
+  // O WhatsApp troca o código: a tela mostra o novo sem clique.
+  const firstCode = await qr.getAttribute('src')
+  await phone(request, sector.id, 'qr')
+  await expect(qr).not.toHaveAttribute('src', firstCode!)
 
   // O celular lê o QR code; a tela mostra o novo estado sem recarregar.
   await phone(request, sector.id, 'pair')

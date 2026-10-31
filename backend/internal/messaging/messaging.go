@@ -87,6 +87,7 @@ type Event interface {
 }
 
 // ConnectionChanged reports a new connection status of the sector number.
+// Providers paired by QR code report each new code as connecting again.
 type ConnectionChanged struct {
 	SectorID int64
 	Status   ConnectionStatus

@@ -29,6 +29,9 @@ func (a *Adapter) Handler() http.Handler {
 			return a.Pair(r.Context(), sectorID, body.AccountID)
 		})
 	})
+	r.Post("/messaging/sectors/{sectorID}/qr", func(w http.ResponseWriter, r *http.Request) {
+		a.control(w, r, func(sectorID int64) error { return a.NextQR(r.Context(), sectorID) })
+	})
 	r.Post("/messaging/sectors/{sectorID}/drop", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.Drop(r.Context(), sectorID) })
 	})

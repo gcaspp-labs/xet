@@ -1,6 +1,6 @@
 // Package fake is a messaging provider that simulates WhatsApp, used by the
 // integration tests and, with MESSAGING_PROVIDER=fake, by the end-to-end
-// tests against the real server. Tests drive it through Pair, Drop and
+// tests against the real server. Tests drive it through Pair, NextQR, Drop and
 // LogOut (or the HTTP routes of Handler) as if a phone were on the other side.
 package fake
 
@@ -112,6 +112,21 @@ func (a *Adapter) Pair(ctx context.Context, sectorID int64, accountID string) er
 	}
 	return a.set(ctx, sectorID, func(s *session) {
 		s.status, s.accountID, s.qr = messaging.StatusConnected, accountID, ""
+	})
+}
+
+// NextQR simulates the provider replacing the QR code of a pairing, as
+// WhatsApp does every 20 seconds.
+func (a *Adapter) NextQR(ctx context.Context, sectorID int64) error {
+	a.mu.Lock()
+	pairing := a.session(sectorID).qr != ""
+	a.mu.Unlock()
+	if !pairing {
+		return ErrNotPairing
+	}
+	return a.set(ctx, sectorID, func(s *session) {
+		a.qrCount++
+		s.qr = fmt.Sprintf("fake-qr-%d-%d", sectorID, a.qrCount)
 	})
 }
 
