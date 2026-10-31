@@ -5,6 +5,7 @@ Documentos do projeto:
 - [spec.md](spec.md): regras de negócio. É a fonte da verdade sobre o comportamento do sistema.
 - [arquitetura.md](arquitetura.md): decisões técnicas, bibliotecas padrão e estrutura do repositório.
 - [modelo-dados.md](modelo-dados.md): domínios, entidades, ligações, restrições e permissões. Migrações seguem este documento; mudanças no modelo são registradas nele antes da migração.
+- [design.md](design.md): aplicação do design system da GCASPP LAB com shadcn/ui: tokens, tema, tipografia, componentes, ícones, marca e tom dos textos.
 - [tasks.md](tasks.md): fluxo de implementação do piloto.
 
 ## Fluxo de trabalho
@@ -47,6 +48,7 @@ Documentos do projeto:
 ## Código
 
 - Nomes de código, banco, rotas e variáveis em inglês. Textos de interface, mensagens ao usuário e documentação em português.
+- Toda tela segue o `design.md`: cores somente por tokens (nunca cores fixas ou a paleta padrão do Tailwind), componentes do shadcn adaptados ao design system e textos no tom do brand book.
 - Usar somente as bibliotecas listadas em `arquitetura.md`. Uma nova biblioteca exige justificativa registrada lá antes do uso.
 - As regras de negócio nunca importam o Whatsmeow diretamente; passam pela interface de mensageria.
 - Toda validação de permissão acontece no backend. A interface apenas reflete as regras.

@@ -28,6 +28,7 @@ Leia por completo, nesta ordem, antes de escrever qualquer código:
 3. `spec.md`: as regras de negócio envolvidas na task.
 4. `arquitetura.md`: componentes, adaptadores, bibliotecas permitidas e estrutura do repositório.
 5. `modelo-dados.md`: tabelas, restrições, permissões e ciclo do chamado envolvidos na task.
+6. `design.md`: obrigatório quando a task tiver interface (telas, componentes ou textos ao usuário).
 
 Depois, explore o código existente que a task vai tocar e siga os padrões já estabelecidos (nomes, organização de pacotes, estilo de testes, tratamento de erros).
 

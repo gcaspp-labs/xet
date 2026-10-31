@@ -121,8 +121,10 @@ Ferramentas de desenvolvimento (não entram no binário, executadas via Docker c
 | Dados do servidor | TanStack Query |
 | Formulários | React Hook Form + Zod (validação) |
 | Estilo | Tailwind CSS |
-| Componentes | shadcn/ui (estilo `base-nova`, sobre Base UI; padrão atual do shadcn) |
-| Ícones | lucide-react |
+| Design system | `github:gcaspp-labs/glab-design-system` (tokens, logos), fixado por commit; aplicação em [design.md](design.md) |
+| Componentes | shadcn/ui (estilo `base-nova`, sobre Base UI; padrão atual do shadcn), adaptado ao design system |
+| Fontes | `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-serif`, `@fontsource/ibm-plex-mono` (servidas localmente) |
+| Ícones | lucide-react, com traço 1,7 |
 | Notificações na tela | sonner |
 | Datas | date-fns (locale pt-BR) |
 | Tempo real | WebSocket nativo do navegador |
