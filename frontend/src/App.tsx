@@ -1,7 +1,11 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router'
-import { useCurrentUser } from '@/lib/auth'
+import AppLayout from '@/components/AppLayout'
+import { type Role, useCurrentUser } from '@/lib/auth'
 import HomePage from '@/pages/HomePage'
 import LoginPage from '@/pages/LoginPage'
+import ModulesPage from '@/pages/admin/ModulesPage'
+import SectorsPage from '@/pages/admin/SectorsPage'
+import UsersPage from '@/pages/admin/UsersPage'
 
 // Rotas que exigem sessão; sem sessão, vai para o login.
 function RequireAuth() {
@@ -15,12 +19,30 @@ function RequireAuth() {
   return <Outlet />
 }
 
+// Rotas restritas a papéis; os demais voltam ao início. O backend também recusa.
+function RequireRole({ roles }: { roles: Role[] }) {
+  const { data: user } = useCurrentUser()
+  if (!user || !roles.includes(user.role)) {
+    return <Navigate to="/" replace />
+  }
+  return <Outlet />
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
-        <Route path="/" element={<HomePage />} />
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route element={<RequireRole roles={['supervisor', 'admin']} />}>
+            <Route path="/modulos" element={<ModulesPage />} />
+          </Route>
+          <Route element={<RequireRole roles={['admin']} />}>
+            <Route path="/admin/setores" element={<SectorsPage />} />
+            <Route path="/admin/usuarios" element={<UsersPage />} />
+          </Route>
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

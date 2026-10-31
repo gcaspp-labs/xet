@@ -91,6 +91,81 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id int64) (User, error) 
 	return i, err
 }
 
+const listUsers = `-- name: ListUsers :many
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at from users
+order by lower(name), id
+`
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Role,
+			&i.SectorID,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateUser = `-- name: UpdateUser :one
+update users
+set name = $1, email = $2, role = $3, sector_id = $4, active = $5
+where id = $6
+returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	Name     string
+	Email    string
+	Role     UserRole
+	SectorID *int64
+	Active   bool
+	ID       int64
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.Name,
+		arg.Email,
+		arg.Role,
+		arg.SectorID,
+		arg.Active,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.SectorID,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateUserPassword = `-- name: UpdateUserPassword :exec
 update users
 set password_hash = $1

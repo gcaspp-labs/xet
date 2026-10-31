@@ -1,12 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { admin } from './fixtures'
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto('/login')
-  await page.getByLabel('E-mail').fill(email)
-  await page.getByLabel('Senha').fill(password)
-  await page.getByRole('button', { name: 'Entrar' }).click()
-}
+import { expect, test } from '@playwright/test'
+import { admin, login } from './fixtures'
 
 test('sem sessão, a página inicial leva ao login', async ({ page }) => {
   await page.goto('/')

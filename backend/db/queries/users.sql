@@ -16,3 +16,13 @@ for update;
 update users
 set password_hash = @password_hash
 where id = @id;
+
+-- name: ListUsers :many
+select * from users
+order by lower(name), id;
+
+-- name: UpdateUser :one
+update users
+set name = @name, email = @email, role = @role, sector_id = @sector_id, active = @active
+where id = @id
+returning *;
