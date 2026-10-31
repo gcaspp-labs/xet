@@ -421,6 +421,17 @@ func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
 		t.Fatalf("voice sent = type %s, mime %q, seconds %d, caption %q", voice.Type, voice.Media.MimeType, voice.Media.DurationSeconds, voice.Caption)
 	}
 
+	// A conversa informa a duração do áudio, para o painel mostrar ao lado do player.
+	status, _, raw := e.get(fmt.Sprintf("/api/tickets/%d/messages", c.ticket.ID), c.biaToken)
+	var listed []messageResponse
+	if err := json.Unmarshal(raw, &listed); status != http.StatusOK || err != nil {
+		t.Fatalf("list messages: status %d, error %v", status, err)
+	}
+	last := listed[len(listed)-1]
+	if last.Media == nil || last.Media.DurationSeconds == nil || *last.Media.DurationSeconds != 2 {
+		t.Fatalf("listed voice media = %+v", last.Media)
+	}
+
 	// Repetir o envio devolve a mesma mensagem, sem converter nem enviar de novo.
 	if r := e.sendVoice(c.ticket.ID, c.anaToken, requestA, webm, ""); r.status != http.StatusOK || id(r.body) != got[0].ID {
 		t.Fatalf("repeated voice: status %d, body %v", r.status, r.body)

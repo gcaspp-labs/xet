@@ -41,6 +41,8 @@ type mediaResponse struct {
 	MimeType  string  `json:"mimeType"`
 	FileName  *string `json:"fileName"`
 	SizeBytes int64   `json:"sizeBytes"`
+	// DurationSeconds is set for audio and video, when the provider reports it.
+	DurationSeconds *int32 `json:"durationSeconds"`
 }
 
 type messageResponse struct {
@@ -69,7 +71,7 @@ func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
 		out.Author = &ticketUserResponse{ID: *m.AuthorID, Name: *m.AuthorName}
 	}
 	if m.MediaID != nil && m.MediaMimeType != nil && m.MediaSizeBytes != nil {
-		out.Media = &mediaResponse{ID: *m.MediaID, MimeType: *m.MediaMimeType, FileName: m.MediaFileName, SizeBytes: *m.MediaSizeBytes}
+		out.Media = &mediaResponse{ID: *m.MediaID, MimeType: *m.MediaMimeType, FileName: m.MediaFileName, SizeBytes: *m.MediaSizeBytes, DurationSeconds: m.MediaDurationSeconds}
 	}
 	return out
 }

@@ -34,7 +34,13 @@ export type Message = {
   failureReason: string | null
   sentAt: string
   author: { id: number; name: string } | null
-  media: { id: number; mimeType: string; fileName: string | null; sizeBytes: number } | null
+  media: {
+    id: number
+    mimeType: string
+    fileName: string | null
+    sizeBytes: number
+    durationSeconds: number | null
+  } | null
 }
 
 export type Note = {

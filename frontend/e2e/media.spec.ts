@@ -43,7 +43,11 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
     })
   await receive('image', { data: png, mimeType: 'image/png' }, 'Foto do recibo')
   await receive('video', { data: 'AAAA', mimeType: 'video/mp4', durationSeconds: 3 })
-  await receive('audio', { data: 'T2dnUw==', mimeType: 'audio/ogg; codecs=opus' })
+  await receive('audio', {
+    data: 'T2dnUw==',
+    mimeType: 'audio/ogg; codecs=opus',
+    durationSeconds: 7,
+  })
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Clara Cliente' }).click()
@@ -68,6 +72,7 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
     'src',
     /^\/api\/media\/\d+$/,
   )
+  await expect(received.nth(2).getByLabel('Duração do áudio')).toHaveText('0:07')
 
   // Grava pelo microfone (simulado), ouve antes de enviar e envia como mensagem de voz.
   await page.getByRole('button', { name: 'Assumir' }).click()
@@ -80,7 +85,9 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
   await page.getByRole('button', { name: 'Enviar áudio' }).click()
 
   const voice = conversation.getByRole('listitem', { name: 'Mensagem enviada' })
-  await expect(voice).toContainText('Enviada')
+  // O envio só responde depois da conversão com ffmpeg, mais lenta com a máquina carregada.
+  await expect(voice).toContainText('Enviada', { timeout: 15_000 })
+  await expect(voice.getByLabel('Duração do áudio')).toHaveText(/^0:0[12]$/)
   const src = await voice.locator('audio[controls]').getAttribute('src')
   // O backend converteu a gravação para OGG/Opus, o formato da mensagem de voz do WhatsApp.
   const file = await page.request.get(src!)

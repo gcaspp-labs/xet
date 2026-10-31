@@ -111,13 +111,20 @@ function MessageMedia({ message }: { message: Message }) {
       )
     case 'audio':
       return (
-        <audio
-          src={src}
-          controls
-          preload="metadata"
-          aria-label="Áudio"
-          className="w-72 max-w-full"
-        />
+        <div className="flex items-center gap-2">
+          <audio
+            src={src}
+            controls
+            preload="metadata"
+            aria-label="Áudio"
+            className="w-72 max-w-full"
+          />
+          {message.media.durationSeconds !== null && (
+            <span className="mono-num caption text-ink-faint" aria-label="Duração do áudio">
+              {formatDuration(message.media.durationSeconds)}
+            </span>
+          )}
+        </div>
       )
   }
   return (

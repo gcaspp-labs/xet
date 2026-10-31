@@ -396,7 +396,8 @@ const listTicketMessages = `-- name: ListTicketMessages :many
 select
     m.id, m.ticket_id, m.direction, m.origin, m.type, m.body, m.status, m.failure_reason, m.sent_at,
     m.author_id, u.name as author_name,
-    m.media_id, f.mime_type as media_mime_type, f.file_name as media_file_name, f.size_bytes as media_size_bytes
+    m.media_id, f.mime_type as media_mime_type, f.file_name as media_file_name, f.size_bytes as media_size_bytes,
+    f.duration_seconds as media_duration_seconds
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
@@ -405,21 +406,22 @@ order by m.sent_at, m.id
 `
 
 type ListTicketMessagesRow struct {
-	ID             int64
-	TicketID       int64
-	Direction      MessageDirection
-	Origin         MessageOrigin
-	Type           MessageType
-	Body           *string
-	Status         NullMessageStatus
-	FailureReason  *string
-	SentAt         time.Time
-	AuthorID       *int64
-	AuthorName     *string
-	MediaID        *int64
-	MediaMimeType  *string
-	MediaFileName  *string
-	MediaSizeBytes *int64
+	ID                   int64
+	TicketID             int64
+	Direction            MessageDirection
+	Origin               MessageOrigin
+	Type                 MessageType
+	Body                 *string
+	Status               NullMessageStatus
+	FailureReason        *string
+	SentAt               time.Time
+	AuthorID             *int64
+	AuthorName           *string
+	MediaID              *int64
+	MediaMimeType        *string
+	MediaFileName        *string
+	MediaSizeBytes       *int64
+	MediaDurationSeconds *int32
 }
 
 func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]ListTicketMessagesRow, error) {
@@ -447,6 +449,7 @@ func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]Lis
 			&i.MediaMimeType,
 			&i.MediaFileName,
 			&i.MediaSizeBytes,
+			&i.MediaDurationSeconds,
 		); err != nil {
 			return nil, err
 		}
