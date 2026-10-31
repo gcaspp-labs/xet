@@ -87,7 +87,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** mensagens de texto e arquivo chegam e ficam gravadas; mensagem repetida não duplica; mensagem de grupo não gera chamado; testes cobrem cada regra.
 
-### [~] T08 — Painel em tempo real e assumir chamado
+### [x] T08 — Painel em tempo real e assumir chamado
 
 - WebSocket com eventos filtrados pelos setores do usuário.
 - Fila do setor, chamados por responsável e contagem de chamados ativos por atendente.
