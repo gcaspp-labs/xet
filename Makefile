@@ -2,27 +2,28 @@ GOLANGCI_LINT_IMAGE := golangci/golangci-lint:v2.14.0
 SQLC_IMAGE := sqlc/sqlc:1.29.0
 POSTGRES_IMAGE := postgres:17-alpine
 
-DEV_DATABASE_URL ?= postgres://xet:xet@localhost:5433/xet?sslmode=disable
+DEV_DATABASE_URL ?= postgres://xet:xet@localhost:5440/xet?sslmode=disable
 E2E_DB_CONTAINER := xet-e2e-db
 E2E_DATABASE_URL := postgres://xet:xet@localhost:15432/xet?sslmode=disable
 
 .PHONY: dev dev-db dev-db-stop dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend up down logs create-admin dev-create-admin
 
-## Desenvolvimento: banco em :5433, backend em :8080 e frontend em :5173 (com proxy para o backend).
+## Desenvolvimento: banco em :5440, backend em :8090 e frontend em :5173 (com proxy para o backend).
+## Portas fora das padrão (5432/5433/8080/8081) para conviver com outros projetos rodando na mesma máquina.
 dev: dev-db
 	$(MAKE) -j2 dev-backend dev-frontend
 
 dev-db:
 	@docker start xet-dev-db >/dev/null 2>&1 || docker run -d --name xet-dev-db \
 		-e POSTGRES_USER=xet -e POSTGRES_PASSWORD=xet -e POSTGRES_DB=xet \
-		-p 5433:5432 -v xet-dev-db:/var/lib/postgresql/data $(POSTGRES_IMAGE) >/dev/null
+		-p 5440:5432 -v xet-dev-db:/var/lib/postgresql/data $(POSTGRES_IMAGE) >/dev/null
 	@until docker exec xet-dev-db pg_isready -h 127.0.0.1 -U xet -d xet >/dev/null 2>&1; do sleep 1; done
 
 dev-db-stop:
 	docker stop xet-dev-db
 
 dev-backend:
-	cd backend && DATABASE_URL="$(DEV_DATABASE_URL)" COOKIE_SECURE=false go run ./cmd/server
+	cd backend && DATABASE_URL="$(DEV_DATABASE_URL)" HTTP_ADDR=:8090 COOKIE_SECURE=false go run ./cmd/server
 
 ## Cria um administrador no banco de desenvolvimento; a senha é pedida no terminal.
 ## Uso: make dev-create-admin NAME="Maria Silva" EMAIL=maria@exemplo.com
@@ -33,8 +34,9 @@ dev-create-admin: dev-db
 sqlc:
 	docker run --rm -u "$$(id -u):$$(id -g)" -v "$(CURDIR)/backend":/src -w /src $(SQLC_IMAGE) generate
 
+# Escuta em todas as interfaces para permitir testar pelo celular via Tailscale.
 dev-frontend:
-	cd frontend && npm run dev
+	cd frontend && npm run dev -- --host
 
 ## Confere se o código gerado (sqlc) e o go.mod estão em dia com o que foi commitado.
 check-generated: sqlc

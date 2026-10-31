@@ -65,7 +65,7 @@ Documentos do projeto:
 
 Executados na raiz do repositório:
 
-- `make dev`: banco de desenvolvimento em `:5433` (container `xet-dev-db`, dados persistidos), backend em `:8080` e frontend em `:5173`, com proxy de `/api` para o backend. `make dev-db-stop` para o banco.
+- `make dev`: banco de desenvolvimento em `:5440` (container `xet-dev-db`, dados persistidos), backend em `:8090` e frontend em `:5173`, com proxy de `/api` para o backend. `make dev-db-stop` para o banco. O frontend escuta em todas as interfaces e aceita o nome MagicDNS do Tailscale (`http://<máquina>.<tailnet>.ts.net:5173`), para testes manuais pelo celular. As portas do banco e do backend fogem das padrão (5432, 5433, 8080, 8081) porque outros projetos usam essas portas na mesma máquina; dentro do Docker Compose o backend continua em `:8080`.
 - `make sqlc`: gera o código Go das queries.
 - `make check-generated`: confere se o código do sqlc e o `go.mod` estão em dia com o commit (também roda no CI).
 - `make test`: testes de integração do backend (`go test -race`, PostgreSQL via testcontainers) e ponta a ponta (Playwright, em portas próprias 18080 e 15173, com banco próprio em `:15432` criado e removido a cada execução).
