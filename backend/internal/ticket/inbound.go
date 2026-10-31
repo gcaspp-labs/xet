@@ -16,6 +16,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/storage"
 )
 
@@ -34,10 +35,11 @@ type Service struct {
 	pool    *pgxpool.Pool
 	q       *db.Queries
 	storage storage.Storage
+	hub     *realtime.Hub
 }
 
-func NewService(pool *pgxpool.Pool, files storage.Storage) *Service {
-	return &Service{pool: pool, q: db.New(pool), storage: files}
+func NewService(pool *pgxpool.Pool, files storage.Storage, hub *realtime.Hub) *Service {
+	return &Service{pool: pool, q: db.New(pool), storage: files, hub: hub}
 }
 
 func mustLoadLocation(name string) *time.Location {
@@ -62,7 +64,8 @@ func (s *Service) HandleSentOutside(ctx context.Context, ev messaging.MessageSen
 // record adds a message from the provider to the open ticket of the contact
 // in the sector, opening a queued ticket when there is none. Group messages
 // are ignored, and a message already recorded (same external ID in the
-// sector) has no effect, so the provider may deliver it again.
+// sector) has no effect, so the provider may deliver it again. The panels
+// of the sector are notified after the commit.
 func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Message, origin db.MessageOrigin) error {
 	if msg.Group {
 		return nil
@@ -91,6 +94,7 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		return err
 	}
 
+	var ticketID int64
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		contact, err := findOrCreateContact(ctx, q, msg)
@@ -101,6 +105,7 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		if err != nil {
 			return err
 		}
+		ticketID = ticket.ID
 
 		var mediaID *int64
 		if media != nil {
@@ -139,7 +144,11 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 	if errors.Is(err, errDuplicate) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	s.hub.Publish(realtime.TicketChanged(sectorID, ticketID))
+	return nil
 }
 
 // saveMedia writes the attachment to the storage and returns its record.

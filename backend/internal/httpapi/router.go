@@ -14,7 +14,9 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
+	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
 type Options struct {
@@ -23,6 +25,9 @@ type Options struct {
 	SecureCookie bool
 	// Messaging is the provider of the sector numbers.
 	Messaging messaging.Provider
+	// SessionCheckInterval is how often an open WebSocket connection checks
+	// its session; one minute when zero.
+	SessionCheckInterval time.Duration
 	// TestRoutes, when set, is mounted at /api/test. Only the fake messaging
 	// provider sets it, for the end-to-end tests.
 	TestRoutes http.Handler
@@ -33,16 +38,20 @@ type server struct {
 	auth      *auth.Service
 	sectors   *sector.Service
 	directory *directory.Service
+	tickets   *ticket.Service
+	hub       *realtime.Hub
 	validate  *validator.Validate
 	opts      Options
 }
 
-func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *sector.Service, directoryService *directory.Service, opts Options) http.Handler {
+func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *sector.Service, directoryService *directory.Service, ticketService *ticket.Service, hub *realtime.Hub, opts Options) http.Handler {
 	s := &server{
 		logger:    logger,
 		auth:      authService,
 		sectors:   sectorService,
 		directory: directoryService,
+		tickets:   ticketService,
+		hub:       hub,
 		validate:  validator.New(validator.WithRequiredStructEnabled()),
 		opts:      opts,
 	}
@@ -64,6 +73,7 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireUser)
 			r.Get("/auth/me", s.me)
+			r.Get("/ws", s.events)
 			r.With(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin)).
 				Put("/users/{userID}/password", s.resetPassword)
 
@@ -102,6 +112,12 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 				r.Post("/organizations", s.createOrganization)
 				r.Put("/organizations/{organizationID}", s.updateOrganization)
 			})
+
+			// Painel: chamados abertos e carga de cada atendente, para todos os papéis do setor.
+			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/tickets", s.listTickets)
+			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/workload", s.workload)
+			// O serviço confere o setor do chamado.
+			r.Post("/tickets/{ticketID}/assign", s.assignTicket)
 
 			// Contatos: o cadastro é único para todos os setores e aberto a todos os papéis.
 			r.Get("/contacts", s.listContacts)

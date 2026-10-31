@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 )
 
 // Handler exposes the test controls over HTTP, for the end-to-end tests that
@@ -28,6 +31,30 @@ func (a *Adapter) Handler() http.Handler {
 	})
 	r.Post("/messaging/sectors/{sectorID}/drop", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.Drop(r.Context(), sectorID) })
+	})
+	// Text message from a contact; the contact is identified by the phone.
+	r.Post("/messaging/sectors/{sectorID}/receive", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ExternalMessageID string `json:"externalMessageId"`
+			Phone             string `json:"phone"`
+			ContactName       string `json:"contactName"`
+			Body              string `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ExternalMessageID == "" || body.Phone == "" {
+			http.Error(w, "externalMessageId and phone are required", http.StatusBadRequest)
+			return
+		}
+		a.control(w, r, func(sectorID int64) error {
+			return a.Receive(r.Context(), sectorID, messaging.Message{
+				ExternalMessageID: body.ExternalMessageID,
+				ExternalContactID: body.Phone + "@s.whatsapp.net",
+				Phone:             body.Phone,
+				ContactName:       body.ContactName,
+				Type:              messaging.TypeText,
+				Body:              body.Body,
+				SentAt:            time.Now(),
+			})
+		})
 	})
 	r.Post("/messaging/sectors/{sectorID}/logout", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.LogOut(r.Context(), sectorID) })

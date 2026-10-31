@@ -108,6 +108,48 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 	return i, err
 }
 
+const listLastMessages = `-- name: ListLastMessages :many
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at
+from messages
+where ticket_id = any($1::bigint[])
+order by ticket_id, sent_at desc, id desc
+`
+
+type ListLastMessagesRow struct {
+	TicketID int64
+	Type     MessageType
+	Body     *string
+	Origin   MessageOrigin
+	SentAt   time.Time
+}
+
+// Last message of each ticket, for the ticket lists.
+func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]ListLastMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listLastMessages, ticketIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLastMessagesRow
+	for rows.Next() {
+		var i ListLastMessagesRow
+		if err := rows.Scan(
+			&i.TicketID,
+			&i.Type,
+			&i.Body,
+			&i.Origin,
+			&i.SentAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const messageExists = `-- name: MessageExists :one
 select exists (
     select 1 from messages where sector_id = $1 and external_message_id = $2

@@ -17,3 +17,39 @@ insert into tickets (protocol, sector_id, contact_id, organization_id, status, a
 values (@protocol, @sector_id, @contact_id, @organization_id, 'queued', @arrived_at, @arrived_at)
 on conflict (sector_id, contact_id) where status <> 'closed' do nothing
 returning *;
+
+-- name: GetTicket :one
+select * from tickets
+where id = @id;
+
+-- name: AssignTicket :one
+-- Conditional update: only a queued ticket is assigned, so among concurrent
+-- attempts only one returns a row.
+update tickets
+set assignee_id = @assignee_id, status = 'in_progress', assigned_at = coalesce(assigned_at, now())
+where id = @id and status = 'queued'
+returning *;
+
+-- name: ListOpenTickets :many
+-- Open tickets of the sector with the contact and the assignee, oldest first.
+select
+    t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
+    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    o.name as organization_name,
+    t.assignee_id, u.name as assignee_name
+from tickets t
+join contacts c on c.id = t.contact_id
+left join organizations o on o.id = t.organization_id
+left join users u on u.id = t.assignee_id
+where t.sector_id = @sector_id and t.status <> 'closed'
+order by t.arrived_at, t.id;
+
+-- name: ListSectorWorkload :many
+-- Active users of the sector and anyone else (such as an admin) with tickets
+-- in progress there, with the number of tickets in progress of each one.
+select u.id, u.name, u.role, count(t.id)::integer as active_tickets
+from users u
+left join tickets t on t.assignee_id = u.id and t.sector_id = @sector_id and t.status = 'in_progress'
+where (u.sector_id = @sector_id and u.active) or t.id is not null
+group by u.id
+order by lower(u.name), u.id;

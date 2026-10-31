@@ -10,6 +10,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // Connect starts the session of the sector number. A sector without a linked
@@ -52,10 +53,11 @@ func account(sector db.Sector) messaging.Account {
 // HandleConnection records a connection change reported by the provider,
 // locking the sector row. Entering connected and leaving it are audited as
 // actions of the system; an unlinked account is forgotten, so the next
-// connection asks for a new QR code.
+// connection asks for a new QR code. The panels are notified after the
+// commit, even when nothing changed, since a new pairing has a new QR code.
 func (s *Service) HandleConnection(ctx context.Context, ev messaging.ConnectionChanged) error {
 	status := db.ConnectionStatus(ev.Status)
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		before, err := q.GetSectorForUpdate(ctx, ev.SectorID)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -97,4 +99,9 @@ func (s *Service) HandleConnection(ctx context.Context, ev messaging.ConnectionC
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.hub.Publish(realtime.ConnectionChanged(ev.SectorID))
+	return nil
 }
