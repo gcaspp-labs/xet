@@ -9,6 +9,7 @@ import UsersPage from '@/pages/admin/UsersPage'
 import ConnectionPage from '@/pages/connection/ConnectionPage'
 import ContactsPage from '@/pages/directory/ContactsPage'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
+import TicketPage from '@/pages/ticket/TicketPage'
 
 // Rotas que exigem sessão; sem sessão, vai para o login.
 function RequireAuth() {
@@ -38,6 +39,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<PanelPage />} />
+          <Route path="/chamados/:ticketId" element={<TicketPage />} />
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>

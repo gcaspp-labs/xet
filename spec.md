@@ -70,6 +70,16 @@ Mensagens de grupos do WhatsApp serão ignoradas no piloto e não gerarão chama
 
 Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão registradas no chamado correspondente com a marcação "enviada fora do sistema", sem atendente identificado. Se não houver chamado aberto para o contato, será criado um chamado na fila do setor. O uso do aparelho para atendimento deve ser evitado.
 
+## Conversa
+
+- Apenas o responsável envia mensagens e arquivos ao cliente, com o chamado aberto; supervisores e administradores também precisam ser o responsável. O backend confere o responsável a cada envio.
+- Arquivos enviados pelo painel têm até 16 MB. Imagens JPEG e PNG vão como imagem, vídeos MP4 como vídeo e os demais arquivos como documento, com o nome original. O envio de áudio gravado como mensagem de voz é tratado à parte.
+- Cada mensagem enviada mostra a situação de entrega: enviando, enviada, entregue, lida ou falhou. A situação só avança (uma confirmação atrasada de entrega não desfaz a leitura); uma mensagem marcada como falha volta a avançar se o WhatsApp confirmar a entrega.
+- Mensagem que falhou (número desconectado, erro do WhatsApp ou serviço reiniciado durante o envio) não é reenviada automaticamente: o responsável usa "Reenviar", que tenta a mesma mensagem de novo, sem duplicá-la no WhatsApp.
+- Notas internas podem ser escritas por qualquer pessoa com acesso ao setor do chamado, mesmo sem ser o responsável e também em chamado encerrado. Não são enviadas ao cliente, nem editadas ou excluídas.
+- O campo "falou com" é preenchido pelo responsável enquanto o chamado está aberto; depois do encerramento, muda só pela correção.
+- O histórico do contato e o do órgão listam os chamados, abertos e encerrados, dos setores a que o usuário tem acesso (todos, para o administrador), do mais recente ao mais antigo; cada chamado abre a conversa completa, só para leitura quando o usuário não é o responsável.
+
 ## Iniciar conversas
 
 - Qualquer atendente poderá buscar um contato e iniciar uma conversa pelo número do próprio setor.

@@ -179,6 +179,170 @@ func (q *Queries) GetTicket(ctx context.Context, id int64) (Ticket, error) {
 	return i, err
 }
 
+const getTicketDetail = `-- name: GetTicketDetail :one
+select
+    t.id, t.protocol, t.status, t.sector_id, s.name as sector_name, t.spoke_with,
+    t.arrived_at, t.assigned_at, t.closed_at, t.subject, t.resolution,
+    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    t.organization_id, o.name as organization_name,
+    t.assignee_id, u.name as assignee_name
+from tickets t
+join sectors s on s.id = t.sector_id
+join contacts c on c.id = t.contact_id
+left join organizations o on o.id = t.organization_id
+left join users u on u.id = t.assignee_id
+where t.id = $1
+`
+
+type GetTicketDetailRow struct {
+	ID                int64
+	Protocol          string
+	Status            TicketStatus
+	SectorID          int64
+	SectorName        string
+	SpokeWith         *string
+	ArrivedAt         time.Time
+	AssignedAt        *time.Time
+	ClosedAt          *time.Time
+	Subject           *string
+	Resolution        *string
+	ContactID         int64
+	ContactName       string
+	ContactPhone      *string
+	ContactRegistered bool
+	OrganizationID    *int64
+	OrganizationName  *string
+	AssigneeID        *int64
+	AssigneeName      *string
+}
+
+func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetailRow, error) {
+	row := q.db.QueryRow(ctx, getTicketDetail, id)
+	var i GetTicketDetailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.Status,
+		&i.SectorID,
+		&i.SectorName,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.ClosedAt,
+		&i.Subject,
+		&i.Resolution,
+		&i.ContactID,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.ContactRegistered,
+		&i.OrganizationID,
+		&i.OrganizationName,
+		&i.AssigneeID,
+		&i.AssigneeName,
+	)
+	return i, err
+}
+
+const getTicketForUpdate = `-- name: GetTicketForUpdate :one
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at from tickets
+where id = $1
+for update
+`
+
+func (q *Queries) GetTicketForUpdate(ctx context.Context, id int64) (Ticket, error) {
+	row := q.db.QueryRow(ctx, getTicketForUpdate, id)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listContactTickets = `-- name: ListContactTickets :many
+select
+    t.id, t.protocol, t.status, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    c.name as contact_name, o.name as organization_name, u.name as assignee_name
+from tickets t
+join sectors s on s.id = t.sector_id
+join contacts c on c.id = t.contact_id
+left join organizations o on o.id = t.organization_id
+left join users u on u.id = t.assignee_id
+where t.contact_id = $1
+  and ($2::bigint is null or t.sector_id = $2)
+order by t.arrived_at desc, t.id desc
+limit 200
+`
+
+type ListContactTicketsParams struct {
+	ContactID int64
+	SectorID  *int64
+}
+
+type ListContactTicketsRow struct {
+	ID               int64
+	Protocol         string
+	Status           TicketStatus
+	SectorName       string
+	ArrivedAt        time.Time
+	ClosedAt         *time.Time
+	Subject          *string
+	ContactName      string
+	OrganizationName *string
+	AssigneeName     *string
+}
+
+// History of the contact, newest first. A null sector lists every sector (admin).
+func (q *Queries) ListContactTickets(ctx context.Context, arg ListContactTicketsParams) ([]ListContactTicketsRow, error) {
+	rows, err := q.db.Query(ctx, listContactTickets, arg.ContactID, arg.SectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListContactTicketsRow
+	for rows.Next() {
+		var i ListContactTicketsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.Status,
+			&i.SectorName,
+			&i.ArrivedAt,
+			&i.ClosedAt,
+			&i.Subject,
+			&i.ContactName,
+			&i.OrganizationName,
+			&i.AssigneeName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOpenTickets = `-- name: ListOpenTickets :many
 select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
@@ -230,6 +394,71 @@ func (q *Queries) ListOpenTickets(ctx context.Context, sectorID int64) ([]ListOp
 			&i.ContactRegistered,
 			&i.OrganizationName,
 			&i.AssigneeID,
+			&i.AssigneeName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationTickets = `-- name: ListOrganizationTickets :many
+select
+    t.id, t.protocol, t.status, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    c.name as contact_name, o.name as organization_name, u.name as assignee_name
+from tickets t
+join sectors s on s.id = t.sector_id
+join contacts c on c.id = t.contact_id
+left join organizations o on o.id = t.organization_id
+left join users u on u.id = t.assignee_id
+where t.organization_id = $1
+  and ($2::bigint is null or t.sector_id = $2)
+order by t.arrived_at desc, t.id desc
+limit 200
+`
+
+type ListOrganizationTicketsParams struct {
+	OrganizationID *int64
+	SectorID       *int64
+}
+
+type ListOrganizationTicketsRow struct {
+	ID               int64
+	Protocol         string
+	Status           TicketStatus
+	SectorName       string
+	ArrivedAt        time.Time
+	ClosedAt         *time.Time
+	Subject          *string
+	ContactName      string
+	OrganizationName *string
+	AssigneeName     *string
+}
+
+// History of the organization, newest first. A null sector lists every sector (admin).
+func (q *Queries) ListOrganizationTickets(ctx context.Context, arg ListOrganizationTicketsParams) ([]ListOrganizationTicketsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationTickets, arg.OrganizationID, arg.SectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationTicketsRow
+	for rows.Next() {
+		var i ListOrganizationTicketsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.Status,
+			&i.SectorName,
+			&i.ArrivedAt,
+			&i.ClosedAt,
+			&i.Subject,
+			&i.ContactName,
+			&i.OrganizationName,
 			&i.AssigneeName,
 		); err != nil {
 			return nil, err
@@ -298,4 +527,45 @@ func (q *Queries) NextProtocolNumber(ctx context.Context, year int32) (int32, er
 	var last_value int32
 	err := row.Scan(&last_value)
 	return last_value, err
+}
+
+const setTicketSpokeWith = `-- name: SetTicketSpokeWith :one
+update tickets
+set spoke_with = $1
+where id = $2
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type SetTicketSpokeWithParams struct {
+	SpokeWith *string
+	ID        int64
+}
+
+func (q *Queries) SetTicketSpokeWith(ctx context.Context, arg SetTicketSpokeWithParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, setTicketSpokeWith, arg.SpokeWith, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

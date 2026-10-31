@@ -8,7 +8,102 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const advanceMessageStatus = `-- name: AdvanceMessageStatus :many
+update messages
+set status = $1, failure_reason = null
+where sector_id = $2 and external_message_id = any($3::text[])
+  and direction = 'outbound'
+  and (case status when 'sent' then 1 when 'delivered' then 2 when 'read' then 3 else 0 end)
+    < (case $1::message_status when 'sent' then 1 when 'delivered' then 2 when 'read' then 3 else 0 end)
+returning ticket_id
+`
+
+type AdvanceMessageStatusParams struct {
+	Status             NullMessageStatus
+	SectorID           int64
+	ExternalMessageIds []string
+}
+
+// Delivery progress only moves forward: a late "delivered" never undoes
+// "read". A confirmed delivery also overrides a failure.
+func (q *Queries) AdvanceMessageStatus(ctx context.Context, arg AdvanceMessageStatusParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, advanceMessageStatus, arg.Status, arg.SectorID, arg.ExternalMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var ticket_id int64
+		if err := rows.Scan(&ticket_id); err != nil {
+			return nil, err
+		}
+		items = append(items, ticket_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const createAgentMessage = `-- name: CreateAgentMessage :one
+insert into messages (ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, client_request_id, status, sent_at)
+values ($1, $2, $3, 'outbound', 'agent', $4, $5, $6, $7, $8, 'pending', now())
+on conflict (client_request_id) where client_request_id is not null do nothing
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+`
+
+type CreateAgentMessageParams struct {
+	TicketID        int64
+	SectorID        int64
+	ContactID       int64
+	AuthorID        *int64
+	Type            MessageType
+	Body            *string
+	MediaID         *int64
+	ClientRequestID pgtype.UUID
+}
+
+// Message sent by an agent through the system, recorded as pending before it
+// goes to the provider. A repeated request (same client_request_id) returns
+// no row.
+func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) (Message, error) {
+	row := q.db.QueryRow(ctx, createAgentMessage,
+		arg.TicketID,
+		arg.SectorID,
+		arg.ContactID,
+		arg.AuthorID,
+		arg.Type,
+		arg.Body,
+		arg.MediaID,
+		arg.ClientRequestID,
+	)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.TicketID,
+		&i.SectorID,
+		&i.ContactID,
+		&i.Direction,
+		&i.Origin,
+		&i.AuthorID,
+		&i.Type,
+		&i.Body,
+		&i.MediaID,
+		&i.ExternalMessageID,
+		&i.ClientRequestID,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
 
 const createMediaFile = `-- name: CreateMediaFile :one
 insert into media_files (storage_key, mime_type, size_bytes, file_name, sha256, duration_seconds)
@@ -108,6 +203,153 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 	return i, err
 }
 
+const failPendingMessages = `-- name: FailPendingMessages :execrows
+update messages
+set status = 'failed', failure_reason = $1
+where status = 'pending'
+`
+
+// Messages left pending by a previous run of the service: there is no
+// automatic resend, the agent retries them.
+func (q *Queries) FailPendingMessages(ctx context.Context, failureReason *string) (int64, error) {
+	result, err := q.db.Exec(ctx, failPendingMessages, failureReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failSentMessages = `-- name: FailSentMessages :many
+update messages
+set status = 'failed', failure_reason = $1
+where sector_id = $2 and external_message_id = any($3::text[])
+  and direction = 'outbound' and status in ('pending', 'sent')
+returning ticket_id
+`
+
+type FailSentMessagesParams struct {
+	FailureReason      *string
+	SectorID           int64
+	ExternalMessageIds []string
+}
+
+func (q *Queries) FailSentMessages(ctx context.Context, arg FailSentMessagesParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, failSentMessages, arg.FailureReason, arg.SectorID, arg.ExternalMessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var ticket_id int64
+		if err := rows.Scan(&ticket_id); err != nil {
+			return nil, err
+		}
+		items = append(items, ticket_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMediaFile = `-- name: GetMediaFile :one
+select id, storage_key, mime_type, size_bytes, file_name, sha256, duration_seconds, created_at from media_files
+where id = $1
+`
+
+func (q *Queries) GetMediaFile(ctx context.Context, id int64) (MediaFile, error) {
+	row := q.db.QueryRow(ctx, getMediaFile, id)
+	var i MediaFile
+	err := row.Scan(
+		&i.ID,
+		&i.StorageKey,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.FileName,
+		&i.Sha256,
+		&i.DurationSeconds,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getMediaFileSector = `-- name: GetMediaFileSector :one
+select t.sector_id
+from messages m
+join tickets t on t.id = m.ticket_id
+where m.media_id = $1
+limit 1
+`
+
+// Sector of the ticket whose message holds the file, to check the access.
+func (q *Queries) GetMediaFileSector(ctx context.Context, mediaID *int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getMediaFileSector, mediaID)
+	var sector_id int64
+	err := row.Scan(&sector_id)
+	return sector_id, err
+}
+
+const getMessage = `-- name: GetMessage :one
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at from messages
+where id = $1
+`
+
+func (q *Queries) GetMessage(ctx context.Context, id int64) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessage, id)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.TicketID,
+		&i.SectorID,
+		&i.ContactID,
+		&i.Direction,
+		&i.Origin,
+		&i.AuthorID,
+		&i.Type,
+		&i.Body,
+		&i.MediaID,
+		&i.ExternalMessageID,
+		&i.ClientRequestID,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMessageByClientRequestID = `-- name: GetMessageByClientRequestID :one
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at from messages
+where client_request_id = $1
+`
+
+func (q *Queries) GetMessageByClientRequestID(ctx context.Context, clientRequestID pgtype.UUID) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessageByClientRequestID, clientRequestID)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.TicketID,
+		&i.SectorID,
+		&i.ContactID,
+		&i.Direction,
+		&i.Origin,
+		&i.AuthorID,
+		&i.Type,
+		&i.Body,
+		&i.MediaID,
+		&i.ExternalMessageID,
+		&i.ClientRequestID,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listLastMessages = `-- name: ListLastMessages :many
 select distinct on (ticket_id) ticket_id, type, body, origin, sent_at
 from messages
@@ -150,6 +392,146 @@ func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]Li
 	return items, nil
 }
 
+const listTicketMessages = `-- name: ListTicketMessages :many
+select
+    m.id, m.ticket_id, m.direction, m.origin, m.type, m.body, m.status, m.failure_reason, m.sent_at,
+    m.author_id, u.name as author_name,
+    m.media_id, f.mime_type as media_mime_type, f.file_name as media_file_name, f.size_bytes as media_size_bytes
+from messages m
+left join users u on u.id = m.author_id
+left join media_files f on f.id = m.media_id
+where m.ticket_id = $1
+order by m.sent_at, m.id
+`
+
+type ListTicketMessagesRow struct {
+	ID             int64
+	TicketID       int64
+	Direction      MessageDirection
+	Origin         MessageOrigin
+	Type           MessageType
+	Body           *string
+	Status         NullMessageStatus
+	FailureReason  *string
+	SentAt         time.Time
+	AuthorID       *int64
+	AuthorName     *string
+	MediaID        *int64
+	MediaMimeType  *string
+	MediaFileName  *string
+	MediaSizeBytes *int64
+}
+
+func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]ListTicketMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listTicketMessages, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTicketMessagesRow
+	for rows.Next() {
+		var i ListTicketMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TicketID,
+			&i.Direction,
+			&i.Origin,
+			&i.Type,
+			&i.Body,
+			&i.Status,
+			&i.FailureReason,
+			&i.SentAt,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.MediaID,
+			&i.MediaMimeType,
+			&i.MediaFileName,
+			&i.MediaSizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markMessageFailed = `-- name: MarkMessageFailed :one
+update messages
+set status = 'failed', failure_reason = $1
+where id = $2 and status = 'pending'
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+`
+
+type MarkMessageFailedParams struct {
+	FailureReason *string
+	ID            int64
+}
+
+func (q *Queries) MarkMessageFailed(ctx context.Context, arg MarkMessageFailedParams) (Message, error) {
+	row := q.db.QueryRow(ctx, markMessageFailed, arg.FailureReason, arg.ID)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.TicketID,
+		&i.SectorID,
+		&i.ContactID,
+		&i.Direction,
+		&i.Origin,
+		&i.AuthorID,
+		&i.Type,
+		&i.Body,
+		&i.MediaID,
+		&i.ExternalMessageID,
+		&i.ClientRequestID,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markMessageSent = `-- name: MarkMessageSent :one
+update messages
+set status = 'sent', external_message_id = $1, failure_reason = null
+where id = $2 and status = 'pending'
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+`
+
+type MarkMessageSentParams struct {
+	ExternalMessageID *string
+	ID                int64
+}
+
+func (q *Queries) MarkMessageSent(ctx context.Context, arg MarkMessageSentParams) (Message, error) {
+	row := q.db.QueryRow(ctx, markMessageSent, arg.ExternalMessageID, arg.ID)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.TicketID,
+		&i.SectorID,
+		&i.ContactID,
+		&i.Direction,
+		&i.Origin,
+		&i.AuthorID,
+		&i.Type,
+		&i.Body,
+		&i.MediaID,
+		&i.ExternalMessageID,
+		&i.ClientRequestID,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const messageExists = `-- name: MessageExists :one
 select exists (
     select 1 from messages where sector_id = $1 and external_message_id = $2
@@ -166,4 +548,37 @@ func (q *Queries) MessageExists(ctx context.Context, arg MessageExistsParams) (b
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const retryMessage = `-- name: RetryMessage :one
+update messages
+set status = 'pending', failure_reason = null
+where id = $1 and status = 'failed'
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+`
+
+// Only a failed message goes back to pending, so a double click retries once.
+func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
+	row := q.db.QueryRow(ctx, retryMessage, id)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.TicketID,
+		&i.SectorID,
+		&i.ContactID,
+		&i.Direction,
+		&i.Origin,
+		&i.AuthorID,
+		&i.Type,
+		&i.Body,
+		&i.MediaID,
+		&i.ExternalMessageID,
+		&i.ClientRequestID,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

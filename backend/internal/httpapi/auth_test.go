@@ -31,11 +31,12 @@ import (
 const testPassword = "Senha@123"
 
 type testEnv struct {
-	t       *testing.T
-	pool    *pgxpool.Pool
-	q       *db.Queries
-	url     string
-	sectors *sector.Service
+	t             *testing.T
+	pool          *pgxpool.Pool
+	q             *db.Queries
+	url           string
+	sectors       *sector.Service
+	ticketService *ticket.Service
 	// whatsapp simulates the phones of the sector numbers.
 	whatsapp *fake.Adapter
 	// files holds the attachments of the messages.
@@ -66,6 +67,8 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 			return tickets.HandleReceived(ctx, ev)
 		case messaging.MessageSentOutside:
 			return tickets.HandleSentOutside(ctx, ev)
+		case messaging.StatusUpdated:
+			return tickets.HandleStatus(ctx, ev)
 		}
 		return nil
 	})
@@ -81,7 +84,7 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testEnv{t: t, pool: pool, q: db.New(pool), url: srv.URL, sectors: sectors, whatsapp: whatsapp, files: files}
+	return &testEnv{t: t, pool: pool, q: db.New(pool), url: srv.URL, sectors: sectors, ticketService: tickets, whatsapp: whatsapp, files: files}
 }
 
 func (e *testEnv) sector(name, phone string) db.Sector {

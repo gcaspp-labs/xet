@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormSheet } from '@/components/FormSheet'
 import { SearchBox } from '@/components/SearchBox'
+import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -206,6 +207,7 @@ export default function ContactsPage() {
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
   const [sheetKey, setSheetKey] = useState(0)
+  const [history, setHistory] = useState<Contact | null>(null)
 
   const openSheet = (contact: Contact | null) => {
     setEditing(contact)
@@ -267,7 +269,15 @@ export default function ContactsPage() {
                         <span className="text-ink-faint">Sem órgão</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Histórico de ${contact.name}`}
+                        onClick={() => setHistory(contact)}
+                      >
+                        Histórico
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -303,6 +313,10 @@ export default function ContactsPage() {
         )}
       </PageContent>
       <ContactSheet key={sheetKey} contact={editing} open={open} onOpenChange={setOpen} />
+      <HistorySheet
+        target={history && { kind: 'contact', id: history.id, name: history.name }}
+        onClose={() => setHistory(null)}
+      />
     </>
   )
 }

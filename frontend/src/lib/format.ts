@@ -77,3 +77,20 @@ export function formatMessageTime(value: string) {
   const date = new Date(value)
   return format(date, isToday(date) ? 'HH:mm' : 'dd/MM HH:mm')
 }
+
+export const ticketStatusLabels: Record<
+  'queued' | 'in_progress' | 'closed',
+  { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }
+> = {
+  queued: { label: 'Na fila', tone: 'warning' },
+  in_progress: { label: 'Em atendimento', tone: 'success' },
+  closed: { label: 'Encerrado', tone: 'neutral' },
+}
+
+// Tamanho de arquivo em pt-BR: 820 KB, 1,4 MB.
+export function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  }
+  return `${(bytes / (1024 * 1024)).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB`
+}

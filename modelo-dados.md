@@ -202,7 +202,9 @@ Restrições:
 | `author_id` | bigint → `users` | Obrigatório |
 | `body` | text | Obrigatório |
 
-Notas não são editadas nem excluídas. Ficam visíveis para quem pode ver o chamado e, após transferência entre setores, para o setor de destino.
+Índice: `(ticket_id, created_at)` para exibir as notas do chamado.
+
+Notas não são editadas nem excluídas. Qualquer pessoa com acesso ao setor do chamado escreve notas, mesmo sem ser o responsável e após o encerramento. Ficam visíveis para quem pode ver o chamado e, após transferência entre setores, para o setor de destino.
 
 ### `protocol_counters` — Contador de protocolo
 
@@ -271,6 +273,8 @@ Restrições:
 Índice: `(ticket_id, sent_at)` para exibir a conversa.
 
 Mensagens enviadas pelo celular fora do sistema (`origin = 'phone'`) são gravadas com `status = 'sent'`, sem autor.
+
+Mensagens enviadas pelo sistema são gravadas como `pending` (com `sent_at` no momento do registro) e passam a `sent` com o `external_message_id` quando o provedor aceita, ou a `failed` com `failure_reason`. As confirmações do provedor só avançam a situação (`sent` → `delivered` → `read`); uma falha informada pelo provedor só vale para mensagens `pending` ou `sent`, e uma entrega confirmada vale também sobre `failed`. O reenvio pelo responsável volta a mensagem de `failed` para `pending` com a mesma chave de idempotência (`client_request_id`).
 
 Mensagens não são editadas nem excluídas.
 

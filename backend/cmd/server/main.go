@@ -73,6 +73,8 @@ func eventHandler(sectors *sector.Service, tickets *ticket.Service) messaging.Ev
 			return tickets.HandleReceived(ctx, ev)
 		case messaging.MessageSentOutside:
 			return tickets.HandleSentOutside(ctx, ev)
+		case messaging.StatusUpdated:
+			return tickets.HandleStatus(ctx, ev)
 		}
 		return nil
 	}
@@ -100,6 +102,14 @@ func run() error {
 	hub := realtime.NewHub()
 	sectors := sector.NewService(pool, hub)
 	tickets := ticket.NewService(pool, storage.NewDisk(cfg.StorageDir), hub)
+	// Messages left pending by the previous run are not resent automatically.
+	failed, err := tickets.FailPending(ctx)
+	if err != nil {
+		return err
+	}
+	if failed > 0 {
+		logger.Warn("pending messages marked as failed", "count", failed)
+	}
 	opts := httpapi.Options{SecureCookie: cfg.CookieSecure}
 	handler := eventHandler(sectors, tickets)
 	switch cfg.MessagingProvider {

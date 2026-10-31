@@ -8,11 +8,13 @@ export class ApiError extends Error {
 }
 
 // Chama a API do backend; erros chegam como { error: "mensagem" } em português.
+// Um FormData (envio de arquivo) vai como multipart; o resto, como JSON.
 export async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+  const json = init?.body !== undefined && !(init.body instanceof FormData)
   const response = await fetch(`/api${path}`, {
     method: init?.method ?? 'GET',
-    headers: init?.body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: init?.body === undefined ? undefined : JSON.stringify(init.body),
+    headers: json ? { 'Content-Type': 'application/json' } : undefined,
+    body: json ? JSON.stringify(init.body) : (init?.body as FormData | undefined),
     credentials: 'same-origin',
   })
   if (!response.ok) {

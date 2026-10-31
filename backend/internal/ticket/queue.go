@@ -70,20 +70,14 @@ func (s *Service) Workload(ctx context.Context, sectorID int64) ([]db.ListSector
 // without a new record, so a repeated click is harmless.
 func (s *Service) Assign(ctx context.Context, actor auth.User, ticketID int64) (db.Ticket, error) {
 	// The sector of a ticket never changes, so it is checked before the update.
-	current, err := s.q.GetTicket(ctx, ticketID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return db.Ticket{}, ErrNotFound
-	}
-	if err != nil {
-		return db.Ticket{}, fmt.Errorf("get ticket: %w", err)
-	}
-	if !actor.CanAccessSector(current.SectorID) {
-		return db.Ticket{}, ErrForbidden
+	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+		return db.Ticket{}, err
 	}
 
 	var ticket db.Ticket
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
+		var err error
 		ticket, err = q.AssignTicket(ctx, db.AssignTicketParams{ID: ticketID, AssigneeID: &actor.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errNotQueued

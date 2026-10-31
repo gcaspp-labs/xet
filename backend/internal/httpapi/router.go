@@ -116,8 +116,19 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 			// Painel: chamados abertos e carga de cada atendente, para todos os papéis do setor.
 			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/tickets", s.listTickets)
 			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/workload", s.workload)
-			// O serviço confere o setor do chamado.
+			// O serviço confere o setor do chamado e, para responder, o responsável.
 			r.Post("/tickets/{ticketID}/assign", s.assignTicket)
+			r.Get("/tickets/{ticketID}", s.getTicket)
+			r.Get("/tickets/{ticketID}/messages", s.listMessages)
+			r.Post("/tickets/{ticketID}/messages", s.sendMessage)
+			r.Put("/tickets/{ticketID}/spoke-with", s.setSpokeWith)
+			r.Get("/tickets/{ticketID}/notes", s.listNotes)
+			r.Post("/tickets/{ticketID}/notes", s.createNote)
+			r.Post("/messages/{messageID}/retry", s.retryMessage)
+			r.Get("/media/{mediaID}", s.getMedia)
+			// Histórico: chamados dos setores do usuário (todos, para o administrador).
+			r.Get("/contacts/{contactID}/tickets", s.contactHistory)
+			r.Get("/organizations/{organizationID}/tickets", s.organizationHistory)
 
 			// Contatos: o cadastro é único para todos os setores e aberto a todos os papéis.
 			r.Get("/contacts", s.listContacts)

@@ -165,24 +165,30 @@ func (s *Service) saveMedia(ctx context.Context, msg messaging.Message, now time
 		return nil, fmt.Errorf("%s message without media", msg.Type)
 	}
 
+	return s.storeMedia(ctx, *msg.Media, now)
+}
+
+// storeMedia writes a file to the storage and returns its record, to be
+// created in the transaction of the message.
+func (s *Service) storeMedia(ctx context.Context, media messaging.Media, now time.Time) (*db.CreateMediaFileParams, error) {
 	key := storage.NewKey(now)
-	if err := s.storage.Put(ctx, key, msg.Media.Data); err != nil {
+	if err := s.storage.Put(ctx, key, media.Data); err != nil {
 		return nil, fmt.Errorf("save media: %w", err)
 	}
-	sum := sha256.Sum256(msg.Media.Data)
-	mimeType := msg.Media.MimeType
+	sum := sha256.Sum256(media.Data)
+	mimeType := media.MimeType
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
 	m := &db.CreateMediaFileParams{
 		StorageKey: key,
 		MimeType:   mimeType,
-		SizeBytes:  int64(len(msg.Media.Data)),
-		FileName:   optional(msg.Media.FileName),
+		SizeBytes:  int64(len(media.Data)),
+		FileName:   optional(media.FileName),
 		Sha256:     hex.EncodeToString(sum[:]),
 	}
-	if msg.Media.DurationSeconds > 0 {
-		seconds := int32(min(msg.Media.DurationSeconds, 1<<31-1))
+	if media.DurationSeconds > 0 {
+		seconds := int32(min(media.DurationSeconds, 1<<31-1))
 		m.DurationSeconds = &seconds
 	}
 	return m, nil
