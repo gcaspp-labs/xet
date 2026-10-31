@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -39,12 +40,23 @@ func (e *testEnv) sendText(ticketID int64, token, requestID, body string) respon
 // sendFile posts a file to the ticket as the panel does, in a multipart form.
 func (e *testEnv) sendFile(ticketID int64, token, requestID, name, mimeType string, data []byte, caption string) response {
 	e.t.Helper()
+	return e.sendForm(ticketID, token, requestID, "file", name, mimeType, data, caption)
+}
+
+// sendVoice posts audio recorded in the browser, to go as a voice message.
+func (e *testEnv) sendVoice(ticketID int64, token, requestID string, data []byte, caption string) response {
+	e.t.Helper()
+	return e.sendForm(ticketID, token, requestID, "voice", "gravacao.webm", "audio/webm;codecs=opus", data, caption)
+}
+
+func (e *testEnv) sendForm(ticketID int64, token, requestID, field, name, mimeType string, data []byte, caption string) response {
+	e.t.Helper()
 	var buf bytes.Buffer
 	form := multipart.NewWriter(&buf)
 	_ = form.WriteField("clientRequestId", requestID)
 	_ = form.WriteField("caption", caption)
 	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename=%q`, name))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, field, name))
 	header.Set("Content-Type", mimeType)
 	part, err := form.CreatePart(header)
 	if err != nil {
@@ -349,6 +361,93 @@ func TestSendingFiles(t *testing.T) {
 	}
 	if got := e.outbound(c.ticket.ID); len(got) != 2 {
 		t.Fatalf("large file recorded: %d messages", len(got))
+	}
+}
+
+// recordWebM makes a WebM/Opus recording like the browser's, with a tone
+// of the given seconds.
+func recordWebM(t *testing.T, seconds int) []byte {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+		"-f", "lavfi", "-i", fmt.Sprintf("sine=frequency=440:duration=%d", seconds),
+		"-c:a", "libopus", "-f", "webm", "pipe:1").Output()
+	if err != nil {
+		t.Fatalf("ffmpeg: %v", err)
+	}
+	return out
+}
+
+func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	webm := recordWebM(t, 2)
+
+	// Só o responsável envia áudio; a gravação recusada não deixa registro.
+	if r := e.sendVoice(c.ticket.ID, c.biaToken, requestB, webm, ""); r.status != http.StatusForbidden {
+		t.Fatalf("voice by another agent: status %d", r.status)
+	}
+	// Conteúdo que não é áudio é recusado com uma mensagem clara.
+	if r := e.sendVoice(c.ticket.ID, c.anaToken, requestB, []byte("não é áudio"), ""); r.status != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid audio: status %d, body %v", r.status, r.body)
+	}
+	if got := e.outbound(c.ticket.ID); len(got) != 0 {
+		t.Fatalf("refused audio recorded: %+v", got)
+	}
+
+	// A legenda é ignorada: mensagem de voz não tem texto.
+	resp := e.sendVoice(c.ticket.ID, c.anaToken, requestA, webm, "legenda indevida")
+	if resp.status != http.StatusOK || resp.body["status"] != "sent" {
+		t.Fatalf("voice: status %d, body %v", resp.status, resp.body)
+	}
+	got := e.outbound(c.ticket.ID)
+	if len(got) != 1 || got[0].Type != "audio" || got[0].Body != nil || got[0].MediaID == nil {
+		t.Fatalf("voice message = %+v", got)
+	}
+	file := e.media(*got[0].MediaID)
+	if file.MimeType != "audio/ogg; codecs=opus" || file.FileName != nil {
+		t.Fatalf("voice file = %+v", file)
+	}
+
+	// Convertido para OGG/Opus e enviado como áudio, com a duração da gravação.
+	sent := e.whatsapp.SentMessages()
+	if len(sent) != 1 {
+		t.Fatalf("sent %d messages, want 1", len(sent))
+	}
+	voice, ok := sent[0].(messaging.MediaMessage)
+	if !ok || voice.Type != messaging.TypeAudio || voice.Media.MimeType != "audio/ogg; codecs=opus" ||
+		voice.Media.DurationSeconds != 2 || voice.Caption != "" || !bytes.HasPrefix(voice.Media.Data, []byte("OggS")) {
+		t.Fatalf("voice sent = type %s, mime %q, seconds %d, caption %q", voice.Type, voice.Media.MimeType, voice.Media.DurationSeconds, voice.Caption)
+	}
+
+	// Repetir o envio devolve a mesma mensagem, sem converter nem enviar de novo.
+	if r := e.sendVoice(c.ticket.ID, c.anaToken, requestA, webm, ""); r.status != http.StatusOK || id(r.body) != got[0].ID {
+		t.Fatalf("repeated voice: status %d, body %v", r.status, r.body)
+	}
+	if sent := e.whatsapp.SentMessages(); len(sent) != 1 {
+		t.Fatalf("repeated voice sent again: %d messages", len(sent))
+	}
+	if n := e.count("media_files"); n != 1 {
+		t.Fatalf("media files = %d, want 1", n)
+	}
+
+	// O player do painel busca trechos do arquivo para avançar e voltar.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("%s/api/media/%d", e.url, *got[0].MediaID), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Range", "bytes=0-3")
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: c.biaToken})
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	part, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusPartialContent || string(part) != "OggS" || res.Header.Get("Content-Type") != "audio/ogg; codecs=opus" ||
+		!strings.HasPrefix(res.Header.Get("Content-Disposition"), "inline") {
+		t.Fatalf("range: status %d, body %q, headers %v", res.StatusCode, part, res.Header)
 	}
 }
 

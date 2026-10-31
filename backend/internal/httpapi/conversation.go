@@ -130,6 +130,8 @@ func (s *server) ticketError(w http.ResponseWriter, r *http.Request, err error) 
 		writeError(w, http.StatusConflict, "Este envio já foi usado em outra mensagem. Tente novamente.")
 	case errors.Is(err, ticket.ErrNotFailed):
 		writeError(w, http.StatusConflict, "Esta mensagem não está com falha.")
+	case errors.Is(err, ticket.ErrInvalidAudio):
+		writeError(w, http.StatusUnprocessableEntity, "Não foi possível ler o áudio gravado. Grave novamente.")
 	default:
 		s.internalError(w, r, err)
 	}
@@ -237,7 +239,12 @@ func (s *server) readFileMessage(w http.ResponseWriter, r *http.Request) (ticket
 	if !parseRequestID(w, r.FormValue("clientRequestId"), &out.ClientRequestID) {
 		return out, false
 	}
+	// A recording to go as a voice message comes in the voice field.
 	file, header, err := r.FormFile("file")
+	if errors.Is(err, http.ErrMissingFile) {
+		file, header, err = r.FormFile("voice")
+		out.Voice = err == nil
+	}
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "Escolha um arquivo.")
 		return out, false
@@ -260,7 +267,9 @@ func (s *server) readFileMessage(w http.ResponseWriter, r *http.Request) (ticket
 	if mimeType == "" || mimeType == "application/octet-stream" {
 		mimeType = http.DetectContentType(data)
 	}
-	out.Body = strings.TrimSpace(r.FormValue("caption"))
+	if !out.Voice {
+		out.Body = strings.TrimSpace(r.FormValue("caption"))
+	}
 	out.File = &messaging.Media{Data: data, MimeType: mimeType, FileName: filepath.Base(header.Filename)}
 	return out, true
 }
@@ -309,11 +318,17 @@ func (s *server) getMedia(w http.ResponseWriter, r *http.Request) {
 		disposition = "inline"
 	}
 	w.Header().Set("Content-Type", file.MimeType)
-	w.Header().Set("Content-Length", fmt.Sprint(file.SizeBytes))
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": name}))
 	w.Header().Set("Content-Security-Policy", "sandbox")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=86400")
+	// Byte ranges let the audio and video players seek; the disk storage
+	// supports them, other storages send the whole file.
+	if seeker, ok := content.(io.ReadSeeker); ok {
+		http.ServeContent(w, r, "", file.CreatedAt, seeker)
+		return
+	}
+	w.Header().Set("Content-Length", fmt.Sprint(file.SizeBytes))
 	_, _ = io.Copy(w, content)
 }
 
