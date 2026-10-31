@@ -67,7 +67,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 ## Fase 2 — Conexão e recebimento
 
-### [ ] T06 — Camada de mensageria e Whatsmeow
+### [~] T06 — Camada de mensageria e Whatsmeow
 
 - Contrato de mensageria com tipos neutros conforme `arquitetura.md` e adaptador falso para testes.
 - Adaptador Whatsmeow em `internal/messaging/whatsmeow`, uma sessão por setor, sessões salvas no PostgreSQL.

@@ -315,6 +315,8 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `module_created`, `module_updated` | Administração de módulos |
 | `organization_created`, `organization_updated` | Administração de órgãos |
 
+Conexão do número: `sector_connected` é gravado quando o setor passa a `connected` vindo de outro estado ou com outra conta vinculada; `sector_disconnected`, quando sai de `connected`. Os estados intermediários (`connecting`) e as reconexões automáticas que não passam por `connected` não geram auditoria. Os dois registros são ações do sistema (`actor_id` vazio) e guardam em `changes` o estado da conexão e a conta vinculada.
+
 Registros de auditoria nunca são alterados nem excluídos.
 
 ## Sessões do Whatsmeow
