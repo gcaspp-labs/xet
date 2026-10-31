@@ -51,6 +51,8 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - Cada telefone corresponde a um único contato. Quando um telefone for usado por mais de uma pessoa, o atendente poderá anotar no chamado com quem falou.
 - A busca deverá permitir localizar órgãos e contatos por nome, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
 - Mensagens de números desconhecidos entrarão normalmente na fila.
+- A mensagem recebida é ligada ao contato pelo identificador do WhatsApp gravado no contato. Na primeira mensagem de um contato cadastrado manualmente, ainda sem esse identificador, vale o telefone, aceitando também a variante brasileira com ou sem o nono dígito do celular (ex.: 5511987654321 e 551187654321); o identificador passa a ser gravado no contato.
+- Número desconhecido gera um contato não cadastrado, com o nome do perfil do WhatsApp ou, sem ele, o telefone. Se o WhatsApp não informar o telefone (contato identificado apenas por LID), o contato fica sem telefone, com o nome do perfil ou "Contato sem telefone"; o atendente informa o telefone ao cadastrá-lo.
 - Antes de finalizar um chamado de número desconhecido, o atendente deverá cadastrar o contato e vinculá-lo a um órgão pré-cadastrado.
 
 ## Recebimento e distribuição

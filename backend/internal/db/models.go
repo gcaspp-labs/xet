@@ -8,7 +8,67 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type ClosureType string
+
+const (
+	ClosureTypeResolved    ClosureType = "resolved"
+	ClosureTypeTransferred ClosureType = "transferred"
+)
+
+func (e *ClosureType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ClosureType(s)
+	case string:
+		*e = ClosureType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ClosureType: %T", src)
+	}
+	return nil
+}
+
+type NullClosureType struct {
+	ClosureType ClosureType
+	Valid       bool // Valid is true if ClosureType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullClosureType) Scan(value interface{}) error {
+	if value == nil {
+		ns.ClosureType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ClosureType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullClosureType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ClosureType), nil
+}
+
+func (e ClosureType) Valid() bool {
+	switch e {
+	case ClosureTypeResolved,
+		ClosureTypeTransferred:
+		return true
+	}
+	return false
+}
+
+func AllClosureTypeValues() []ClosureType {
+	return []ClosureType{
+		ClosureTypeResolved,
+		ClosureTypeTransferred,
+	}
+}
 
 type ConnectionStatus string
 
@@ -71,6 +131,323 @@ func AllConnectionStatusValues() []ConnectionStatus {
 		ConnectionStatusConnecting,
 		ConnectionStatusConnected,
 		ConnectionStatusLoggedOut,
+	}
+}
+
+type MessageDirection string
+
+const (
+	MessageDirectionInbound  MessageDirection = "inbound"
+	MessageDirectionOutbound MessageDirection = "outbound"
+)
+
+func (e *MessageDirection) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageDirection(s)
+	case string:
+		*e = MessageDirection(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageDirection: %T", src)
+	}
+	return nil
+}
+
+type NullMessageDirection struct {
+	MessageDirection MessageDirection
+	Valid            bool // Valid is true if MessageDirection is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageDirection) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageDirection, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageDirection.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageDirection) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageDirection), nil
+}
+
+func (e MessageDirection) Valid() bool {
+	switch e {
+	case MessageDirectionInbound,
+		MessageDirectionOutbound:
+		return true
+	}
+	return false
+}
+
+func AllMessageDirectionValues() []MessageDirection {
+	return []MessageDirection{
+		MessageDirectionInbound,
+		MessageDirectionOutbound,
+	}
+}
+
+type MessageOrigin string
+
+const (
+	MessageOriginCustomer MessageOrigin = "customer"
+	MessageOriginAgent    MessageOrigin = "agent"
+	MessageOriginPhone    MessageOrigin = "phone"
+)
+
+func (e *MessageOrigin) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageOrigin(s)
+	case string:
+		*e = MessageOrigin(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageOrigin: %T", src)
+	}
+	return nil
+}
+
+type NullMessageOrigin struct {
+	MessageOrigin MessageOrigin
+	Valid         bool // Valid is true if MessageOrigin is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageOrigin) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageOrigin, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageOrigin.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageOrigin) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageOrigin), nil
+}
+
+func (e MessageOrigin) Valid() bool {
+	switch e {
+	case MessageOriginCustomer,
+		MessageOriginAgent,
+		MessageOriginPhone:
+		return true
+	}
+	return false
+}
+
+func AllMessageOriginValues() []MessageOrigin {
+	return []MessageOrigin{
+		MessageOriginCustomer,
+		MessageOriginAgent,
+		MessageOriginPhone,
+	}
+}
+
+type MessageStatus string
+
+const (
+	MessageStatusPending   MessageStatus = "pending"
+	MessageStatusSent      MessageStatus = "sent"
+	MessageStatusDelivered MessageStatus = "delivered"
+	MessageStatusRead      MessageStatus = "read"
+	MessageStatusFailed    MessageStatus = "failed"
+)
+
+func (e *MessageStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageStatus(s)
+	case string:
+		*e = MessageStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageStatus: %T", src)
+	}
+	return nil
+}
+
+type NullMessageStatus struct {
+	MessageStatus MessageStatus
+	Valid         bool // Valid is true if MessageStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageStatus), nil
+}
+
+func (e MessageStatus) Valid() bool {
+	switch e {
+	case MessageStatusPending,
+		MessageStatusSent,
+		MessageStatusDelivered,
+		MessageStatusRead,
+		MessageStatusFailed:
+		return true
+	}
+	return false
+}
+
+func AllMessageStatusValues() []MessageStatus {
+	return []MessageStatus{
+		MessageStatusPending,
+		MessageStatusSent,
+		MessageStatusDelivered,
+		MessageStatusRead,
+		MessageStatusFailed,
+	}
+}
+
+type MessageType string
+
+const (
+	MessageTypeText        MessageType = "text"
+	MessageTypeImage       MessageType = "image"
+	MessageTypeVideo       MessageType = "video"
+	MessageTypeAudio       MessageType = "audio"
+	MessageTypeDocument    MessageType = "document"
+	MessageTypeUnsupported MessageType = "unsupported"
+)
+
+func (e *MessageType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageType(s)
+	case string:
+		*e = MessageType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageType: %T", src)
+	}
+	return nil
+}
+
+type NullMessageType struct {
+	MessageType MessageType
+	Valid       bool // Valid is true if MessageType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageType) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageType), nil
+}
+
+func (e MessageType) Valid() bool {
+	switch e {
+	case MessageTypeText,
+		MessageTypeImage,
+		MessageTypeVideo,
+		MessageTypeAudio,
+		MessageTypeDocument,
+		MessageTypeUnsupported:
+		return true
+	}
+	return false
+}
+
+func AllMessageTypeValues() []MessageType {
+	return []MessageType{
+		MessageTypeText,
+		MessageTypeImage,
+		MessageTypeVideo,
+		MessageTypeAudio,
+		MessageTypeDocument,
+		MessageTypeUnsupported,
+	}
+}
+
+type TicketStatus string
+
+const (
+	TicketStatusQueued     TicketStatus = "queued"
+	TicketStatusInProgress TicketStatus = "in_progress"
+	TicketStatusClosed     TicketStatus = "closed"
+)
+
+func (e *TicketStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TicketStatus(s)
+	case string:
+		*e = TicketStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TicketStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTicketStatus struct {
+	TicketStatus TicketStatus
+	Valid        bool // Valid is true if TicketStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTicketStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TicketStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TicketStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTicketStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TicketStatus), nil
+}
+
+func (e TicketStatus) Valid() bool {
+	switch e {
+	case TicketStatusQueued,
+		TicketStatusInProgress,
+		TicketStatusClosed:
+		return true
+	}
+	return false
+}
+
+func AllTicketStatusValues() []TicketStatus {
+	return []TicketStatus{
+		TicketStatusQueued,
+		TicketStatusInProgress,
+		TicketStatusClosed,
 	}
 }
 
@@ -150,10 +527,41 @@ type AuditLog struct {
 type Contact struct {
 	ID                int64
 	Name              string
-	Phone             string
+	Phone             *string
 	ExternalContactID *string
 	OrganizationID    *int64
 	Registered        bool
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+type MediaFile struct {
+	ID              int64
+	StorageKey      string
+	MimeType        string
+	SizeBytes       int64
+	FileName        *string
+	Sha256          string
+	DurationSeconds *int32
+	CreatedAt       time.Time
+}
+
+type Message struct {
+	ID                int64
+	TicketID          int64
+	SectorID          int64
+	ContactID         int64
+	Direction         MessageDirection
+	Origin            MessageOrigin
+	AuthorID          *int64
+	Type              MessageType
+	Body              *string
+	MediaID           *int64
+	ExternalMessageID *string
+	ClientRequestID   pgtype.UUID
+	Status            NullMessageStatus
+	FailureReason     *string
+	SentAt            time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
@@ -173,6 +581,11 @@ type Organization struct {
 	Cnpj      *string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type ProtocolCounter struct {
+	Year      int32
+	LastValue int32
 }
 
 type Sector struct {
@@ -195,6 +608,30 @@ type Session struct {
 	ExpiresAt  time.Time
 	LastSeenAt time.Time
 	CreatedAt  time.Time
+}
+
+type Ticket struct {
+	ID               int64
+	Protocol         string
+	SectorID         int64
+	ContactID        int64
+	OrganizationID   *int64
+	AssigneeID       *int64
+	Status           TicketStatus
+	PreviousTicketID *int64
+	CreatedByID      *int64
+	SpokeWith        *string
+	ArrivedAt        time.Time
+	AssignedAt       *time.Time
+	StartedAt        time.Time
+	EndedAt          *time.Time
+	ClosedAt         *time.Time
+	ClosedByID       *int64
+	ClosureType      NullClosureType
+	Subject          *string
+	Resolution       *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type User struct {

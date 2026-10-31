@@ -76,7 +76,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** o número de teste conecta por QR code, sobrevive a reinício do serviço e a desconexão aparece no painel.
 
-### [ ] T07 — Recebimento de mensagens e chamados
+### [x] T07 — Recebimento de mensagens e chamados
 
 - Mensagem recebida cria chamado na fila do setor (com protocolo ano + sequência) ou entra no chamado aberto do contato.
 - Índice único: um chamado aberto por contato e setor.

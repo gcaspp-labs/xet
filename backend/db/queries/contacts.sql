@@ -30,3 +30,25 @@ where @name_pattern::text = ''
    or (@cnpj_pattern::text <> '' and o.cnpj like @cnpj_pattern)
 order by lower(c.name), c.id
 limit @max_results;
+
+-- name: GetContactByExternalID :one
+select * from contacts where external_contact_id = @external_contact_id;
+
+-- name: GetContactByPhone :one
+-- Matches any of the phone variants (with or without the Brazilian ninth
+-- digit), preferring the exact phone, given first.
+select * from contacts
+where phone = any(@phones::text[])
+order by phone <> (@phones::text[])[1], id
+limit 1;
+
+-- name: SetContactExternalID :exec
+update contacts set external_contact_id = @external_contact_id where id = @id;
+
+-- name: CreateUnregisteredContact :one
+-- A concurrent message of the same new contact may insert it first; then no
+-- row is returned and the caller looks it up again.
+insert into contacts (name, phone, external_contact_id, registered)
+values (@name, @phone, @external_contact_id, false)
+on conflict do nothing
+returning *;

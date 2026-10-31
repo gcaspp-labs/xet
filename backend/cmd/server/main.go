@@ -23,6 +23,8 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/whatsmeow"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
+	"github.com/gcaspp-labs/xet/backend/internal/storage"
+	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
 func main() {
@@ -61,10 +63,15 @@ func openDatabase(ctx context.Context, databaseURL string) (*pgxpool.Pool, error
 }
 
 // eventHandler routes the events of the messaging provider to the domains.
-func eventHandler(sectors *sector.Service) messaging.EventHandler {
+func eventHandler(sectors *sector.Service, tickets *ticket.Service) messaging.EventHandler {
 	return func(ctx context.Context, ev messaging.Event) error {
-		if ev, ok := ev.(messaging.ConnectionChanged); ok {
+		switch ev := ev.(type) {
+		case messaging.ConnectionChanged:
 			return sectors.HandleConnection(ctx, ev)
+		case messaging.MessageReceived:
+			return tickets.HandleReceived(ctx, ev)
+		case messaging.MessageSentOutside:
+			return tickets.HandleSentOutside(ctx, ev)
 		}
 		return nil
 	}
@@ -91,7 +98,7 @@ func run() error {
 
 	sectors := sector.NewService(pool)
 	opts := httpapi.Options{SecureCookie: cfg.CookieSecure}
-	handler := eventHandler(sectors)
+	handler := eventHandler(sectors, ticket.NewService(pool, storage.NewDisk(cfg.StorageDir)))
 	switch cfg.MessagingProvider {
 	case "fake":
 		provider := fake.New(handler)

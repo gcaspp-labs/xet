@@ -135,12 +135,12 @@ Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua sen
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `name` | text | Obrigatório; para números desconhecidos, preenchido com o nome do perfil do WhatsApp ou o telefone |
-| `phone` | text | Obrigatório, único, somente dígitos com DDI |
-| `external_contact_id` | text | Identificador do contato no provedor, usado para casar mensagens recebidas |
+| `phone` | text | Único quando preenchido, somente dígitos com DDI; obrigatório para contato cadastrado (vazio só em contato criado automaticamente sem telefone conhecido, identificado apenas por LID) |
+| `external_contact_id` | text | Identificador do contato no provedor, usado para casar mensagens recebidas; único quando preenchido |
 | `organization_id` | bigint → `organizations` | Órgão principal; vazio para contato ainda não vinculado |
 | `registered` | boolean | `false` para contatos criados automaticamente a partir de número desconhecido; `true` após cadastro pelo atendente |
 
-Restrição: `registered` ⇒ `organization_id` preenchido (contato cadastrado pelo atendente sempre tem órgão).
+Restrições: `registered` ⇒ `organization_id` e `phone` preenchidos (contato cadastrado pelo atendente sempre tem órgão e telefone).
 
 O cadastro de contatos e órgãos é único para todos os setores. Os órgãos são pré-cadastrados por supervisores e administradores; no atendimento, o atendente apenas vincula a pessoa a um órgão existente.
 
@@ -148,7 +148,7 @@ Busca: por nome do contato ou do órgão (índice `pg_trgm` para busca parcial, 
 
 CNPJ: desde julho de 2026 a Receita Federal emite CNPJ alfanumérico (IN RFB 2.229/2024): as 12 primeiras posições aceitam letras maiúsculas e dígitos, e os 2 dígitos verificadores continuam numéricos. A validação usa o cálculo do módulo 11 com o valor de cada caractere igual ao código ASCII menos 48, que vale também para o CNPJ numérico. CNPJ com todos os caracteres iguais é recusado.
 
-Atenção na implementação (T07): números brasileiros podem chegar com ou sem o nono dígito, e o WhatsApp pode identificar contatos por LID em vez do telefone. O casamento de mensagens recebidas deve usar o `external_contact_id` resolvido pelo adaptador, não comparação direta de texto do telefone.
+Casamento de mensagens recebidas: números brasileiros podem chegar com ou sem o nono dígito, e o WhatsApp pode identificar contatos por LID em vez do telefone. A mensagem é ligada ao contato pelo `external_contact_id` resolvido pelo adaptador. Sem contato com esse identificador, procura-se o contato pelo telefone ou por sua variante com ou sem o nono dígito (celular brasileiro: `55` + DDD + `9` + 8 dígitos ou `55` + DDD + 8 dígitos começando por 6 a 9), preferindo o telefone exato; se ele ainda não tiver `external_contact_id`, passa a ter o identificador. Sem nenhum dos dois, é criado um contato com `registered = false`.
 
 ## Atendimento
 
@@ -211,7 +211,7 @@ Notas não são editadas nem excluídas. Ficam visíveis para quem pode ver o ch
 | `year` | integer | Chave primária |
 | `last_value` | integer | Último número usado no ano |
 
-O protocolo é gerado na mesma transação que cria o chamado, com `insert ... on conflict (year) do update set last_value = last_value + 1 returning last_value`. A numeração é única para todos os setores e reinicia a cada ano.
+O protocolo é gerado na mesma transação que cria o chamado, com `insert ... on conflict (year) do update set last_value = last_value + 1 returning last_value`. A numeração é única para todos os setores e reinicia a cada ano, contado no horário de Brasília (`America/Sao_Paulo`).
 
 ### Ciclo de vida do chamado
 
@@ -269,6 +269,8 @@ Restrições:
 - `type in ('image', 'video', 'audio', 'document')` ⇒ `media_id` preenchido.
 
 Índice: `(ticket_id, sent_at)` para exibir a conversa.
+
+Mensagens enviadas pelo celular fora do sistema (`origin = 'phone'`) são gravadas com `status = 'sent'`, sem autor.
 
 Mensagens não são editadas nem excluídas.
 

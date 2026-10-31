@@ -17,12 +17,88 @@ returning id, name, phone, external_contact_id, organization_id, registered, cre
 
 type CreateContactParams struct {
 	Name           string
-	Phone          string
+	Phone          *string
 	OrganizationID *int64
 }
 
 func (q *Queries) CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error) {
 	row := q.db.QueryRow(ctx, createContact, arg.Name, arg.Phone, arg.OrganizationID)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.ExternalContactID,
+		&i.OrganizationID,
+		&i.Registered,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createUnregisteredContact = `-- name: CreateUnregisteredContact :one
+insert into contacts (name, phone, external_contact_id, registered)
+values ($1, $2, $3, false)
+on conflict do nothing
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+`
+
+type CreateUnregisteredContactParams struct {
+	Name              string
+	Phone             *string
+	ExternalContactID *string
+}
+
+// A concurrent message of the same new contact may insert it first; then no
+// row is returned and the caller looks it up again.
+func (q *Queries) CreateUnregisteredContact(ctx context.Context, arg CreateUnregisteredContactParams) (Contact, error) {
+	row := q.db.QueryRow(ctx, createUnregisteredContact, arg.Name, arg.Phone, arg.ExternalContactID)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.ExternalContactID,
+		&i.OrganizationID,
+		&i.Registered,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getContactByExternalID = `-- name: GetContactByExternalID :one
+select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at from contacts where external_contact_id = $1
+`
+
+func (q *Queries) GetContactByExternalID(ctx context.Context, externalContactID *string) (Contact, error) {
+	row := q.db.QueryRow(ctx, getContactByExternalID, externalContactID)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.ExternalContactID,
+		&i.OrganizationID,
+		&i.Registered,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getContactByPhone = `-- name: GetContactByPhone :one
+select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at from contacts
+where phone = any($1::text[])
+order by phone <> ($1::text[])[1], id
+limit 1
+`
+
+// Matches any of the phone variants (with or without the Brazilian ninth
+// digit), preferring the exact phone, given first.
+func (q *Queries) GetContactByPhone(ctx context.Context, phones []string) (Contact, error) {
+	row := q.db.QueryRow(ctx, getContactByPhone, phones)
 	var i Contact
 	err := row.Scan(
 		&i.ID,
@@ -133,6 +209,20 @@ func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) 
 	return items, nil
 }
 
+const setContactExternalID = `-- name: SetContactExternalID :exec
+update contacts set external_contact_id = $1 where id = $2
+`
+
+type SetContactExternalIDParams struct {
+	ExternalContactID *string
+	ID                int64
+}
+
+func (q *Queries) SetContactExternalID(ctx context.Context, arg SetContactExternalIDParams) error {
+	_, err := q.db.Exec(ctx, setContactExternalID, arg.ExternalContactID, arg.ID)
+	return err
+}
+
 const updateContact = `-- name: UpdateContact :one
 update contacts
 set name = $1, phone = $2, organization_id = $3, registered = true
@@ -142,7 +232,7 @@ returning id, name, phone, external_contact_id, organization_id, registered, cre
 
 type UpdateContactParams struct {
 	Name           string
-	Phone          string
+	Phone          *string
 	OrganizationID *int64
 	ID             int64
 }

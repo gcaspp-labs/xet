@@ -22,7 +22,9 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
+	"github.com/gcaspp-labs/xet/backend/internal/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
+	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
 const testPassword = "Senha@123"
@@ -35,6 +37,8 @@ type testEnv struct {
 	sectors *sector.Service
 	// whatsapp simulates the phones of the sector numbers.
 	whatsapp *fake.Adapter
+	// files holds the attachments of the messages.
+	files storage.Storage
 }
 
 // newTestEnv starts the API on a fresh database. extra registers routes used
@@ -50,9 +54,16 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	sectors := sector.NewService(pool)
+	files := storage.NewDisk(t.TempDir())
+	tickets := ticket.NewService(pool, files)
 	whatsapp := fake.New(func(ctx context.Context, ev messaging.Event) error {
-		if ev, ok := ev.(messaging.ConnectionChanged); ok {
+		switch ev := ev.(type) {
+		case messaging.ConnectionChanged:
 			return sectors.HandleConnection(ctx, ev)
+		case messaging.MessageReceived:
+			return tickets.HandleReceived(ctx, ev)
+		case messaging.MessageSentOutside:
+			return tickets.HandleSentOutside(ctx, ev)
 		}
 		return nil
 	})
@@ -66,7 +77,7 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testEnv{t: t, pool: pool, q: db.New(pool), url: srv.URL, sectors: sectors, whatsapp: whatsapp}
+	return &testEnv{t: t, pool: pool, q: db.New(pool), url: srv.URL, sectors: sectors, whatsapp: whatsapp, files: files}
 }
 
 func (e *testEnv) sector(name, phone string) db.Sector {

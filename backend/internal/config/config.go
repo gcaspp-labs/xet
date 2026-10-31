@@ -15,6 +15,8 @@ type Config struct {
 	CookieSecure bool
 	// MessagingProvider is "whatsmeow" or, for the end-to-end tests, "fake".
 	MessagingProvider string
+	// StorageDir is the directory of the message attachments.
+	StorageDir string
 }
 
 func Load() (Config, error) {
@@ -22,6 +24,7 @@ func Load() (Config, error) {
 		HTTPAddr:          getEnv("HTTP_ADDR", ":8080"),
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		MessagingProvider: getEnv("MESSAGING_PROVIDER", "whatsmeow"),
+		StorageDir:        getEnv("STORAGE_DIR", "data/media"),
 	}
 
 	if cfg.DatabaseURL == "" {
