@@ -70,3 +70,4 @@ Executados na raiz do repositório:
 - `make test`: testes de integração do backend (`go test -race`, PostgreSQL via testcontainers) e ponta a ponta (Playwright, em portas próprias 18080 e 15173, com banco próprio em `:15432` criado e removido a cada execução).
 - `make lint`: golangci-lint (via Docker) no backend; oxlint e Prettier no frontend.
 - `make up` / `make down` / `make logs`: sistema completo com Docker Compose; requer `deploy/.env` (copiar de `deploy/.env.example`).
+- `make create-admin NAME="Nome" EMAIL=email` (sistema do Compose) ou `make dev-create-admin NAME="Nome" EMAIL=email` (banco de desenvolvimento): cria um administrador; a senha é lida da entrada padrão.

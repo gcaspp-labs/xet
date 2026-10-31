@@ -67,6 +67,9 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 
 - Login com e-mail e senha (hash bcrypt), sessão gravada no PostgreSQL e cookie seguro (HttpOnly).
 - Senhas redefinidas por administradores e supervisores; sem recuperação automática.
+- Cookie `xet_session` com token aleatório de 32 bytes (somente o hash SHA-256 é gravado), `HttpOnly`, `SameSite=Lax` e `Secure` (desligável por `COOKIE_SECURE=false` no desenvolvimento sem HTTPS). Expiração deslizante de 12 horas, renovada a cada requisição autenticada.
+- Rotas da API ficam sob `/api`. Sem sessão válida a resposta é 401; com sessão, mas sem permissão (papel ou setor), 403.
+- O primeiro administrador é criado pelo comando `server create-admin` (nome, e-mail e senha), executado no próprio binário do backend; a senha é lida da entrada padrão para não ficar no histórico do shell (`make create-admin` / `make dev-create-admin`).
 
 ## Áudio e mídia
 
@@ -119,7 +122,7 @@ Ferramentas de desenvolvimento (não entram no binário, executadas via Docker c
 | Framework | React |
 | Rotas | React Router |
 | Dados do servidor | TanStack Query |
-| Formulários | React Hook Form + Zod (validação) |
+| Formulários | React Hook Form + Zod (validação), ligados por `@hookform/resolvers` |
 | Estilo | Tailwind CSS |
 | Design system | `github:gcaspp-labs/glab-design-system` (tokens, logos), fixado por commit; aplicação em [design.md](design.md) |
 | Componentes | shadcn/ui (estilo `base-nova`, sobre Base UI; padrão atual do shadcn), adaptado ao design system |

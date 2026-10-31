@@ -1,0 +1,61 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/testdb"
+)
+
+func TestCreateAdmin(t *testing.T) {
+	t.Parallel()
+	pool := testdb.New(t)
+	svc := auth.NewService(pool)
+	ctx := t.Context()
+	args := []string{"-name", "Maria Admin", "-email", "maria@exemplo.com"}
+
+	var out bytes.Buffer
+	if err := createAdmin(ctx, svc, args, strings.NewReader("Senha@123\n"), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "maria@exemplo.com") {
+		t.Fatalf("output: %q", out.String())
+	}
+
+	_, user, _, err := svc.Login(ctx, "maria@exemplo.com", "Senha@123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Role != db.UserRoleAdmin || user.SectorID != nil {
+		t.Fatalf("created user: %+v", user)
+	}
+
+	logs, err := db.New(pool).ListAuditLogsByEntity(ctx, db.ListAuditLogsByEntityParams{EntityType: "user", EntityID: user.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 || logs[0].Action != "user_created" || logs[0].ActorID != nil {
+		t.Fatalf("audit logs: %+v", logs)
+	}
+
+	cases := []struct {
+		name  string
+		args  []string
+		stdin string
+	}{
+		{"duplicate email", []string{"-name", "Outra", "-email", "MARIA@exemplo.com"}, "Senha@123\n"},
+		{"weak password", []string{"-name", "Outra", "-email", "outra@exemplo.com"}, "fraca\n"},
+		{"missing email", []string{"-name", "Outra"}, "Senha@123\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := createAdmin(context.Background(), svc, tc.args, strings.NewReader(tc.stdin), &bytes.Buffer{}); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}

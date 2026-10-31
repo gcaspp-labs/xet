@@ -29,7 +29,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** migrações sobem e descem sem erro; um teste de integração grava e lê um setor.
 
-### [ ] T03 — Autenticação e papéis
+### [x] T03 — Autenticação e papéis
 
 - Login com e-mail e senha (bcrypt), sessão em tabela no PostgreSQL com cookie seguro.
 - Papéis: atendente e supervisor do próprio setor, administrador global; middleware de autorização por setor conforme a tabela de permissões de `modelo-dados.md`.
@@ -152,3 +152,16 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 - Teste de reconexão: queda de internet, reinício do servidor, desconexão do celular.
 
 **Pronto quando:** todos os critérios de validação da spec estão marcados como atendidos.
+
+## Fase 5 — Pós-MVP
+
+Ajustes para fazer antes de escalar para outros setores, levantados durante o piloto.
+
+### [ ] T17 — Reforço da autenticação
+
+- Limitar tentativas de login por e-mail e por IP, com bloqueio temporário após falhas seguidas, contra força bruta.
+- Recusar senhas comuns ou vazadas (lista de senhas conhecidas), como recomenda o NIST SP 800-63B-4.
+- Limpar periodicamente as sessões expiradas, inclusive de usuários que não voltam a fazer login.
+- Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
+
+**Pronto quando:** login bloqueia após o limite de tentativas; senha comum é recusada; sessões expiradas são removidas sem depender de novo login; usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.

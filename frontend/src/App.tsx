@@ -1,7 +1,28 @@
+import { Navigate, Outlet, Route, Routes } from 'react-router'
+import { useCurrentUser } from '@/lib/auth'
+import HomePage from '@/pages/HomePage'
+import LoginPage from '@/pages/LoginPage'
+
+// Rotas que exigem sessão; sem sessão, vai para o login.
+function RequireAuth() {
+  const { data: user, isPending } = useCurrentUser()
+  if (isPending) {
+    return null
+  }
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+  return <Outlet />
+}
+
 export default function App() {
   return (
-    <main className="flex min-h-svh items-center justify-center">
-      <h1 className="text-2xl font-semibold">Central de atendimento</h1>
-    </main>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<RequireAuth />}>
+        <Route path="/" element={<HomePage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
