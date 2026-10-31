@@ -111,14 +111,27 @@ export function useOrganizationHistory(organizationId: number | undefined) {
 
 type SentMessage = { id: number; status: MessageStatus; failureReason: string | null }
 
-export type Outgoing = { requestId: string; body: string; file: File | null }
+export type Outgoing = { requestId: string; body: string; file: File | null; voice?: Blob }
 
-// Envia texto ou arquivo. O mesmo requestId numa nova tentativa devolve a
-// mensagem já registrada, sem enviar de novo; o backend confere o responsável.
+// Extensão do arquivo gravado, só para o nome no envio; o backend lê o conteúdo.
+function recordingName(blob: Blob) {
+  const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'
+  return `gravacao.${ext}`
+}
+
+// Envia texto, arquivo ou áudio gravado (como mensagem de voz, sem legenda).
+// O mesmo requestId numa nova tentativa devolve a mensagem já registrada, sem
+// enviar de novo; o backend confere o responsável.
 export function useSendMessage(ticketId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ requestId, body, file }: Outgoing) => {
+    mutationFn: ({ requestId, body, file, voice }: Outgoing) => {
+      if (voice) {
+        const form = new FormData()
+        form.append('clientRequestId', requestId)
+        form.append('voice', voice, recordingName(voice))
+        return api<SentMessage>(`/tickets/${ticketId}/messages`, { method: 'POST', body: form })
+      }
       if (!file) {
         return api<SentMessage>(`/tickets/${ticketId}/messages`, {
           method: 'POST',
