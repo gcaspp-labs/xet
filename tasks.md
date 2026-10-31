@@ -41,7 +41,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** usuário loga e desloga; rotas protegidas recusam acesso sem sessão ou sem permissão no setor; testes cobrem as regras de permissão; a tela de login usa os tokens, fontes e logo do design system nos temas claro e escuro.
 
-### [~] T18 — Integração contínua
+### [x] T18 — Integração contínua
 
 - GitHub Actions a cada PR e a cada push na `main`, chamando os mesmos alvos do `Makefile` usados localmente.
 - Jobs em paralelo: lint, testes de integração do backend, testes ponta a ponta e conferência do código gerado (sqlc e `go mod tidy`).

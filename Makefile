@@ -6,7 +6,7 @@ DEV_DATABASE_URL ?= postgres://xet:xet@localhost:5433/xet?sslmode=disable
 E2E_DB_CONTAINER := xet-e2e-db
 E2E_DATABASE_URL := postgres://xet:xet@localhost:15432/xet?sslmode=disable
 
-.PHONY: dev dev-db dev-db-stop dev-backend dev-frontend sqlc test test-backend test-e2e lint lint-backend lint-frontend up down logs create-admin dev-create-admin
+.PHONY: dev dev-db dev-db-stop dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend up down logs create-admin dev-create-admin
 
 ## Desenvolvimento: banco em :5433, backend em :8080 e frontend em :5173 (com proxy para o backend).
 dev: dev-db
@@ -35,6 +35,14 @@ sqlc:
 
 dev-frontend:
 	cd frontend && npm run dev
+
+## Confere se o código gerado (sqlc) e o go.mod estão em dia com o que foi commitado.
+check-generated: sqlc
+	cd backend && go mod tidy
+	@git diff --exit-code -- backend/internal/db backend/go.mod backend/go.sum || \
+		(echo "Código gerado desatualizado: rode make sqlc e go mod tidy e commite o resultado." && exit 1)
+	@test -z "$$(git status --porcelain -- backend/internal/db)" || \
+		(echo "Arquivos gerados pelo sqlc não commitados em backend/internal/db." && exit 1)
 
 ## Testes: integração do backend e ponta a ponta com Playwright.
 test: test-backend test-e2e
