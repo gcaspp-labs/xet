@@ -1,12 +1,16 @@
 GOLANGCI_LINT_IMAGE := golangci/golangci-lint:v2.14.0
 SQLC_IMAGE := sqlc/sqlc:1.29.0
 POSTGRES_IMAGE := postgres:17-alpine
+# Binário estático do ffmpeg (com libopus) usado no CI; o digest fixa o conteúdo da imagem.
+FFMPEG_IMAGE := mwader/static-ffmpeg:9.0.2@sha256:7d9bdaaf887f7e6ce6151f67325c344074b5ff1fb75316011c3376503e449a7b
+# Caches do Go e do golangci-lint reaproveitados entre execuções do lint.
+LINT_CACHE_DIR ?= $(HOME)/.cache/xet-lint
 
 DEV_DATABASE_URL ?= postgres://xet:xet@localhost:5440/xet?sslmode=disable
 E2E_DB_CONTAINER := xet-e2e-db
 E2E_DATABASE_URL := postgres://xet:xet@localhost:15432/xet?sslmode=disable
 
-.PHONY: dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend up down logs create-admin dev-create-admin
+.PHONY: dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend ci-ffmpeg up down logs create-admin dev-create-admin
 
 ## Desenvolvimento: banco em :5440, backend em :8090 e frontend em :5173 (com proxy para o backend).
 ## Portas fora das padrão (5432/5433/8080/8081) para conviver com outros projetos rodando na mesma máquina.
@@ -81,10 +85,19 @@ test-e2e:
 lint: lint-backend lint-frontend
 
 lint-backend:
-	docker run --rm -v "$(CURDIR)/backend":/app -w /app $(GOLANGCI_LINT_IMAGE) golangci-lint run ./...
+	@mkdir -p "$(LINT_CACHE_DIR)"
+	docker run --rm -u "$$(id -u):$$(id -g)" -v "$(CURDIR)/backend":/app -v "$(LINT_CACHE_DIR)":/cache -w /app \
+		-e HOME=/tmp -e GOCACHE=/cache/go-build -e GOMODCACHE=/cache/mod -e GOLANGCI_LINT_CACHE=/cache/golangci-lint \
+		$(GOLANGCI_LINT_IMAGE) golangci-lint run ./...
 
 lint-frontend:
 	cd frontend && npm run lint
+
+## Instala o ffmpeg do CI em /usr/local/bin, copiado da imagem estática (mais rápido e estável que o apt).
+ci-ffmpeg:
+	@id=$$(docker create $(FFMPEG_IMAGE)) && sudo docker cp $$id:/ffmpeg /usr/local/bin/ffmpeg; \
+		status=$$?; docker rm $$id >/dev/null; exit $$status
+	ffmpeg -hide_banner -encoders | grep -q libopus
 
 ## Implantação local com Docker Compose (requer deploy/.env).
 up:
