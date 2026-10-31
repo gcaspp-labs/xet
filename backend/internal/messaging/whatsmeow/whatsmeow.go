@@ -282,6 +282,7 @@ func (s *session) changed(status messaging.ConnectionStatus) {
 }
 
 // watchQR keeps the current code of a pairing until it succeeds or expires.
+// Each new code is reported as connecting again, so the screen shows it.
 func (s *session) watchQR(ch <-chan whatsmeow.QRChannelItem, ready chan struct{}) {
 	var once sync.Once
 	signal := func() { once.Do(func() { close(ready) }) }
@@ -293,6 +294,7 @@ func (s *session) watchQR(ch <-chan whatsmeow.QRChannelItem, ready chan struct{}
 			s.qr = item.Code
 			s.mu.Unlock()
 			signal()
+			_ = s.adapter.emit(messaging.ConnectionChanged{SectorID: s.sectorID, Status: messaging.StatusConnecting})
 		case whatsmeow.QRChannelSuccess.Event:
 			s.mu.Lock()
 			s.qr = ""

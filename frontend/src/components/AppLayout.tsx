@@ -3,15 +3,16 @@ import {
   BookUser,
   Boxes,
   Building2,
-  House,
   Landmark,
   LogOut,
+  MessagesSquare,
   QrCode,
   Users,
   type LucideIcon,
 } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { DisconnectionNote } from '@/components/DisconnectionNote'
+import { RealtimeNote } from '@/components/RealtimeNote'
 import {
   Sidebar,
   SidebarContent,
@@ -29,11 +30,12 @@ import {
 } from '@/components/ui/sidebar'
 import { type Role, useCurrentUser, useLogout } from '@/lib/auth'
 import { roleLabels } from '@/lib/format'
+import { useRealtime } from '@/lib/realtime'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 
 const mainItems: NavItem[] = [
-  { to: '/', label: 'Início', icon: House, roles: ['agent', 'supervisor', 'admin'] },
+  { to: '/', label: 'Atendimento', icon: MessagesSquare, roles: ['agent', 'supervisor', 'admin'] },
 ]
 
 // Cadastro único de clientes: todos consultam; o backend restringe a edição de órgãos.
@@ -87,6 +89,7 @@ export default function AppLayout() {
   const { data: user } = useCurrentUser()
   const logout = useLogout()
   const navigate = useNavigate()
+  const online = useRealtime()
   if (!user) {
     return null
   }
@@ -132,6 +135,7 @@ export default function AppLayout() {
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
+        {!online && <RealtimeNote />}
         <DisconnectionNote />
         <Outlet />
       </SidebarInset>

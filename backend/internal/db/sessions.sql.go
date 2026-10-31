@@ -56,6 +56,37 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID int64) error {
 	return err
 }
 
+const getSessionUser = `-- name: GetSessionUser :one
+select u.id, u.name, u.email, u.role, u.sector_id, s.expires_at
+from sessions s
+join users u on u.id = s.user_id
+where s.token_hash = $1 and s.expires_at > now() and u.active
+`
+
+type GetSessionUserRow struct {
+	ID        int64
+	Name      string
+	Email     string
+	Role      UserRole
+	SectorID  *int64
+	ExpiresAt time.Time
+}
+
+// Confere a sessão sem renovar a expiração (conexões WebSocket abertas).
+func (q *Queries) GetSessionUser(ctx context.Context, tokenHash string) (GetSessionUserRow, error) {
+	row := q.db.QueryRow(ctx, getSessionUser, tokenHash)
+	var i GetSessionUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.SectorID,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const touchSession = `-- name: TouchSession :one
 with touched as (
     update sessions

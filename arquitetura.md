@@ -41,12 +41,12 @@ O pacote `internal/messaging` define a interface e os tipos neutros; cada proved
 - Ao iniciar, o serviço reconecta cada setor ativo que tem conta vinculada (`external_account_id`); as chaves ficam nas tabelas do `sqlstore` do Whatsmeow.
 - Conectar um setor sem conta vinculada inicia o pareamento: a API devolve o QR code como imagem PNG, gerada no backend, e a tela mostra a imagem. O código do QR muda a cada 20 segundos (o primeiro dura 60); depois de cerca de 2 minutos sem leitura, o pareamento expira e o setor volta a desconectado.
 - O adaptador traduz os estados de conexão em eventos `ConnectionChanged`; o domínio grava o estado no setor. Desvinculado pelo celular (`logged_out`), o setor perde a conta vinculada e só volta por novo QR code.
-- Até o WebSocket (T08), a tela de conexão e o alerta de desconexão mostram o estado do momento em que a página foi carregada; a tela de conexão tem um botão para atualizar.
+- A tela de conexão e o alerta de desconexão acompanham o estado pelo WebSocket (ver Tempo real). Cada novo código do QR é informado pelo adaptador como um novo `ConnectionChanged` com `connecting`, sem mudança de estado nem auditoria, para a tela trocar a imagem sozinha; o botão de atualizar fica só como recurso extra.
 
 ### Adaptador falso
 
 - `internal/messaging/fake` implementa o contrato para os testes de integração do backend.
-- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura do QR code e a desconexão do número. O padrão é `whatsmeow`, e em produção essas rotas não existem.
+- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número e mensagens de texto recebidas. O padrão é `whatsmeow`, e em produção essas rotas não existem.
 
 ### Regras
 
@@ -75,6 +75,12 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 ## Tempo real
 
 - O painel recebe novas mensagens, mudanças de fila, responsáveis e status da conexão por WebSocket, filtrados pelo setor do usuário (todos, para o administrador).
+- Um único endpoint, `GET /api/ws`, autenticado pelo cookie de sessão. O servidor mantém em memória apenas as conexões abertas (pacote `internal/realtime`), protegidas por mutex; cada conexão guarda o usuário e só recebe eventos dos setores a que ele tem acesso.
+- Os eventos são avisos, não dados: `{"type": "ticket", "sectorId": 1, "ticketId": 10}` quando um chamado é criado, recebe mensagem ou é assumido, e `{"type": "connection", "sectorId": 1}` quando muda a conexão do número. A interface recarrega pela API o que mudou (TanStack Query), que continua sendo a única fonte dos dados e das permissões.
+- Os eventos são publicados somente depois do commit da transação. A publicação não bloqueia: uma conexão lenta, com a fila de saída cheia, é encerrada, e a interface reconecta e recarrega tudo.
+- A interface reconecta sozinha após queda, com espera crescente, e recarrega os dados ao reconectar, para não perder eventos do intervalo. Enquanto a conexão está caída, a tela mostra um aviso de que a atualização em tempo real foi interrompida.
+- A sessão é conferida a cada minuto enquanto a conexão está aberta, sem renovar a expiração (só requisições do usuário renovam); sessão encerrada, expirada ou usuário desativado fecha a conexão.
+- No desenvolvimento, o proxy do Vite repassa o WebSocket (`ws: true`); no Caddy, o `reverse_proxy` já o repassa.
 
 ## Autenticação
 

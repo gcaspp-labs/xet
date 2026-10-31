@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { format, isToday } from 'date-fns'
 import type { Sector } from '@/lib/admin'
 import type { Role } from '@/lib/auth'
 
@@ -70,4 +70,10 @@ export const connectionLabels: Record<
 // Data e hora no formato pt-BR: 02/03/2026 14:05.
 export function formatDateTime(value: string) {
   return format(new Date(value), 'dd/MM/yyyy HH:mm')
+}
+
+// Hora da mensagem: só a hora quando é de hoje (14:05), senão dia e hora (02/03 14:05).
+export function formatMessageTime(value: string) {
+  const date = new Date(value)
+  return format(date, isToday(date) ? 'HH:mm' : 'dd/MM HH:mm')
 }

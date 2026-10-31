@@ -5,7 +5,7 @@ import { seedSector, signIn, userPassword } from './fixtures'
 async function phone(
   request: APIRequestContext,
   sectorId: number,
-  action: 'pair' | 'drop' | 'logout',
+  action: 'pair' | 'qr' | 'drop' | 'logout',
 ) {
   const response = await request.post(`/api/test/messaging/sectors/${sectorId}/${action}`)
   expect(response.ok()).toBeTruthy()
@@ -37,22 +37,25 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
     .poll(() => qr.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
     .toBeGreaterThan(0)
 
-  // O celular lê o QR code; a tela mostra o novo estado ao atualizar.
+  // O WhatsApp troca o código: a tela mostra o novo sem clique.
+  const firstCode = await qr.getAttribute('src')
+  await phone(request, sector.id, 'qr')
+  await expect(qr).not.toHaveAttribute('src', firstCode!)
+
+  // O celular lê o QR code; a tela mostra o novo estado sem recarregar.
   await phone(request, sector.id, 'pair')
-  await page.getByRole('button', { name: 'Atualizar' }).click()
   await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
   await expect(
     page.getByText(/^Última conexão em \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}\.$/),
   ).toBeVisible()
   await expect(qr).toBeHidden()
 
-  await page.getByRole('link', { name: 'Início' }).click()
-  await expect(page.getByText('Sessão iniciada como')).toBeVisible()
+  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
   await expect(note).toBeHidden()
 
-  // Queda da conexão: o aviso aparece ao recarregar o painel.
+  // Queda da conexão: o aviso aparece no painel sem recarregar.
   await phone(request, sector.id, 'drop')
-  await page.reload()
   await expect(note).toBeVisible()
 
   // Desvinculado pelo celular: a tela pede um novo QR code.
@@ -70,7 +73,7 @@ test('atendente não vê a conexão nem o aviso de desconexão', async ({ page, 
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
 
-  await expect(page.getByText('Sessão iniciada como')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Conexão' })).toBeHidden()
   await expect(page.getByText(/desconectado\./)).toBeHidden()
   await page.goto('/conexao')

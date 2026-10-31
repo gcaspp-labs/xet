@@ -79,8 +79,8 @@ function ConnectionPanel({ sector }: { sector: Sector }) {
               dispositivo e leia o QR code.
             </p>
             <p className="caption text-muted-foreground">
-              O QR code muda a cada 20 segundos. Depois de ler, ou se ele expirar, clique em
-              Atualizar.
+              O QR code muda a cada 20 segundos e a tela mostra o novo código sozinha. Se ele
+              expirar, conecte de novo.
             </p>
           </div>
         )}

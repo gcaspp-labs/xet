@@ -22,6 +22,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/whatsmeow"
+	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 	"github.com/gcaspp-labs/xet/backend/internal/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
@@ -96,9 +97,11 @@ func run() error {
 	defer pool.Close()
 	logger.Info("database migrated")
 
-	sectors := sector.NewService(pool)
+	hub := realtime.NewHub()
+	sectors := sector.NewService(pool, hub)
+	tickets := ticket.NewService(pool, storage.NewDisk(cfg.StorageDir), hub)
 	opts := httpapi.Options{SecureCookie: cfg.CookieSecure}
-	handler := eventHandler(sectors, ticket.NewService(pool, storage.NewDisk(cfg.StorageDir)))
+	handler := eventHandler(sectors, tickets)
 	switch cfg.MessagingProvider {
 	case "fake":
 		provider := fake.New(handler)
@@ -123,7 +126,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), opts),
+		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), tickets, hub, opts),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

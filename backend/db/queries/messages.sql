@@ -15,3 +15,10 @@ insert into messages (ticket_id, sector_id, contact_id, direction, origin, type,
 values (@ticket_id, @sector_id, @contact_id, @direction, @origin, @type, @body, @media_id, @external_message_id, @status, @sent_at)
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
 returning *;
+
+-- name: ListLastMessages :many
+-- Last message of each ticket, for the ticket lists.
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at
+from messages
+where ticket_id = any(@ticket_ids::bigint[])
+order by ticket_id, sent_at desc, id desc;

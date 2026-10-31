@@ -14,6 +14,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // Provider of new sectors; the official API comes later (arquitetura.md).
@@ -37,10 +38,11 @@ var phoneFormatting = strings.NewReplacer(" ", "", "(", "", ")", "", "-", "", "+
 type Service struct {
 	pool *pgxpool.Pool
 	q    *db.Queries
+	hub  *realtime.Hub
 }
 
-func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool, q: db.New(pool)}
+func NewService(pool *pgxpool.Pool, hub *realtime.Hub) *Service {
+	return &Service{pool: pool, q: db.New(pool), hub: hub}
 }
 
 // SectorInput holds the editable fields of a sector.

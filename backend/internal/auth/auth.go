@@ -151,6 +151,22 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, time.Ti
 	return User{ID: row.ID, Name: row.Name, Email: row.Email, Role: row.Role, SectorID: row.SectorID}, row.ExpiresAt, nil
 }
 
+// CheckSession validates the session token without renewing it, for long
+// connections that should not keep the session alive on their own.
+func (s *Service) CheckSession(ctx context.Context, token string) (User, error) {
+	if token == "" {
+		return User{}, ErrInvalidSession
+	}
+	row, err := s.q.GetSessionUser(ctx, hashToken(token))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrInvalidSession
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("get session: %w", err)
+	}
+	return User{ID: row.ID, Name: row.Name, Email: row.Email, Role: row.Role, SectorID: row.SectorID}, nil
+}
+
 // Logout ends the session of the token, if it exists.
 func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {

@@ -1,8 +1,8 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router'
 import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
-import HomePage from '@/pages/HomePage'
 import LoginPage from '@/pages/LoginPage'
+import PanelPage from '@/pages/PanelPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
 import UsersPage from '@/pages/admin/UsersPage'
@@ -37,7 +37,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<PanelPage />} />
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>

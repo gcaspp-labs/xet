@@ -21,6 +21,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
+	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 	"github.com/gcaspp-labs/xet/backend/internal/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
@@ -53,9 +54,10 @@ func newTestEnv(t *testing.T, extra func(s *server, r chi.Router)) *testEnv {
 func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.Router)) *testEnv {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	sectors := sector.NewService(pool)
+	hub := realtime.NewHub()
+	sectors := sector.NewService(pool, hub)
 	files := storage.NewDisk(t.TempDir())
-	tickets := ticket.NewService(pool, files)
+	tickets := ticket.NewService(pool, files, hub)
 	whatsapp := fake.New(func(ctx context.Context, ev messaging.Event) error {
 		switch ev := ev.(type) {
 		case messaging.ConnectionChanged:
@@ -67,7 +69,9 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 		}
 		return nil
 	})
-	handler := NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), Options{SecureCookie: true, Messaging: whatsapp})
+	handler := NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), tickets, hub, Options{
+		SecureCookie: true, Messaging: whatsapp, SessionCheckInterval: 200 * time.Millisecond,
+	})
 	if extra != nil {
 		s := &server{logger: logger, auth: auth.NewService(pool), opts: Options{SecureCookie: true}}
 		r := chi.NewRouter()

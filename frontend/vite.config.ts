@@ -16,7 +16,9 @@ export default defineConfig({
     // Permite abrir o servidor de desenvolvimento pelo nome MagicDNS do Tailscale.
     allowedHosts: ['.ts.net'],
     proxy: {
-      '/api': backendURL,
+      // ws repassa o WebSocket do painel; o Host original é mantido para a
+      // verificação de origem do backend.
+      '/api': { target: backendURL, ws: true, changeOrigin: false },
       '/health': backendURL,
     },
   },

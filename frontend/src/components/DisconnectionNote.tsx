@@ -4,8 +4,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
 
-// Alerta de número desconectado para supervisores e administradores. Sem
-// atualização automática até o WebSocket (T08): reflete o carregamento da página.
+// Alerta de número desconectado para supervisores e administradores,
+// atualizado pelos eventos do WebSocket.
 export function DisconnectionNote() {
   const { data: user } = useCurrentUser()
   const { pathname } = useLocation()
