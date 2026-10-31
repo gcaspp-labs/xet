@@ -46,7 +46,7 @@ O pacote `internal/messaging` define a interface e os tipos neutros; cada proved
 ### Adaptador falso
 
 - `internal/messaging/fake` implementa o contrato para os testes de integração do backend.
-- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número, mensagens de texto recebidas e confirmações de entrega e leitura das mensagens enviadas. O padrão é `whatsmeow`, e em produção essas rotas não existem.
+- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número, mensagens recebidas (texto, imagem, vídeo, áudio e documento) e confirmações de entrega e leitura das mensagens enviadas. O padrão é `whatsmeow`, e em produção essas rotas não existem.
 
 ### Regras
 
@@ -92,8 +92,11 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 
 ## Áudio e mídia
 
-- O WhatsApp usa áudio OGG/Opus e o navegador grava em WebM/Opus; o backend converte o áudio gravado com ffmpeg antes de enviar.
-- Imagens e vídeos recebidos são exibidos com pré-visualização no painel.
+- O WhatsApp usa áudio OGG/Opus e o navegador grava em WebM/Opus (MP4 no Safari); o backend converte o áudio gravado com ffmpeg antes de enviar.
+- A gravação chega na mesma rota de envio de arquivos (`POST /api/tickets/{id}/messages`, multipart), no campo `voice` em vez de `file`. O pacote `internal/audio` grava a entrada num arquivo temporário (MP4 exige leitura com saltos, que um pipe não permite), converte para OGG/Opus mono a 48 kHz (`libopus`, 32 kbit/s) e lê a duração da última página OGG. Só o arquivo convertido é guardado, com o tipo `audio/ogg; codecs=opus`, e enviado com a marcação de mensagem de voz (PTT no Whatsmeow).
+- A conversão acontece depois da conferência de idempotência: repetir o envio devolve a mensagem registrada sem converter de novo.
+- O `ffmpeg` (com `libopus`) precisa estar instalado onde o backend roda: na imagem Docker do backend, no CI e na máquina de desenvolvimento.
+- Imagens e vídeos são exibidos com pré-visualização no painel e áudios com o player nativo do navegador (`<audio>`). A rota `GET /api/media/{id}` atende pedidos parciais (`Range`), para os players avançarem e voltarem.
 
 ## Monitoramento
 
