@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { DisconnectionNote } from '@/components/DisconnectionNote'
+import { RealtimeNote } from '@/components/RealtimeNote'
 import {
   Sidebar,
   SidebarContent,
@@ -88,7 +89,7 @@ export default function AppLayout() {
   const { data: user } = useCurrentUser()
   const logout = useLogout()
   const navigate = useNavigate()
-  useRealtime()
+  const online = useRealtime()
   if (!user) {
     return null
   }
@@ -134,6 +135,7 @@ export default function AppLayout() {
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
+        {!online && <RealtimeNote />}
         <DisconnectionNote />
         <Outlet />
       </SidebarInset>

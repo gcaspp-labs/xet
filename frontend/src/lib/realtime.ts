@@ -1,5 +1,5 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { connectionKey } from '@/lib/connection'
 import { ticketsKey, workloadKey } from '@/lib/tickets'
 
@@ -29,9 +29,11 @@ function handle(queryClient: QueryClient, event: RealtimeEvent) {
 
 // Mantém a conexão com os eventos em tempo real enquanto há sessão. Reconecta
 // sozinha com espera crescente e recarrega tudo ao reconectar, para não perder
-// o que mudou no intervalo.
+// o que mudou no intervalo. Devolve false enquanto a conexão está caída, para
+// a tela avisar que os dados podem estar desatualizados.
 export function useRealtime() {
   const queryClient = useQueryClient()
+  const [online, setOnline] = useState(true)
 
   useEffect(() => {
     let socket: WebSocket | null = null
@@ -45,6 +47,7 @@ export function useRealtime() {
       socket = new WebSocket(`${protocol}//${window.location.host}/api/ws`)
       socket.onopen = () => {
         delay = minDelay
+        setOnline(true)
         if (reconnecting) {
           void queryClient.invalidateQueries()
         }
@@ -62,6 +65,7 @@ export function useRealtime() {
           return
         }
         reconnecting = true
+        setOnline(false)
         timer = setTimeout(connect, delay)
         delay = Math.min(delay * 2, maxDelay)
       }
@@ -74,4 +78,6 @@ export function useRealtime() {
       socket?.close()
     }
   }, [queryClient])
+
+  return online
 }

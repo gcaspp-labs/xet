@@ -1,4 +1,10 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+  type WebSocketRoute,
+} from '@playwright/test'
 import { seedSector, signIn, unique, userPassword } from './fixtures'
 
 // Mensagem de texto de um contato, simulada pelo adaptador falso do backend.
@@ -91,4 +97,41 @@ test('atendente de outro setor não vê a fila', async ({ page, request, baseURL
   })
   await expect(queue.getByRole('row', { name: /Contato do setor/ })).toBeVisible()
   await expect(page.getByText('Contato de outro setor')).toHaveCount(0)
+})
+
+test('painel avisa quando a atualização em tempo real cai e volta sozinho', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  // Intermedia o WebSocket do painel para simular a queda da conexão.
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket(/\/api\/ws$/, (ws) => {
+    sockets.push(ws)
+    ws.connectToServer()
+  })
+  await signIn(page, agent, userPassword)
+  const note = page
+    .getByRole('alert')
+    .filter({ hasText: 'Atualização em tempo real interrompida.' })
+  await expect(card(page, 'Fila do setor').getByText('Nenhum chamado na fila.')).toBeVisible()
+  // No desenvolvimento, o StrictMode do React abre e fecha uma conexão a mais.
+  await expect.poll(() => sockets.length).toBeGreaterThan(0)
+  await expect(note).toBeHidden()
+  const opened = sockets.length
+
+  // Queda: o aviso aparece, e a mensagem que chega nesse intervalo não se perde.
+  await sockets[opened - 1].close({ code: 1006 })
+  await expect(note).toBeVisible()
+  await receive(request, sector.id, {
+    phone: unique().phone,
+    contactName: 'Contato na queda',
+    body: 'Olá',
+  })
+  await expect.poll(() => sockets.length, { timeout: 10_000 }).toBe(opened + 1)
+  await expect(note).toBeHidden()
+  await expect(
+    card(page, 'Fila do setor').getByRole('row', { name: /Contato na queda/ }),
+  ).toBeVisible()
 })
