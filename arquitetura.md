@@ -20,6 +20,7 @@ Decisões técnicas do piloto. As regras de negócio estão em [spec.md](spec.md
 - **Armazenamento de arquivos substituível:** anexos são gravados por uma interface de armazenamento; no piloto, disco local. Pode passar para armazenamento de objetos (S3 ou similar) numa migração para VPS.
 - **Mensagens idempotentes:** cada mensagem é gravada com o identificador externo do provedor, evitando duplicidade em reconexões.
 - **Mídia baixada na chegada:** anexos recebidos são baixados e salvos imediatamente, pois os links do WhatsApp expiram.
+- **Disco local no piloto:** a interface de armazenamento fica em `internal/storage`, com a implementação em disco sob o diretório `STORAGE_DIR` (padrão `data/media`, relativo ao diretório do backend; no Docker Compose, o volume `media-data` em `/data/media`). Cada arquivo recebe uma chave aleatória organizada por ano e mês (`2026/10/<hex>`).
 
 ## Adaptador de mensageria
 
