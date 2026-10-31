@@ -57,3 +57,26 @@ export function useAssignTicket(sectorId: number) {
       ]),
   })
 }
+
+const mediaLabels: Record<Exclude<MessageType, 'text'>, string> = {
+  image: 'Imagem',
+  video: 'Vídeo',
+  audio: 'Áudio',
+  document: 'Documento',
+  unsupported: 'Tipo de mensagem não suportado',
+}
+
+// Prévia da última mensagem do chamado, como na lista de conversas do WhatsApp.
+export function lastMessagePreview(ticket: TicketSummary) {
+  const message = ticket.lastMessage
+  if (!message) {
+    return 'Sem mensagens'
+  }
+  const content =
+    message.type === 'text'
+      ? (message.body ?? '')
+      : message.body
+        ? `${mediaLabels[message.type]}: ${message.body}`
+        : mediaLabels[message.type]
+  return message.origin === 'phone' ? `Pelo celular: ${content}` : content
+}

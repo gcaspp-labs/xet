@@ -19,6 +19,7 @@ import {
 } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
+import { ConversationList } from '@/components/ConversationList'
 import { TicketHistoryList } from '@/components/TicketHistory'
 import { Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -547,13 +548,17 @@ export default function TicketPage() {
         }
       />
       {/* A tela de conversas usa a largura toda (design.md). */}
-      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]">
         {assign.error && (
-          <Alert variant="warning" className="lg:col-span-2">
+          <Alert variant="warning" className="lg:col-span-2 xl:col-span-3">
             <CircleAlert strokeWidth={1.7} aria-hidden />
             <AlertDescription>{assign.error.message}</AlertDescription>
           </Alert>
         )}
+        {/* Abaixo de 1280px a lista some; o painel continua sendo o caminho entre conversas. */}
+        <div className="hidden xl:block">
+          <ConversationList sectorId={ticket.sector.id} user={user} />
+        </div>
         <ConversationCard ticket={ticket} user={user} />
         <Card role="region" aria-labelledby="ticket-info-title">
           <CardHeader>

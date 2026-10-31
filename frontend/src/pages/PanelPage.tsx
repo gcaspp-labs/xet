@@ -28,35 +28,12 @@ import { useSectors } from '@/lib/admin'
 import { type User, useCurrentUser } from '@/lib/auth'
 import { formatMessageTime, formatPhone, roleLabels } from '@/lib/format'
 import {
-  type MessageType,
+  lastMessagePreview,
   type TicketSummary,
   useAssignTicket,
   useTickets,
   useWorkload,
 } from '@/lib/tickets'
-
-const mediaLabels: Record<Exclude<MessageType, 'text'>, string> = {
-  image: 'Imagem',
-  video: 'Vídeo',
-  audio: 'Áudio',
-  document: 'Documento',
-  unsupported: 'Tipo de mensagem não suportado',
-}
-
-// Prévia da última mensagem do chamado, como na lista de conversas do WhatsApp.
-function lastMessagePreview(ticket: TicketSummary) {
-  const message = ticket.lastMessage
-  if (!message) {
-    return 'Sem mensagens'
-  }
-  const content =
-    message.type === 'text'
-      ? (message.body ?? '')
-      : message.body
-        ? `${mediaLabels[message.type]}: ${message.body}`
-        : mediaLabels[message.type]
-  return message.origin === 'phone' ? `Pelo celular: ${content}` : content
-}
 
 function ContactCell({ ticket }: { ticket: TicketSummary }) {
   const { contact } = ticket

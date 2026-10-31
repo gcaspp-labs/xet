@@ -41,7 +41,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Maria Cliente' }).click()
   await expect(page.getByRole('heading', { name: 'Maria Cliente' })).toBeVisible()
-  const conversation = page.getByRole('region', { name: 'Conversa' })
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Bom dia, preciso do balancete')
   await expect(conversation).toContainText('Chamado na fila. Assuma o chamado para responder.')
   await page.getByRole('button', { name: 'Assumir' }).click()
@@ -52,7 +52,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   const other = await otherContext.newPage()
   await signIn(other, supervisor, userPassword)
   await other.goto(page.url())
-  const otherConversation = other.getByRole('region', { name: 'Conversa' })
+  const otherConversation = other.getByRole('region', { name: 'Conversa', exact: true })
   await expect(otherConversation).toContainText(/Chamado com agent \d+\. Peça a transferência/)
   await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
 
@@ -127,6 +127,28 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   await page.getByRole('tab', { name: 'Histórico' }).click()
   await expect(page.getByRole('list', { name: 'Chamados do contato' })).toContainText(
     'Este chamado',
+  )
+
+  // Lista de conversas do setor ao lado: a atual marcada, uma nova chega sem recarregar.
+  const list = page.getByRole('navigation', { name: 'Conversas abertas' })
+  await expect(list.getByRole('link', { name: /Maria Cliente/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await expect(list.getByRole('link', { name: /Maria Cliente/ })).toContainText('Você')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName: 'Pedro Cliente',
+    body: 'Boa tarde',
+  })
+  const pedro = list.getByRole('link', { name: /Pedro Cliente/ })
+  await expect(pedro).toContainText('Boa tarde')
+  await expect(pedro).toContainText('Na fila')
+  await pedro.click()
+  await expect(page.getByRole('heading', { name: 'Pedro Cliente' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
+    'Boa tarde',
   )
   await otherContext.close()
 })
