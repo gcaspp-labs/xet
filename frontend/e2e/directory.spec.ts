@@ -155,6 +155,11 @@ test('busca contatos por nome, telefone e CNPJ', async ({ page, baseURL }) => {
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(`Carlos ${id}`)
 
+  // Nome do órgão sem acento.
+  await search.fill(`consorcio ${id}`)
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(`Carlos ${id}`)
+
   // Telefone formatado.
   await search.fill(`(21) ${id.slice(0, 5)}-${id.slice(5)}`)
   await expect(rows).toHaveCount(1)

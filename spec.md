@@ -49,7 +49,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - Cada chamado ficará vinculado ao contato e ao órgão. O órgão vem do cadastro do contato e pode ser alterado no formulário de encerramento quando o atendimento for de outro órgão; a alteração vale só para aquele chamado.
 - No piloto, órgãos e contatos serão cadastrados manualmente. A importação por planilha (CSV) fica para uma etapa posterior.
 - Cada telefone corresponde a um único contato. Quando um telefone for usado por mais de uma pessoa, o atendente poderá anotar no chamado com quem falou.
-- A busca deverá permitir localizar órgãos e contatos por nome, telefone e CNPJ.
+- A busca deverá permitir localizar órgãos e contatos por nome, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
 - Mensagens de números desconhecidos entrarão normalmente na fila.
 - Antes de finalizar um chamado de número desconhecido, o atendente deverá cadastrar o contato e vinculá-lo a um órgão pré-cadastrado.
 

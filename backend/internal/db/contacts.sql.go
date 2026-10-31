@@ -73,8 +73,8 @@ select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.regist
 from contacts c
 left join organizations o on o.id = c.organization_id
 where $1::text = ''
-   or c.name ilike $1
-   or o.name ilike $1
+   or immutable_unaccent(c.name) ilike immutable_unaccent($1)
+   or immutable_unaccent(o.name) ilike immutable_unaccent($1)
    or ($2::text <> '' and c.phone like $2)
    or ($3::text <> '' and o.cnpj like $3)
 order by lower(c.name), c.id
@@ -94,8 +94,9 @@ type SearchContactsRow struct {
 	OrganizationCnpj *string
 }
 
-// Matches the contact or organization name, the phone digits or the
-// organization CNPJ. Empty patterns disable the phone and CNPJ keys.
+// Matches the contact or organization name (ignoring case and accents), the
+// phone digits or the organization CNPJ. Empty patterns disable the phone and
+// CNPJ keys.
 func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) ([]SearchContactsRow, error) {
 	rows, err := q.db.Query(ctx, searchContacts,
 		arg.NamePattern,

@@ -15,11 +15,12 @@ where id = @id
 returning *;
 
 -- name: SearchOrganizations :many
--- An empty query lists by name. name_pattern is an ILIKE pattern; cnpj_pattern
--- is a LIKE pattern, empty when the query cannot be part of a CNPJ.
+-- An empty query lists by name. name_pattern is an ILIKE pattern compared
+-- without accents; cnpj_pattern is a LIKE pattern, empty when the query
+-- cannot be part of a CNPJ.
 select * from organizations
 where @name_pattern::text = ''
-   or name ilike @name_pattern
+   or immutable_unaccent(name) ilike immutable_unaccent(@name_pattern)
    or (@cnpj_pattern::text <> '' and cnpj like @cnpj_pattern)
 order by lower(name), id
 limit @max_results;

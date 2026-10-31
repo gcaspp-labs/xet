@@ -55,7 +55,7 @@ func (q *Queries) GetOrganizationForUpdate(ctx context.Context, id int64) (Organ
 const searchOrganizations = `-- name: SearchOrganizations :many
 select id, name, cnpj, created_at, updated_at from organizations
 where $1::text = ''
-   or name ilike $1
+   or immutable_unaccent(name) ilike immutable_unaccent($1)
    or ($2::text <> '' and cnpj like $2)
 order by lower(name), id
 limit $3
@@ -67,8 +67,9 @@ type SearchOrganizationsParams struct {
 	MaxResults  int32
 }
 
-// An empty query lists by name. name_pattern is an ILIKE pattern; cnpj_pattern
-// is a LIKE pattern, empty when the query cannot be part of a CNPJ.
+// An empty query lists by name. name_pattern is an ILIKE pattern compared
+// without accents; cnpj_pattern is a LIKE pattern, empty when the query
+// cannot be part of a CNPJ.
 func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizationsParams) ([]Organization, error) {
 	rows, err := q.db.Query(ctx, searchOrganizations, arg.NamePattern, arg.CnpjPattern, arg.MaxResults)
 	if err != nil {

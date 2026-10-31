@@ -17,14 +17,15 @@ left join organizations o on o.id = c.organization_id
 where c.id = @id;
 
 -- name: SearchContacts :many
--- Matches the contact or organization name, the phone digits or the
--- organization CNPJ. Empty patterns disable the phone and CNPJ keys.
+-- Matches the contact or organization name (ignoring case and accents), the
+-- phone digits or the organization CNPJ. Empty patterns disable the phone and
+-- CNPJ keys.
 select sqlc.embed(c), o.name as organization_name, o.cnpj as organization_cnpj
 from contacts c
 left join organizations o on o.id = c.organization_id
 where @name_pattern::text = ''
-   or c.name ilike @name_pattern
-   or o.name ilike @name_pattern
+   or immutable_unaccent(c.name) ilike immutable_unaccent(@name_pattern)
+   or immutable_unaccent(o.name) ilike immutable_unaccent(@name_pattern)
    or (@phone_pattern::text <> '' and c.phone like @phone_pattern)
    or (@cnpj_pattern::text <> '' and o.cnpj like @cnpj_pattern)
 order by lower(c.name), c.id

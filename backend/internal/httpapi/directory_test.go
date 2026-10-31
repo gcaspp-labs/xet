@@ -311,7 +311,10 @@ func TestDirectorySearch(t *testing.T) {
 		{"5511", []string{"José Pereira", "Maria Souza"}},
 		{"11.222.333/0001-81", []string{"José Pereira", "Maria Souza"}}, // CNPJ formatado
 		{"12.abc.345", []string{"Ana Salto"}},                           // CNPJ alfanumérico parcial, em minúsculas
-		{"%", nil},                                                      // curingas do LIKE são texto comum
+		{"jose pereira", []string{"José Pereira"}},                      // sem acentos
+		{"CÂMARA", []string{"Ana Salto"}},                               // nome do órgão, maiúsculas acentuadas
+		{"camara municipal", []string{"Ana Salto"}},
+		{"%", nil}, // curingas do LIKE são texto comum
 		{"_", nil},
 		{"inexistente", nil},
 	}
@@ -328,6 +331,9 @@ func TestDirectorySearch(t *testing.T) {
 	}{
 		{"", []string{"Câmara Municipal de Salto", "Fundo 100% Educação", "Prefeitura de Itu"}},
 		{"municipal", []string{"Câmara Municipal de Salto"}},
+		{"camara", []string{"Câmara Municipal de Salto"}},
+		{"EDUCAÇÃO", []string{"Fundo 100% Educação"}},
+		{"educacao", []string{"Fundo 100% Educação"}},
 		{"112223330001", []string{"Prefeitura de Itu"}},
 		{"12ABC34501DE35", []string{"Câmara Municipal de Salto"}},
 		{"100%", []string{"Fundo 100% Educação"}},
@@ -350,7 +356,7 @@ func TestDirectorySearchIsLimited(t *testing.T) {
 		`insert into organizations (name) select 'Órgão ' || lpad(n::text, 3, '0') from generate_series(1, 60) n`); err != nil {
 		t.Fatal(err)
 	}
-	list := e.doList(http.MethodGet, "/api/organizations?q=rg", token)
+	list := e.doList(http.MethodGet, "/api/organizations?q=ORGAO", token)
 	if len(list) != 50 || list[0]["name"] != "Órgão 001" {
 		t.Fatalf("got %d results starting at %v, want the first 50 by name", len(list), list[0]["name"])
 	}
