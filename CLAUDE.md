@@ -47,10 +47,10 @@ Documentos do projeto:
 ## Código
 
 - Nomes de código, banco, rotas e variáveis em inglês. Textos de interface, mensagens ao usuário e documentação em português.
+- Toda tela segue o `design.md`: cores somente por tokens (nunca cores fixas ou a paleta padrão do Tailwind), componentes do shadcn adaptados ao design system e textos no tom do brand book.
 - Usar somente as bibliotecas listadas em `arquitetura.md`. Uma nova biblioteca exige justificativa registrada lá antes do uso.
 - As regras de negócio nunca importam o Whatsmeow diretamente; passam pela interface de mensageria.
 - Toda validação de permissão acontece no backend. A interface apenas reflete as regras.
-- Toda tela segue o `design.md`: cores somente por tokens (nunca cores fixas ou a paleta padrão do Tailwind), componentes do shadcn adaptados ao design system e textos no tom do brand book.
 - SQL escrito em `backend/db/queries` e gerado com sqlc; mudanças de esquema somente por migração goose.
 - Alterações relevantes de chamados (transferência, correção, horários, troca de empresa) sempre gravam auditoria.
 
