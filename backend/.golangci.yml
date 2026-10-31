@@ -14,6 +14,7 @@ linters:
     errcheck:
       exclude-functions:
         - (io.Closer).Close
+        - (*database/sql.DB).Close
     revive:
       rules:
         - name: exported
