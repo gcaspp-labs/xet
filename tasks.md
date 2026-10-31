@@ -97,7 +97,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 ## Fase 3 — Atendimento
 
-### [~] T09 — Conversa
+### [x] T09 — Conversa
 
 - Enviar texto e arquivos; apenas o responsável responde (validado no backend); envio idempotente por `client_request_id`.
 - Status de entrega das mensagens.
