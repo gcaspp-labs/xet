@@ -1,5 +1,6 @@
 import { CircleAlert, Inbox, MessagesSquare, UserCheck } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -61,7 +62,12 @@ function ContactCell({ ticket }: { ticket: TicketSummary }) {
   const { contact } = ticket
   return (
     <TableCell>
-      <p className="body-strong">{contact.name}</p>
+      <Link
+        to={`/chamados/${ticket.id}`}
+        className="body-strong underline-offset-2 hover:text-accent-strong hover:underline"
+      >
+        {contact.name}
+      </Link>
       <p className="caption text-ink-faint">
         <span className="mono-num">{ticket.protocol}</span>
         {' · '}

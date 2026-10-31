@@ -1,6 +1,7 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { connectionKey } from '@/lib/connection'
+import { historyKey, ticketKey } from '@/lib/conversation'
 import { ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Avisos do backend (arquitetura.md, Tempo real): dizem o que mudou, e os dados
@@ -19,6 +20,9 @@ function handle(queryClient: QueryClient, event: RealtimeEvent) {
     case 'ticket':
       void queryClient.invalidateQueries({ queryKey: ticketsKey(event.sectorId) })
       void queryClient.invalidateQueries({ queryKey: workloadKey(event.sectorId) })
+      // Conversa, notas e histórico abertos do chamado.
+      void queryClient.invalidateQueries({ queryKey: ticketKey(event.ticketId) })
+      void queryClient.invalidateQueries({ queryKey: historyKey })
       break
     case 'connection':
       void queryClient.invalidateQueries({ queryKey: ['sectors'], exact: true })

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormSheet } from '@/components/FormSheet'
 import { SearchBox } from '@/components/SearchBox'
+import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -117,6 +118,7 @@ export default function OrganizationsPage() {
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
   const [sheetKey, setSheetKey] = useState(0)
+  const [history, setHistory] = useState<Organization | null>(null)
 
   const openSheet = (organization: Organization | null) => {
     setEditing(organization)
@@ -152,11 +154,9 @@ export default function OrganizationsPage() {
                 <TableRow>
                   <TableHead>Órgão</TableHead>
                   <TableHead>CNPJ</TableHead>
-                  {canEdit && (
-                    <TableHead className="w-0">
-                      <span className="sr-only">Ações</span>
-                    </TableHead>
-                  )}
+                  <TableHead className="w-0">
+                    <span className="sr-only">Ações</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -166,8 +166,16 @@ export default function OrganizationsPage() {
                     <TableCell className="mono-num">
                       {organization.cnpj ? formatCnpj(organization.cnpj) : '—'}
                     </TableCell>
-                    {canEdit && (
-                      <TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Histórico de ${organization.name}`}
+                        onClick={() => setHistory(organization)}
+                      >
+                        Histórico
+                      </Button>
+                      {canEdit && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -176,8 +184,8 @@ export default function OrganizationsPage() {
                         >
                           Editar
                         </Button>
-                      </TableCell>
-                    )}
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -202,6 +210,10 @@ export default function OrganizationsPage() {
         )}
       </PageContent>
       <OrganizationSheet key={sheetKey} organization={editing} open={open} onOpenChange={setOpen} />
+      <HistorySheet
+        target={history && { kind: 'organization', id: history.id, name: history.name }}
+        onClose={() => setHistory(null)}
+      />
     </>
   )
 }

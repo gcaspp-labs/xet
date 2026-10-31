@@ -71,7 +71,9 @@ function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; ro
           {visible.map((item) => (
             <SidebarMenuItem key={item.to}>
               <SidebarMenuButton
-                isActive={pathname === item.to}
+                isActive={
+                  pathname === item.to || (item.to === '/' && pathname.startsWith('/chamados/'))
+                }
                 render={<NavLink to={item.to} onClick={() => setOpenMobile(false)} />}
               >
                 <item.icon strokeWidth={1.7} className="size-[17px]!" aria-hidden />
