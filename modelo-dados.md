@@ -119,7 +119,7 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | `expires_at` | timestamptz | Obrigatório |
 | `last_seen_at` | timestamptz | Atualizado no uso |
 
-Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua senha remove suas sessões.
+Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua senha remove suas sessões. A expiração é deslizante: cada uso válido leva `expires_at` para 12 horas à frente.
 
 ## Cadastro de clientes
 
@@ -296,6 +296,8 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 | `changes` | jsonb | Valores anteriores e novos: `{"campo": {"from": ..., "to": ...}}` |
 
 Índices: `(ticket_id, created_at)` e `(entity_type, entity_id)`.
+
+A tabela é criada na T03 (primeira ação auditada: redefinição de senha), antes de existir `tickets`; a chave estrangeira de `ticket_id` é adicionada na migração que cria `tickets`.
 
 | Ação | Quando |
 | --- | --- |
