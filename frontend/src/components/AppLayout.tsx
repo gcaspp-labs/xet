@@ -1,5 +1,14 @@
 import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
-import { Boxes, Building2, House, LogOut, Users, type LucideIcon } from 'lucide-react'
+import {
+  BookUser,
+  Boxes,
+  Building2,
+  House,
+  Landmark,
+  LogOut,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import {
   Sidebar,
@@ -23,6 +32,12 @@ type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 
 const mainItems: NavItem[] = [
   { to: '/', label: 'Início', icon: House, roles: ['agent', 'supervisor', 'admin'] },
+]
+
+// Cadastro único de clientes: todos consultam; o backend restringe a edição de órgãos.
+const directoryItems: NavItem[] = [
+  { to: '/contatos', label: 'Contatos', icon: BookUser, roles: ['agent', 'supervisor', 'admin'] },
+  { to: '/orgaos', label: 'Órgãos', icon: Landmark, roles: ['agent', 'supervisor', 'admin'] },
 ]
 
 // A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
@@ -87,6 +102,7 @@ export default function AppLayout() {
         </SidebarHeader>
         <SidebarContent>
           <NavGroup items={mainItems} role={user.role} />
+          <NavGroup label="Cadastro" items={directoryItems} role={user.role} />
           <NavGroup label="Administração" items={adminItems} role={user.role} />
         </SidebarContent>
         <SidebarFooter className="gap-3 border-t border-sidebar-border px-4 py-3">
