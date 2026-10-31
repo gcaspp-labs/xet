@@ -35,29 +35,45 @@ func (a *Adapter) Handler() http.Handler {
 	r.Post("/messaging/sectors/{sectorID}/drop", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.Drop(r.Context(), sectorID) })
 	})
-	// Text message from a contact; the contact is identified by the phone.
+	// Message from a contact, identified by the phone: a text or, with type
+	// and media (content in base64), an image, video, audio or document.
 	r.Post("/messaging/sectors/{sectorID}/receive", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			ExternalMessageID string `json:"externalMessageId"`
-			Phone             string `json:"phone"`
-			ContactName       string `json:"contactName"`
-			Body              string `json:"body"`
+			ExternalMessageID string                `json:"externalMessageId"`
+			Phone             string                `json:"phone"`
+			ContactName       string                `json:"contactName"`
+			Type              messaging.MessageType `json:"type"`
+			Body              string                `json:"body"`
+			Media             *struct {
+				Data            []byte `json:"data"`
+				MimeType        string `json:"mimeType"`
+				FileName        string `json:"fileName"`
+				DurationSeconds int    `json:"durationSeconds"`
+			} `json:"media"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ExternalMessageID == "" || body.Phone == "" {
 			http.Error(w, "externalMessageId and phone are required", http.StatusBadRequest)
 			return
 		}
-		a.control(w, r, func(sectorID int64) error {
-			return a.Receive(r.Context(), sectorID, messaging.Message{
-				ExternalMessageID: body.ExternalMessageID,
-				ExternalContactID: body.Phone + "@s.whatsapp.net",
-				Phone:             body.Phone,
-				ContactName:       body.ContactName,
-				Type:              messaging.TypeText,
-				Body:              body.Body,
-				SentAt:            time.Now(),
-			})
-		})
+		msg := messaging.Message{
+			ExternalMessageID: body.ExternalMessageID,
+			ExternalContactID: body.Phone + "@s.whatsapp.net",
+			Phone:             body.Phone,
+			ContactName:       body.ContactName,
+			Type:              messaging.TypeText,
+			Body:              body.Body,
+			SentAt:            time.Now(),
+		}
+		if body.Type != "" {
+			msg.Type = body.Type
+		}
+		if body.Media != nil {
+			msg.Media = &messaging.Media{
+				Data: body.Media.Data, MimeType: body.Media.MimeType,
+				FileName: body.Media.FileName, DurationSeconds: body.Media.DurationSeconds,
+			}
+		}
+		a.control(w, r, func(sectorID int64) error { return a.Receive(r.Context(), sectorID, msg) })
 	})
 	// Delivery progress of sent messages, as the contact's phone reports it.
 	r.Post("/messaging/sectors/{sectorID}/status", func(w http.ResponseWriter, r *http.Request) {

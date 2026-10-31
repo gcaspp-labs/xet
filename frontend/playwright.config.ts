@@ -15,7 +15,19 @@ export default defineConfig({
     baseURL: `http://localhost:${frontendPort}`,
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Microfone simulado (um tom contínuo) para a gravação de áudio, sem pedir permissão.
+        permissions: ['microphone'],
+        launchOptions: {
+          args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+        },
+      },
+    },
+  ],
   webServer: [
     {
       command: 'go run ./cmd/server',

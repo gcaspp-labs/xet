@@ -94,3 +94,9 @@ export function formatFileSize(bytes: number) {
   }
   return `${(bytes / (1024 * 1024)).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB`
 }
+
+// Duração de áudio em minutos e segundos: 75 → 1:15.
+export function formatDuration(seconds: number) {
+  const total = Math.floor(seconds)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}

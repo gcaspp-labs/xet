@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/gcaspp-labs/xet/backend/internal/audio"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -39,14 +40,17 @@ var (
 	ErrMessageNotFound = errors.New("message not found")
 	ErrNotFailed       = errors.New("message has not failed")
 	ErrMediaNotFound   = errors.New("media file not found")
+	ErrInvalidAudio    = errors.New("recorded audio could not be converted")
 )
 
-// Outgoing is a message an agent sends from the panel: a text, or a file with
-// an optional caption.
+// Outgoing is a message an agent sends from the panel: a text, a file with
+// an optional caption, or audio recorded in the browser to go as a voice
+// message (Voice), without caption.
 type Outgoing struct {
 	ClientRequestID pgtype.UUID
 	Body            string
 	File            *messaging.Media
+	Voice           bool
 }
 
 // HistoryEntry is a ticket in the history of a contact or an organization.
@@ -134,9 +138,22 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 	msgType := messaging.TypeText
 	var media *db.CreateMediaFileParams
 	if out.File != nil {
-		msgType = fileType(out.File.MimeType)
+		file := *out.File
+		msgType = fileType(file.MimeType)
+		if out.Voice {
+			data, seconds, err := audio.ToVoice(ctx, file.Data)
+			if errors.Is(err, audio.ErrInvalid) {
+				slog.Warn("convert recorded audio", "ticket_id", ticketID, "error", err)
+				return db.Message{}, ErrInvalidAudio
+			}
+			if err != nil {
+				return db.Message{}, fmt.Errorf("convert recorded audio: %w", err)
+			}
+			msgType, out.Body = messaging.TypeAudio, ""
+			file = messaging.Media{Data: data, MimeType: audio.VoiceMimeType, DurationSeconds: seconds}
+		}
 		var err error
-		media, err = s.storeMedia(ctx, *out.File, time.Now())
+		media, err = s.storeMedia(ctx, file, time.Now())
 		if err != nil {
 			return db.Message{}, err
 		}
@@ -313,6 +330,9 @@ func (s *Service) send(ctx context.Context, provider messaging.Provider, msg db.
 	media := messaging.Media{Data: data, MimeType: file.MimeType}
 	if file.FileName != nil {
 		media.FileName = *file.FileName
+	}
+	if file.DurationSeconds != nil {
+		media.DurationSeconds = int(*file.DurationSeconds)
 	}
 	return provider.SendMedia(ctx, messaging.MediaMessage{
 		SectorID: msg.SectorID, To: to, Type: messaging.MessageType(msg.Type), Media: media, Caption: body, IdempotencyKey: key,

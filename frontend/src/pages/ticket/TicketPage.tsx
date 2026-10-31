@@ -1,11 +1,14 @@
 import {
+  Check,
   CircleAlert,
   FileText,
   MessagesSquare,
+  Mic,
   Paperclip,
   RotateCw,
   SendHorizontal,
   StickyNote,
+  Trash2,
   UserCheck,
   X,
 } from 'lucide-react'
@@ -51,11 +54,13 @@ import {
 } from '@/lib/conversation'
 import {
   formatDateTime,
+  formatDuration,
   formatFileSize,
   formatMessageTime,
   formatPhone,
   ticketStatusLabels,
 } from '@/lib/format'
+import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 
 const messageStatusLabels: Record<
   MessageStatus,
@@ -73,6 +78,71 @@ const fileLabels: Record<string, string> = {
   video: 'Vídeo',
   audio: 'Áudio',
   document: 'Documento',
+}
+
+// Imagens e vídeos com pré-visualização e áudios com player na própria
+// conversa; os demais arquivos abrem ou são baixados pelo link.
+function MessageMedia({ message }: { message: Message }) {
+  if (!message.media) {
+    return null
+  }
+  const src = `/api/media/${message.media.id}`
+  switch (message.type) {
+    case 'image':
+      return (
+        <a href={src} target="_blank" rel="noopener" aria-label="Abrir imagem em tamanho real">
+          <img
+            src={src}
+            alt="Imagem"
+            loading="lazy"
+            className="max-h-72 max-w-full rounded-(--radius-8) border border-line-soft bg-muted object-contain"
+          />
+        </a>
+      )
+    case 'video':
+      return (
+        <video
+          src={src}
+          controls
+          preload="metadata"
+          aria-label="Vídeo"
+          className="max-h-72 max-w-full rounded-(--radius-8) border border-line-soft bg-muted"
+        />
+      )
+    case 'audio':
+      return (
+        <div className="flex items-center gap-2">
+          <audio
+            src={src}
+            controls
+            preload="metadata"
+            aria-label="Áudio"
+            className="w-72 max-w-full"
+          />
+          {message.media.durationSeconds !== null && (
+            <span className="mono-num caption text-ink-faint" aria-label="Duração do áudio">
+              {formatDuration(message.media.durationSeconds)}
+            </span>
+          )}
+        </div>
+      )
+  }
+  return (
+    <a
+      href={src}
+      target="_blank"
+      rel="noopener"
+      className="flex items-center gap-2 rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-2 hover:border-primary"
+    >
+      <FileText strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1 truncate">
+        {message.media.fileName ?? fileLabels[message.type] ?? 'Arquivo'}
+      </span>
+      <span className="mono-num caption text-ink-faint">
+        {formatFileSize(message.media.sizeBytes)}
+      </span>
+    </a>
+  )
 }
 
 // Só o responsável conduz a conversa, com o chamado aberto; o backend confere de novo.
@@ -106,22 +176,7 @@ function MessageBubble({
       }`}
     >
       {author && <p className="caption font-medium text-ink-soft">{author}</p>}
-      {message.media && (
-        <a
-          href={`/api/media/${message.media.id}`}
-          target="_blank"
-          rel="noopener"
-          className="flex items-center gap-2 rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-2 hover:border-primary"
-        >
-          <FileText strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">
-            {message.media.fileName ?? fileLabels[message.type] ?? 'Arquivo'}
-          </span>
-          <span className="mono-num caption text-ink-faint">
-            {formatFileSize(message.media.sizeBytes)}
-          </span>
-        </a>
-      )}
+      <MessageMedia message={message} />
       {message.type === 'unsupported' ? (
         <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
       ) : (
@@ -150,8 +205,10 @@ function MessageBubble({
 
 function Composer({ ticketId }: { ticketId: number }) {
   const send = useSendMessage(ticketId)
+  const recorder = useVoiceRecorder()
   const [text, setText] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [voice, setVoice] = useState<Recording | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   // O mesmo identificador numa nova tentativa evita mensagem duplicada; muda
   // quando o conteúdo muda.
@@ -178,19 +235,43 @@ function Composer({ ticketId }: { ticketId: number }) {
     setFile(chosen)
   }
 
+  const changeVoice = (recording: Recording | null) => {
+    requestId.current = null
+    if (voice) {
+      URL.revokeObjectURL(voice.url)
+    }
+    setVoice(recording)
+  }
+
+  const finishRecording = async () => {
+    const recording = await recorder.stop()
+    if (recording && recording.blob.size > maxFileSize) {
+      URL.revokeObjectURL(recording.url)
+      recorder.setError('O áudio passa de 16 MB. Grave um áudio mais curto.')
+      return
+    }
+    changeVoice(recording)
+  }
+
   const submit = () => {
     const body = text.trim()
-    if ((!body && !file) || send.isPending) {
+    if ((!body && !file && !voice) || send.isPending) {
       return
     }
     requestId.current ??= newRequestId()
     send.mutate(
-      { requestId: requestId.current, body, file },
+      voice
+        ? { requestId: requestId.current, body: '', file: null, voice: voice.blob }
+        : { requestId: requestId.current, body, file },
       {
         onSuccess: () => {
           requestId.current = null
-          setText('')
-          setFile(null)
+          if (voice) {
+            changeVoice(null)
+          } else {
+            setText('')
+            setFile(null)
+          }
         },
       },
     )
@@ -203,7 +284,7 @@ function Composer({ ticketId }: { ticketId: number }) {
     }
   }
 
-  const error = fileError ?? send.error?.message
+  const error = fileError ?? recorder.error ?? send.error?.message
 
   return (
     <div className="flex flex-col gap-2 border-t border-line-soft p-3">
@@ -213,7 +294,7 @@ function Composer({ ticketId }: { ticketId: number }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {file && (
+      {file && !voice && (
         <div className="flex items-center gap-2 self-start rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-1.5">
           <Paperclip strokeWidth={1.7} className="size-[15px]" aria-hidden />
           <span className="max-w-[240px] truncate">{file.name}</span>
@@ -231,40 +312,98 @@ function Composer({ ticketId }: { ticketId: number }) {
           </Button>
         </div>
       )}
-      <div className="flex items-end gap-2">
-        <input
-          ref={fileInput}
-          type="file"
-          className="hidden"
-          aria-label="Arquivo para enviar"
-          onChange={chooseFile}
-        />
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Anexar arquivo"
-          onClick={() => fileInput.current?.click()}
-        >
-          <Paperclip strokeWidth={1.7} aria-hidden />
-        </Button>
-        <Textarea
-          aria-label={file ? 'Legenda do arquivo' : 'Mensagem'}
-          placeholder={file ? 'Legenda (opcional)' : 'Escreva a mensagem'}
-          rows={1}
-          className="max-h-40 min-h-9"
-          value={text}
-          onChange={(event) => changeText(event.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        <Button
-          size="icon"
-          aria-label="Enviar mensagem"
-          disabled={send.isPending || (!text.trim() && !file)}
-          onClick={submit}
-        >
-          <SendHorizontal strokeWidth={1.7} aria-hidden />
-        </Button>
-      </div>
+      {recorder.recording ? (
+        <div role="status" aria-label="Gravação de áudio" className="flex items-center gap-2">
+          <span className="size-2 rounded-full bg-danger" aria-hidden />
+          <span className="flex-1">
+            Gravando{' '}
+            <span className="mono-num text-ink-soft">{formatDuration(recorder.elapsed)}</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Cancelar gravação"
+            onClick={recorder.cancel}
+          >
+            <Trash2 strokeWidth={1.7} aria-hidden />
+          </Button>
+          <Button size="icon" aria-label="Concluir gravação" onClick={finishRecording}>
+            <Check strokeWidth={1.7} aria-hidden />
+          </Button>
+        </div>
+      ) : voice ? (
+        <div className="flex items-center gap-2">
+          <audio
+            src={voice.url}
+            controls
+            aria-label="Áudio gravado"
+            className="h-9 min-w-0 flex-1"
+          />
+          <span className="mono-num caption text-ink-faint">{formatDuration(voice.seconds)}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Descartar áudio"
+            disabled={send.isPending}
+            onClick={() => changeVoice(null)}
+          >
+            <Trash2 strokeWidth={1.7} aria-hidden />
+          </Button>
+          <Button size="icon" aria-label="Enviar áudio" disabled={send.isPending} onClick={submit}>
+            <SendHorizontal strokeWidth={1.7} aria-hidden />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2">
+          <input
+            ref={fileInput}
+            type="file"
+            className="hidden"
+            aria-label="Arquivo para enviar"
+            onChange={chooseFile}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Anexar arquivo"
+            onClick={() => fileInput.current?.click()}
+          >
+            <Paperclip strokeWidth={1.7} aria-hidden />
+          </Button>
+          <Textarea
+            aria-label={file ? 'Legenda do arquivo' : 'Mensagem'}
+            placeholder={file ? 'Legenda (opcional)' : 'Escreva a mensagem'}
+            rows={1}
+            className="max-h-40 min-h-9"
+            value={text}
+            onChange={(event) => changeText(event.target.value)}
+            onKeyDown={onKeyDown}
+          />
+          {!text.trim() && !file ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Gravar áudio"
+              onClick={() => {
+                setFileError(null)
+                send.reset()
+                void recorder.start()
+              }}
+            >
+              <Mic strokeWidth={1.7} aria-hidden />
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              aria-label="Enviar mensagem"
+              disabled={send.isPending}
+              onClick={submit}
+            >
+              <SendHorizontal strokeWidth={1.7} aria-hidden />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

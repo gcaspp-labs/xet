@@ -106,7 +106,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** responsável conversa com o cliente pelo painel; outro atendente é bloqueado no backend mesmo chamando a API diretamente.
 
-### [ ] T10 — Áudio, imagens e vídeos
+### [x] T10 — Áudio, imagens e vídeos
 
 - Player de áudio no painel.
 - Gravação de áudio no navegador, conversão com ffmpeg e envio como mensagem de voz.

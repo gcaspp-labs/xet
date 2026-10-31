@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates tzdata && adduser -D -H app \
+RUN apk add --no-cache ca-certificates tzdata ffmpeg && adduser -D -H app \
     && mkdir -p /data/media && chown app:app /data/media
 COPY --from=build /out/server /usr/local/bin/server
 USER app
