@@ -19,6 +19,9 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/config"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging/whatsmeow"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 )
 
@@ -57,6 +60,16 @@ func openDatabase(ctx context.Context, databaseURL string) (*pgxpool.Pool, error
 	return pool, nil
 }
 
+// eventHandler routes the events of the messaging provider to the domains.
+func eventHandler(sectors *sector.Service) messaging.EventHandler {
+	return func(ctx context.Context, ev messaging.Event) error {
+		if ev, ok := ev.(messaging.ConnectionChanged); ok {
+			return sectors.HandleConnection(ctx, ev)
+		}
+		return nil
+	}
+}
+
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -76,9 +89,34 @@ func run() error {
 	defer pool.Close()
 	logger.Info("database migrated")
 
+	sectors := sector.NewService(pool)
+	opts := httpapi.Options{SecureCookie: cfg.CookieSecure}
+	handler := eventHandler(sectors)
+	switch cfg.MessagingProvider {
+	case "fake":
+		provider := fake.New(handler)
+		opts.Messaging, opts.TestRoutes = provider, provider.Handler()
+		logger.Warn("using the fake messaging provider: for end-to-end tests only")
+	default:
+		provider, err := whatsmeow.New(ctx, pool, handler, logger)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = provider.Close() }()
+		opts.Messaging = provider
+	}
+
+	// Reconnects the sector numbers in the background, so a slow WhatsApp
+	// does not hold the API.
+	go func() {
+		if err := sectors.Reconnect(ctx, opts.Messaging); err != nil {
+			logger.Error("reconnect sectors", "error", err)
+		}
+	}()
+
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), sector.NewService(pool), directory.NewService(pool), httpapi.Options{SecureCookie: cfg.CookieSecure}),
+		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), opts),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

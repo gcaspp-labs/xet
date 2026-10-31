@@ -13,16 +13,23 @@ type Config struct {
 	DatabaseURL  string
 	LogLevel     slog.Level
 	CookieSecure bool
+	// MessagingProvider is "whatsmeow" or, for the end-to-end tests, "fake".
+	MessagingProvider string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr:    getEnv("HTTP_ADDR", ":8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		HTTPAddr:          getEnv("HTTP_ADDR", ":8080"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		MessagingProvider: getEnv("MESSAGING_PROVIDER", "whatsmeow"),
 	}
 
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
+	}
+
+	if cfg.MessagingProvider != "whatsmeow" && cfg.MessagingProvider != "fake" {
+		return Config{}, fmt.Errorf("MESSAGING_PROVIDER: unknown provider %q", cfg.MessagingProvider)
 	}
 
 	cookieSecure, err := strconv.ParseBool(getEnv("COOKIE_SECURE", "true"))
