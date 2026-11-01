@@ -208,7 +208,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** responsável, supervisor e administrador devolvem, e outro atendente não; chamado na fila ou encerrado é recusado; o chamado volta à fila e outra pessoa assume; `assigned_at` se mantém.
 
-### [~] T24 — Arquivo recebido que não baixa
+### [x] T24 — Arquivo recebido que não baixa
 
 - Novo tipo `media_unavailable` em `message_type`, com aviso na conversa e na última mensagem do painel.
 - No adaptador Whatsmeow, conferir o tamanho informado antes de baixar (limite de 100 MB) e tentar o download algumas vezes. Hoje a falha devolve erro, e a mensagem não entra no chamado enquanto o download falhar (`internal/messaging/whatsmeow/messages.go`).
