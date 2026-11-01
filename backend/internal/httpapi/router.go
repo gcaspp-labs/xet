@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -154,41 +153,6 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 
 func health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
-}
-
-// writeError sends a message meant for the user, in Portuguese.
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
-}
-
-func (s *server) internalError(w http.ResponseWriter, r *http.Request, err error) {
-	s.logger.Error("internal error",
-		"error", err,
-		"path", r.URL.Path,
-		"request_id", middleware.GetReqID(r.Context()),
-	)
-	writeError(w, http.StatusInternalServerError, "Erro interno. Tente novamente.")
-}
-
-// decodeJSON reads and validates the request body; on failure it writes the
-// response and returns false.
-func (s *server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		writeError(w, http.StatusBadRequest, "Requisição inválida.")
-		return false
-	}
-	if err := s.validate.Struct(dst); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "Preencha todos os campos corretamente.")
-		return false
-	}
-	return true
 }
 
 func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {

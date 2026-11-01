@@ -17,13 +17,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
-var (
-	ErrNotClosed      = errors.New("ticket not closed")
-	ErrCannotCorrect  = errors.New("user may not correct the ticket")
-	ErrReasonRequired = errors.New("correction without reason")
-	ErrNoChanges      = errors.New("correction changes nothing")
-)
-
 // Correction is the full closing data of a closed ticket after the
 // correction, with the reason for it.
 type Correction struct {

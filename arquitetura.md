@@ -189,6 +189,12 @@ frontend/           Aplicação React
 deploy/             Docker Compose, Caddyfile
 ```
 
+### Um arquivo por assunto
+
+Em `internal/ticket` e `internal/httpapi`, cada assunto tem um arquivo, com o mesmo nome nos dois pacotes: a regra de transferir fica em `ticket/transfer.go` e a rota, em `httpapi/transfer.go`. A consulta fica no arquivo do assunto que ela lê, como as notas em `notes.go`. Assunto novo ganha um novo par de arquivos, e um arquivo não reúne assuntos diferentes.
+
+Ficam sem par os arquivos sem rota ou que servem a todos os assuntos: em `ticket`, `service.go` (o serviço e seus auxiliares), `errors.go` (os erros do pacote), `access.go` (quem vê e quem age no chamado) e `inbound.go` (eventos recebidos do adaptador); em `httpapi`, `router.go` (as rotas) e `respond.go` (leitura da requisição, respostas e erros compartilhados).
+
 ## Referências
 
 - Whatsmeow: https://github.com/tulir/whatsmeow

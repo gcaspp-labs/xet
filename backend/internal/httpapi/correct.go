@@ -21,7 +21,7 @@ type correctRequest struct {
 
 // correctTicket corrects the closing data of a closed ticket, with a reason.
 func (s *server) correctTicket(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -58,14 +58,14 @@ type fieldChangeResponse struct {
 type correctionResponse struct {
 	ID        int64                 `json:"id"`
 	CreatedAt time.Time             `json:"createdAt"`
-	Actor     *ticketUserResponse   `json:"actor"`
+	Actor     *refResponse          `json:"actor"`
 	Reason    string                `json:"reason"`
 	Changes   []fieldChangeResponse `json:"changes"`
 }
 
 // listCorrections returns the history of changes of a closed ticket.
 func (s *server) listCorrections(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -78,7 +78,7 @@ func (s *server) listCorrections(w http.ResponseWriter, r *http.Request) {
 	for i, l := range logs {
 		out[i] = correctionResponse{ID: l.ID, CreatedAt: l.CreatedAt, Reason: l.Reason, Changes: make([]fieldChangeResponse, len(l.Changes))}
 		if l.ActorID != nil && l.ActorName != nil {
-			out[i].Actor = &ticketUserResponse{ID: *l.ActorID, Name: *l.ActorName}
+			out[i].Actor = &refResponse{ID: *l.ActorID, Name: *l.ActorName}
 		}
 		for j, c := range l.Changes {
 			out[i].Changes[j] = fieldChangeResponse{Field: c.Field, From: c.From, To: c.To}

@@ -13,13 +13,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
-var (
-	ErrNotFound        = errors.New("ticket not found")
-	ErrForbidden       = errors.New("ticket of a sector the user cannot access")
-	ErrAlreadyAssigned = errors.New("ticket already assigned to another user")
-	ErrClosed          = errors.New("ticket closed")
-)
-
 // Summary is an open ticket as shown in the panel lists.
 type Summary struct {
 	db.ListOpenTicketsRow
@@ -100,9 +93,6 @@ func (s *Service) Assign(ctx context.Context, actor auth.User, ticketID int64) (
 	return ticket, nil
 }
 
-// errNotQueued rolls back an assignment that found the ticket taken.
-var errNotQueued = errors.New("ticket not queued")
-
 // notQueued explains why the ticket could not be assigned.
 func (s *Service) notQueued(ctx context.Context, actor auth.User, ticketID int64) (db.Ticket, error) {
 	ticket, err := s.q.GetTicket(ctx, ticketID)
@@ -117,22 +107,4 @@ func (s *Service) notQueued(ctx context.Context, actor auth.User, ticketID int64
 	default:
 		return db.Ticket{}, ErrAlreadyAssigned
 	}
-}
-
-func recordTicket(ctx context.Context, q *db.Queries, ticketID int64, action string, actorID int64, changes audit.Changes) error {
-	raw, err := changes.JSON()
-	if err != nil {
-		return err
-	}
-	if err := q.CreateAuditLog(ctx, db.CreateAuditLogParams{
-		TicketID:   &ticketID,
-		EntityType: "ticket",
-		EntityID:   ticketID,
-		Action:     action,
-		ActorID:    &actorID,
-		Changes:    raw,
-	}); err != nil {
-		return fmt.Errorf("audit: %w", err)
-	}
-	return nil
 }

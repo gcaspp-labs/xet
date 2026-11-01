@@ -12,11 +12,11 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 | Acesso | `internal/auth` | Usuário, Sessão | Login, papéis e permissões |
 | Cadastro de clientes | `internal/directory` | Órgão, Contato | Pessoas atendidas e os órgãos a que pertencem |
 | Atendimento | `internal/ticket` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções |
-| Mensagens | `internal/message` | Mensagem, Arquivo | Histórico de mensagens e anexos |
+| Mensagens | `internal/ticket` | Mensagem, Arquivo | Histórico de mensagens e anexos |
 | Mensageria | `internal/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
 | Auditoria | `internal/audit` | Registro de auditoria | Histórico de alterações relevantes |
 
-Dependências permitidas: `ticket` usa `sector`, `auth`, `directory`, `message` e `audit`; `message` usa `messaging` para enviar; `messaging` não conhece nenhum outro domínio e só emite eventos.
+Dependências permitidas: `ticket` usa `auth`, `directory`, `audit` e `messaging`, além dos pacotes de apoio `audio`, `realtime` e `storage`; `sector` usa `audit`, `messaging` e `realtime`; `auth` e `directory` usam `audit`; `messaging` não conhece nenhum outro domínio e só emite eventos. `ticket` não usa `sector`. `auth`, `directory`, `sector` e `ticket` gravam pelo código gerado em `db`, e `httpapi` os expõe pela API.
 
 ## Diagrama
 
