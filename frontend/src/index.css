@@ -55,18 +55,18 @@
   --color-border: var(--line);
   --color-input: var(--line);
   --color-ring: var(--focus);
-  --color-sidebar: var(--sidebar-bg);
-  --color-sidebar-foreground: var(--sidebar-text);
+  --color-sidebar: var(--surface);
+  --color-sidebar-foreground: var(--ink-soft);
   --color-sidebar-primary: var(--accent-soft);
   --color-sidebar-primary-foreground: var(--accent-strong);
   --color-sidebar-accent: var(--accent-soft);
   --color-sidebar-accent-foreground: var(--accent-strong);
-  --color-sidebar-border: var(--sidebar-line);
+  --color-sidebar-border: var(--line);
   --color-sidebar-ring: var(--focus);
 
   /* Tokens sem equivalente no shadcn. */
   --color-ink-faint: var(--ink-faint);
-  --color-sidebar-text-active: var(--sidebar-text-active);
+  --color-sidebar-text-active: var(--ink);
   --color-line-soft: var(--line-soft);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
