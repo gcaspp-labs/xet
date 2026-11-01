@@ -24,7 +24,11 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
   await connectSector(baseURL!, request, sector.id)
   const { id, phone } = unique()
   const name = `Carla ${id}`
-  await seedDirectory(baseURL!, [{ name: `Prefeitura ${id}` }], [{ name, phone, organization: 0 }])
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name, phone, organization: 0, sector: sector.id }],
+  )
 
   await signIn(page, agent, userPassword)
   await page.getByRole('button', { name: 'Nova conversa' }).click()
@@ -103,4 +107,31 @@ test('contato com chamado na fila leva ao chamado existente', async ({
   await expect(conversation).toContainText('Preciso de ajuda')
   await expect(conversation).toContainText('Chamado na fila. Assuma o chamado para responder.')
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+})
+
+test('a busca de nova conversa abre em "Meu setor", com opção de ver todos', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const other = await seedSector(baseURL!)
+  const { id } = unique()
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [
+      { name: `Iara ${id}`, phone: `5511${id}`, organization: 0, sector: own.sector.id },
+      { name: `Jonas ${id}`, phone: `5521${id}`, organization: 0, sector: other.sector.id },
+    ],
+  )
+  await signIn(page, own.agent, userPassword)
+  await page.getByRole('button', { name: 'Nova conversa' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(id)
+  await expect(sheet.getByRole('button', { name: new RegExp(`Iara ${id}`) })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: new RegExp(`Jonas ${id}`) })).toHaveCount(0)
+
+  await sheet.getByRole('combobox', { name: 'Filtrar por setor' }).click()
+  await page.getByRole('option', { name: 'Todos os setores' }).click()
+  await expect(sheet.getByRole('button', { name: new RegExp(`Jonas ${id}`) })).toBeVisible()
 })

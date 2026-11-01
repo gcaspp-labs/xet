@@ -259,3 +259,53 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   await expect(supervisorPage.getByText('Chamado cancelado', { exact: true })).toBeVisible()
   await supervisorContext.close()
 })
+
+test('os módulos do contato vêm marcados no encerramento e podem ser alterados', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone } = unique()
+  const organization = `Prefeitura ${id}`
+  const api = await apiRequest.newContext({ baseURL })
+  await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
+  await api.post(`/api/sectors/${sector.id}/connection`)
+  await api.post(`/api/test/messaging/sectors/${sector.id}/pair`)
+  const org = (await (
+    await api.post('/api/organizations', { data: { name: organization } })
+  ).json()) as { id: number }
+  const moduleIds: number[] = []
+  for (const name of ['Folha', 'Patrimônio']) {
+    const created = await api.post(`/api/sectors/${sector.id}/modules`, { data: { name } })
+    moduleIds.push(((await created.json()) as { id: number }).id)
+  }
+  const contact = await api.post('/api/contacts', {
+    data: {
+      name: `Vera ${id}`,
+      phone,
+      organizationId: org.id,
+      sectorIds: [sector.id],
+      moduleIds: [moduleIds[0]],
+    },
+  })
+  expect(contact.ok()).toBeTruthy()
+  await api.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+    data: { externalMessageId: `E2E-${id}`, phone, contactName: `Vera ${id}`, body: 'Bom dia' },
+  })
+  await api.dispose()
+
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: `Vera ${id}` }).click()
+  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await expect(sheet.getByRole('checkbox', { name: 'Folha' })).toBeChecked()
+  await expect(sheet.getByRole('checkbox', { name: 'Patrimônio' })).not.toBeChecked()
+
+  await sheet.getByRole('checkbox', { name: 'Folha' }).click()
+  await sheet.getByRole('checkbox', { name: 'Patrimônio' }).click()
+  await sheet.getByLabel('Assunto').fill('Consulta')
+  await sheet.getByLabel('Resolução').fill('Respondida.')
+  await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
+})

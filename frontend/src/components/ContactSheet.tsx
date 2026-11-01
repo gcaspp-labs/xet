@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useDeferredValue, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormSheet } from '@/components/FormSheet'
@@ -12,9 +12,25 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { type Contact, type Organization, useOrganizations, useSaveContact } from '@/lib/directory'
+import { useSectors } from '@/lib/admin'
+import { useCurrentUser } from '@/lib/auth'
+import {
+  type Contact,
+  type Organization,
+  useActiveModulesOf,
+  useOrganizations,
+  useSaveContact,
+} from '@/lib/directory'
 import { formatCnpj, normalizePhone } from '@/lib/format'
 
 const organizationSchema = z.object({
@@ -32,6 +48,8 @@ const schema = z.object({
   organization: organizationSchema
     .nullable()
     .refine((value) => value !== null, 'Selecione o órgão do contato.'),
+  sectorIds: z.array(z.number()).min(1, 'Selecione ao menos um setor.'),
+  modules: z.array(z.object({ id: z.number(), sectorId: z.number() })),
 })
 
 type FormValues = z.input<typeof schema>
@@ -92,16 +110,22 @@ export function ContactSheet({
   onOpenChange,
   onSaved,
 }: {
-  contact: Pick<Contact, 'id' | 'name' | 'phone' | 'organization'> | null
+  contact: Contact | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved?: () => void
 }) {
   const save = useSaveContact()
+  const { data: user } = useCurrentUser()
+  // Para atendente e supervisor, a lista traz só o próprio setor: os demais do
+  // contato aparecem para leitura, e o backend os preserva.
+  const { data: sectors = [] } = useSectors()
   const {
     register,
     control,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues, unknown, z.output<typeof schema>>({
     resolver: zodResolver(schema),
@@ -109,8 +133,37 @@ export function ContactSheet({
       name: contact?.name ?? '',
       phone: contact?.phone ?? '',
       organization: contact?.organization ?? null,
+      sectorIds: contact?.sectors.length
+        ? contact.sectors.map((sector) => sector.id)
+        : user?.sectorId
+          ? [user.sectorId]
+          : [],
+      modules: contact?.modules ?? [],
     },
   })
+  const sectorIds = useWatch({ control, name: 'sectorIds' })
+  const editable = sectors.filter(
+    (sector) => sector.active || contact?.sectors.some((linked) => linked.id === sector.id),
+  )
+  const isEditable = (sectorId: number) => sectors.some((sector) => sector.id === sectorId)
+  const activeModules = useActiveModulesOf(sectorIds.filter(isEditable))
+  const otherSectors = contact?.sectors.filter((sector) => !isEditable(sector.id)) ?? []
+  const otherModules = contact?.modules.filter((module) => !isEditable(module.sectorId)) ?? []
+
+  // Tirar um setor tira também os módulos dele.
+  const toggleSector = (sectorId: number, checked: boolean) => {
+    setValue(
+      'sectorIds',
+      checked ? [...sectorIds, sectorId] : sectorIds.filter((id) => id !== sectorId),
+      { shouldValidate: errors.sectorIds !== undefined },
+    )
+    if (!checked) {
+      setValue(
+        'modules',
+        getValues('modules').filter((module) => module.sectorId !== sectorId),
+      )
+    }
+  }
 
   const onSubmit = handleSubmit((values) =>
     save.mutate(
@@ -119,6 +172,8 @@ export function ContactSheet({
         name: values.name,
         phone: values.phone,
         organizationId: values.organization!.id,
+        sectorIds: values.sectorIds,
+        moduleIds: values.modules.map((module) => module.id),
       },
       {
         onSuccess: () => {
@@ -176,6 +231,60 @@ export function ContactSheet({
         </FieldDescription>
         <FieldError errors={[errors.organization]} />
       </Field>
+      <FieldSet data-invalid={!!errors.sectorIds}>
+        <FieldLegend variant="label">Setores</FieldLegend>
+        <div className="flex flex-col gap-2">
+          {editable.map((sector) => (
+            <label key={sector.id} className="flex items-center gap-2">
+              <Checkbox
+                checked={sectorIds.includes(sector.id)}
+                onCheckedChange={(checked) => toggleSector(sector.id, checked)}
+              />
+              {sector.name}
+            </label>
+          ))}
+        </div>
+        {otherSectors.length > 0 && (
+          <FieldDescription>
+            Também em: {otherSectors.map((sector) => sector.name).join(', ')}.
+          </FieldDescription>
+        )}
+        <FieldError errors={[errors.sectorIds]} />
+      </FieldSet>
+      {(activeModules.length > 0 || otherModules.length > 0) && (
+        <Controller
+          control={control}
+          name="modules"
+          render={({ field }) => (
+            <FieldSet>
+              <FieldLegend variant="label">Módulos</FieldLegend>
+              <div className="flex flex-col gap-2">
+                {activeModules.map((module) => (
+                  <label key={module.id} className="flex items-center gap-2">
+                    <Checkbox
+                      checked={field.value.some((chosen) => chosen.id === module.id)}
+                      onCheckedChange={(checked) =>
+                        field.onChange(
+                          checked
+                            ? [...field.value, { id: module.id, sectorId: module.sectorId }]
+                            : field.value.filter((chosen) => chosen.id !== module.id),
+                        )
+                      }
+                    />
+                    {module.name}
+                  </label>
+                ))}
+              </div>
+              {otherModules.length > 0 && (
+                <FieldDescription>
+                  De outros setores: {otherModules.map((module) => module.name).join(', ')}.
+                </FieldDescription>
+              )}
+              <FieldDescription>Opcional. Vêm marcados no encerramento.</FieldDescription>
+            </FieldSet>
+          )}
+        />
+      )}
     </FormSheet>
   )
 }

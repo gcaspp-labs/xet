@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -28,6 +28,7 @@ import {
   useTransferSector,
   useTransferSectors,
 } from '@/lib/conversation'
+import { useContact } from '@/lib/directory'
 import { formatPhone } from '@/lib/format'
 
 const schema = z.object(closingShape).superRefine(checkPeriod)
@@ -60,6 +61,7 @@ export function ClosingSheet({
   const [sectorId, setSectorId] = useState<string | null>(null)
   const [sectorError, setSectorError] = useState<string>()
   const [registering, setRegistering] = useState(false)
+  const { data: contact } = useContact(ticket.contact.id, registering)
   // Horários sugeridos na abertura; só os alterados vão ao backend.
   const [suggested] = useState(() => ({
     startedAt: localInput(new Date(ticket.startedAt)),
@@ -84,6 +86,19 @@ export function ClosingSheet({
       setValue('organization', { ...form.organization, cnpj: null })
     }
   }, [form?.organization, getValues, setValue])
+
+  // Os módulos do contato vêm marcados, com o formulário ou depois do cadastro,
+  // sem desfazer o que a pessoa já marcou.
+  const contactModules = useRef('')
+  useEffect(() => {
+    const ids = form?.contactModuleIds ?? []
+    if (ids.join() !== contactModules.current) {
+      contactModules.current = ids.join()
+      if (getValues('moduleIds').length === 0) {
+        setValue('moduleIds', ids)
+      }
+    }
+  }, [form?.contactModuleIds, getValues, setValue])
 
   const onSubmit = handleSubmit(
     (values) => {
@@ -218,18 +233,15 @@ export function ClosingSheet({
           Alterações de horário ficam registradas no histórico de auditoria.
         </FieldDescription>
       </FormSheet>
-      <ContactSheet
-        key={registering ? 'open' : 'closed'}
-        contact={{
-          id: ticket.contact.id,
-          name: ticket.contact.name,
-          phone: ticket.contact.phone,
-          organization: null,
-        }}
-        open={registering}
-        onOpenChange={setRegistering}
-        onSaved={() => queryClient.invalidateQueries({ queryKey: ticketKey(ticket.id) })}
-      />
+      {contact && (
+        <ContactSheet
+          key={registering ? 'open' : 'closed'}
+          contact={contact}
+          open={registering}
+          onOpenChange={setRegistering}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ticketKey(ticket.id) })}
+        />
+      )}
     </>
   )
 }

@@ -18,7 +18,7 @@ async function closedTicket(baseURL: string) {
   const [organization] = await seedDirectory(
     baseURL,
     [{ name: `Prefeitura ${id}` }],
-    [{ name: `Rita ${id}`, phone, organization: 0 }],
+    [{ name: `Rita ${id}`, phone, organization: 0, sector: sector.id }],
   )
 
   const api = await apiRequest.newContext({ baseURL })

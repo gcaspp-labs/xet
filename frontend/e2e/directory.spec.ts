@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test'
+import { expect, request as apiRequest, test } from '@playwright/test'
 import {
+  admin,
   formatCnpj,
   seedDirectory,
   seedSector,
@@ -129,7 +130,7 @@ test('atendente cadastra contato vinculado a um órgão e não cadastra órgãos
 })
 
 test('busca contatos por nome, telefone e CNPJ', async ({ page, baseURL }) => {
-  const { agent } = await seedSector(baseURL!)
+  const { agent, sector } = await seedSector(baseURL!)
   const { id } = unique()
   const cnpj = uniqueCnpj(true)
   const phones = [`5511${id}`, `5521${id}`]
@@ -137,8 +138,8 @@ test('busca contatos por nome, telefone e CNPJ', async ({ page, baseURL }) => {
     baseURL!,
     [{ name: `Tribunal ${id}`, cnpj }, { name: `Consórcio ${id}` }],
     [
-      { name: `Beatriz ${id}`, phone: phones[0], organization: 0 },
-      { name: `Carlos ${id}`, phone: phones[1], organization: 1 },
+      { name: `Beatriz ${id}`, phone: phones[0], organization: 0, sector: sector.id },
+      { name: `Carlos ${id}`, phone: phones[1], organization: 1, sector: sector.id },
     ],
   )
   await signIn(page, agent, userPassword)
@@ -182,4 +183,101 @@ test('busca contatos por nome, telefone e CNPJ', async ({ page, baseURL }) => {
   await orgSearch.fill(cnpj)
   await expect(orgRows).toHaveCount(1)
   await expect(orgRows.first()).toContainText(`Tribunal ${id}`)
+})
+
+test('filtra contatos por setor e módulo, e o atendente altera só o próprio setor', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const other = await seedSector(baseURL!)
+  const { id } = unique()
+  const phone = `5531${id}`
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [
+      { name: `Dora ${id}`, phone: `5511${id}`, organization: 0, sector: own.sector.id },
+      { name: `Elias ${id}`, phone: `5521${id}`, organization: 0, sector: other.sector.id },
+    ],
+  )
+  const api = await apiRequest.newContext({ baseURL })
+  await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
+  await api.post(`/api/sectors/${own.sector.id}/modules`, { data: { name: `Folha ${id}` } })
+  await api.dispose()
+  await signIn(page, own.agent, userPassword)
+  await page.goto('/contatos')
+  const rows = page.getByRole('row').filter({ hasText: id })
+
+  // Abre em "Meu setor", com opção de ver todos.
+  const sectorFilter = page.getByRole('combobox', { name: 'Filtrar por setor' })
+  await expect(sectorFilter).toContainText('Meu setor')
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(`Dora ${id}`)
+  await sectorFilter.click()
+  await page.getByRole('option', { name: 'Todos os setores' }).click()
+  await expect(rows).toHaveCount(2)
+
+  // No contato de outro setor, o vínculo fica só para leitura.
+  await page.getByRole('button', { name: `Editar Elias ${id}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Editar contato' })
+  await expect(edit).toContainText(`Também em: ${other.sector.name}.`)
+  await expect(edit.getByRole('checkbox', { name: other.sector.name })).toHaveCount(0)
+  await edit.getByRole('button', { name: 'Cancelar' }).click()
+
+  // Cadastro: o setor de quem cadastra já vem marcado e ao menos um é obrigatório.
+  await page.getByRole('button', { name: 'Novo contato' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo contato' })
+  const ownCheckbox = drawer.getByRole('checkbox', { name: own.sector.name })
+  await expect(ownCheckbox).toBeChecked()
+  await drawer.getByLabel('Nome').fill(`Flora ${id}`)
+  await drawer.getByLabel('Telefone (WhatsApp)').fill(phone)
+  await drawer.getByLabel('Órgão').fill(`Prefeitura ${id}`)
+  await page.getByRole('option', { name: new RegExp(`Prefeitura ${id}`) }).click()
+  await ownCheckbox.click()
+  await drawer.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(drawer.getByText('Selecione ao menos um setor.')).toBeVisible()
+  await ownCheckbox.click()
+  await drawer.getByRole('checkbox', { name: `Folha ${id}` }).click()
+  await drawer.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(drawer).toBeHidden()
+
+  // O módulo filtra a lista.
+  await page.getByRole('combobox', { name: 'Filtrar por módulo' }).click()
+  await page.getByRole('option', { name: `Folha ${id}` }).click()
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(`Flora ${id}`)
+})
+
+test('o administrador abre os contatos em todos os setores e escolhe o setor', async ({
+  page,
+  baseURL,
+}) => {
+  const first = await seedSector(baseURL!)
+  const second = await seedSector(baseURL!)
+  const { id } = unique()
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [
+      { name: `Gil ${id}`, phone: `5511${id}`, organization: 0, sector: first.sector.id },
+      { name: `Hana ${id}`, phone: `5521${id}`, organization: 0, sector: second.sector.id },
+    ],
+  )
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/contatos')
+  const rows = page.getByRole('row').filter({ hasText: id })
+  const sectorFilter = page.getByRole('combobox', { name: 'Filtrar por setor' })
+  await expect(sectorFilter).toContainText('Todos os setores')
+  await expect(rows).toHaveCount(2)
+  await sectorFilter.click()
+  await page.getByRole('option', { name: second.sector.name }).click()
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(`Hana ${id}`)
+
+  // Nenhum setor vem marcado no cadastro do administrador.
+  await page.getByRole('button', { name: 'Novo contato' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo contato' })
+  await expect(drawer.getByRole('checkbox', { name: first.sector.name })).not.toBeChecked()
+  await expect(drawer.getByRole('checkbox', { name: second.sector.name })).not.toBeChecked()
 })

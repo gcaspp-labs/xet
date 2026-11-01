@@ -2,6 +2,7 @@ import { BookUser } from 'lucide-react'
 import { type FormEvent, useDeferredValue, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
+import { ContactFilters } from '@/components/ContactFilters'
 import { FormSheet } from '@/components/FormSheet'
 import { SearchBox } from '@/components/SearchBox'
 import { Button } from '@/components/ui/button'
@@ -9,7 +10,7 @@ import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { newRequestId } from '@/lib/conversation'
-import { type Contact, useContacts } from '@/lib/directory'
+import { type Contact, useContactFilter, useContacts } from '@/lib/directory'
 import { formatPhone } from '@/lib/format'
 import { openTicketOf, useStartConversation } from '@/lib/tickets'
 
@@ -41,7 +42,8 @@ function ContactSearch({
   onChoose: (contact: Contact) => void
 }) {
   const [query, setQuery] = useState('')
-  const { data: contacts = [] } = useContacts(useDeferredValue(query))
+  const contactFilter = useContactFilter()
+  const { data: contacts = [] } = useContacts(useDeferredValue(query), contactFilter.filter)
 
   return (
     <div className="flex flex-col gap-3">
@@ -51,6 +53,7 @@ function ContactSearch({
         label="Buscar contato"
         placeholder="Nome, órgão, telefone ou CNPJ"
       />
+      <ContactFilters {...contactFilter} />
       {contacts.length > 0 ? (
         <ul aria-label="Contatos" className="flex flex-col divide-y divide-line-soft">
           {contacts.map((contact) => (
