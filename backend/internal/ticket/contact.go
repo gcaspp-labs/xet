@@ -30,7 +30,7 @@ func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactI
 		if err != nil {
 			return fmt.Errorf("lock open tickets: %w", err)
 		}
-		contact, err = directory.UpdateContact(ctx, q, contactID, in)
+		contact, err = directory.UpdateContact(ctx, q, actor, contactID, in)
 		if err != nil {
 			return err
 		}

@@ -63,9 +63,12 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 
 - O contato pode pertencer a vários setores. O setor organiza a lista e não restringe o acesso: o cadastro continua único para todos os setores.
 - No cadastro manual, ao menos um setor é obrigatório, com o setor de quem cadastra já marcado; o administrador escolhe.
+- Atendentes e supervisores marcam ou desmarcam apenas o próprio setor e o módulo dele. Os demais setores e módulos do contato aparecem só para leitura e são preservados ao salvar. O administrador altera qualquer setor e módulo.
 - A lista de contatos abre em "Meu setor", com opção de ver todos. A busca de "Nova conversa" usa o mesmo filtro. O administrador abre em todos.
 - O contato entra no setor sozinho ao escrever para o número dele, ao receber uma conversa iniciada por ele, em mensagem enviada pelo celular do setor ou ao ser transferido para ele.
-- Módulos no contato são opcionais e pertencem aos setores do contato. Eles filtram a lista e vêm marcados no formulário de encerramento.
+- O módulo no contato é opcional e o contato tem no máximo um em cada setor: dois setores, até dois módulos. Eles filtram a lista, e o módulo do setor do chamado vem marcado no formulário de encerramento.
+- A lista de contatos mostra os setores do contato e o módulo em cada um.
+- As alterações de setores e módulos do contato, inclusive as automáticas, ficam registradas na auditoria.
 
 ### Importar contatos do WhatsApp
 
@@ -168,7 +171,7 @@ Ao clicar em finalizar, o sistema abrirá o formulário de registro. O chamado s
 - Encerra o chamado em atendimento somente o responsável; supervisores e administradores também precisam ser o responsável (na ausência dele, o supervisor transfere o chamado para si e encerra). Chamado na fila não é encerrado: é assumido.
 - O fim não pode ser anterior ao início nem estar no futuro. Sem edição, o fim é o momento em que o formulário é salvo.
 - O órgão sugerido é o do chamado ou, se ele ainda não tiver, o órgão principal do contato. Contato não cadastrado (número desconhecido) precisa ser cadastrado e vinculado a um órgão antes de salvar o formulário.
-- Os módulos selecionáveis são os ativos do setor do chamado. Os módulos do contato que estiverem entre eles já vêm marcados, e a pessoa pode alterar.
+- Os módulos selecionáveis são os ativos do setor do chamado. O módulo do contato nesse setor, se estiver ativo, já vem marcado, e a pessoa pode alterar ou marcar outros para aquele chamado.
 
 Cada setor terá sua própria lista de módulos/sistemas. Um chamado poderá tratar de vários módulos, com uma resolução geral.
 

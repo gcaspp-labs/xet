@@ -9,6 +9,38 @@ import (
 	"context"
 )
 
+const addContactModules = `-- name: AddContactModules :exec
+insert into contact_modules (contact_id, module_id, sector_id)
+select $1, id, sector_id from modules
+where id = any($2::bigint[])
+`
+
+type AddContactModulesParams struct {
+	ContactID int64
+	ModuleIds []int64
+}
+
+func (q *Queries) AddContactModules(ctx context.Context, arg AddContactModulesParams) error {
+	_, err := q.db.Exec(ctx, addContactModules, arg.ContactID, arg.ModuleIds)
+	return err
+}
+
+const addContactSectors = `-- name: AddContactSectors :exec
+insert into contact_sectors (contact_id, sector_id)
+select $1, unnest($2::bigint[])
+on conflict do nothing
+`
+
+type AddContactSectorsParams struct {
+	ContactID int64
+	SectorIds []int64
+}
+
+func (q *Queries) AddContactSectors(ctx context.Context, arg AddContactSectorsParams) error {
+	_, err := q.db.Exec(ctx, addContactSectors, arg.ContactID, arg.SectorIds)
+	return err
+}
+
 const createContact = `-- name: CreateContact :one
 insert into contacts (name, phone, organization_id, registered)
 values ($1, $2, $3, true)
@@ -165,23 +197,154 @@ func (q *Queries) GetContactWithOrganization(ctx context.Context, id int64) (Get
 	return i, err
 }
 
+const linkContactSector = `-- name: LinkContactSector :execrows
+insert into contact_sectors (contact_id, sector_id)
+values ($1, $2)
+on conflict do nothing
+`
+
+type LinkContactSectorParams struct {
+	ContactID int64
+	SectorID  int64
+}
+
+// The contact enters the sector by itself: a repeated link has no effect and
+// affects no rows.
+func (q *Queries) LinkContactSector(ctx context.Context, arg LinkContactSectorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkContactSector, arg.ContactID, arg.SectorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listModulesOfContacts = `-- name: ListModulesOfContacts :many
+select cm.contact_id, m.id, m.sector_id, m.name
+from contact_modules cm
+join modules m on m.id = cm.module_id
+where cm.contact_id = any($1::bigint[])
+order by lower(m.name), m.id
+`
+
+type ListModulesOfContactsRow struct {
+	ContactID int64
+	ID        int64
+	SectorID  int64
+	Name      string
+}
+
+func (q *Queries) ListModulesOfContacts(ctx context.Context, contactIds []int64) ([]ListModulesOfContactsRow, error) {
+	rows, err := q.db.Query(ctx, listModulesOfContacts, contactIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModulesOfContactsRow
+	for rows.Next() {
+		var i ListModulesOfContactsRow
+		if err := rows.Scan(
+			&i.ContactID,
+			&i.ID,
+			&i.SectorID,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSectorsOfContacts = `-- name: ListSectorsOfContacts :many
+select cs.contact_id, s.id, s.name
+from contact_sectors cs
+join sectors s on s.id = cs.sector_id
+where cs.contact_id = any($1::bigint[])
+order by lower(s.name), s.id
+`
+
+type ListSectorsOfContactsRow struct {
+	ContactID int64
+	ID        int64
+	Name      string
+}
+
+func (q *Queries) ListSectorsOfContacts(ctx context.Context, contactIds []int64) ([]ListSectorsOfContactsRow, error) {
+	rows, err := q.db.Query(ctx, listSectorsOfContacts, contactIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSectorsOfContactsRow
+	for rows.Next() {
+		var i ListSectorsOfContactsRow
+		if err := rows.Scan(&i.ContactID, &i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeContactModules = `-- name: RemoveContactModules :exec
+delete from contact_modules
+where contact_id = $1 and module_id = any($2::bigint[])
+`
+
+type RemoveContactModulesParams struct {
+	ContactID int64
+	ModuleIds []int64
+}
+
+func (q *Queries) RemoveContactModules(ctx context.Context, arg RemoveContactModulesParams) error {
+	_, err := q.db.Exec(ctx, removeContactModules, arg.ContactID, arg.ModuleIds)
+	return err
+}
+
+const removeContactSectors = `-- name: RemoveContactSectors :exec
+delete from contact_sectors
+where contact_id = $1 and sector_id = any($2::bigint[])
+`
+
+type RemoveContactSectorsParams struct {
+	ContactID int64
+	SectorIds []int64
+}
+
+func (q *Queries) RemoveContactSectors(ctx context.Context, arg RemoveContactSectorsParams) error {
+	_, err := q.db.Exec(ctx, removeContactSectors, arg.ContactID, arg.SectorIds)
+	return err
+}
+
 const searchContacts = `-- name: SearchContacts :many
 select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj
 from contacts c
 left join organizations o on o.id = c.organization_id
-where $1::text = ''
-   or immutable_unaccent(c.name) ilike immutable_unaccent($1)
-   or immutable_unaccent(o.name) ilike immutable_unaccent($1)
-   or ($2::text <> '' and c.phone like $2)
-   or ($3::text <> '' and o.cnpj like $3)
+where ($1::text = ''
+       or immutable_unaccent(c.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(o.name) ilike immutable_unaccent($1)
+       or ($2::text <> '' and c.phone like $2)
+       or ($3::text <> '' and o.cnpj like $3))
+  and ($4::bigint = 0 or exists (
+       select 1 from contact_sectors cs where cs.contact_id = c.id and cs.sector_id = $4))
+  and ($5::bigint = 0 or exists (
+       select 1 from contact_modules cm where cm.contact_id = c.id and cm.module_id = $5))
 order by lower(c.name), c.id
-limit $4
+limit $6
 `
 
 type SearchContactsParams struct {
 	NamePattern  string
 	PhonePattern string
 	CnpjPattern  string
+	SectorID     int64
+	ModuleID     int64
 	MaxResults   int32
 }
 
@@ -193,12 +356,14 @@ type SearchContactsRow struct {
 
 // Matches the contact or organization name (ignoring case and accents), the
 // phone digits or the organization CNPJ. Empty patterns disable the phone and
-// CNPJ keys.
+// CNPJ keys; a zero sector or module disables that filter.
 func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) ([]SearchContactsRow, error) {
 	rows, err := q.db.Query(ctx, searchContacts,
 		arg.NamePattern,
 		arg.PhonePattern,
 		arg.CnpjPattern,
+		arg.SectorID,
+		arg.ModuleID,
 		arg.MaxResults,
 	)
 	if err != nil {

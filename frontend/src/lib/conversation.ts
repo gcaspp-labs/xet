@@ -283,6 +283,8 @@ export function useReturnTicket(ticketId: number, sectorId: number) {
 // órgão sugerido (do chamado ou do contato) e início automático.
 export type ClosingForm = {
   modules: { id: number; name: string }[]
+  // Módulos do contato entre os ativos do setor: já vêm marcados.
+  contactModuleIds: number[]
   organization: { id: number; name: string } | null
   startedAt: string
 }

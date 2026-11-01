@@ -29,12 +29,13 @@ type Closing struct {
 }
 
 // ClosingForm is what the closing form shows before the assignee fills it:
-// the active modules of the sector, the suggested organization and the
-// automatic start.
+// the active modules of the sector, those of the contact among them, the
+// suggested organization and the automatic start.
 type ClosingForm struct {
-	Modules      []db.Module
-	Organization *db.Organization
-	StartedAt    time.Time
+	Modules          []db.Module
+	ContactModuleIDs []int64
+	Organization     *db.Organization
+	StartedAt        time.Time
 }
 
 // ClosingForm returns the defaults of the closing form. The organization is
@@ -49,7 +50,11 @@ func (s *Service) ClosingForm(ctx context.Context, actor auth.User, ticketID int
 	if err != nil {
 		return ClosingForm{}, fmt.Errorf("list active modules: %w", err)
 	}
-	form := ClosingForm{Modules: modules, StartedAt: t.StartedAt}
+	contactModules, err := s.q.ListContactActiveModuleIDs(ctx, db.ListContactActiveModuleIDsParams{ContactID: t.ContactID, SectorID: t.SectorID})
+	if err != nil {
+		return ClosingForm{}, fmt.Errorf("list contact modules: %w", err)
+	}
+	form := ClosingForm{Modules: modules, ContactModuleIDs: contactModules, StartedAt: t.StartedAt}
 	orgID := t.OrganizationID
 	if orgID == nil {
 		c, err := s.q.GetContactWithOrganization(ctx, t.ContactID)

@@ -11,6 +11,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
@@ -104,6 +105,9 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 		}
 		if err != nil {
 			return fmt.Errorf("create ticket: %w", err)
+		}
+		if err := directory.LinkSector(ctx, q, contactID, sectorID, &actor.ID); err != nil {
+			return err
 		}
 		// Starting counts as assigning: the ticket is born with the user.
 		changes := audit.Changes{}

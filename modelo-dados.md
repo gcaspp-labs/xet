@@ -115,6 +115,7 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | Conectar e desvincular número (QR code) e ver status | — | Próprio setor | Todos os setores |
 | Cadastrar setores e usuários | — | — | Sim |
 | Cadastrar contatos e vinculá-los a um órgão | Sim | Sim | Sim |
+| Alterar setores e módulos do contato | Próprio setor | Próprio setor | Todos os setores |
 | Importar contatos do WhatsApp do setor | Próprio setor | Próprio setor | Todos os setores |
 | Cadastrar e editar órgãos | — | Sim | Sim |
 
@@ -178,9 +179,10 @@ O setor organiza a lista de contatos e não restringe o acesso. O vínculo é cr
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `contact_id` | bigint → `contacts` | Chave primária composta |
-| `module_id` | bigint → `modules` | Chave primária composta; o módulo deve ser de um setor do contato (validado na transação do cadastro) |
+| `module_id` | bigint → `modules` | Chave primária composta |
+| `sector_id` | bigint | Setor do módulo; `(module_id, sector_id)` → `modules` e `(contact_id, sector_id)` → `contact_sectors`, de modo que o módulo seja de um setor do contato; único com `contact_id` |
 
-Opcional. Tirar um setor do contato remove os módulos desse setor na mesma transação. Índice: `(module_id)` para o filtro da lista.
+Opcional, com no máximo um módulo por setor do contato. Tirar um setor do contato remove o módulo desse setor na mesma transação (`on delete cascade`). Módulo novo precisa estar ativo; o já vinculado pode continuar depois de desativado. Vínculos de setores que o usuário não altera são preservados ao salvar (ver Permissões). Índice: `(module_id)` para o filtro da lista.
 
 ## Atendimento
 
@@ -365,6 +367,8 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |
 | `module_created`, `module_updated` | Administração de módulos |
 | `organization_created`, `organization_updated` | Administração de órgãos |
+| `contact_links_updated` | Cadastro ou edição muda setores ou módulos do contato, na entidade `contact`: `changes` só com o que mudou entre `sector_ids` e `module_ids` (listas ordenadas) |
+| `contact_sector_linked` | Contato entra no setor sozinho, na entidade `contact`: `changes` com `sector_id` de vazio para o setor; `actor_id` vazio em mensagem recebida ou enviada pelo celular, e quem agiu na nova conversa e na transferência. Vínculo já existente não gera registro |
 | `contacts_imported` | Importação de contatos, na entidade `sector`: `changes` com as quantidades de contatos criados e já existentes |
 
 Conexão do número: `sector_connected` é gravado quando o setor passa a `connected` vindo de outro estado ou com outra conta vinculada; `sector_disconnected`, quando sai de `connected`. Os estados intermediários (`connecting`) e as reconexões automáticas que não passam por `connected` não geram auditoria. Os dois registros são ações do sistema (`actor_id` vazio), exceto ao desvincular pela tela de conexão, quando `sector_disconnected` guarda o autor, mesmo que a conexão já estivesse caída; repetir não gera novo registro. Guardam em `changes` o estado da conexão, a conta vinculada, o telefone e o motivo da recusa. Número recusado por já estar em outro setor não chega a `connected` e por isso não gera `sector_connected`.

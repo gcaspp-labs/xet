@@ -87,6 +87,16 @@ func (s *server) directoryError(w http.ResponseWriter, r *http.Request, err erro
 		writeError(w, http.StatusNotFound, "Órgão não encontrado.")
 	case errors.Is(err, directory.ErrContactNotFound):
 		writeError(w, http.StatusNotFound, "Contato não encontrado.")
+	case errors.Is(err, directory.ErrSectorRequired):
+		writeError(w, http.StatusUnprocessableEntity, "Selecione ao menos um setor.")
+	case errors.Is(err, directory.ErrInvalidSector):
+		writeError(w, http.StatusUnprocessableEntity, "Escolha setores ativos.")
+	case errors.Is(err, directory.ErrSectorNotAllowed):
+		writeError(w, http.StatusForbidden, "Você altera somente o próprio setor do contato e o módulo dele.")
+	case errors.Is(err, directory.ErrOneModulePerSector):
+		writeError(w, http.StatusUnprocessableEntity, "Escolha no máximo um módulo por setor.")
+	case errors.Is(err, directory.ErrInvalidModules):
+		writeError(w, http.StatusUnprocessableEntity, "Escolha módulos ativos dos setores do contato.")
 	default:
 		s.internalError(w, r, err)
 	}

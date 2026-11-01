@@ -541,6 +541,17 @@ type Contact struct {
 	UpdatedAt         time.Time
 }
 
+type ContactModule struct {
+	ContactID int64
+	ModuleID  int64
+	SectorID  int64
+}
+
+type ContactSector struct {
+	ContactID int64
+	SectorID  int64
+}
+
 type InternalNote struct {
 	ID        int64
 	TicketID  int64

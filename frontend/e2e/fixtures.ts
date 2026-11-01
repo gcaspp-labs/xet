@@ -93,7 +93,7 @@ type OrganizationData = { id: number; name: string; cnpj: string | null }
 export async function seedDirectory(
   baseURL: string,
   organizations: { name: string; cnpj?: string }[],
-  contacts: { name: string; phone: string; organization: number }[],
+  contacts: { name: string; phone: string; organization: number; sector: number }[],
 ) {
   const api = await request.newContext({ baseURL })
   const login = await api.post('/api/auth/login', {
@@ -112,6 +112,7 @@ export async function seedDirectory(
         name: contact.name,
         phone: contact.phone,
         organizationId: created[contact.organization].id,
+        sectorIds: [contact.sector],
       },
     })
     expect(response.ok()).toBeTruthy()

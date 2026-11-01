@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/storage"
@@ -96,6 +97,12 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 			if err := q.SetContactExternalID(ctx, db.SetContactExternalIDParams{ID: contact.ID, ExternalContactID: &msg.ExternalContactID}); err != nil {
 				return fmt.Errorf("set contact external id: %w", err)
 			}
+		}
+		// After the contact is written, so saving its registration, which
+		// writes the contact and then the links, never waits on this link
+		// while this transaction waits on the contact.
+		if err := directory.LinkSector(ctx, q, contact.ID, sectorID, nil); err != nil {
+			return err
 		}
 
 		var mediaID *int64

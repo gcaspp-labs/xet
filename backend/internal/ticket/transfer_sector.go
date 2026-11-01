@@ -10,6 +10,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
@@ -62,6 +63,9 @@ func (s *Service) TransferSector(ctx context.Context, actor auth.User, ticketID,
 		}
 		if err != nil {
 			return fmt.Errorf("create transferred ticket: %w", err)
+		}
+		if err := directory.LinkSector(ctx, q, closed.ContactID, target.ID, &actor.ID); err != nil {
+			return err
 		}
 		changes["sector_id"] = audit.Change{From: closed.SectorID, To: target.ID}
 		changes["next_ticket_id"] = audit.Change{From: nil, To: next.ID}

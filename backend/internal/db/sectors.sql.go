@@ -88,6 +88,31 @@ func (q *Queries) GetSectorForUpdate(ctx context.Context, id int64) (Sector, err
 	return i, err
 }
 
+const listActiveSectorIDs = `-- name: ListActiveSectorIDs :many
+select id from sectors
+where id = any($1::bigint[]) and active
+`
+
+func (q *Queries) ListActiveSectorIDs(ctx context.Context, ids []int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listActiveSectorIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSectors = `-- name: ListSectors :many
 select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error from sectors
 order by lower(name)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -392,9 +393,9 @@ func TestRegisteredContactIsMatchedByPhoneVariant(t *testing.T) {
 	token := e.login("sup@exemplo.com", testPassword)
 	orgID := e.organization(token, "Câmara Municipal", "")
 	// Cadastrado com o nono dígito; o WhatsApp informa o número sem ele.
-	withNine := e.contact(token, "José Cadastrado", "5511987654321", orgID)
+	withNine := e.contact(token, "José Cadastrado", "5511987654321", orgID, contab.ID)
 	// Cadastrado sem o nono dígito; o WhatsApp informa o número com ele.
-	withoutNine := e.contact(token, "Ana Cadastrada", "551176543210", orgID)
+	withoutNine := e.contact(token, "Ana Cadastrada", "551176543210", orgID, contab.ID)
 
 	msg := text("MSG-1", "551187654321@s.whatsapp.net", "551187654321", "Oi")
 	msg.ContactName = "Zé"
@@ -612,5 +613,93 @@ func TestMediaIsSavedOnArrival(t *testing.T) {
 	}
 	if m := msgs[4]; m.Type != "unsupported" || m.MediaID != nil {
 		t.Fatalf("unsupported message = %+v", m)
+	}
+}
+
+// contactSectors lists the sectors linked to the contact.
+func (e *testEnv) contactSectors(contactID int64) []int64 {
+	e.t.Helper()
+	rows, err := e.pool.Query(e.t.Context(), `select sector_id from contact_sectors where contact_id = $1 order by sector_id`, contactID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return ids
+}
+
+// O contato entra no setor ao escrever para o número dele e por mensagem do
+// celular do setor, sem duplicar o vínculo nem perder os outros setores.
+func TestMessagesLinkTheContactToTheSector(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab, rh := e.sector("Contabilidade"), e.sector("RH")
+
+	e.receive(contab.ID, text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
+	e.receive(contab.ID, text("MSG-2", "5511988887777@s.whatsapp.net", "5511988887777", "De novo"))
+	maria := e.contacts()[0].ID
+	if got := e.contactSectors(maria); fmt.Sprint(got) != fmt.Sprint([]int64{contab.ID}) {
+		t.Fatalf("after two messages: %v", got)
+	}
+	e.receive(rh.ID, text("MSG-3", "5511988887777@s.whatsapp.net", "5511988887777", "Oi, RH"))
+	if got := e.contactSectors(maria); fmt.Sprint(got) != fmt.Sprint([]int64{contab.ID, rh.ID}) {
+		t.Fatalf("after message to another sector: %v", got)
+	}
+
+	// Só o vínculo novo vai à auditoria, como ação do sistema.
+	actions, changes := e.auditChanges("contact", maria)
+	if fmt.Sprint(actions) != "[contact_sector_linked contact_sector_linked]" ||
+		changes[1]["sector_id"]["to"] != float64(rh.ID) {
+		t.Fatalf("audit: %v %v", actions, changes)
+	}
+	logs, err := e.q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: maria})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if logs[0].ActorID != nil {
+		t.Fatalf("audit actor = %d, want the system", *logs[0].ActorID)
+	}
+
+	e.sendOutside(rh.ID, text("OUT-1", "5511977776666@s.whatsapp.net", "5511977776666", "Enviada pelo celular"))
+	var joao int64
+	for _, c := range e.contacts() {
+		if c.ID != maria {
+			joao = c.ID
+		}
+	}
+	if got := e.contactSectors(joao); fmt.Sprint(got) != fmt.Sprint([]int64{rh.ID}) {
+		t.Fatalf("after message from the phone: %v", got)
+	}
+}
+
+// Mensagens do mesmo contato ao mesmo tempo que o cadastro dele: nenhum dos
+// lados espera o outro para sempre e os vínculos terminam corretos.
+func TestMessagesWhileSavingContactDoNotDeadlock(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab, rh := e.sector("Contabilidade"), e.sector("RH")
+	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
+	admin := e.login("admin@exemplo.com", testPassword)
+	org := e.organization(admin, "Prefeitura", "")
+	contact := e.contact(admin, "Maria", "5511988887777", org, contab.ID)
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			e.receive(rh.ID, text(fmt.Sprintf("MSG-%d", i), "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
+		})
+		wg.Go(func() {
+			resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", contact), admin,
+				map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": org, "sectorIds": []int64{contab.ID}})
+			if resp.status != http.StatusOK {
+				t.Errorf("update contact: status %d, body %v", resp.status, resp.body)
+			}
+		})
+	}
+	wg.Wait()
+	if got := e.contactSectors(contact); !slices.Contains(got, contab.ID) {
+		t.Fatalf("sectors: %v", got)
 	}
 }

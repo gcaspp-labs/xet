@@ -3,10 +3,12 @@ package httpapi
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 )
 
@@ -51,7 +53,7 @@ func TestStartConversationCreatesTicketAssignedToTheAgent(t *testing.T) {
 	c := newConversation(t)
 	e := c.e
 	org := e.organization(c.supToken, "Prefeitura de Santos", "")
-	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", org)
+	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", org, c.sector.ID)
 
 	resp := e.startConversation(c.sector.ID, carla, c.anaToken, requestA, "Bom dia, Carla. Sua guia está pronta.")
 	if resp.status != http.StatusCreated || resp.body["existing"] != false {
@@ -115,7 +117,7 @@ func TestStartConversationIsIdempotent(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e := c.e
-	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""))
+	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""), c.sector.ID)
 
 	// Cliques repetidos e simultâneos com o mesmo identificador geram um único chamado e uma única mensagem.
 	const attempts = 8
@@ -151,7 +153,7 @@ func TestStartConversationIsIdempotent(t *testing.T) {
 	if resp := e.startConversation(c.sector.ID, carla, c.biaToken, requestA, "Bom dia"); resp.status != http.StatusConflict {
 		t.Fatalf("other author: status %d", resp.status)
 	}
-	other := e.contact(c.anaToken, "Davi Lima", "5513988882222", e.organization(c.supToken, "Câmara", ""))
+	other := e.contact(c.anaToken, "Davi Lima", "5513988882222", e.organization(c.supToken, "Câmara", ""), c.sector.ID)
 	if resp := e.startConversation(c.sector.ID, other, c.anaToken, requestA, "Bom dia"); resp.status != http.StatusConflict {
 		t.Fatalf("other contact: status %d", resp.status)
 	}
@@ -213,7 +215,7 @@ func TestStartConversationConcurrentAgentsShareOneTicket(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e := c.e
-	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""))
+	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""), c.sector.ID)
 
 	// Dois atendentes iniciam ao mesmo tempo: um cria o chamado e o outro é direcionado a ele.
 	tokens := []string{c.anaToken, c.biaToken}
@@ -250,7 +252,7 @@ func TestStartConversationPermissions(t *testing.T) {
 	c := newConversation(t)
 	e := c.e
 	rh := e.sector("Tributos")
-	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""))
+	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""), c.sector.ID)
 
 	// Só pelo número do próprio setor; o administrador inicia em qualquer setor.
 	if resp := e.startConversation(c.sector.ID, carla, c.rhToken, requestA, "Bom dia"); resp.status != http.StatusForbidden {
@@ -300,7 +302,7 @@ func TestStartConversationWithDisconnectedNumberFails(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e := c.e
-	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""))
+	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""), c.sector.ID)
 	if err := e.whatsapp.Drop(t.Context(), c.sector.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +328,7 @@ func TestStartConversationRecordsTheAssignment(t *testing.T) {
 	c := newConversation(t)
 	e := c.e
 	org := e.organization(c.supToken, "Prefeitura de Santos", "")
-	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", org)
+	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", org, c.sector.ID)
 
 	resp := e.startConversation(c.sector.ID, carla, c.anaToken, requestA, "Bom dia, Carla.")
 	if resp.status != http.StatusCreated {
@@ -360,5 +362,36 @@ func TestStartConversationRecordsTheAssignment(t *testing.T) {
 	if len(logs) != 2 || logs[0]["action"] != "ticket_started" || logs[0]["toName"] != "ana@exemplo.com" ||
 		logs[0]["actor"].(map[string]any)["name"] != "ana@exemplo.com" || logs[1]["action"] != "ticket_transferred_user" {
 		t.Fatalf("assignments = %v", logs)
+	}
+}
+
+func TestStartConversationLinksTheContactToTheSector(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	rh := e.sector("Recursos")
+	carla := e.contact(c.adminToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""), rh.ID)
+
+	if resp := e.startConversation(c.sector.ID, carla, c.anaToken, requestA, "Bom dia"); resp.status != http.StatusCreated {
+		t.Fatalf("start: status %d, body %v", resp.status, resp.body)
+	}
+	want := []int64{c.sector.ID, rh.ID}
+	slices.Sort(want)
+	if got := e.contactSectors(carla); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("sectors = %v, want %v", got, want)
+	}
+	logs, err := e.q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: carla})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := logs[len(logs)-1]; last.Action != "contact_sector_linked" || last.ActorID == nil || *last.ActorID != c.ana.ID {
+		t.Fatalf("audit: %+v", last)
+	}
+	// Repetir a requisição não duplica o vínculo.
+	if resp := e.startConversation(c.sector.ID, carla, c.anaToken, requestA, "Bom dia"); resp.status >= 300 {
+		t.Fatalf("repeat: status %d", resp.status)
+	}
+	if got := e.contactSectors(carla); len(got) != 2 {
+		t.Fatalf("after repeat: %v", got)
 	}
 }

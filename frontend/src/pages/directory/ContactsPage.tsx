@@ -1,9 +1,11 @@
 import { BookUser, Plus } from 'lucide-react'
 import { useDeferredValue, useState } from 'react'
+import { ContactFilters } from '@/components/ContactFilters'
 import { ContactSheet } from '@/components/ContactSheet'
 import { SearchBox } from '@/components/SearchBox'
 import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
@@ -15,13 +17,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { type Contact, searchLimit, useContacts } from '@/lib/directory'
+import { type Contact, searchLimit, useContactFilter, useContacts } from '@/lib/directory'
 import { formatCnpj, formatPhone } from '@/lib/format'
 
 export default function ContactsPage() {
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
-  const { data: contacts, isPending } = useContacts(deferredQuery)
+  const contactFilter = useContactFilter()
+  const { data: contacts, isPending } = useContacts(deferredQuery, contactFilter.filter)
   const [editing, setEditing] = useState<Contact | null>(null)
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
@@ -53,6 +56,7 @@ export default function ContactsPage() {
           label="Buscar contatos"
           placeholder="Nome, telefone ou CNPJ"
         />
+        <ContactFilters {...contactFilter} />
         <Card>
           {contacts && contacts.length > 0 ? (
             <Table>
@@ -60,6 +64,7 @@ export default function ContactsPage() {
                 <TableRow>
                   <TableHead>Contato</TableHead>
                   <TableHead>Órgão</TableHead>
+                  <TableHead>Setores e módulos</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -86,6 +91,23 @@ export default function ContactsPage() {
                         </>
                       ) : (
                         <span className="text-ink-faint">Sem órgão</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {contact.sectors.length > 0 ? (
+                        <ul className="flex flex-col gap-1">
+                          {contact.sectors.map((sector) => {
+                            const module = contact.modules.find((m) => m.sectorId === sector.id)
+                            return (
+                              <li key={sector.id} className="flex flex-wrap items-center gap-2">
+                                {sector.name}
+                                {module && <Badge variant="tag">{module.name}</Badge>}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : (
+                        <span className="text-ink-faint">Sem setor</span>
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -117,7 +139,9 @@ export default function ContactsPage() {
                   <BookUser strokeWidth={1.7} aria-hidden />
                 </EmptyMedia>
                 <EmptyDescription>
-                  {deferredQuery.trim()
+                  {deferredQuery.trim() ||
+                  contactFilter.filter.sectorId ||
+                  contactFilter.filter.moduleId
                     ? 'Nenhum contato encontrado.'
                     : 'Nenhum contato cadastrado.'}
                 </EmptyDescription>

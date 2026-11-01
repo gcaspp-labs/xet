@@ -32,7 +32,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await seedDirectory(
     baseURL!,
     [{ name: `Prefeitura ${id}` }],
-    [{ name: contact, phone, organization: 0 }],
+    [{ name: contact, phone, organization: 0, sector: origin.sector.id }],
   )
   expect(
     (

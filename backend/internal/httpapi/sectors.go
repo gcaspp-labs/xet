@@ -123,6 +123,23 @@ func (s *server) listModules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *server) listActiveModules(w http.ResponseWriter, r *http.Request) {
+	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	if !ok {
+		return
+	}
+	modules, err := s.sectors.ListActiveModules(r.Context(), sectorID)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	out := make([]moduleResponse, len(modules))
+	for i, m := range modules {
+		out[i] = toModuleResponse(m)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 type createModuleRequest struct {
 	Name string `json:"name" validate:"required"`
 }

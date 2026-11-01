@@ -59,6 +59,40 @@ func (q *Queries) GetModuleForUpdate(ctx context.Context, arg GetModuleForUpdate
 	return i, err
 }
 
+const getModulesForShare = `-- name: GetModulesForShare :many
+select id, sector_id, name, active, created_at, updated_at from modules
+where id = any($1::bigint[])
+for share
+`
+
+// Keeps the modules from being deactivated until the transaction ends.
+func (q *Queries) GetModulesForShare(ctx context.Context, ids []int64) ([]Module, error) {
+	rows, err := q.db.Query(ctx, getModulesForShare, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Module
+	for rows.Next() {
+		var i Module
+		if err := rows.Scan(
+			&i.ID,
+			&i.SectorID,
+			&i.Name,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveModules = `-- name: ListActiveModules :many
 select id, sector_id, name, active, created_at, updated_at from modules
 where sector_id = $1 and active
@@ -85,6 +119,40 @@ func (q *Queries) ListActiveModules(ctx context.Context, sectorID int64) ([]Modu
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContactActiveModuleIDs = `-- name: ListContactActiveModuleIDs :many
+select m.id
+from contact_modules cm
+join modules m on m.id = cm.module_id
+where cm.contact_id = $1 and m.sector_id = $2 and m.active
+order by m.id
+`
+
+type ListContactActiveModuleIDsParams struct {
+	ContactID int64
+	SectorID  int64
+}
+
+// The modules of the contact that the closing form of the sector can mark.
+func (q *Queries) ListContactActiveModuleIDs(ctx context.Context, arg ListContactActiveModuleIDsParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listContactActiveModuleIDs, arg.ContactID, arg.SectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

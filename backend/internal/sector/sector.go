@@ -169,6 +169,15 @@ func (s *Service) ListModules(ctx context.Context, sectorID int64) ([]db.Module,
 	return modules, nil
 }
 
+// ListActiveModules returns the modules of the sector that can still be chosen.
+func (s *Service) ListActiveModules(ctx context.Context, sectorID int64) ([]db.Module, error) {
+	modules, err := s.q.ListActiveModules(ctx, sectorID)
+	if err != nil {
+		return nil, fmt.Errorf("list active modules: %w", err)
+	}
+	return modules, nil
+}
+
 // CreateModule adds an active module to the sector.
 func (s *Service) CreateModule(ctx context.Context, actorID, sectorID int64, name string) (db.Module, error) {
 	name = strings.TrimSpace(name)
