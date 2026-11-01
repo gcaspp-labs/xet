@@ -200,7 +200,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** fila e atendimento seguem as permissões, com teste de atendente que não é o responsável; motivo em branco é recusado; contato não cadastrado cancela sem órgão; cancelar não cruza com assumir nem com mensagem nova, e a mensagem seguinte abre outro chamado; a correção é recusada; a auditoria grava o motivo na mesma transação.
 
-### [ ] T23 — Devolver à fila
+### [x] T23 — Devolver à fila
 
 - Ação na tela do chamado em atendimento, com volta ao painel, travando o chamado como em `Transfer` (`internal/ticket/transfer.go`); auditoria `ticket_returned` com `recordTicket` e registro na conversa.
 
