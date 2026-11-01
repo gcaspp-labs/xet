@@ -503,6 +503,53 @@ func TestMessagesSentFromThePhone(t *testing.T) {
 	}
 }
 
+func TestUnavailableMediaBecomesNotice(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.sector("Contabilidade", "5511999990000")
+	const contact, phone = "5511988887777@s.whatsapp.net", "5511988887777"
+
+	// Abre o chamado mesmo sem o arquivo, e a reentrega não duplica o aviso.
+	file := text("BIG-1", contact, phone, "video-grande.mp4")
+	file.Type = messaging.TypeMediaUnavailable
+	e.receive(contab.ID, file)
+	e.receive(contab.ID, file)
+
+	// Enviado pelo celular do setor, também fica registrado.
+	outside := text("BIG-2", contact, phone, "")
+	outside.Type = messaging.TypeMediaUnavailable
+	e.sendOutside(contab.ID, outside)
+
+	tickets := e.tickets(contab.ID)
+	if len(tickets) != 1 || tickets[0].Status != "queued" {
+		t.Fatalf("tickets = %+v", tickets)
+	}
+	msgs := e.messages(tickets[0].ID)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d, want 2", len(msgs))
+	}
+	if m := msgs[0]; m.Type != "media_unavailable" || m.MediaID != nil || m.Direction != "inbound" ||
+		m.Body == nil || *m.Body != "video-grande.mp4" {
+		t.Fatalf("received notice = %+v", m)
+	}
+	if m := msgs[1]; m.Type != "media_unavailable" || m.MediaID != nil || m.Origin != "phone" || m.Body != nil {
+		t.Fatalf("notice from the phone = %+v", m)
+	}
+	if got := e.count("media_files"); got != 0 {
+		t.Fatalf("media files = %d, want 0", got)
+	}
+
+	// A restrição do banco recusa anexo no aviso, mesmo fora do serviço.
+	doc := text("DOC-1", contact, phone, "")
+	doc.Type = messaging.TypeDocument
+	doc.Media = &messaging.Media{Data: []byte("%PDF"), MimeType: "application/pdf"}
+	e.receive(contab.ID, doc)
+	saved := e.messages(tickets[0].ID)[2]
+	if _, err := e.pool.Exec(t.Context(), `update messages set media_id = $1 where id = $2`, saved.MediaID, msgs[0].ID); err == nil {
+		t.Fatal("notice with a file was accepted")
+	}
+}
+
 func TestMediaIsSavedOnArrival(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)

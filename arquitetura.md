@@ -48,7 +48,7 @@ O pacote `internal/messaging` define a interface e os tipos neutros; cada proved
 ### Adaptador falso
 
 - `internal/messaging/fake` implementa o contrato para os testes de integração do backend.
-- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número, mensagens recebidas (texto, imagem, vídeo, áudio e documento) e confirmações de entrega e leitura das mensagens enviadas. O padrão é `whatsmeow`, e em produção essas rotas não existem.
+- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número, mensagens recebidas (texto, imagem, vídeo, áudio, documento e arquivo indisponível) e confirmações de entrega e leitura das mensagens enviadas. O padrão é `whatsmeow`, e em produção essas rotas não existem.
 
 ### Regras
 

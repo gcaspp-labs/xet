@@ -323,6 +323,9 @@ function MessageBubble({
     >
       {author && <p className="caption font-medium text-ink-soft">{author}</p>}
       <MessageMedia message={message} />
+      {message.type === 'media_unavailable' && (
+        <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
+      )}
       {message.type === 'unsupported' ? (
         <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
       ) : (
