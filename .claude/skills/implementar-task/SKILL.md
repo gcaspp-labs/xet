@@ -70,7 +70,12 @@ Leia só o que a task precisa, antes de escrever qualquer código. Ler menos nã
    - Rode `make dev-restart` (exatamente assim, sem variações, porque é o comando liberado nas permissões). Ele para o ambiente que estiver rodando e sobe de novo em segundo plano: o backend roda com `go run` e não recarrega sozinho, então ficaria sem as mudanças da task.
    - Confirme que `http://gc-11.tail9dcef6.ts.net:5173` responde e que a API tem as rotas novas.
    - Se não for possível reiniciar (por exemplo, permissão negada), não contorne: avise o usuário que o `make dev` precisa ser reiniciado.
-5. Envie uma notificação push curta com o link do PR e o link de teste `http://gc-11.tail9dcef6.ts.net:5173`, dizendo se os checks do CI ainda vão rodar. Inclua o e-mail do administrador de teste e diga que a senha está em `.dev-credentials`, na raiz do repositório (arquivo local, ignorado pelo git). Nunca coloque a senha na notificação nem na resposta. Se o arquivo não existir ou o login falhar (por exemplo, banco de desenvolvimento recriado), crie o administrador de novo com `make dev-create-admin`, gerando a senha sem exibi-la, grave-a no arquivo com permissão 600 e confirme o login pela API.
+5. Envie uma notificação push curta com o link do PR e o link de teste `http://gc-11.tail9dcef6.ts.net:5173`, dizendo se os checks do CI ainda vão rodar. Inclua o e-mail do administrador de teste e diga que a senha está em `.dev-credentials`, na raiz do repositório (arquivo local, ignorado pelo git). Nunca coloque a senha na notificação nem na resposta, e nunca exiba o arquivo na saída de um comando (`cat`, `sed`, `Read`), porque ela ficaria no histórico da sessão. O e-mail sai de `grep '^E-mail:' .dev-credentials`, e o login se confere com o comando abaixo, que mostra só o código HTTP. Se o arquivo não existir ou o login falhar (por exemplo, banco de desenvolvimento recriado), crie o administrador de novo com `make dev-create-admin`, gerando a senha sem exibi-la, grave-a no arquivo com permissão 600 e confirme o login da mesma forma.
+
+   ```bash
+   python3 -c "import json,re,urllib.request as r; t=open('.dev-credentials').read(); b=json.dumps({'email':re.search(r'E-mail:\s*(\S+)',t)[1],'password':re.search(r'Senha:\s*(\S+)',t)[1]}).encode(); print(r.urlopen(r.Request('http://localhost:8090/api/auth/login',b,{'Content-Type':'application/json'})).status)"
+   ```
+
 6. Responda ao usuário com o link do PR, o link de teste, o e-mail de login e o mesmo resumo, de forma curta.
 
 Não faça merge do PR. A revisão e o merge são do usuário.
