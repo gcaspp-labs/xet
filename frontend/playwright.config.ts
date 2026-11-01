@@ -42,8 +42,13 @@ export default defineConfig({
       },
     },
     {
-      command: `npm run dev -- --port ${frontendPort} --strictPort`,
+      // Build de produção servido pelo vite preview (com o mesmo proxy de /api):
+      // o servidor de desenvolvimento compila cada módulo no primeiro acesso, e
+      // com vários navegadores em paralelo e o cache vazio (como no CI) os
+      // primeiros carregamentos estouravam os tempos de espera dos testes.
+      command: `npx vite build --logLevel warn && npx vite preview --port ${frontendPort} --strictPort`,
       url: `http://localhost:${frontendPort}`,
+      timeout: 120_000,
       env: { BACKEND_URL: `http://localhost:${backendPort}` },
     },
   ],
