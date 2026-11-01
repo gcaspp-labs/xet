@@ -299,7 +299,7 @@ Só muda onde o código fica, para ler o backend por funcionalidade. Comportamen
 
 **Pronto quando:** o tema persiste ao recarregar e vale também na tela de login; "Sistema" segue o sistema operacional; "Sair" funciona pelo menu; o menu funciona por teclado.
 
-### [ ] T32 — Player de áudio próprio
+### [x] T32 — Player de áudio próprio
 
 - Componente sobre `<audio>` sem controles nativos, com tocar e pausar, progresso e tempo, usado na gravação (`Composer`) e nas mensagens (`MessageMedia`, em `TicketPage`). A duração aparece uma única vez.
 
