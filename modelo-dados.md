@@ -110,6 +110,8 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | Cadastrar contatos e vinculá-los a um órgão | Sim | Sim | Sim |
 | Cadastrar e editar órgãos | — | Sim | Sim |
 
+Transferir entre atendentes: o responsável transfere o próprio chamado; supervisor (do setor) e administrador transferem qualquer chamado em atendimento. O destino é um usuário ativo do setor do chamado (atendente ou supervisor).
+
 ### `sessions` — Sessão de login
 
 | Coluna | Tipo | Regras |
@@ -233,9 +235,9 @@ stateDiagram-v2
 | Mensagem do cliente sem chamado aberto no setor | Cria chamado `queued` com `arrived_at` = horário da mensagem |
 | Mensagem do cliente com chamado aberto | Entra no chamado existente |
 | Mensagem enviada pelo celular sem chamado aberto | Cria chamado `queued`; mensagem com origem `phone` |
-| Atendente inicia conversa | Cria chamado `in_progress` com `assignee_id` e `created_by_id` = atendente e `arrived_at` = envio |
+| Atendente inicia conversa | Cria chamado `in_progress` com `assignee_id` e `created_by_id` = atendente e `arrived_at` = envio; auditoria `ticket_started` na mesma transação |
 | Assumir | `update ... set assignee_id = :user, status = 'in_progress', assigned_at = coalesce(assigned_at, now()) where id = :id and status = 'queued'`; nenhuma linha afetada significa que outro atendente assumiu antes |
-| Transferência entre atendentes | Troca `assignee_id`; auditoria `ticket_transferred_user` |
+| Transferência entre atendentes | Com o chamado travado (`for update`) e `in_progress`, troca `assignee_id`; auditoria `ticket_transferred_user` com `assignee_id` de/para na mesma transação. Repetir a transferência para quem já é o responsável não grava de novo |
 | Encerramento | Preenche os campos de encerramento com `closure_type = 'resolved'` e grava `ticket_modules` |
 | Transferência entre setores | Encerra com o formulário completo e `closure_type = 'transferred'`; cria chamado `queued` no destino com `previous_ticket_id`, mesmo contato e órgão, e `arrived_at` = momento da transferência |
 | Mensagem após encerramento | Cria novo chamado (não reabre) |
@@ -312,6 +314,7 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | Ação | Quando |
 | --- | --- |
 | `ticket_assigned` | Atendente assume chamado |
+| `ticket_started` | Atendente inicia conversa; o chamado nasce assumido por ele |
 | `ticket_transferred_user` | Transferência entre atendentes |
 | `ticket_transferred_sector` | Transferência entre setores (no chamado de origem) |
 | `ticket_closed` | Encerramento, incluindo horários e órgão alterados no formulário |

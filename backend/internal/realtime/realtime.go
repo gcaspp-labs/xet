@@ -21,7 +21,8 @@ type Event struct {
 	TicketID int64  `json:"ticketId,omitempty"`
 }
 
-// TicketChanged reports a ticket created, with a new message or assigned.
+// TicketChanged reports a ticket created, with a new message, assigned or
+// transferred.
 func TicketChanged(sectorID, ticketID int64) Event {
 	return Event{Type: TypeTicket, SectorID: sectorID, TicketID: ticketID}
 }

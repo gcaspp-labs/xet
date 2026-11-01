@@ -542,7 +542,7 @@ func (q *Queries) ListOrganizationTickets(ctx context.Context, arg ListOrganizat
 }
 
 const listSectorWorkload = `-- name: ListSectorWorkload :many
-select u.id, u.name, u.role, count(t.id)::integer as active_tickets
+select u.id, u.name, u.role, u.active, count(t.id)::integer as active_tickets
 from users u
 left join tickets t on t.assignee_id = u.id and t.sector_id = $1 and t.status = 'in_progress'
 where (u.sector_id = $1 and u.active) or t.id is not null
@@ -554,6 +554,7 @@ type ListSectorWorkloadRow struct {
 	ID            int64
 	Name          string
 	Role          UserRole
+	Active        bool
 	ActiveTickets int32
 }
 
@@ -572,6 +573,7 @@ func (q *Queries) ListSectorWorkload(ctx context.Context, sectorID int64) ([]Lis
 			&i.ID,
 			&i.Name,
 			&i.Role,
+			&i.Active,
 			&i.ActiveTickets,
 		); err != nil {
 			return nil, err
@@ -613,6 +615,48 @@ type SetTicketSpokeWithParams struct {
 
 func (q *Queries) SetTicketSpokeWith(ctx context.Context, arg SetTicketSpokeWithParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, setTicketSpokeWith, arg.SpokeWith, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const transferTicket = `-- name: TransferTicket :one
+update tickets
+set assignee_id = $1
+where id = $2
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type TransferTicketParams struct {
+	AssigneeID *int64
+	ID         int64
+}
+
+// The caller holds the lock of the ticket and checked it is in progress.
+func (q *Queries) TransferTicket(ctx context.Context, arg TransferTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, transferTicket, arg.AssigneeID, arg.ID)
 	var i Ticket
 	err := row.Scan(
 		&i.ID,

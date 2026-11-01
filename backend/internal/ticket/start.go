@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -112,6 +113,13 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 		}
 		if err != nil {
 			return fmt.Errorf("create ticket: %w", err)
+		}
+		// Starting counts as assigning: the ticket is born with the user.
+		changes := audit.Changes{}
+		changes.Set("status", (*string)(nil), string(t.Status))
+		changes.Set("assignee_id", (*int64)(nil), t.AssigneeID)
+		if err := recordTicket(ctx, q, t.ID, "ticket_started", actor.ID, changes); err != nil {
+			return err
 		}
 		msg, err = q.CreateAgentMessage(ctx, db.CreateAgentMessageParams{
 			TicketID:        t.ID,

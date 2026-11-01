@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 )
 
 const createAuditLog = `-- name: CreateAuditLog :exec
@@ -67,6 +68,60 @@ func (q *Queries) ListAuditLogsByEntity(ctx context.Context, arg ListAuditLogsBy
 			&i.Reason,
 			&i.Changes,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketAssignmentLogs = `-- name: ListTicketAssignmentLogs :many
+select
+    a.id, a.action, a.created_at,
+    a.actor_id, actor.name as actor_name,
+    from_user.name as from_name,
+    to_user.name as to_name
+from audit_logs a
+left join users actor on actor.id = a.actor_id
+left join users from_user on from_user.id = (a.changes -> 'assignee_id' ->> 'from')::bigint
+left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::bigint
+where a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user')
+order by a.created_at, a.id
+`
+
+type ListTicketAssignmentLogsRow struct {
+	ID        int64
+	Action    string
+	CreatedAt time.Time
+	ActorID   *int64
+	ActorName *string
+	FromName  *string
+	ToName    *string
+}
+
+// Start, assignment and transfers of the ticket, oldest first, with the names of
+// the actor and of the previous and new assignees.
+func (q *Queries) ListTicketAssignmentLogs(ctx context.Context, ticketID *int64) ([]ListTicketAssignmentLogsRow, error) {
+	rows, err := q.db.Query(ctx, listTicketAssignmentLogs, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTicketAssignmentLogsRow
+	for rows.Next() {
+		var i ListTicketAssignmentLogsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Action,
+			&i.CreatedAt,
+			&i.ActorID,
+			&i.ActorName,
+			&i.FromName,
+			&i.ToName,
 		); err != nil {
 			return nil, err
 		}

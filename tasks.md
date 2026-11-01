@@ -121,7 +121,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** os dois caminhos funcionam e têm teste.
 
-### [ ] T12 — Transferência entre atendentes
+### [x] T12 — Transferência entre atendentes
 
 - Transferir responsabilidade preservando histórico; registrar na auditoria.
 

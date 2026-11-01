@@ -320,3 +320,45 @@ func TestStartConversationWithDisconnectedNumberFails(t *testing.T) {
 		t.Fatalf("retry: status %d, body %v", retry.status, retry.body)
 	}
 }
+
+func TestStartConversationRecordsTheAssignment(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	org := e.organization(c.supToken, "Prefeitura de Santos", "")
+	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", org)
+
+	resp := e.startConversation(c.sector.ID, carla, c.anaToken, requestA, "Bom dia, Carla.")
+	if resp.status != http.StatusCreated {
+		t.Fatalf("start: status %d, body %v", resp.status, resp.body)
+	}
+	ticketID := int64(resp.body["ticketId"].(float64))
+	// Repetir o pedido não grava de novo.
+	if resp := e.startConversation(c.sector.ID, carla, c.anaToken, requestA, "Bom dia, Carla."); resp.body["ticketId"] != float64(ticketID) {
+		t.Fatalf("repeated start: status %d, body %v", resp.status, resp.body)
+	}
+	// Quem é direcionado ao chamado aberto não assume nada.
+	if resp := e.startConversation(c.sector.ID, carla, c.biaToken, requestB, "Oi"); resp.body["existing"] != true {
+		t.Fatalf("start with open ticket: status %d, body %v", resp.status, resp.body)
+	}
+
+	// Iniciar conta como assumir: auditoria na mesma transação que cria o chamado.
+	actions, changes := e.auditChanges("ticket", ticketID)
+	if len(actions) != 1 || actions[0] != "ticket_started" {
+		t.Fatalf("audit actions = %v", actions)
+	}
+	if changes[0]["status"]["from"] != nil || changes[0]["status"]["to"] != "in_progress" ||
+		changes[0]["assignee_id"]["from"] != nil || changes[0]["assignee_id"]["to"] != float64(c.ana.ID) {
+		t.Fatalf("started changes = %v", changes[0])
+	}
+
+	// A conversa mostra o início antes de uma transferência.
+	if resp := e.transfer(ticketID, e.userID("bia@exemplo.com"), c.anaToken); resp.status != http.StatusOK {
+		t.Fatalf("transfer: status %d", resp.status)
+	}
+	logs := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", ticketID), c.supToken)
+	if len(logs) != 2 || logs[0]["action"] != "ticket_started" || logs[0]["toName"] != "ana@exemplo.com" ||
+		logs[0]["actor"].(map[string]any)["name"] != "ana@exemplo.com" || logs[1]["action"] != "ticket_transferred_user" {
+		t.Fatalf("assignments = %v", logs)
+	}
+}

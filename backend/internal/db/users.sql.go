@@ -68,6 +68,31 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
+const getUserForShare = `-- name: GetUserForShare :one
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at from users
+where id = $1
+for share
+`
+
+// Keeps the user from being deactivated or moved to another sector until the
+// transaction ends.
+func (q *Queries) GetUserForShare(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRow(ctx, getUserForShare, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.SectorID,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserForUpdate = `-- name: GetUserForUpdate :one
 select id, name, email, password_hash, role, sector_id, active, created_at, updated_at from users
 where id = $1

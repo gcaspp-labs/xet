@@ -45,6 +45,11 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
       .filter({ hasText: 'Bom dia, sua guia está pronta.' }),
   ).toContainText('Enviada')
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  // Iniciar a conversa conta como assumir o chamado e fica registrado, antes da
+  // primeira mensagem.
+  await expect(conversation.getByRole('listitem').first()).toContainText(
+    `${agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')} iniciou a conversa e assumiu o chamado`,
+  )
   const ticketUrl = page.url()
 
   // Outro integrante do setor que inicia conversa com o mesmo contato é levado ao

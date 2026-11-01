@@ -47,7 +47,7 @@ order by t.arrived_at, t.id;
 -- name: ListSectorWorkload :many
 -- Active users of the sector and anyone else (such as an admin) with tickets
 -- in progress there, with the number of tickets in progress of each one.
-select u.id, u.name, u.role, count(t.id)::integer as active_tickets
+select u.id, u.name, u.role, u.active, count(t.id)::integer as active_tickets
 from users u
 left join tickets t on t.assignee_id = u.id and t.sector_id = @sector_id and t.status = 'in_progress'
 where (u.sector_id = @sector_id and u.active) or t.id is not null
@@ -120,4 +120,11 @@ where sector_id = @sector_id and contact_id = @contact_id and status <> 'closed'
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, created_by_id, arrived_at, assigned_at, started_at)
 values (@protocol, @sector_id, @contact_id, @organization_id, 'in_progress', @assignee_id, @assignee_id, now(), now(), now())
 on conflict (sector_id, contact_id) where status <> 'closed' do nothing
+returning *;
+
+-- name: TransferTicket :one
+-- The caller holds the lock of the ticket and checked it is in progress.
+update tickets
+set assignee_id = @assignee_id
+where id = @id
 returning *;

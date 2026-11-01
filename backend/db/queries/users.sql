@@ -26,3 +26,10 @@ update users
 set name = @name, email = @email, role = @role, sector_id = @sector_id, active = @active
 where id = @id
 returning *;
+
+-- name: GetUserForShare :one
+-- Keeps the user from being deactivated or moved to another sector until the
+-- transaction ends.
+select * from users
+where id = @id
+for share;
