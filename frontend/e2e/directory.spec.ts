@@ -314,7 +314,8 @@ test('atendente importa contatos selecionados da agenda, com e sem órgão', asy
 }) => {
   const { sector, agent } = await seedSector(baseURL!)
   const { id } = unique()
-  const phoneOf = (digit: number) => `5511${id.slice(0, -1)}${digit}`
+  // O final difere sempre do final do id: a busca pelo nome com o id não pode casar com um telefone.
+  const phoneOf = (digit: number) => `5511${id.slice(0, -1)}${(Number(id.at(-1)) + digit) % 10}`
   await seedDirectory(baseURL!, [{ name: `Prefeitura ${id}` }], [])
   await connectBook(baseURL!, sector.id, [
     { name: `Ana ${id}`, phone: phoneOf(1) },
