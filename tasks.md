@@ -217,7 +217,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** pelo adaptador falso, a mensagem com arquivo indisponível vira aviso no chamado e a reentrega não duplica; há verificação manual com o número real, enviando um arquivo acima do limite.
 
-### [ ] T25 — Usuário com chamados em atendimento
+### [~] T25 — Usuário com chamados em atendimento
 
 - `UpdateUser` (`internal/auth/auth.go`) recusa a desativação e a troca de setor, inclusive ao virar administrador, se houver chamados em atendimento, informando a quantidade. A tela de usuários mostra a mensagem.
 

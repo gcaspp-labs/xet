@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
@@ -86,7 +87,14 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) userError(w http.ResponseWriter, r *http.Request, err error) {
+	var hasTickets *auth.UserHasTicketsError
 	switch {
+	case errors.As(err, &hasTickets):
+		tickets := fmt.Sprintf("%d chamados", hasTickets.Count)
+		if hasTickets.Count == 1 {
+			tickets = "1 chamado"
+		}
+		writeError(w, http.StatusConflict, fmt.Sprintf("O usuário tem %s em atendimento. Transfira antes de desativar ou trocar de setor.", tickets))
 	case errors.Is(err, auth.ErrWeakPassword):
 		writeError(w, http.StatusUnprocessableEntity, msgWeakPassword)
 	case errors.Is(err, auth.ErrPasswordTooLong):
