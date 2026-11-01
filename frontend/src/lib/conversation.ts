@@ -63,10 +63,11 @@ export type HistoryEntry = {
   assigneeName: string | null
 }
 
-// Quando o chamado foi assumido e cada transferência, com quem fez e de quem para quem.
+// Como o chamado ganhou o primeiro responsável (conversa iniciada ou assumido) e
+// cada transferência, com quem fez e de quem para quem.
 export type AssignmentLog = {
   id: number
-  action: 'ticket_assigned' | 'ticket_transferred_user'
+  action: 'ticket_started' | 'ticket_assigned' | 'ticket_transferred_user'
   createdAt: string
   actor: { id: number; name: string } | null
   fromName: string | null

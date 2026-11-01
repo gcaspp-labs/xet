@@ -161,6 +161,9 @@ function canTransfer(ticket: TicketDetail, user: User) {
 }
 
 function assignmentText(log: AssignmentLog) {
+  if (log.action === 'ticket_started') {
+    return `${log.toName} iniciou a conversa e assumiu o chamado`
+  }
   if (log.action === 'ticket_assigned') {
     return `${log.toName} assumiu o chamado`
   }
@@ -199,7 +202,11 @@ function timeline(messages: Message[], logs: AssignmentLog[]): TimelineItem[] {
     })),
     ...logs.map((log) => ({ kind: 'assignment' as const, at: Date.parse(log.createdAt), log })),
   ]
-  return items.sort((a, b) => a.at - b.at)
+  // No mesmo instante (conversa iniciada), o registro vem antes da primeira mensagem.
+  return items.sort(
+    (a, b) =>
+      a.at - b.at || (a.kind === 'assignment' ? -1 : 0) - (b.kind === 'assignment' ? -1 : 0),
+  )
 }
 
 function MessageBubble({
