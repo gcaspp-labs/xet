@@ -115,6 +115,7 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | Conectar e desvincular número (QR code) e ver status | — | Próprio setor | Todos os setores |
 | Cadastrar setores e usuários | — | — | Sim |
 | Cadastrar contatos e vinculá-los a um órgão | Sim | Sim | Sim |
+| Alterar setores e módulos do contato | Próprio setor | Próprio setor | Todos os setores |
 | Importar contatos do WhatsApp do setor | Próprio setor | Próprio setor | Todos os setores |
 | Cadastrar e editar órgãos | — | Sim | Sim |
 
@@ -180,7 +181,7 @@ O setor organiza a lista de contatos e não restringe o acesso. O vínculo é cr
 | `contact_id` | bigint → `contacts` | Chave primária composta |
 | `module_id` | bigint → `modules` | Chave primária composta; o módulo deve ser de um setor do contato (validado na transação do cadastro) |
 
-Opcional. Tirar um setor do contato remove os módulos desse setor na mesma transação. Índice: `(module_id)` para o filtro da lista.
+Opcional. Tirar um setor do contato remove os módulos desse setor na mesma transação. Módulo novo precisa estar ativo; o já vinculado pode continuar depois de desativado. Vínculos de setores que o usuário não altera são preservados ao salvar (ver Permissões). Índice: `(module_id)` para o filtro da lista.
 
 ## Atendimento
 
