@@ -113,6 +113,11 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 - O setor de destino terá acesso ao histórico relacionado para continuar o atendimento.
 - O destino responderá pelo próprio número de WhatsApp.
 - A mensagem de abertura pelo número do destino será enviada quando o chamado for assumido, não imediatamente na transferência. O atendente do destino escreve essa mensagem livremente.
+- Transfere para outro setor somente o responsável pelo chamado em atendimento, como no encerramento; supervisores e administradores também precisam ser o responsável. Valem as regras do formulário de encerramento, inclusive o cadastro do contato.
+- O destino é outro setor ativo. Se o contato já tiver chamado aberto no setor de destino, a transferência é recusada e nada é encerrado.
+- O novo chamado entra na fila do destino com o mesmo contato e o órgão informado no formulário, e chega no momento da transferência.
+- O chamado do destino mostra a origem (setor, protocolo, assunto, resolução e quem transferiu) com acesso à conversa anterior completa, com notas, só para leitura. Os usuários do destino veem toda a cadeia de chamados anteriores, mas não escrevem notas nem agem neles.
+- O chamado de origem mostra para qual setor e protocolo foi transferido, sem acesso à conversa do destino. A conversa da origem mostra quem transferiu e quando.
 
 ## Formulário de encerramento
 
