@@ -90,6 +90,27 @@ func (a *Adapter) Handler() http.Handler {
 			return a.UpdateStatus(r.Context(), sectorID, body.Status, body.ExternalMessageIDs...)
 		})
 	})
+	// Address book of the sector number.
+	r.Post("/messaging/sectors/{sectorID}/saved-contacts", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Contacts []struct {
+				Name  string `json:"name"`
+				Phone string `json:"phone"`
+			} `json:"contacts"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		contacts := make([]messaging.SavedContact, len(body.Contacts))
+		for i, c := range body.Contacts {
+			contacts[i] = messaging.SavedContact{Name: c.Name, Phone: c.Phone}
+		}
+		a.control(w, r, func(sectorID int64) error {
+			a.SetSavedContacts(sectorID, contacts...)
+			return nil
+		})
+	})
 	// The next unlink of the sector cannot reach the device.
 	r.Post("/messaging/sectors/{sectorID}/unreachable", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error {
