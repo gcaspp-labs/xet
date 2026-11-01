@@ -55,7 +55,7 @@ Leia só o que a task precisa, antes de escrever qualquer código. Ler menos nã
 ## 5. Testar e validar
 
 1. Escreva os testes exigidos pelo `CLAUDE.md`: integração no backend (banco PostgreSQL real e próprio para os testes), Playwright no frontend quando a task tiver interface.
-2. Rode `make lint` e `make test`. Tudo precisa passar; não desative regras de lint nem pule testes para fazer passar.
+2. Rode `make lint` e `make test`. Tudo precisa passar; não desative regras de lint nem pule testes para fazer passar. Ao filtrar a saída (`| tail`, `| grep`), comece o comando com `set -o pipefail`, porque sem ele o `&&` e o código de saída refletem o filtro, e uma falha passa despercebida. Não encadeie lint, testes ou conferências com `git commit`, `git push` ou `gh pr create`: confira o resultado antes de seguir.
 3. Percorra cada item de "Pronto quando" e confirme, com evidência (saída de teste, comando executado), que está atendido. Se algum não puder ser verificado (ex.: depende do número real de WhatsApp), anote para o resumo.
 
 ## 6. Finalizar com o PR
