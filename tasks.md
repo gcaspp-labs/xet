@@ -168,7 +168,7 @@ Só reorganiza, para facilitar a leitura e reduzir conflitos nas tasks seguintes
 
 **Pronto quando:** os arquivos de teste não mudam e `go test -race`, `make lint` e `make test-e2e` passam; o diff só mostra código movido e os renomes previstos; `modelo-dados.md` descreve os pacotes reais; cada assunto de `ticket` tem o arquivo correspondente em `httpapi`, quando houver rota.
 
-### [~] T20.1 — Leitura por camadas
+### [x] T20.1 — Leitura por camadas
 
 Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia seis documentos inteiros a cada task e passa a ler só o que a task precisa, sem esquecer regra de negócio.
 
