@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"bytes"
@@ -15,48 +15,48 @@ import (
 
 // getQR fetches the QR code image of the sector.
 func (e *testEnv) getQR(sectorID int64, token string) (int, []byte, string) {
-	e.t.Helper()
-	req, err := http.NewRequestWithContext(e.t.Context(), http.MethodGet, fmt.Sprintf("%s/api/sectors/%d/connection/qr.png", e.url, sectorID), nil)
+	e.T.Helper()
+	req, err := http.NewRequestWithContext(e.T.Context(), http.MethodGet, fmt.Sprintf("%s/api/sectors/%d/connection/qr.png", e.URL, sectorID), nil)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return resp.StatusCode, body, resp.Header.Get("Content-Type")
 }
 
 func (e *testEnv) connection(sectorID int64, token string) map[string]any {
-	e.t.Helper()
-	resp := e.do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/connection", sectorID), token, nil)
-	if resp.status != http.StatusOK {
-		e.t.Fatalf("get connection: status %d, body %v", resp.status, resp.body)
+	e.T.Helper()
+	resp := e.Do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/connection", sectorID), token, nil)
+	if resp.Status != http.StatusOK {
+		e.T.Fatalf("get connection: status %d, body %v", resp.Status, resp.Body)
 	}
-	return resp.body
+	return resp.Body
 }
 
 func (e *testEnv) accountID(sectorID int64) *string {
-	e.t.Helper()
-	s, err := e.q.GetSector(e.t.Context(), sectorID)
+	e.T.Helper()
+	s, err := e.Q.GetSector(e.T.Context(), sectorID)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return s.ExternalAccountID
 }
 
 // connectionLogs returns the connection actions recorded for the sector.
 func (e *testEnv) connectionLogs(sectorID int64) []db.AuditLog {
-	e.t.Helper()
-	logs, err := e.q.ListAuditLogsByEntity(e.t.Context(), db.ListAuditLogsByEntityParams{EntityType: "sector", EntityID: sectorID})
+	e.T.Helper()
+	logs, err := e.Q.ListAuditLogsByEntity(e.T.Context(), db.ListAuditLogsByEntityParams{EntityType: "sector", EntityID: sectorID})
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	var out []db.AuditLog
 	for _, l := range logs {
@@ -70,11 +70,11 @@ func (e *testEnv) connectionLogs(sectorID int64) []db.AuditLog {
 // connectionAudit returns the connection actions recorded for the sector,
 // checking they are actions of the system (no actor).
 func (e *testEnv) connectionAudit(sectorID int64) []string {
-	e.t.Helper()
+	e.T.Helper()
 	var actions []string
 	for _, l := range e.connectionLogs(sectorID) {
 		if l.ActorID != nil {
-			e.t.Errorf("%s: actor %d, want none (system action)", l.Action, *l.ActorID)
+			e.T.Errorf("%s: actor %d, want none (system action)", l.Action, *l.ActorID)
 		}
 		actions = append(actions, l.Action)
 	}
@@ -83,22 +83,22 @@ func (e *testEnv) connectionAudit(sectorID int64) []string {
 
 // pair connects the sector by QR code with the given account.
 func (e *testEnv) pair(sectorID int64, token, accountID string) {
-	e.t.Helper()
-	resp := e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", sectorID), token, nil)
-	if resp.status != http.StatusOK {
-		e.t.Fatalf("connect: status %d, body %v", resp.status, resp.body)
+	e.T.Helper()
+	resp := e.Do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", sectorID), token, nil)
+	if resp.Status != http.StatusOK {
+		e.T.Fatalf("connect: status %d, body %v", resp.Status, resp.Body)
 	}
-	if err := e.whatsapp.Pair(e.t.Context(), sectorID, accountID); err != nil {
-		e.t.Fatal(err)
+	if err := e.WhatsApp.Pair(e.T.Context(), sectorID, accountID); err != nil {
+		e.T.Fatal(err)
 	}
 }
 
 func TestConnectByQRCode(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	token := e.login("sup@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	token := e.Login("sup@exemplo.com", testPassword)
 
 	if c := e.connection(contab.ID, token); c["status"] != "disconnected" || c["pairing"] != false {
 		t.Fatalf("before connecting: %v", c)
@@ -108,9 +108,9 @@ func TestConnectByQRCode(t *testing.T) {
 	}
 
 	path := fmt.Sprintf("/api/sectors/%d/connection", contab.ID)
-	resp := e.do(http.MethodPost, path, token, nil)
-	if resp.status != http.StatusOK || resp.body["status"] != "connecting" || resp.body["pairing"] != true {
-		t.Fatalf("connect: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodPost, path, token, nil)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "connecting" || resp.Body["pairing"] != true {
+		t.Fatalf("connect: status %d, body %v", resp.Status, resp.Body)
 	}
 	status, image, contentType := e.getQR(contab.ID, token)
 	if status != http.StatusOK || contentType != "image/png" {
@@ -121,7 +121,7 @@ func TestConnectByQRCode(t *testing.T) {
 	}
 
 	// O celular lê o QR code.
-	if err := e.whatsapp.Pair(t.Context(), contab.ID, "5511999990000@s.whatsapp.net"); err != nil {
+	if err := e.WhatsApp.Pair(t.Context(), contab.ID, "5511999990000@s.whatsapp.net"); err != nil {
 		t.Fatal(err)
 	}
 	c := e.connection(contab.ID, token)
@@ -136,15 +136,15 @@ func TestConnectByQRCode(t *testing.T) {
 	}
 
 	// Conectar de novo um número conectado não gera novo QR code.
-	resp = e.do(http.MethodPost, path, token, nil)
-	if resp.status != http.StatusOK || resp.body["status"] != "connected" || resp.body["pairing"] != false {
-		t.Fatalf("connect again: status %d, body %v", resp.status, resp.body)
+	resp = e.Do(http.MethodPost, path, token, nil)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "connected" || resp.Body["pairing"] != false {
+		t.Fatalf("connect again: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	if got := e.connectionAudit(contab.ID); len(got) != 1 || got[0] != "sector_connected" {
 		t.Fatalf("audit = %v, want [sector_connected]", got)
 	}
-	_, changes := e.auditChanges("sector", contab.ID)
+	_, changes := e.AuditChanges("sector", contab.ID)
 	last := changes[len(changes)-1]
 	if last["connection_status"]["to"] != "connected" || last["external_account_id"]["to"] != "5511999990000@s.whatsapp.net" || last["phone"]["to"] != "5511999990000" {
 		t.Fatalf("sector_connected changes = %v", last)
@@ -154,22 +154,22 @@ func TestConnectByQRCode(t *testing.T) {
 func TestConnectionSurvivesRestart(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	rh := e.sector("RH")
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
 
-	e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
-	if err := e.whatsapp.Pair(t.Context(), contab.ID, "contab-account"); err != nil {
+	e.Do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
+	if err := e.WhatsApp.Pair(t.Context(), contab.ID, "contab-account"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Reinício: novo serviço no mesmo banco, sem nada em memória.
-	restarted := startServer(t, e.pool, nil)
-	if err := restarted.ticketService.Reconnect(t.Context(), restarted.whatsapp); err != nil {
+	restarted := startServer(t, e.Pool, nil)
+	if err := restarted.TicketService.Reconnect(t.Context(), restarted.WhatsApp); err != nil {
 		t.Fatal(err)
 	}
-	token = restarted.login("admin@exemplo.com", testPassword)
+	token = restarted.Login("admin@exemplo.com", testPassword)
 	c := restarted.connection(contab.ID, token)
 	if c["status"] != "connected" || c["pairing"] != false {
 		t.Fatalf("after restart: %v", c)
@@ -186,18 +186,18 @@ func TestConnectionSurvivesRestart(t *testing.T) {
 func TestDisconnectionReachesSupervisors(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	token := e.login("sup@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	token := e.Login("sup@exemplo.com", testPassword)
 	path := fmt.Sprintf("/api/sectors/%d/connection", contab.ID)
 
-	e.do(http.MethodPost, path, token, nil)
-	if err := e.whatsapp.Pair(t.Context(), contab.ID, "contab-account"); err != nil {
+	e.Do(http.MethodPost, path, token, nil)
+	if err := e.WhatsApp.Pair(t.Context(), contab.ID, "contab-account"); err != nil {
 		t.Fatal(err)
 	}
 
 	sectorStatus := func() any {
-		list := e.doList(http.MethodGet, "/api/sectors", token)
+		list := e.DoList(http.MethodGet, "/api/sectors", token)
 		if len(list) != 1 {
 			t.Fatalf("list sectors: %v", list)
 		}
@@ -205,7 +205,7 @@ func TestDisconnectionReachesSupervisors(t *testing.T) {
 	}
 
 	// Queda da conexão: a conta continua vinculada.
-	if err := e.whatsapp.Drop(t.Context(), contab.ID); err != nil {
+	if err := e.WhatsApp.Drop(t.Context(), contab.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := sectorStatus(); got != "disconnected" {
@@ -216,13 +216,13 @@ func TestDisconnectionReachesSupervisors(t *testing.T) {
 	}
 
 	// Reconectar com a conta vinculada não pede QR code.
-	resp := e.do(http.MethodPost, path, token, nil)
-	if resp.body["status"] != "connected" || resp.body["pairing"] != false {
-		t.Fatalf("reconnect: %v", resp.body)
+	resp := e.Do(http.MethodPost, path, token, nil)
+	if resp.Body["status"] != "connected" || resp.Body["pairing"] != false {
+		t.Fatalf("reconnect: %v", resp.Body)
 	}
 
 	// Desvinculado pelo celular: a conta é esquecida e a reconexão pede QR code.
-	if err := e.whatsapp.LogOut(t.Context(), contab.ID); err != nil {
+	if err := e.WhatsApp.LogOut(t.Context(), contab.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := sectorStatus(); got != "logged_out" {
@@ -231,9 +231,9 @@ func TestDisconnectionReachesSupervisors(t *testing.T) {
 	if acc := e.accountID(contab.ID); acc != nil {
 		t.Fatalf("logout must clear the account, got %q", *acc)
 	}
-	resp = e.do(http.MethodPost, path, token, nil)
-	if resp.body["status"] != "connecting" || resp.body["pairing"] != true {
-		t.Fatalf("connect after logout: %v", resp.body)
+	resp = e.Do(http.MethodPost, path, token, nil)
+	if resp.Body["status"] != "connecting" || resp.Body["pairing"] != true {
+		t.Fatalf("connect after logout: %v", resp.Body)
 	}
 
 	want := []string{"sector_connected", "sector_disconnected", "sector_connected", "sector_disconnected"}
@@ -245,35 +245,35 @@ func TestDisconnectionReachesSupervisors(t *testing.T) {
 func TestConnectionPermissions(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	rh := e.sector("RH")
-	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
-	e.user("sup.rh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.User("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
+	e.User("sup.rh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
 
 	path := fmt.Sprintf("/api/sectors/%d/connection", contab.ID)
 	for who, email := range map[string]string{"agent": "agente@exemplo.com", "other sector supervisor": "sup.rh@exemplo.com"} {
-		token := e.login(email, testPassword)
+		token := e.Login(email, testPassword)
 		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
-			if resp := e.do(method, path, token, nil); resp.status != http.StatusForbidden {
-				t.Errorf("%s %s: status %d, want 403", who, method, resp.status)
+			if resp := e.Do(method, path, token, nil); resp.Status != http.StatusForbidden {
+				t.Errorf("%s %s: status %d, want 403", who, method, resp.Status)
 			}
 		}
 		if status, _, _ := e.getQR(contab.ID, token); status != http.StatusForbidden {
 			t.Errorf("%s qr: status %d, want 403", who, status)
 		}
 	}
-	if resp := e.do(http.MethodPost, path, "", nil); resp.status != http.StatusUnauthorized {
-		t.Errorf("no session: status %d, want 401", resp.status)
+	if resp := e.Do(http.MethodPost, path, "", nil); resp.Status != http.StatusUnauthorized {
+		t.Errorf("no session: status %d, want 401", resp.Status)
 	}
-	if got := e.whatsapp.Status(contab.ID); got != "disconnected" {
+	if got := e.WhatsApp.Status(contab.ID); got != "disconnected" {
 		t.Fatalf("refused requests must not connect, status %s", got)
 	}
 
 	// O administrador conecta qualquer setor.
-	admin := e.login("admin@exemplo.com", testPassword)
-	if resp := e.do(http.MethodPost, path, admin, nil); resp.status != http.StatusOK || resp.body["pairing"] != true {
-		t.Fatalf("admin connect: status %d, body %v", resp.status, resp.body)
+	admin := e.Login("admin@exemplo.com", testPassword)
+	if resp := e.Do(http.MethodPost, path, admin, nil); resp.Status != http.StatusOK || resp.Body["pairing"] != true {
+		t.Fatalf("admin connect: status %d, body %v", resp.Status, resp.Body)
 	}
 	if status, _, _ := e.getQR(contab.ID, admin); status != http.StatusOK {
 		t.Fatalf("admin qr: status %d", status)
@@ -283,21 +283,21 @@ func TestConnectionPermissions(t *testing.T) {
 func TestPhoneFollowsTheConnection(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	token := e.login("sup@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	token := e.Login("sup@exemplo.com", testPassword)
 
 	if c := e.connection(contab.ID, token); c["phone"] != nil || c["linked"] != false {
 		t.Fatalf("before connecting: %v", c)
 	}
 	e.pair(contab.ID, token, "5511999990000@s.whatsapp.net")
-	list := e.doList(http.MethodGet, "/api/sectors", token)
+	list := e.DoList(http.MethodGet, "/api/sectors", token)
 	if len(list) != 1 || list[0]["phone"] != "5511999990000" {
 		t.Fatalf("list after pairing: %v", list)
 	}
 
 	// Queda temporária: o telefone continua.
-	if err := e.whatsapp.Drop(t.Context(), contab.ID); err != nil {
+	if err := e.WhatsApp.Drop(t.Context(), contab.ID); err != nil {
 		t.Fatal(err)
 	}
 	if c := e.connection(contab.ID, token); c["status"] != "disconnected" || c["phone"] != "5511999990000" || c["linked"] != true {
@@ -305,7 +305,7 @@ func TestPhoneFollowsTheConnection(t *testing.T) {
 	}
 
 	// Desvinculado pelo celular: o telefone é apagado.
-	if err := e.whatsapp.LogOut(t.Context(), contab.ID); err != nil {
+	if err := e.WhatsApp.LogOut(t.Context(), contab.ID); err != nil {
 		t.Fatal(err)
 	}
 	if c := e.connection(contab.ID, token); c["status"] != "logged_out" || c["phone"] != nil || c["linked"] != false {
@@ -316,22 +316,22 @@ func TestPhoneFollowsTheConnection(t *testing.T) {
 func TestNumberOfAnotherSectorIsRefused(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	rh := e.sector("RH")
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
 	const account = "5511999990000@s.whatsapp.net"
 
 	e.pair(contab.ID, token, account)
 	e.pair(rh.ID, token, account)
-	e.ticketService.Wait()
+	e.TicketService.Wait()
 
 	// O aparelho é desvinculado e a tela mostra o motivo, sem erro 500.
 	c := e.connection(rh.ID, token)
 	if c["status"] != "logged_out" || c["phone"] != nil || c["linked"] != false || c["connectionError"] == nil {
 		t.Fatalf("refused sector: %v", c)
 	}
-	if got := e.whatsapp.Status(rh.ID); got != "logged_out" {
+	if got := e.WhatsApp.Status(rh.ID); got != "logged_out" {
 		t.Fatalf("refused device must be unlinked, status %s", got)
 	}
 	if got := e.connectionAudit(rh.ID); len(got) != 0 {
@@ -343,11 +343,11 @@ func TestNumberOfAnotherSectorIsRefused(t *testing.T) {
 	}
 
 	// A nova tentativa limpa o motivo e outro número conecta.
-	resp := e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", rh.ID), token, nil)
-	if resp.status != http.StatusOK || resp.body["connectionError"] != nil || resp.body["pairing"] != true {
-		t.Fatalf("connect after refusal: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", rh.ID), token, nil)
+	if resp.Status != http.StatusOK || resp.Body["connectionError"] != nil || resp.Body["pairing"] != true {
+		t.Fatalf("connect after refusal: status %d, body %v", resp.Status, resp.Body)
 	}
-	if err := e.whatsapp.Pair(t.Context(), rh.ID, "5511999990001@s.whatsapp.net"); err != nil {
+	if err := e.WhatsApp.Pair(t.Context(), rh.ID, "5511999990001@s.whatsapp.net"); err != nil {
 		t.Fatal(err)
 	}
 	if c := e.connection(rh.ID, token); c["status"] != "connected" || c["phone"] != "5511999990001" {
@@ -355,10 +355,10 @@ func TestNumberOfAnotherSectorIsRefused(t *testing.T) {
 	}
 
 	// Liberado pelo primeiro setor, o número pode ser ligado a outro.
-	if err := e.whatsapp.LogOut(t.Context(), contab.ID); err != nil {
+	if err := e.WhatsApp.LogOut(t.Context(), contab.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.whatsapp.LogOut(t.Context(), rh.ID); err != nil {
+	if err := e.WhatsApp.LogOut(t.Context(), rh.ID); err != nil {
 		t.Fatal(err)
 	}
 	e.pair(rh.ID, token, account)
@@ -370,22 +370,22 @@ func TestNumberOfAnotherSectorIsRefused(t *testing.T) {
 func TestSameNumberOnTwoSectorsAtOnce(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sectors := []db.Sector{e.sector("Contabilidade"), e.sector("RH"), e.sector("Tributos"), e.sector("Compras")}
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
+	sectors := []db.Sector{e.Sector("Contabilidade"), e.Sector("RH"), e.Sector("Tributos"), e.Sector("Compras")}
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
 	for _, sec := range sectors {
-		if resp := e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", sec.ID), token, nil); resp.status != http.StatusOK {
-			t.Fatalf("connect: status %d", resp.status)
+		if resp := e.Do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/connection", sec.ID), token, nil); resp.Status != http.StatusOK {
+			t.Fatalf("connect: status %d", resp.Status)
 		}
 	}
 
 	var wg sync.WaitGroup
 	errs := make([]error, len(sectors))
 	for i, sec := range sectors {
-		wg.Go(func() { errs[i] = e.whatsapp.Pair(t.Context(), sec.ID, "5511999990000@s.whatsapp.net") })
+		wg.Go(func() { errs[i] = e.WhatsApp.Pair(t.Context(), sec.ID, "5511999990000@s.whatsapp.net") })
 	}
 	wg.Wait()
-	e.ticketService.Wait()
+	e.TicketService.Wait()
 	for _, err := range errs {
 		if err != nil {
 			t.Fatalf("pair: %v", err)
@@ -412,20 +412,20 @@ func TestSameNumberOnTwoSectorsAtOnce(t *testing.T) {
 func TestDisconnectFromTheScreen(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	sup := e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	token := e.login("sup@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	sup := e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	token := e.Login("sup@exemplo.com", testPassword)
 	path := fmt.Sprintf("/api/sectors/%d/connection", contab.ID)
 
 	e.pair(contab.ID, token, "5511999990000@s.whatsapp.net")
-	resp := e.do(http.MethodDelete, path, token, nil)
-	if resp.status != http.StatusOK || resp.body["status"] != "logged_out" || resp.body["phone"] != nil || resp.body["linked"] != false {
-		t.Fatalf("disconnect: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodDelete, path, token, nil)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "logged_out" || resp.Body["phone"] != nil || resp.Body["linked"] != false {
+		t.Fatalf("disconnect: status %d, body %v", resp.Status, resp.Body)
 	}
-	if _, warned := resp.body["warning"]; warned {
-		t.Fatalf("device was told, body %v", resp.body)
+	if _, warned := resp.Body["warning"]; warned {
+		t.Fatalf("device was told, body %v", resp.Body)
 	}
-	if got := e.whatsapp.Status(contab.ID); got != "logged_out" {
+	if got := e.WhatsApp.Status(contab.ID); got != "logged_out" {
 		t.Fatalf("provider status %s, want logged_out", got)
 	}
 	if acc := e.accountID(contab.ID); acc != nil {
@@ -441,17 +441,17 @@ func TestDisconnectFromTheScreen(t *testing.T) {
 		}
 	}
 	check()
-	if resp := e.do(http.MethodDelete, path, token, nil); resp.status != http.StatusOK || resp.body["status"] != "logged_out" {
-		t.Fatalf("repeat: status %d, body %v", resp.status, resp.body)
+	if resp := e.Do(http.MethodDelete, path, token, nil); resp.Status != http.StatusOK || resp.Body["status"] != "logged_out" {
+		t.Fatalf("repeat: status %d, body %v", resp.Status, resp.Body)
 	}
 	check()
 
 	// O setor volta a conectar pelo QR code.
-	resp = e.do(http.MethodPost, path, token, nil)
-	if resp.status != http.StatusOK || resp.body["pairing"] != true {
-		t.Fatalf("connect after disconnect: status %d, body %v", resp.status, resp.body)
+	resp = e.Do(http.MethodPost, path, token, nil)
+	if resp.Status != http.StatusOK || resp.Body["pairing"] != true {
+		t.Fatalf("connect after disconnect: status %d, body %v", resp.Status, resp.Body)
 	}
-	if err := e.whatsapp.Pair(t.Context(), contab.ID, "5511999990000@s.whatsapp.net"); err != nil {
+	if err := e.WhatsApp.Pair(t.Context(), contab.ID, "5511999990000@s.whatsapp.net"); err != nil {
 		t.Fatal(err)
 	}
 	if c := e.connection(contab.ID, token); c["status"] != "connected" || c["phone"] != "5511999990000" {
@@ -462,17 +462,17 @@ func TestDisconnectFromTheScreen(t *testing.T) {
 func TestDisconnectDuringDropIsAudited(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	admin := e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	admin := e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
 
 	e.pair(contab.ID, token, "5511999990000@s.whatsapp.net")
-	if err := e.whatsapp.Drop(t.Context(), contab.ID); err != nil {
+	if err := e.WhatsApp.Drop(t.Context(), contab.ID); err != nil {
 		t.Fatal(err)
 	}
-	resp := e.do(http.MethodDelete, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
-	if resp.status != http.StatusOK || resp.body["status"] != "logged_out" || resp.body["phone"] != nil {
-		t.Fatalf("disconnect: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodDelete, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "logged_out" || resp.Body["phone"] != nil {
+		t.Fatalf("disconnect: status %d, body %v", resp.Status, resp.Body)
 	}
 	logs := e.connectionLogs(contab.ID)
 	last := logs[len(logs)-1]
@@ -484,15 +484,15 @@ func TestDisconnectDuringDropIsAudited(t *testing.T) {
 func TestDisconnectWithUnreachableDevice(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
 
 	e.pair(contab.ID, token, "5511999990000@s.whatsapp.net")
-	e.whatsapp.FailNextDisconnect(contab.ID)
-	resp := e.do(http.MethodDelete, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
-	if resp.status != http.StatusOK || resp.body["status"] != "logged_out" || resp.body["warning"] == nil {
-		t.Fatalf("disconnect: status %d, body %v", resp.status, resp.body)
+	e.WhatsApp.FailNextDisconnect(contab.ID)
+	resp := e.Do(http.MethodDelete, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "logged_out" || resp.Body["warning"] == nil {
+		t.Fatalf("disconnect: status %d, body %v", resp.Status, resp.Body)
 	}
 	if acc := e.accountID(contab.ID); acc != nil {
 		t.Fatalf("account must be cleared, got %q", *acc)
@@ -502,43 +502,43 @@ func TestDisconnectWithUnreachableDevice(t *testing.T) {
 func TestDisconnectWithoutNumberChangesNothing(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
 
-	resp := e.do(http.MethodDelete, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
-	if resp.status != http.StatusOK || resp.body["status"] != "disconnected" {
-		t.Fatalf("disconnect: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodDelete, fmt.Sprintf("/api/sectors/%d/connection", contab.ID), token, nil)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "disconnected" {
+		t.Fatalf("disconnect: status %d, body %v", resp.Status, resp.Body)
 	}
 	if logs := e.connectionLogs(contab.ID); len(logs) != 0 {
 		t.Fatalf("audit = %+v", logs)
 	}
-	if resp := e.do(http.MethodDelete, "/api/sectors/999999/connection", token, nil); resp.status != http.StatusNotFound {
-		t.Fatalf("unknown sector: status %d", resp.status)
+	if resp := e.Do(http.MethodDelete, "/api/sectors/999999/connection", token, nil); resp.Status != http.StatusNotFound {
+		t.Fatalf("unknown sector: status %d", resp.Status)
 	}
 }
 
 func TestDisconnectPermissions(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	rh := e.sector("RH")
-	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
-	e.user("sup.rh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	admin := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.User("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
+	e.User("sup.rh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	admin := e.Login("admin@exemplo.com", testPassword)
 	e.pair(contab.ID, admin, "5511999990000@s.whatsapp.net")
 
 	path := fmt.Sprintf("/api/sectors/%d/connection", contab.ID)
 	for _, email := range []string{"agente@exemplo.com", "sup.rh@exemplo.com"} {
-		if resp := e.do(http.MethodDelete, path, e.login(email, testPassword), nil); resp.status != http.StatusForbidden {
-			t.Errorf("%s: status %d, want 403", email, resp.status)
+		if resp := e.Do(http.MethodDelete, path, e.Login(email, testPassword), nil); resp.Status != http.StatusForbidden {
+			t.Errorf("%s: status %d, want 403", email, resp.Status)
 		}
 	}
-	if got := e.whatsapp.Status(contab.ID); got != "connected" {
+	if got := e.WhatsApp.Status(contab.ID); got != "connected" {
 		t.Fatalf("refused requests must not unlink, status %s", got)
 	}
-	if resp := e.do(http.MethodDelete, path, admin, nil); resp.status != http.StatusOK || resp.body["status"] != "logged_out" {
-		t.Fatalf("admin: status %d, body %v", resp.status, resp.body)
+	if resp := e.Do(http.MethodDelete, path, admin, nil); resp.Status != http.StatusOK || resp.Body["status"] != "logged_out" {
+		t.Fatalf("admin: status %d, body %v", resp.Status, resp.Body)
 	}
 }

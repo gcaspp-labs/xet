@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"bytes"
@@ -26,32 +26,32 @@ const (
 
 // connectSector links and connects the sector number, as after reading the QR code.
 func (e *testEnv) connectSector(sectorID int64) {
-	e.t.Helper()
-	if err := e.whatsapp.Connect(e.t.Context(), messaging.Account{SectorID: sectorID, AccountID: fmt.Sprintf("account-%d", sectorID)}); err != nil {
-		e.t.Fatal(err)
+	e.T.Helper()
+	if err := e.WhatsApp.Connect(e.T.Context(), messaging.Account{SectorID: sectorID, AccountID: fmt.Sprintf("account-%d", sectorID)}); err != nil {
+		e.T.Fatal(err)
 	}
 }
 
 func (e *testEnv) sendText(ticketID int64, token, requestID, body string) response {
-	e.t.Helper()
-	return e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/messages", ticketID), token,
+	e.T.Helper()
+	return e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/messages", ticketID), token,
 		map[string]string{"clientRequestId": requestID, "body": body})
 }
 
 // sendFile posts a file to the ticket as the panel does, in a multipart form.
 func (e *testEnv) sendFile(ticketID int64, token, requestID, name, mimeType string, data []byte, caption string) response {
-	e.t.Helper()
+	e.T.Helper()
 	return e.sendForm(ticketID, token, requestID, "file", name, mimeType, data, caption)
 }
 
 // sendVoice posts audio recorded in the browser, to go as a voice message.
 func (e *testEnv) sendVoice(ticketID int64, token, requestID string, data []byte, caption string) response {
-	e.t.Helper()
+	e.T.Helper()
 	return e.sendForm(ticketID, token, requestID, "voice", "gravacao.webm", "audio/webm;codecs=opus", data, caption)
 }
 
 func (e *testEnv) sendForm(ticketID int64, token, requestID, field, name, mimeType string, data []byte, caption string) response {
-	e.t.Helper()
+	e.T.Helper()
 	var buf bytes.Buffer
 	form := multipart.NewWriter(&buf)
 	_ = form.WriteField("clientRequestId", requestID)
@@ -61,39 +61,39 @@ func (e *testEnv) sendForm(ticketID int64, token, requestID, field, name, mimeTy
 	header.Set("Content-Type", mimeType)
 	part, err := form.CreatePart(header)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	_, _ = part.Write(data)
 	_ = form.Close()
 
-	req, err := http.NewRequestWithContext(e.t.Context(), http.MethodPost, fmt.Sprintf("%s/api/tickets/%d/messages", e.url, ticketID), &buf)
+	req, err := http.NewRequestWithContext(e.T.Context(), http.MethodPost, fmt.Sprintf("%s/api/tickets/%d/messages", e.URL, ticketID), &buf)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	defer resp.Body.Close()
-	out := response{status: resp.StatusCode}
+	out := response{Status: resp.StatusCode}
 	raw, _ := io.ReadAll(resp.Body)
-	_ = json.Unmarshal(raw, &out.body)
+	_ = json.Unmarshal(raw, &out.Body)
 	return out
 }
 
 // get returns the raw response of a GET, for routes that answer with a list or a file.
 func (e *testEnv) get(path, token string) (int, http.Header, []byte) {
-	e.t.Helper()
-	req, err := http.NewRequestWithContext(e.t.Context(), http.MethodGet, e.url+path, nil)
+	e.T.Helper()
+	req, err := http.NewRequestWithContext(e.T.Context(), http.MethodGet, e.URL+path, nil)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
@@ -102,7 +102,7 @@ func (e *testEnv) get(path, token string) (int, http.Header, []byte) {
 
 // outbound returns the messages of the ticket sent by the sector.
 func (e *testEnv) outbound(ticketID int64) []messageRow {
-	e.t.Helper()
+	e.T.Helper()
 	var out []messageRow
 	for _, m := range e.messages(ticketID) {
 		if m.Direction == "outbound" {
@@ -113,10 +113,10 @@ func (e *testEnv) outbound(ticketID int64) []messageRow {
 }
 
 func (e *testEnv) failureReason(messageID int64) *string {
-	e.t.Helper()
+	e.T.Helper()
 	var reason *string
-	if err := e.pool.QueryRow(e.t.Context(), "select failure_reason from messages where id = $1", messageID).Scan(&reason); err != nil {
-		e.t.Fatal(err)
+	if err := e.Pool.QueryRow(e.T.Context(), "select failure_reason from messages where id = $1", messageID).Scan(&reason); err != nil {
+		e.T.Fatal(err)
 	}
 	return reason
 }
@@ -145,18 +145,18 @@ type conversation struct {
 func newConversation(t *testing.T) conversation {
 	t.Helper()
 	e := newTestEnv(t, nil)
-	c := conversation{e: e, sector: e.sector("Contabilidade")}
-	rh := e.sector("RH")
-	c.ana = e.user("ana@exemplo.com", db.UserRoleAgent, &c.sector.ID)
-	e.user("bia@exemplo.com", db.UserRoleAgent, &c.sector.ID)
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &c.sector.ID)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	e.user("rh@exemplo.com", db.UserRoleAgent, &rh.ID)
-	c.anaToken = e.login("ana@exemplo.com", testPassword)
-	c.biaToken = e.login("bia@exemplo.com", testPassword)
-	c.supToken = e.login("sup@exemplo.com", testPassword)
-	c.adminToken = e.login("admin@exemplo.com", testPassword)
-	c.rhToken = e.login("rh@exemplo.com", testPassword)
+	c := conversation{e: e, sector: e.Sector("Contabilidade")}
+	rh := e.Sector("RH")
+	c.ana = e.User("ana@exemplo.com", db.UserRoleAgent, &c.sector.ID)
+	e.User("bia@exemplo.com", db.UserRoleAgent, &c.sector.ID)
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &c.sector.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	e.User("rh@exemplo.com", db.UserRoleAgent, &rh.ID)
+	c.anaToken = e.Login("ana@exemplo.com", testPassword)
+	c.biaToken = e.Login("bia@exemplo.com", testPassword)
+	c.supToken = e.Login("sup@exemplo.com", testPassword)
+	c.adminToken = e.Login("admin@exemplo.com", testPassword)
+	c.rhToken = e.Login("rh@exemplo.com", testPassword)
 
 	e.connectSector(c.sector.ID)
 	c.ticket = e.queuedTicket(c.sector.ID, "MSG-1", "5511988887777")
@@ -164,9 +164,9 @@ func newConversation(t *testing.T) conversation {
 }
 
 func (c conversation) assign() {
-	c.e.t.Helper()
-	if resp := c.e.assign(c.ticket.ID, c.anaToken); resp.status != http.StatusOK {
-		c.e.t.Fatalf("assign: status %d", resp.status)
+	c.e.T.Helper()
+	if resp := c.e.assign(c.ticket.ID, c.anaToken); resp.Status != http.StatusOK {
+		c.e.T.Fatalf("assign: status %d", resp.Status)
 	}
 }
 
@@ -176,8 +176,8 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 	e := c.e
 
 	// Na fila, sem responsável, ninguém responde.
-	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); resp.status != http.StatusForbidden {
-		t.Fatalf("queued ticket: status %d", resp.status)
+	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); resp.Status != http.StatusForbidden {
+		t.Fatalf("queued ticket: status %d", resp.Status)
 	}
 	c.assign()
 
@@ -186,27 +186,27 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 		"agent of the sector": c.biaToken, "supervisor": c.supToken, "admin": c.adminToken, "other sector": c.rhToken,
 	} {
 		resp := e.sendText(c.ticket.ID, token, requestA, "Posso ajudar?")
-		if resp.status != http.StatusForbidden {
-			t.Fatalf("%s: status %d", name, resp.status)
+		if resp.Status != http.StatusForbidden {
+			t.Fatalf("%s: status %d", name, resp.Status)
 		}
 		file := e.sendFile(c.ticket.ID, token, requestB, "nota.pdf", "application/pdf", []byte("%PDF"), "")
-		if file.status != http.StatusForbidden {
-			t.Fatalf("%s sending a file: status %d", name, file.status)
+		if file.Status != http.StatusForbidden {
+			t.Fatalf("%s sending a file: status %d", name, file.Status)
 		}
 	}
-	if resp := e.sendText(c.ticket.ID, "", requestA, "Oi"); resp.status != http.StatusUnauthorized {
-		t.Fatalf("without session: status %d", resp.status)
+	if resp := e.sendText(c.ticket.ID, "", requestA, "Oi"); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("without session: status %d", resp.Status)
 	}
 	if got := e.outbound(c.ticket.ID); len(got) != 0 {
 		t.Fatalf("blocked senders recorded messages: %+v", got)
 	}
-	if sent := e.whatsapp.SentMessages(); len(sent) != 0 {
+	if sent := e.WhatsApp.SentMessages(); len(sent) != 0 {
 		t.Fatalf("blocked senders reached WhatsApp: %+v", sent)
 	}
 
 	resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia, em que posso ajudar?")
-	if resp.status != http.StatusOK || resp.body["status"] != "sent" {
-		t.Fatalf("assignee: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "sent" {
+		t.Fatalf("assignee: status %d, body %v", resp.Status, resp.Body)
 	}
 	got := e.outbound(c.ticket.ID)
 	if len(got) != 1 {
@@ -217,7 +217,7 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 		str(m.Body) != "Bom dia, em que posso ajudar?" || str(m.Status) != "sent" || m.ExternalMessageID == nil {
 		t.Fatalf("sent message = %+v", m)
 	}
-	sent := e.whatsapp.SentMessages()
+	sent := e.WhatsApp.SentMessages()
 	if len(sent) != 1 {
 		t.Fatalf("sent to WhatsApp = %+v", sent)
 	}
@@ -242,9 +242,9 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 	}
 
 	// Encerrado, nem o responsável responde.
-	e.closeTicket(c.ticket.ID, c.ana.ID, e.organization(c.supToken, "Prefeitura", ""))
-	if resp := e.sendText(c.ticket.ID, c.anaToken, requestB, "Mais alguma coisa?"); resp.status != http.StatusConflict {
-		t.Fatalf("closed ticket: status %d", resp.status)
+	e.closeTicket(c.ticket.ID, c.ana.ID, e.Organization(c.supToken, "Prefeitura", ""))
+	if resp := e.sendText(c.ticket.ID, c.anaToken, requestB, "Mais alguma coisa?"); resp.Status != http.StatusConflict {
+		t.Fatalf("closed ticket: status %d", resp.Status)
 	}
 }
 
@@ -264,7 +264,7 @@ func TestSendingIsIdempotent(t *testing.T) {
 		wg.Go(func() {
 			<-start
 			resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Segue o boleto")
-			statuses[i], ids[i] = resp.status, resp.body["id"]
+			statuses[i], ids[i] = resp.Status, resp.Body["id"]
 		})
 	}
 	close(start)
@@ -277,33 +277,33 @@ func TestSendingIsIdempotent(t *testing.T) {
 	if got := e.outbound(c.ticket.ID); len(got) != 1 {
 		t.Fatalf("messages recorded = %d, want 1", len(got))
 	}
-	if sent := e.whatsapp.SentMessages(); len(sent) != 1 {
+	if sent := e.WhatsApp.SentMessages(); len(sent) != 1 {
 		t.Fatalf("messages sent = %d, want 1", len(sent))
 	}
 
 	// Repetir depois devolve a mesma mensagem, sem reenviar.
 	resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Segue o boleto")
-	if resp.status != http.StatusOK || resp.body["id"] != ids[0] || resp.body["status"] != "sent" {
-		t.Fatalf("repeated request: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["id"] != ids[0] || resp.Body["status"] != "sent" {
+		t.Fatalf("repeated request: status %d, body %v", resp.Status, resp.Body)
 	}
-	if sent := e.whatsapp.SentMessages(); len(sent) != 1 {
+	if sent := e.WhatsApp.SentMessages(); len(sent) != 1 {
 		t.Fatalf("repeated request resent: %d messages", len(sent))
 	}
 
 	// O identificador de um envio não serve para outro chamado.
 	other := e.queuedTicket(c.sector.ID, "MSG-2", "5511977776666")
-	if r := e.assign(other.ID, c.anaToken); r.status != http.StatusOK {
-		t.Fatalf("assign other: status %d", r.status)
+	if r := e.assign(other.ID, c.anaToken); r.Status != http.StatusOK {
+		t.Fatalf("assign other: status %d", r.Status)
 	}
-	if r := e.sendText(other.ID, c.anaToken, requestA, "Outro"); r.status != http.StatusConflict {
-		t.Fatalf("request id of another ticket: status %d", r.status)
+	if r := e.sendText(other.ID, c.anaToken, requestA, "Outro"); r.Status != http.StatusConflict {
+		t.Fatalf("request id of another ticket: status %d", r.Status)
 	}
 	// Mensagem vazia ou identificador inválido não é aceito.
-	if r := e.sendText(c.ticket.ID, c.anaToken, requestB, "   "); r.status != http.StatusUnprocessableEntity {
-		t.Fatalf("blank message: status %d", r.status)
+	if r := e.sendText(c.ticket.ID, c.anaToken, requestB, "   "); r.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("blank message: status %d", r.Status)
 	}
-	if r := e.sendText(c.ticket.ID, c.anaToken, "abc", "Oi"); r.status != http.StatusUnprocessableEntity {
-		t.Fatalf("invalid request id: status %d", r.status)
+	if r := e.sendText(c.ticket.ID, c.anaToken, "abc", "Oi"); r.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid request id: status %d", r.Status)
 	}
 }
 
@@ -315,13 +315,13 @@ func TestSendingFiles(t *testing.T) {
 
 	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
 	resp := e.sendFile(c.ticket.ID, c.anaToken, requestA, "foto.png", "image/png", png, "Comprovante")
-	if resp.status != http.StatusOK || resp.body["status"] != "sent" {
-		t.Fatalf("image: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "sent" {
+		t.Fatalf("image: status %d, body %v", resp.Status, resp.Body)
 	}
 	pdf := []byte("%PDF-1.7 balancete")
 	resp = e.sendFile(c.ticket.ID, c.anaToken, requestB, "balancete.pdf", "application/pdf", pdf, "")
-	if resp.status != http.StatusOK || resp.body["status"] != "sent" {
-		t.Fatalf("document: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "sent" {
+		t.Fatalf("document: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	got := e.outbound(c.ticket.ID)
@@ -331,7 +331,7 @@ func TestSendingFiles(t *testing.T) {
 	if f := e.media(*got[1].MediaID); f.MimeType != "application/pdf" || str(f.FileName) != "balancete.pdf" || f.SizeBytes != int64(len(pdf)) {
 		t.Fatalf("document file = %+v", f)
 	}
-	sent := e.whatsapp.SentMessages()
+	sent := e.WhatsApp.SentMessages()
 	img, ok := sent[0].(messaging.MediaMessage)
 	if !ok || img.Type != messaging.TypeImage || img.Caption != "Comprovante" || !bytes.Equal(img.Media.Data, png) {
 		t.Fatalf("image sent = %+v", sent[0])
@@ -357,8 +357,8 @@ func TestSendingFiles(t *testing.T) {
 
 	// Acima de 16 MB, o arquivo é recusado antes de qualquer registro.
 	big := make([]byte, 16<<20+1)
-	if r := e.sendFile(c.ticket.ID, c.anaToken, "8b3d8f50-3f2c-4b7d-9e30-2c3d4e5f6071", "grande.zip", "application/zip", big, ""); r.status != http.StatusRequestEntityTooLarge {
-		t.Fatalf("large file: status %d", r.status)
+	if r := e.sendFile(c.ticket.ID, c.anaToken, "8b3d8f50-3f2c-4b7d-9e30-2c3d4e5f6071", "grande.zip", "application/zip", big, ""); r.Status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("large file: status %d", r.Status)
 	}
 	if got := e.outbound(c.ticket.ID); len(got) != 2 {
 		t.Fatalf("large file recorded: %d messages", len(got))
@@ -386,12 +386,12 @@ func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
 	webm := recordWebM(t, 2)
 
 	// Só o responsável envia áudio; a gravação recusada não deixa registro.
-	if r := e.sendVoice(c.ticket.ID, c.biaToken, requestB, webm, ""); r.status != http.StatusForbidden {
-		t.Fatalf("voice by another agent: status %d", r.status)
+	if r := e.sendVoice(c.ticket.ID, c.biaToken, requestB, webm, ""); r.Status != http.StatusForbidden {
+		t.Fatalf("voice by another agent: status %d", r.Status)
 	}
 	// Conteúdo que não é áudio é recusado com uma mensagem clara.
-	if r := e.sendVoice(c.ticket.ID, c.anaToken, requestB, []byte("não é áudio"), ""); r.status != http.StatusUnprocessableEntity {
-		t.Fatalf("invalid audio: status %d, body %v", r.status, r.body)
+	if r := e.sendVoice(c.ticket.ID, c.anaToken, requestB, []byte("não é áudio"), ""); r.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid audio: status %d, body %v", r.Status, r.Body)
 	}
 	if got := e.outbound(c.ticket.ID); len(got) != 0 {
 		t.Fatalf("refused audio recorded: %+v", got)
@@ -399,8 +399,8 @@ func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
 
 	// A legenda é ignorada: mensagem de voz não tem texto.
 	resp := e.sendVoice(c.ticket.ID, c.anaToken, requestA, webm, "legenda indevida")
-	if resp.status != http.StatusOK || resp.body["status"] != "sent" {
-		t.Fatalf("voice: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "sent" {
+		t.Fatalf("voice: status %d, body %v", resp.Status, resp.Body)
 	}
 	got := e.outbound(c.ticket.ID)
 	if len(got) != 1 || got[0].Type != "audio" || got[0].Body != nil || got[0].MediaID == nil {
@@ -412,7 +412,7 @@ func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
 	}
 
 	// Convertido para OGG/Opus e enviado como áudio, com a duração da gravação.
-	sent := e.whatsapp.SentMessages()
+	sent := e.WhatsApp.SentMessages()
 	if len(sent) != 1 {
 		t.Fatalf("sent %d messages, want 1", len(sent))
 	}
@@ -438,18 +438,18 @@ func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
 	}
 
 	// Repetir o envio devolve a mesma mensagem, sem converter nem enviar de novo.
-	if r := e.sendVoice(c.ticket.ID, c.anaToken, requestA, webm, ""); r.status != http.StatusOK || id(r.body) != got[0].ID {
-		t.Fatalf("repeated voice: status %d, body %v", r.status, r.body)
+	if r := e.sendVoice(c.ticket.ID, c.anaToken, requestA, webm, ""); r.Status != http.StatusOK || id(r.Body) != got[0].ID {
+		t.Fatalf("repeated voice: status %d, body %v", r.Status, r.Body)
 	}
-	if sent := e.whatsapp.SentMessages(); len(sent) != 1 {
+	if sent := e.WhatsApp.SentMessages(); len(sent) != 1 {
 		t.Fatalf("repeated voice sent again: %d messages", len(sent))
 	}
-	if n := e.count("media_files"); n != 1 {
+	if n := e.Count("media_files"); n != 1 {
 		t.Fatalf("media files = %d, want 1", n)
 	}
 
 	// O player do painel busca trechos do arquivo para avançar e voltar.
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("%s/api/media/%d", e.url, *got[0].MediaID), nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("%s/api/media/%d", e.URL, *got[0].MediaID), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,8 +474,8 @@ func TestDeliveryStatusOnlyMovesForward(t *testing.T) {
 	c.assign()
 	events := e.subscribe(c.biaToken)
 
-	if r := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); r.status != http.StatusOK {
-		t.Fatalf("send: status %d", r.status)
+	if r := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); r.Status != http.StatusOK {
+		t.Fatalf("send: status %d", r.Status)
 	}
 	// Gravada como pendente e atualizada após o envio: os dois avisos saem depois do commit.
 	for range 2 {
@@ -497,7 +497,7 @@ func TestDeliveryStatusOnlyMovesForward(t *testing.T) {
 		{messaging.DeliveryFailed, "read"},
 	}
 	for _, step := range steps {
-		if err := e.whatsapp.UpdateStatus(t.Context(), c.sector.ID, step.status, external); err != nil {
+		if err := e.WhatsApp.UpdateStatus(t.Context(), c.sector.ID, step.status, external); err != nil {
 			t.Fatal(err)
 		}
 		if got := str(e.outbound(c.ticket.ID)[0].Status); got != step.want {
@@ -512,8 +512,8 @@ func TestDeliveryStatusOnlyMovesForward(t *testing.T) {
 	}
 
 	// Status de outro setor com o mesmo identificador não afeta a mensagem.
-	other := e.sector("Tributos")
-	if err := e.whatsapp.UpdateStatus(t.Context(), other.ID, messaging.DeliveryFailed, external); err != nil {
+	other := e.Sector("Tributos")
+	if err := e.WhatsApp.UpdateStatus(t.Context(), other.ID, messaging.DeliveryFailed, external); err != nil {
 		t.Fatal(err)
 	}
 	if got := str(e.outbound(c.ticket.ID)[0].Status); got != "read" {
@@ -528,45 +528,45 @@ func TestFailedMessageIsRetriedByTheAssignee(t *testing.T) {
 	c.assign()
 
 	// Número desconectado: a mensagem fica registrada como falha, sem reenvio automático.
-	if err := e.whatsapp.Drop(t.Context(), c.sector.ID); err != nil {
+	if err := e.WhatsApp.Drop(t.Context(), c.sector.ID); err != nil {
 		t.Fatal(err)
 	}
 	resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Segue o boleto")
-	if resp.status != http.StatusOK || resp.body["status"] != "failed" || resp.body["failureReason"] != "Número do setor desconectado." {
-		t.Fatalf("send while disconnected: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "failed" || resp.Body["failureReason"] != "Número do setor desconectado." {
+		t.Fatalf("send while disconnected: status %d, body %v", resp.Status, resp.Body)
 	}
-	msgID := int64(resp.body["id"].(float64))
+	msgID := int64(resp.Body["id"].(float64))
 	retryPath := fmt.Sprintf("/api/messages/%d/retry", msgID)
 
-	if r := e.do(http.MethodPost, retryPath, c.anaToken, nil); r.status != http.StatusOK || r.body["status"] != "failed" {
-		t.Fatalf("retry while disconnected: status %d, body %v", r.status, r.body)
+	if r := e.Do(http.MethodPost, retryPath, c.anaToken, nil); r.Status != http.StatusOK || r.Body["status"] != "failed" {
+		t.Fatalf("retry while disconnected: status %d, body %v", r.Status, r.Body)
 	}
 	e.connectSector(c.sector.ID)
 	for name, token := range map[string]string{"agent of the sector": c.biaToken, "supervisor": c.supToken, "other sector": c.rhToken} {
-		if r := e.do(http.MethodPost, retryPath, token, nil); r.status != http.StatusForbidden {
-			t.Fatalf("retry by %s: status %d", name, r.status)
+		if r := e.Do(http.MethodPost, retryPath, token, nil); r.Status != http.StatusForbidden {
+			t.Fatalf("retry by %s: status %d", name, r.Status)
 		}
 	}
-	if r := e.do(http.MethodPost, retryPath, c.anaToken, nil); r.status != http.StatusOK || r.body["status"] != "sent" {
-		t.Fatalf("retry: status %d, body %v", r.status, r.body)
+	if r := e.Do(http.MethodPost, retryPath, c.anaToken, nil); r.Status != http.StatusOK || r.Body["status"] != "sent" {
+		t.Fatalf("retry: status %d, body %v", r.Status, r.Body)
 	}
 	if reason := e.failureReason(msgID); reason != nil {
 		t.Fatalf("failure reason kept after sending: %s", *reason)
 	}
 	// Mensagem já enviada não é reenviada.
-	if r := e.do(http.MethodPost, retryPath, c.anaToken, nil); r.status != http.StatusConflict {
-		t.Fatalf("retry of a sent message: status %d", r.status)
+	if r := e.Do(http.MethodPost, retryPath, c.anaToken, nil); r.Status != http.StatusConflict {
+		t.Fatalf("retry of a sent message: status %d", r.Status)
 	}
 	if got := e.outbound(c.ticket.ID); len(got) != 1 {
 		t.Fatalf("retries created messages: %+v", got)
 	}
-	if sent := e.whatsapp.SentMessages(); len(sent) != 1 || sent[0].(messaging.TextMessage).IdempotencyKey != requestA {
+	if sent := e.WhatsApp.SentMessages(); len(sent) != 1 || sent[0].(messaging.TextMessage).IdempotencyKey != requestA {
 		t.Fatalf("sent to WhatsApp = %+v", sent)
 	}
 	// Mensagem recebida não tem reenvio.
 	inbound := e.messages(c.ticket.ID)[0]
-	if r := e.do(http.MethodPost, fmt.Sprintf("/api/messages/%d/retry", inbound.ID), c.anaToken, nil); r.status != http.StatusConflict {
-		t.Fatalf("retry of a received message: status %d", r.status)
+	if r := e.Do(http.MethodPost, fmt.Sprintf("/api/messages/%d/retry", inbound.ID), c.anaToken, nil); r.Status != http.StatusConflict {
+		t.Fatalf("retry of a received message: status %d", r.Status)
 	}
 }
 
@@ -576,17 +576,17 @@ func TestPendingMessagesFailOnRestart(t *testing.T) {
 	e := c.e
 	c.assign()
 
-	if r := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); r.status != http.StatusOK {
-		t.Fatalf("send: status %d", r.status)
+	if r := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); r.Status != http.StatusOK {
+		t.Fatalf("send: status %d", r.Status)
 	}
 	msgID := e.outbound(c.ticket.ID)[0].ID
 	// O serviço parou entre gravar a mensagem e receber a resposta do WhatsApp.
-	if _, err := e.pool.Exec(t.Context(), "update messages set status = 'pending', external_message_id = null where id = $1", msgID); err != nil {
+	if _, err := e.Pool.Exec(t.Context(), "update messages set status = 'pending', external_message_id = null where id = $1", msgID); err != nil {
 		t.Fatal(err)
 	}
 
-	restarted := startServer(t, e.pool, nil)
-	n, err := restarted.ticketService.FailPending(t.Context())
+	restarted := startServer(t, e.Pool, nil)
+	n, err := restarted.TicketService.FailPending(t.Context())
 	if err != nil || n != 1 {
 		t.Fatalf("fail pending: %d, %v", n, err)
 	}
@@ -596,10 +596,10 @@ func TestPendingMessagesFailOnRestart(t *testing.T) {
 
 	// O responsável reenvia com a mesma chave, sem duplicar no WhatsApp.
 	restarted.connectSector(c.sector.ID)
-	token := restarted.login("ana@exemplo.com", testPassword)
-	r := restarted.do(http.MethodPost, fmt.Sprintf("/api/messages/%d/retry", msgID), token, nil)
-	if r.status != http.StatusOK || r.body["status"] != "sent" {
-		t.Fatalf("retry after restart: status %d, body %v", r.status, r.body)
+	token := restarted.Login("ana@exemplo.com", testPassword)
+	r := restarted.Do(http.MethodPost, fmt.Sprintf("/api/messages/%d/retry", msgID), token, nil)
+	if r.Status != http.StatusOK || r.Body["status"] != "sent" {
+		t.Fatalf("retry after restart: status %d, body %v", r.Status, r.Body)
 	}
 	if got := restarted.outbound(c.ticket.ID)[0]; str(got.ExternalMessageID) != "fake-msg-"+requestA {
 		t.Fatalf("external id after retry = %s", str(got.ExternalMessageID))
@@ -616,17 +616,17 @@ func TestInternalNotesAndSpokeWith(t *testing.T) {
 
 	// Qualquer pessoa do setor escreve notas, mesmo sem ser a responsável.
 	for _, token := range []string{c.biaToken, c.supToken, c.anaToken} {
-		if r := e.do(http.MethodPost, notesPath, token, map[string]string{"body": "Cliente pediu retorno à tarde"}); r.status != http.StatusCreated {
-			t.Fatalf("create note: status %d, body %v", r.status, r.body)
+		if r := e.Do(http.MethodPost, notesPath, token, map[string]string{"body": "Cliente pediu retorno à tarde"}); r.Status != http.StatusCreated {
+			t.Fatalf("create note: status %d, body %v", r.Status, r.Body)
 		}
 	}
-	if r := e.do(http.MethodPost, notesPath, c.rhToken, map[string]string{"body": "Nota"}); r.status != http.StatusForbidden {
-		t.Fatalf("note from another sector: status %d", r.status)
+	if r := e.Do(http.MethodPost, notesPath, c.rhToken, map[string]string{"body": "Nota"}); r.Status != http.StatusForbidden {
+		t.Fatalf("note from another sector: status %d", r.Status)
 	}
-	if r := e.do(http.MethodPost, notesPath, c.biaToken, map[string]string{"body": "  "}); r.status != http.StatusUnprocessableEntity {
-		t.Fatalf("blank note: status %d", r.status)
+	if r := e.Do(http.MethodPost, notesPath, c.biaToken, map[string]string{"body": "  "}); r.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("blank note: status %d", r.Status)
 	}
-	notes := e.doList(http.MethodGet, notesPath, c.adminToken)
+	notes := e.DoList(http.MethodGet, notesPath, c.adminToken)
 	if len(notes) != 3 || notes[0]["author"].(map[string]any)["name"] != "bia@exemplo.com" || notes[0]["body"] != "Cliente pediu retorno à tarde" {
 		t.Fatalf("notes = %v", notes)
 	}
@@ -634,52 +634,52 @@ func TestInternalNotesAndSpokeWith(t *testing.T) {
 		t.Fatalf("notes from another sector: status %d", status)
 	}
 	// Notas não vão para o cliente.
-	if sent := e.whatsapp.SentMessages(); len(sent) != 0 {
+	if sent := e.WhatsApp.SentMessages(); len(sent) != 0 {
 		t.Fatalf("notes reached WhatsApp: %+v", sent)
 	}
 
 	// "Falou com" é preenchido só pelo responsável.
 	for name, token := range map[string]string{"agent of the sector": c.biaToken, "supervisor": c.supToken, "other sector": c.rhToken} {
-		if r := e.do(http.MethodPut, spokePath, token, map[string]string{"spokeWith": "Maria"}); r.status != http.StatusForbidden {
-			t.Fatalf("spoke with by %s: status %d", name, r.status)
+		if r := e.Do(http.MethodPut, spokePath, token, map[string]string{"spokeWith": "Maria"}); r.Status != http.StatusForbidden {
+			t.Fatalf("spoke with by %s: status %d", name, r.Status)
 		}
 	}
-	if r := e.do(http.MethodPut, spokePath, c.anaToken, map[string]string{"spokeWith": " Maria, esposa do titular "}); r.status != http.StatusOK {
-		t.Fatalf("spoke with: status %d", r.status)
+	if r := e.Do(http.MethodPut, spokePath, c.anaToken, map[string]string{"spokeWith": " Maria, esposa do titular "}); r.Status != http.StatusOK {
+		t.Fatalf("spoke with: status %d", r.Status)
 	}
-	detail := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil)
-	if detail.status != http.StatusOK || detail.body["spokeWith"] != "Maria, esposa do titular" ||
-		detail.body["assignee"].(map[string]any)["name"] != "ana@exemplo.com" || detail.body["protocol"] != c.ticket.Protocol {
-		t.Fatalf("ticket detail: status %d, body %v", detail.status, detail.body)
+	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil)
+	if detail.Status != http.StatusOK || detail.Body["spokeWith"] != "Maria, esposa do titular" ||
+		detail.Body["assignee"].(map[string]any)["name"] != "ana@exemplo.com" || detail.Body["protocol"] != c.ticket.Protocol {
+		t.Fatalf("ticket detail: status %d, body %v", detail.Status, detail.Body)
 	}
 
 	// Encerrado: "falou com" só muda pela correção; notas continuam.
-	e.closeTicket(c.ticket.ID, c.ana.ID, e.organization(c.supToken, "Prefeitura", ""))
-	if r := e.do(http.MethodPut, spokePath, c.anaToken, map[string]string{"spokeWith": "João"}); r.status != http.StatusConflict {
-		t.Fatalf("spoke with on closed ticket: status %d", r.status)
+	e.closeTicket(c.ticket.ID, c.ana.ID, e.Organization(c.supToken, "Prefeitura", ""))
+	if r := e.Do(http.MethodPut, spokePath, c.anaToken, map[string]string{"spokeWith": "João"}); r.Status != http.StatusConflict {
+		t.Fatalf("spoke with on closed ticket: status %d", r.Status)
 	}
-	if r := e.do(http.MethodPost, notesPath, c.biaToken, map[string]string{"body": "Retornou depois"}); r.status != http.StatusCreated {
-		t.Fatalf("note on closed ticket: status %d", r.status)
+	if r := e.Do(http.MethodPost, notesPath, c.biaToken, map[string]string{"body": "Retornou depois"}); r.Status != http.StatusCreated {
+		t.Fatalf("note on closed ticket: status %d", r.Status)
 	}
 }
 
 func TestHistoryByContactAndOrganization(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	rh := e.sector("RH")
-	ana := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	e.user("rh@exemplo.com", db.UserRoleAgent, &rh.ID)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	anaToken := e.login("ana@exemplo.com", testPassword)
-	supToken := e.login("sup@exemplo.com", testPassword)
-	rhToken := e.login("rh@exemplo.com", testPassword)
-	adminToken := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	e.User("rh@exemplo.com", db.UserRoleAgent, &rh.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	anaToken := e.Login("ana@exemplo.com", testPassword)
+	supToken := e.Login("sup@exemplo.com", testPassword)
+	rhToken := e.Login("rh@exemplo.com", testPassword)
+	adminToken := e.Login("admin@exemplo.com", testPassword)
 
-	org := e.organization(supToken, "Câmara Municipal", "")
-	maria := e.contact(anaToken, "Maria", "5511988887777", org, contab.ID)
-	joao := e.contact(anaToken, "João", "5511977776666", org, contab.ID)
+	org := e.Organization(supToken, "Câmara Municipal", "")
+	maria := e.Contact(anaToken, "Maria", "5511988887777", org, contab.ID)
+	joao := e.Contact(anaToken, "João", "5511977776666", org, contab.ID)
 
 	// Maria: um chamado encerrado e outro aberto na Contabilidade, e um no RH. João: um na Contabilidade.
 	first := e.queuedTicket(contab.ID, "M-1", "5511988887777")
@@ -705,14 +705,14 @@ func TestHistoryByContactAndOrganization(t *testing.T) {
 	contactPath := fmt.Sprintf("/api/contacts/%d/tickets", maria)
 	orgPath := fmt.Sprintf("/api/organizations/%d/tickets", org)
 	// Do mais recente ao mais antigo, só dos setores do usuário.
-	check("contact history of the sector", ids(e.doList(http.MethodGet, contactPath, anaToken)), second.ID, first.ID)
-	check("contact history of another sector", ids(e.doList(http.MethodGet, contactPath, rhToken)), rhTicket.ID)
-	check("contact history for the admin", ids(e.doList(http.MethodGet, contactPath, adminToken)), rhTicket.ID, second.ID, first.ID)
-	check("organization history of the sector", ids(e.doList(http.MethodGet, orgPath, anaToken)), joaoTicket.ID, second.ID, first.ID)
-	check("organization history of another sector", ids(e.doList(http.MethodGet, orgPath, rhToken)), rhTicket.ID)
-	check("history of João", ids(e.doList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", joao), anaToken)), joaoTicket.ID)
+	check("contact history of the sector", ids(e.DoList(http.MethodGet, contactPath, anaToken)), second.ID, first.ID)
+	check("contact history of another sector", ids(e.DoList(http.MethodGet, contactPath, rhToken)), rhTicket.ID)
+	check("contact history for the admin", ids(e.DoList(http.MethodGet, contactPath, adminToken)), rhTicket.ID, second.ID, first.ID)
+	check("organization history of the sector", ids(e.DoList(http.MethodGet, orgPath, anaToken)), joaoTicket.ID, second.ID, first.ID)
+	check("organization history of another sector", ids(e.DoList(http.MethodGet, orgPath, rhToken)), rhTicket.ID)
+	check("history of João", ids(e.DoList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", joao), anaToken)), joaoTicket.ID)
 
-	list := e.doList(http.MethodGet, contactPath, anaToken)
+	list := e.DoList(http.MethodGet, contactPath, anaToken)
 	if list[1]["status"] != "closed" || list[1]["subject"] != "Dúvida" || list[1]["sectorName"] != "Contabilidade" ||
 		list[1]["organizationName"] != "Câmara Municipal" || list[1]["closedAt"] == nil {
 		t.Fatalf("closed ticket in history = %v", list[1])

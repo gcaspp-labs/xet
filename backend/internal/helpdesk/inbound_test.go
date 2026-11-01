@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"fmt"
@@ -58,23 +58,23 @@ type mediaRow struct {
 }
 
 func (e *testEnv) receive(sectorID int64, msg messaging.Message) {
-	e.t.Helper()
-	if err := e.whatsapp.Receive(e.t.Context(), sectorID, msg); err != nil {
-		e.t.Fatalf("receive %s: %v", msg.ExternalMessageID, err)
+	e.T.Helper()
+	if err := e.WhatsApp.Receive(e.T.Context(), sectorID, msg); err != nil {
+		e.T.Fatalf("receive %s: %v", msg.ExternalMessageID, err)
 	}
 }
 
 func (e *testEnv) sendOutside(sectorID int64, msg messaging.Message) {
-	e.t.Helper()
-	if err := e.whatsapp.SendOutside(e.t.Context(), sectorID, msg); err != nil {
-		e.t.Fatalf("send outside %s: %v", msg.ExternalMessageID, err)
+	e.T.Helper()
+	if err := e.WhatsApp.SendOutside(e.T.Context(), sectorID, msg); err != nil {
+		e.T.Fatalf("send outside %s: %v", msg.ExternalMessageID, err)
 	}
 }
 
 // tickets lists the tickets of the sector in creation order.
 func (e *testEnv) tickets(sectorID int64) []ticketRow {
-	e.t.Helper()
-	rows, _ := e.pool.Query(e.t.Context(), `
+	e.T.Helper()
+	rows, _ := e.Pool.Query(e.T.Context(), `
 		select id, protocol, status::text, contact_id, organization_id, arrived_at, started_at
 		from tickets where sector_id = $1 order by id`, sectorID)
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (ticketRow, error) {
@@ -83,15 +83,15 @@ func (e *testEnv) tickets(sectorID int64) []ticketRow {
 		return t, err
 	})
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return out
 }
 
 // messages lists the messages of the ticket in the order they were sent.
 func (e *testEnv) messages(ticketID int64) []messageRow {
-	e.t.Helper()
-	rows, _ := e.pool.Query(e.t.Context(), `
+	e.T.Helper()
+	rows, _ := e.Pool.Query(e.T.Context(), `
 		select id, contact_id, direction::text, origin::text, author_id, type::text, body, media_id,
 		       external_message_id, status::text, sent_at
 		from messages where ticket_id = $1 order by sent_at, id`, ticketID)
@@ -102,14 +102,14 @@ func (e *testEnv) messages(ticketID int64) []messageRow {
 		return m, err
 	})
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return out
 }
 
 func (e *testEnv) contacts() []contactRow {
-	e.t.Helper()
-	rows, _ := e.pool.Query(e.t.Context(), `
+	e.T.Helper()
+	rows, _ := e.Pool.Query(e.T.Context(), `
 		select id, name, phone, external_contact_id, organization_id, registered from contacts order by id`)
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (contactRow, error) {
 		var c contactRow
@@ -117,43 +117,34 @@ func (e *testEnv) contacts() []contactRow {
 		return c, err
 	})
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return out
 }
 
 func (e *testEnv) media(id int64) mediaRow {
-	e.t.Helper()
+	e.T.Helper()
 	var m mediaRow
-	err := e.pool.QueryRow(e.t.Context(), `
+	err := e.Pool.QueryRow(e.T.Context(), `
 		select storage_key, mime_type, size_bytes, file_name, sha256, duration_seconds
 		from media_files where id = $1`, id).
 		Scan(&m.StorageKey, &m.MimeType, &m.SizeBytes, &m.FileName, &m.Sha256, &m.DurationSeconds)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return m
-}
-
-func (e *testEnv) count(table string) int {
-	e.t.Helper()
-	var n int
-	if err := e.pool.QueryRow(e.t.Context(), "select count(*) from "+table).Scan(&n); err != nil {
-		e.t.Fatal(err)
-	}
-	return n
 }
 
 // closeTicket closes the ticket directly in the database, standing in for
 // the closing form (T13).
 func (e *testEnv) closeTicket(ticketID, userID, orgID int64) {
-	e.t.Helper()
-	_, err := e.pool.Exec(e.t.Context(), `
+	e.T.Helper()
+	_, err := e.Pool.Exec(e.T.Context(), `
 		update tickets set status = 'closed', assignee_id = $2, organization_id = $3, ended_at = now(),
 		       closed_at = now(), closed_by_id = $2, closure_type = 'resolved', subject = 'Dúvida', resolution = 'Resolvida'
 		where id = $1`, ticketID, userID, orgID)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 }
 
@@ -176,7 +167,7 @@ func protocol(n int) string {
 func TestReceiveFromUnknownNumberOpensQueuedTicket(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 
 	first := text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Bom dia, preciso de ajuda")
 	first.ContactName = "Maria do Perfil"
@@ -236,8 +227,8 @@ func TestReceiveFromUnknownNumberOpensQueuedTicket(t *testing.T) {
 func TestProtocolSequenceIsSharedBySectors(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	rh := e.sector("RH")
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
 
 	e.receive(contab.ID, text("A", "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
 	// O mesmo contato tem um chamado aberto em cada setor.
@@ -260,7 +251,7 @@ func TestProtocolSequenceIsSharedBySectors(t *testing.T) {
 func TestRepeatedMessageIsRecordedOnce(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 
 	msg := text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Oi")
 	e.receive(contab.ID, msg)
@@ -272,7 +263,7 @@ func TestRepeatedMessageIsRecordedOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 10)
 	for range 10 {
-		wg.Go(func() { errs <- e.whatsapp.Receive(t.Context(), contab.ID, again) })
+		wg.Go(func() { errs <- e.WhatsApp.Receive(t.Context(), contab.ID, again) })
 	}
 	wg.Wait()
 	close(errs)
@@ -282,10 +273,10 @@ func TestRepeatedMessageIsRecordedOnce(t *testing.T) {
 		}
 	}
 
-	if got := e.count("messages"); got != 2 {
+	if got := e.Count("messages"); got != 2 {
 		t.Fatalf("messages = %d, want 2", got)
 	}
-	if got := e.count("media_files"); got != 1 {
+	if got := e.Count("media_files"); got != 1 {
 		t.Fatalf("media files = %d, want 1", got)
 	}
 	if got := len(e.tickets(contab.ID)); got != 2 {
@@ -299,13 +290,13 @@ func TestRepeatedMessageIsRecordedOnce(t *testing.T) {
 func TestConcurrentMessagesOpenOneTicket(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 10)
 	for i := range 10 {
 		wg.Go(func() {
-			errs <- e.whatsapp.Receive(t.Context(), contab.ID,
+			errs <- e.WhatsApp.Receive(t.Context(), contab.ID,
 				text(fmt.Sprintf("MSG-%d", i), "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
 		})
 	}
@@ -332,12 +323,12 @@ func TestConcurrentMessagesOpenOneTicket(t *testing.T) {
 func TestOneOpenTicketPerContactAndSectorInDatabase(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 	e.receive(contab.ID, text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
 	tk := e.tickets(contab.ID)[0]
 
 	// O índice único recusa um segundo chamado aberto mesmo fora do serviço.
-	_, err := e.pool.Exec(t.Context(), `
+	_, err := e.Pool.Exec(t.Context(), `
 		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
 		values ('2000-000001', $1, $2, 'queued', now(), now())`, contab.ID, tk.ContactID)
 	if err == nil {
@@ -348,9 +339,9 @@ func TestOneOpenTicketPerContactAndSectorInDatabase(t *testing.T) {
 func TestMessageAfterClosingOpensNewTicket(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	agent := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
-	org, err := e.q.CreateOrganization(t.Context(), db.CreateOrganizationParams{Name: "Prefeitura"})
+	contab := e.Sector("Contabilidade")
+	agent := e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	org, err := e.Q.CreateOrganization(t.Context(), db.CreateOrganizationParams{Name: "Prefeitura"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,12 +366,12 @@ func TestMessageAfterClosingOpensNewTicket(t *testing.T) {
 func TestGroupMessagesAreIgnored(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 
 	e.receive(contab.ID, messaging.Message{ExternalMessageID: "GRP-1", Group: true, Type: messaging.TypeText, Body: "Oi, grupo", SentAt: time.Now()})
 	e.sendOutside(contab.ID, messaging.Message{ExternalMessageID: "GRP-2", Group: true, Type: messaging.TypeText, Body: "Resposta no grupo", SentAt: time.Now()})
 
-	if n := e.count("tickets") + e.count("messages") + e.count("contacts"); n != 0 {
+	if n := e.Count("tickets") + e.Count("messages") + e.Count("contacts"); n != 0 {
 		t.Fatalf("group messages left %d rows, want none", n)
 	}
 }
@@ -388,14 +379,14 @@ func TestGroupMessagesAreIgnored(t *testing.T) {
 func TestRegisteredContactIsMatchedByPhoneVariant(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	token := e.login("sup@exemplo.com", testPassword)
-	orgID := e.organization(token, "Câmara Municipal", "")
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	token := e.Login("sup@exemplo.com", testPassword)
+	orgID := e.Organization(token, "Câmara Municipal", "")
 	// Cadastrado com o nono dígito; o WhatsApp informa o número sem ele.
-	withNine := e.contact(token, "José Cadastrado", "5511987654321", orgID, contab.ID)
+	withNine := e.Contact(token, "José Cadastrado", "5511987654321", orgID, contab.ID)
 	// Cadastrado sem o nono dígito; o WhatsApp informa o número com ele.
-	withoutNine := e.contact(token, "Ana Cadastrada", "551176543210", orgID, contab.ID)
+	withoutNine := e.Contact(token, "Ana Cadastrada", "551176543210", orgID, contab.ID)
 
 	msg := text("MSG-1", "551187654321@s.whatsapp.net", "551187654321", "Oi")
 	msg.ContactName = "Zé"
@@ -436,7 +427,7 @@ func TestRegisteredContactIsMatchedByPhoneVariant(t *testing.T) {
 func TestContactKnownOnlyByLID(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 
 	e.receive(contab.ID, text("MSG-1", "123456789012345@lid", "", "Oi"))
 	named := text("MSG-2", "999456789012345@lid", "", "Olá")
@@ -458,9 +449,9 @@ func TestContactKnownOnlyByLID(t *testing.T) {
 	}
 
 	// A busca de contatos continua funcionando com contatos sem telefone.
-	e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
-	token := e.login("ana@exemplo.com", testPassword)
-	list := e.doList(http.MethodGet, "/api/contacts?q=carla", token)
+	e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	token := e.Login("ana@exemplo.com", testPassword)
+	list := e.DoList(http.MethodGet, "/api/contacts?q=carla", token)
 	if len(list) != 1 || list[0]["phone"] != nil || list[0]["registered"] != false {
 		t.Fatalf("contacts search = %v", list)
 	}
@@ -469,7 +460,7 @@ func TestContactKnownOnlyByLID(t *testing.T) {
 func TestMessagesSentFromThePhone(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 
 	// Sem chamado aberto, a mensagem do celular abre um chamado na fila.
 	e.sendOutside(contab.ID, text("OUT-1", "5511988887777@s.whatsapp.net", "5511988887777", "Bom dia, aqui é da contabilidade"))
@@ -507,7 +498,7 @@ func TestMessagesSentFromThePhone(t *testing.T) {
 func TestUnavailableMediaBecomesNotice(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 	const contact, phone = "5511988887777@s.whatsapp.net", "5511988887777"
 
 	// Abre o chamado mesmo sem o arquivo, e a reentrega não duplica o aviso.
@@ -536,7 +527,7 @@ func TestUnavailableMediaBecomesNotice(t *testing.T) {
 	if m := msgs[1]; m.Type != "media_unavailable" || m.MediaID != nil || m.Origin != "phone" || m.Body != nil {
 		t.Fatalf("notice from the phone = %+v", m)
 	}
-	if got := e.count("media_files"); got != 0 {
+	if got := e.Count("media_files"); got != 0 {
 		t.Fatalf("media files = %d, want 0", got)
 	}
 
@@ -546,7 +537,7 @@ func TestUnavailableMediaBecomesNotice(t *testing.T) {
 	doc.Media = &messaging.Media{Data: []byte("%PDF"), MimeType: "application/pdf"}
 	e.receive(contab.ID, doc)
 	saved := e.messages(tickets[0].ID)[2]
-	if _, err := e.pool.Exec(t.Context(), `update messages set media_id = $1 where id = $2`, saved.MediaID, msgs[0].ID); err == nil {
+	if _, err := e.Pool.Exec(t.Context(), `update messages set media_id = $1 where id = $2`, saved.MediaID, msgs[0].ID); err == nil {
 		t.Fatal("notice with a file was accepted")
 	}
 }
@@ -554,7 +545,7 @@ func TestUnavailableMediaBecomesNotice(t *testing.T) {
 func TestMediaIsSavedOnArrival(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
+	contab := e.Sector("Contabilidade")
 	const contact, phone = "5511988887777@s.whatsapp.net", "5511988887777"
 
 	doc := text("DOC-1", contact, phone, "Segue a nota")
@@ -592,7 +583,7 @@ func TestMediaIsSavedOnArrival(t *testing.T) {
 		pdf.SizeBytes != int64(len(doc.Media.Data)) || pdf.Sha256 == "" {
 		t.Fatalf("document file = %+v", pdf)
 	}
-	f, err := e.files.Open(t.Context(), pdf.StorageKey)
+	f, err := e.Files.Open(t.Context(), pdf.StorageKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,14 +609,14 @@ func TestMediaIsSavedOnArrival(t *testing.T) {
 
 // contactSectors lists the sectors linked to the contact.
 func (e *testEnv) contactSectors(contactID int64) []int64 {
-	e.t.Helper()
-	rows, err := e.pool.Query(e.t.Context(), `select sector_id from contact_sectors where contact_id = $1 order by sector_id`, contactID)
+	e.T.Helper()
+	rows, err := e.Pool.Query(e.T.Context(), `select sector_id from contact_sectors where contact_id = $1 order by sector_id`, contactID)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return ids
 }
@@ -635,7 +626,7 @@ func (e *testEnv) contactSectors(contactID int64) []int64 {
 func TestMessagesLinkTheContactToTheSector(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab, rh := e.sector("Contabilidade"), e.sector("RH")
+	contab, rh := e.Sector("Contabilidade"), e.Sector("RH")
 
 	e.receive(contab.ID, text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
 	e.receive(contab.ID, text("MSG-2", "5511988887777@s.whatsapp.net", "5511988887777", "De novo"))
@@ -649,12 +640,12 @@ func TestMessagesLinkTheContactToTheSector(t *testing.T) {
 	}
 
 	// Só o vínculo novo vai à auditoria, como ação do sistema.
-	actions, changes := e.auditChanges("contact", maria)
+	actions, changes := e.AuditChanges("contact", maria)
 	if fmt.Sprint(actions) != "[contact_sector_linked contact_sector_linked]" ||
 		changes[1]["sector_id"]["to"] != float64(rh.ID) {
 		t.Fatalf("audit: %v %v", actions, changes)
 	}
-	logs, err := e.q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: maria})
+	logs, err := e.Q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: maria})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -679,11 +670,11 @@ func TestMessagesLinkTheContactToTheSector(t *testing.T) {
 func TestMessagesWhileSavingContactDoNotDeadlock(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab, rh := e.sector("Contabilidade"), e.sector("RH")
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	admin := e.login("admin@exemplo.com", testPassword)
-	org := e.organization(admin, "Prefeitura", "")
-	contact := e.contact(admin, "Maria", "5511988887777", org, contab.ID)
+	contab, rh := e.Sector("Contabilidade"), e.Sector("RH")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	admin := e.Login("admin@exemplo.com", testPassword)
+	org := e.Organization(admin, "Prefeitura", "")
+	contact := e.Contact(admin, "Maria", "5511988887777", org, contab.ID)
 
 	var wg sync.WaitGroup
 	for i := range 8 {
@@ -691,10 +682,10 @@ func TestMessagesWhileSavingContactDoNotDeadlock(t *testing.T) {
 			e.receive(rh.ID, text(fmt.Sprintf("MSG-%d", i), "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
 		})
 		wg.Go(func() {
-			resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", contact), admin,
+			resp := e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", contact), admin,
 				map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": org, "sectorIds": []int64{contab.ID}})
-			if resp.status != http.StatusOK {
-				t.Errorf("update contact: status %d, body %v", resp.status, resp.body)
+			if resp.Status != http.StatusOK {
+				t.Errorf("update contact: status %d, body %v", resp.Status, resp.Body)
 			}
 		})
 	}

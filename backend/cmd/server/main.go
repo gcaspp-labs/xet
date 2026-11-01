@@ -11,8 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gcaspp-labs/xet/backend/internal/server"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -27,6 +25,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/whatsmeow"
+	"github.com/gcaspp-labs/xet/backend/internal/server"
 )
 
 func main() {

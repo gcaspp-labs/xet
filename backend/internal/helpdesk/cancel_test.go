@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 )
 
 func (e *testEnv) cancel(ticketID int64, token, reason string) response {
-	e.t.Helper()
-	return e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/cancel", ticketID), token, map[string]any{"reason": reason})
+	e.T.Helper()
+	return e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/cancel", ticketID), token, map[string]any{"reason": reason})
 }
 
 // cancelled reads the columns the cancellation writes.
@@ -24,15 +24,15 @@ type cancelled struct {
 }
 
 func (e *testEnv) cancelled(ticketID int64) cancelled {
-	e.t.Helper()
+	e.T.Helper()
 	var c cancelled
-	err := e.pool.QueryRow(e.t.Context(), `
+	err := e.Pool.QueryRow(e.T.Context(), `
 		select status, coalesce(closure_type::text, ''), assignee_id, closed_by_id, organization_id, subject, resolution,
 		       assigned_at is not null, ended_at is not null and closed_at is not null and ended_at >= started_at
 		from tickets where id = $1`, ticketID).
 		Scan(&c.status, &c.closure, &c.assignee, &c.closedBy, &c.organization, &c.subject, &c.resolution, &c.assignedSet, &c.endedOK)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return c
 }
@@ -46,8 +46,8 @@ func TestCancelFromTheQueueWithoutAssigning(t *testing.T) {
 	// Contato não cadastrado e sem órgão, na fila: quem é do setor cancela sem assumir.
 	events := e.subscribe(c.supToken)
 	resp := e.cancel(c.ticket.ID, c.biaToken, "  Golpe do falso boleto.  ")
-	if resp.status != http.StatusOK || resp.body["status"] != "closed" {
-		t.Fatalf("cancel: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "closed" {
+		t.Fatalf("cancel: status %d, body %v", resp.Status, resp.Body)
 	}
 	if ev := e.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
 		t.Fatalf("event = %+v", ev)
@@ -77,30 +77,30 @@ func TestCancelFromTheQueueWithoutAssigning(t *testing.T) {
 	}
 
 	// A conversa mostra quem cancelou e o motivo, sem espaços nas pontas.
-	logs := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.anaToken)
+	logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.anaToken)
 	if len(logs) != 1 || logs[0]["action"] != "ticket_cancelled" || logs[0]["reason"] != "Golpe do falso boleto." ||
 		logs[0]["actor"].(map[string]any)["id"] != float64(bia) {
 		t.Fatalf("logs = %v", logs)
 	}
 	// Detalhes, histórico e realizados identificam o cancelado.
-	detail := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil)
-	if detail.status != http.StatusOK || detail.body["closureType"] != "cancelled" {
-		t.Fatalf("detail: status %d, body %v", detail.status, detail.body)
+	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil)
+	if detail.Status != http.StatusOK || detail.Body["closureType"] != "cancelled" {
+		t.Fatalf("detail: status %d, body %v", detail.Status, detail.Body)
 	}
-	history := e.doList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
+	history := e.DoList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
 	if len(history) != 1 || history[0]["closureType"] != "cancelled" {
 		t.Fatalf("history = %v", history)
 	}
-	done := e.doList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/closed-today", c.sector.ID), c.anaToken)
+	done := e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/closed-today", c.sector.ID), c.anaToken)
 	if len(done) != 1 || done[0]["closureType"] != "cancelled" || done[0]["organizationName"] != nil ||
 		done[0]["closedBy"].(map[string]any)["id"] != float64(bia) {
 		t.Fatalf("closed today = %v", done)
 	}
 
 	// Notas internas continuam permitidas.
-	note := e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notes", c.ticket.ID), c.anaToken, map[string]any{"body": "Número bloqueado."})
-	if note.status >= http.StatusMultipleChoices {
-		t.Fatalf("note: status %d, body %v", note.status, note.body)
+	note := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notes", c.ticket.ID), c.anaToken, map[string]any{"body": "Número bloqueado."})
+	if note.Status >= http.StatusMultipleChoices {
+		t.Fatalf("note: status %d, body %v", note.Status, note.Body)
 	}
 }
 
@@ -111,11 +111,11 @@ func TestCancelPermissions(t *testing.T) {
 		t.Parallel()
 		c := newConversation(t)
 		e := c.e
-		if resp := e.cancel(c.ticket.ID, c.rhToken, "Engano."); resp.status != http.StatusForbidden {
-			t.Fatalf("other sector: status %d", resp.status)
+		if resp := e.cancel(c.ticket.ID, c.rhToken, "Engano."); resp.Status != http.StatusForbidden {
+			t.Fatalf("other sector: status %d", resp.Status)
 		}
-		if resp := e.cancel(c.ticket.ID, "", "Engano."); resp.status != http.StatusUnauthorized {
-			t.Fatalf("without session: status %d", resp.status)
+		if resp := e.cancel(c.ticket.ID, "", "Engano."); resp.Status != http.StatusUnauthorized {
+			t.Fatalf("without session: status %d", resp.Status)
 		}
 		if got := e.cancelled(c.ticket.ID); got.status != "queued" {
 			t.Fatalf("status = %q", got.status)
@@ -128,11 +128,11 @@ func TestCancelPermissions(t *testing.T) {
 		e := c.e
 		c.assign()
 		resp := e.cancel(c.ticket.ID, c.biaToken, "Engano.")
-		if resp.status != http.StatusForbidden || resp.body["error"] != "Apenas o responsável pelo chamado ou a supervisão do setor pode cancelá-lo." {
-			t.Fatalf("agent: status %d, body %v", resp.status, resp.body)
+		if resp.Status != http.StatusForbidden || resp.Body["error"] != "Apenas o responsável pelo chamado ou a supervisão do setor pode cancelá-lo." {
+			t.Fatalf("agent: status %d, body %v", resp.Status, resp.Body)
 		}
-		if resp := e.cancel(c.ticket.ID, c.rhToken, "Engano."); resp.status != http.StatusForbidden {
-			t.Fatalf("other sector: status %d", resp.status)
+		if resp := e.cancel(c.ticket.ID, c.rhToken, "Engano."); resp.Status != http.StatusForbidden {
+			t.Fatalf("other sector: status %d", resp.Status)
 		}
 		if got := e.cancelled(c.ticket.ID); got.status != "in_progress" {
 			t.Fatalf("status = %q", got.status)
@@ -152,8 +152,8 @@ func TestCancelPermissions(t *testing.T) {
 			c := newConversation(t)
 			e := c.e
 			c.assign()
-			if resp := e.cancel(c.ticket.ID, token(c), "Engano."); resp.status != http.StatusOK {
-				t.Fatalf("status %d, body %v", resp.status, resp.body)
+			if resp := e.cancel(c.ticket.ID, token(c), "Engano."); resp.Status != http.StatusOK {
+				t.Fatalf("status %d, body %v", resp.Status, resp.Body)
 			}
 			// O responsável continua o mesmo e quem cancelou fica registrado.
 			got := e.cancelled(c.ticket.ID)
@@ -176,9 +176,9 @@ func TestCancelRequiresReason(t *testing.T) {
 	for name, body := range map[string]map[string]any{
 		"no reason": {}, "empty": {"reason": ""}, "blank": {"reason": " \n "},
 	} {
-		resp := e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/cancel", c.ticket.ID), c.anaToken, body)
-		if resp.status != http.StatusUnprocessableEntity || resp.body["error"] != "Informe o motivo do cancelamento." {
-			t.Fatalf("%s: status %d, body %v", name, resp.status, resp.body)
+		resp := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/cancel", c.ticket.ID), c.anaToken, body)
+		if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Informe o motivo do cancelamento." {
+			t.Fatalf("%s: status %d, body %v", name, resp.Status, resp.Body)
 		}
 	}
 	if got := e.cancelled(c.ticket.ID); got.status != "queued" {
@@ -186,14 +186,14 @@ func TestCancelRequiresReason(t *testing.T) {
 	}
 
 	// O banco também recusa cancelamento sem motivo.
-	_, err := e.pool.Exec(t.Context(), `
+	_, err := e.Pool.Exec(t.Context(), `
 		insert into audit_logs (ticket_id, entity_type, entity_id, action, actor_id, changes)
 		values ($1, 'ticket', $1, 'ticket_cancelled', $2, '{}')`, c.ticket.ID, c.ana.ID)
 	if err == nil {
 		t.Fatal("cancellation without reason accepted by the database")
 	}
 	// E exige os dados do encerramento de quem não foi cancelado.
-	_, err = e.pool.Exec(t.Context(), `
+	_, err = e.Pool.Exec(t.Context(), `
 		update tickets set status = 'closed', assignee_id = $2, closed_by_id = $2, closure_type = 'resolved', closed_at = now(), ended_at = now()
 		where id = $1`, c.ticket.ID, c.ana.ID)
 	if err == nil {
@@ -206,11 +206,11 @@ func TestClosedTicketIsNotCancelled(t *testing.T) {
 	c := newClosing(t)
 	e := c.e
 	c.register()
-	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.status != http.StatusOK {
-		t.Fatalf("close: status %d, body %v", resp.status, resp.body)
+	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.Status != http.StatusOK {
+		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
 	}
-	if resp := e.cancel(c.ticket.ID, c.supToken, "Engano."); resp.status != http.StatusConflict {
-		t.Fatalf("closed ticket: status %d", resp.status)
+	if resp := e.cancel(c.ticket.ID, c.supToken, "Engano."); resp.Status != http.StatusConflict {
+		t.Fatalf("closed ticket: status %d", resp.Status)
 	}
 	if got := e.cancelled(c.ticket.ID); got.closure != "resolved" {
 		t.Fatalf("closure = %q", got.closure)
@@ -222,8 +222,8 @@ func TestCancelledTicketIsNotCorrected(t *testing.T) {
 	c := newClosing(t)
 	e := c.e
 	c.register()
-	if resp := e.cancel(c.ticket.ID, c.anaToken, "Spam."); resp.status != http.StatusOK {
-		t.Fatalf("cancel: status %d, body %v", resp.status, resp.body)
+	if resp := e.cancel(c.ticket.ID, c.anaToken, "Spam."); resp.Status != http.StatusOK {
+		t.Fatalf("cancel: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	body := with(c.form(c.org), "reason", "Motivo.")
@@ -231,8 +231,8 @@ func TestCancelledTicketIsNotCorrected(t *testing.T) {
 	body["endedAt"] = c.ticket.ArrivedAt
 	for name, token := range map[string]string{"who cancelled": c.anaToken, "supervisor": c.supToken, "admin": c.adminToken} {
 		resp := e.correct(c.ticket.ID, token, body)
-		if resp.status != http.StatusConflict || resp.body["error"] != "Chamado cancelado não é corrigido." {
-			t.Fatalf("%s: status %d, body %v", name, resp.status, resp.body)
+		if resp.Status != http.StatusConflict || resp.Body["error"] != "Chamado cancelado não é corrigido." {
+			t.Fatalf("%s: status %d, body %v", name, resp.Status, resp.Body)
 		}
 	}
 	if got := e.cancelled(c.ticket.ID); got.subject != nil {
@@ -244,8 +244,8 @@ func TestMessageAfterCancellingOpensNewTicket(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e := c.e
-	if resp := e.cancel(c.ticket.ID, c.anaToken, "Engano."); resp.status != http.StatusOK {
-		t.Fatalf("cancel: status %d, body %v", resp.status, resp.body)
+	if resp := e.cancel(c.ticket.ID, c.anaToken, "Engano."); resp.Status != http.StatusOK {
+		t.Fatalf("cancel: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	e.receive(c.sector.ID, text("MSG-9", "5511988887777@s.whatsapp.net", "5511988887777", "Outra dúvida"))
@@ -274,16 +274,16 @@ func TestCancelDoesNotCrossAssigning(t *testing.T) {
 	got := e.cancelled(c.ticket.ID)
 	actions, _ := c.ticketActions()
 	switch {
-	case assign.status == http.StatusOK && cancel.status == http.StatusForbidden:
+	case assign.Status == http.StatusOK && cancel.Status == http.StatusForbidden:
 		if got.status != "in_progress" || *got.assignee != c.ana.ID || len(actions) != 1 || actions[0] != "ticket_assigned" {
 			t.Fatalf("assign won: ticket %+v, audit %v", got, actions)
 		}
-	case assign.status == http.StatusConflict && cancel.status == http.StatusOK:
+	case assign.Status == http.StatusConflict && cancel.Status == http.StatusOK:
 		if got.closure != "cancelled" || got.assignedSet || len(actions) != 1 || actions[0] != "ticket_cancelled" {
 			t.Fatalf("cancel won: ticket %+v, audit %v", got, actions)
 		}
 	default:
-		t.Fatalf("assign %d, cancel %d", assign.status, cancel.status)
+		t.Fatalf("assign %d, cancel %d", assign.Status, cancel.Status)
 	}
 }
 
@@ -297,7 +297,7 @@ func TestConcurrentCancellingCancelsOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range attempts {
 		wg.Go(func() {
-			statuses[i] = e.cancel(c.ticket.ID, c.anaToken, "Spam.").status
+			statuses[i] = e.cancel(c.ticket.ID, c.anaToken, "Spam.").Status
 		})
 	}
 	wg.Wait()
@@ -333,8 +333,8 @@ func TestCancelDoesNotCrossNewMessage(t *testing.T) {
 		e.receive(c.sector.ID, text("MSG-9", "5511988887777@s.whatsapp.net", "5511988887777", "Mais uma"))
 	})
 	wg.Wait()
-	if cancel.status != http.StatusOK {
-		t.Fatalf("cancel: status %d, body %v", cancel.status, cancel.body)
+	if cancel.Status != http.StatusOK {
+		t.Fatalf("cancel: status %d, body %v", cancel.Status, cancel.Body)
 	}
 
 	tickets := e.tickets(c.sector.ID)

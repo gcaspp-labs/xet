@@ -1,4 +1,4 @@
-package httpapi
+package directory_test
 
 import (
 	"fmt"
@@ -16,55 +16,29 @@ const (
 	alphanumericCNPJ = "12ABC34501DE35"
 )
 
-func (e *testEnv) organization(token, name, cnpj string) int64 {
-	e.t.Helper()
-	resp := e.do(http.MethodPost, "/api/organizations", token, map[string]string{"name": name, "cnpj": cnpj})
-	if resp.status != http.StatusCreated {
-		e.t.Fatalf("create organization %s: status %d, body %v", name, resp.status, resp.body)
-	}
-	return id(resp.body)
-}
-
-func (e *testEnv) contact(token, name, phone string, orgID, sectorID int64) int64 {
-	e.t.Helper()
-	resp := e.do(http.MethodPost, "/api/contacts", token, map[string]any{"name": name, "phone": phone, "organizationId": orgID, "sectorIds": []int64{sectorID}})
-	if resp.status != http.StatusCreated {
-		e.t.Fatalf("create contact %s: status %d, body %v", name, resp.status, resp.body)
-	}
-	return id(resp.body)
-}
-
-func names(list []map[string]any) []string {
-	out := make([]string, len(list))
-	for i, item := range list {
-		out[i], _ = item["name"].(string)
-	}
-	return out
-}
-
 func TestOrganizationsRequireSupervisorOrAdmin(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	sup := e.login("sup@exemplo.com", testPassword)
-	agent := e.login("agente@exemplo.com", testPassword)
-	admin := e.login("admin@exemplo.com", testPassword)
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	e.User("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	sup := e.Login("sup@exemplo.com", testPassword)
+	agent := e.Login("agente@exemplo.com", testPassword)
+	admin := e.Login("admin@exemplo.com", testPassword)
 
-	orgID := e.organization(sup, "Prefeitura de Itu", "")
-	e.organization(admin, "Câmara de Itu", "")
+	orgID := e.Organization(sup, "Prefeitura de Itu", "")
+	e.Organization(admin, "Câmara de Itu", "")
 
 	body := map[string]string{"name": "Outro órgão"}
-	if resp := e.do(http.MethodPost, "/api/organizations", agent, body); resp.status != http.StatusForbidden {
-		t.Errorf("agent create: status %d, want 403", resp.status)
+	if resp := e.Do(http.MethodPost, "/api/organizations", agent, body); resp.Status != http.StatusForbidden {
+		t.Errorf("agent create: status %d, want 403", resp.Status)
 	}
-	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/organizations/%d", orgID), agent, body); resp.status != http.StatusForbidden {
-		t.Errorf("agent update: status %d, want 403", resp.status)
+	if resp := e.Do(http.MethodPut, fmt.Sprintf("/api/organizations/%d", orgID), agent, body); resp.Status != http.StatusForbidden {
+		t.Errorf("agent update: status %d, want 403", resp.Status)
 	}
 	// Atendentes consultam os órgãos para vincular contatos.
-	if list := e.doList(http.MethodGet, "/api/organizations", agent); len(list) != 2 {
+	if list := e.DoList(http.MethodGet, "/api/organizations", agent); len(list) != 2 {
 		t.Errorf("agent list: %v", list)
 	}
 	for _, req := range []struct{ method, path string }{
@@ -75,13 +49,13 @@ func TestOrganizationsRequireSupervisorOrAdmin(t *testing.T) {
 		{http.MethodPost, "/api/contacts"},
 		{http.MethodPut, "/api/contacts/1"},
 	} {
-		if resp := e.do(req.method, req.path, "", body); resp.status != http.StatusUnauthorized {
-			t.Errorf("no session %s %s: status %d, want 401", req.method, req.path, resp.status)
+		if resp := e.Do(req.method, req.path, "", body); resp.Status != http.StatusUnauthorized {
+			t.Errorf("no session %s %s: status %d, want 401", req.method, req.path, resp.Status)
 		}
 	}
 
 	var orgs int
-	if err := e.pool.QueryRow(t.Context(), "select count(*) from organizations").Scan(&orgs); err != nil {
+	if err := e.Pool.QueryRow(t.Context(), "select count(*) from organizations").Scan(&orgs); err != nil {
 		t.Fatal(err)
 	}
 	if orgs != 2 {
@@ -92,8 +66,8 @@ func TestOrganizationsRequireSupervisorOrAdmin(t *testing.T) {
 func TestOrganizationCNPJValidation(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	admin := e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
+	admin := e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
 
 	valid := []struct{ input, stored string }{
 		{"11.222.333/0001-81", numericCNPJ},
@@ -101,9 +75,9 @@ func TestOrganizationCNPJValidation(t *testing.T) {
 		{"abcdefgh000195", "ABCDEFGH000195"},
 	}
 	for i, tc := range valid {
-		resp := e.do(http.MethodPost, "/api/organizations", token, map[string]string{"name": fmt.Sprintf("Órgão %d", i), "cnpj": tc.input})
-		if resp.status != http.StatusCreated || resp.body["cnpj"] != tc.stored {
-			t.Errorf("valid %q: status %d, body %v", tc.input, resp.status, resp.body)
+		resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]string{"name": fmt.Sprintf("Órgão %d", i), "cnpj": tc.input})
+		if resp.Status != http.StatusCreated || resp.Body["cnpj"] != tc.stored {
+			t.Errorf("valid %q: status %d, body %v", tc.input, resp.Status, resp.Body)
 		}
 	}
 
@@ -118,52 +92,52 @@ func TestOrganizationCNPJValidation(t *testing.T) {
 		"11.222.333/0001-8!",
 	}
 	for _, cnpj := range invalid {
-		resp := e.do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Inválido", "cnpj": cnpj})
-		if resp.status != http.StatusUnprocessableEntity || resp.body["error"] == "" {
-			t.Errorf("invalid %q: status %d, want 422 (body %v)", cnpj, resp.status, resp.body)
+		resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Inválido", "cnpj": cnpj})
+		if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] == "" {
+			t.Errorf("invalid %q: status %d, want 422 (body %v)", cnpj, resp.Status, resp.Body)
 		}
 	}
 
 	// CNPJ é opcional e único quando informado, mesmo com outra formatação.
-	noCNPJ := e.do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Sem CNPJ", "cnpj": "  "})
-	if noCNPJ.status != http.StatusCreated || noCNPJ.body["cnpj"] != nil {
-		t.Fatalf("without cnpj: status %d, body %v", noCNPJ.status, noCNPJ.body)
+	noCNPJ := e.Do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Sem CNPJ", "cnpj": "  "})
+	if noCNPJ.Status != http.StatusCreated || noCNPJ.Body["cnpj"] != nil {
+		t.Fatalf("without cnpj: status %d, body %v", noCNPJ.Status, noCNPJ.Body)
 	}
-	e.organization(token, "Outro sem CNPJ", "")
-	if resp := e.do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Duplicado", "cnpj": numericCNPJ}); resp.status != http.StatusConflict {
-		t.Errorf("duplicate cnpj: status %d, want 409", resp.status)
+	e.Organization(token, "Outro sem CNPJ", "")
+	if resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Duplicado", "cnpj": numericCNPJ}); resp.Status != http.StatusConflict {
+		t.Errorf("duplicate cnpj: status %d, want 409", resp.Status)
 	}
-	if resp := e.do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Duplicado", "cnpj": "12abc34501de35"}); resp.status != http.StatusConflict {
-		t.Errorf("duplicate alphanumeric cnpj in lowercase: status %d, want 409", resp.status)
+	if resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "Duplicado", "cnpj": "12abc34501de35"}); resp.Status != http.StatusConflict {
+		t.Errorf("duplicate alphanumeric cnpj in lowercase: status %d, want 409", resp.Status)
 	}
-	if resp := e.do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "  "}); resp.status != http.StatusUnprocessableEntity {
-		t.Errorf("blank name: status %d, want 422", resp.status)
+	if resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]string{"name": "  "}); resp.Status != http.StatusUnprocessableEntity {
+		t.Errorf("blank name: status %d, want 422", resp.Status)
 	}
 
-	orgID := id(noCNPJ.body)
+	orgID := id(noCNPJ.Body)
 	path := fmt.Sprintf("/api/organizations/%d", orgID)
-	if resp := e.do(http.MethodPut, path, token, map[string]string{"name": "Sem CNPJ", "cnpj": numericCNPJ}); resp.status != http.StatusConflict {
-		t.Errorf("update to existing cnpj: status %d, want 409", resp.status)
+	if resp := e.Do(http.MethodPut, path, token, map[string]string{"name": "Sem CNPJ", "cnpj": numericCNPJ}); resp.Status != http.StatusConflict {
+		t.Errorf("update to existing cnpj: status %d, want 409", resp.Status)
 	}
-	if resp := e.do(http.MethodPut, path, token, map[string]string{"name": "Sem CNPJ", "cnpj": "12345678000100"}); resp.status != http.StatusUnprocessableEntity {
-		t.Errorf("update to invalid cnpj: status %d, want 422", resp.status)
+	if resp := e.Do(http.MethodPut, path, token, map[string]string{"name": "Sem CNPJ", "cnpj": "12345678000100"}); resp.Status != http.StatusUnprocessableEntity {
+		t.Errorf("update to invalid cnpj: status %d, want 422", resp.Status)
 	}
-	resp := e.do(http.MethodPut, path, token, map[string]string{"name": "Prefeitura de Salto", "cnpj": "45.997.418/0001-53"})
-	if resp.status != http.StatusOK || resp.body["name"] != "Prefeitura de Salto" || resp.body["cnpj"] != "45997418000153" {
-		t.Fatalf("update: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodPut, path, token, map[string]string{"name": "Prefeitura de Salto", "cnpj": "45.997.418/0001-53"})
+	if resp.Status != http.StatusOK || resp.Body["name"] != "Prefeitura de Salto" || resp.Body["cnpj"] != "45997418000153" {
+		t.Fatalf("update: status %d, body %v", resp.Status, resp.Body)
 	}
-	resp = e.do(http.MethodPut, path, token, map[string]string{"name": "Prefeitura de Salto", "cnpj": ""})
-	if resp.status != http.StatusOK || resp.body["cnpj"] != nil {
-		t.Fatalf("clear cnpj: status %d, body %v", resp.status, resp.body)
+	resp = e.Do(http.MethodPut, path, token, map[string]string{"name": "Prefeitura de Salto", "cnpj": ""})
+	if resp.Status != http.StatusOK || resp.Body["cnpj"] != nil {
+		t.Fatalf("clear cnpj: status %d, body %v", resp.Status, resp.Body)
 	}
-	if resp := e.do(http.MethodPut, path, token, map[string]string{"name": "Prefeitura de Salto"}); resp.status != http.StatusOK {
-		t.Fatalf("update without changes: status %d", resp.status)
+	if resp := e.Do(http.MethodPut, path, token, map[string]string{"name": "Prefeitura de Salto"}); resp.Status != http.StatusOK {
+		t.Fatalf("update without changes: status %d", resp.Status)
 	}
-	if resp := e.do(http.MethodPut, "/api/organizations/999999", token, map[string]string{"name": "X"}); resp.status != http.StatusNotFound {
-		t.Fatalf("update unknown: status %d, want 404", resp.status)
+	if resp := e.Do(http.MethodPut, "/api/organizations/999999", token, map[string]string{"name": "X"}); resp.Status != http.StatusNotFound {
+		t.Fatalf("update unknown: status %d, want 404", resp.Status)
 	}
 
-	actions, changes := e.auditChanges("organization", orgID)
+	actions, changes := e.AuditChanges("organization", orgID)
 	if len(actions) != 3 || actions[0] != "organization_created" || actions[1] != "organization_updated" || actions[2] != "organization_updated" {
 		t.Fatalf("audit actions: %v", actions)
 	}
@@ -173,7 +147,7 @@ func TestOrganizationCNPJValidation(t *testing.T) {
 	if changes[2]["cnpj"]["to"] != nil || len(changes[2]) != 1 {
 		t.Fatalf("audit clear changes: %v", changes[2])
 	}
-	logs, err := e.q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "organization", EntityID: orgID})
+	logs, err := e.Q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "organization", EntityID: orgID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,26 +159,26 @@ func TestOrganizationCNPJValidation(t *testing.T) {
 func TestContactRegistration(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade")
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
-	sup := e.login("sup@exemplo.com", testPassword)
-	agent := e.login("agente@exemplo.com", testPassword)
-	orgID := e.organization(sup, "Prefeitura de Itu", numericCNPJ)
-	otherOrgID := e.organization(sup, "Câmara de Itu", "")
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	e.User("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
+	sup := e.Login("sup@exemplo.com", testPassword)
+	agent := e.Login("agente@exemplo.com", testPassword)
+	orgID := e.Organization(sup, "Prefeitura de Itu", numericCNPJ)
+	otherOrgID := e.Organization(sup, "Câmara de Itu", "")
 
 	// Atendentes cadastram contatos e os vinculam a um órgão pré-cadastrado.
-	resp := e.do(http.MethodPost, "/api/contacts", agent, map[string]any{"name": " Maria Souza ", "phone": "+55 (11) 98888-0001", "organizationId": orgID, "sectorIds": []int64{contab.ID}})
-	if resp.status != http.StatusCreated {
-		t.Fatalf("create: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodPost, "/api/contacts", agent, map[string]any{"name": " Maria Souza ", "phone": "+55 (11) 98888-0001", "organizationId": orgID, "sectorIds": []int64{contab.ID}})
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("create: status %d, body %v", resp.Status, resp.Body)
 	}
-	org, _ := resp.body["organization"].(map[string]any)
-	if resp.body["name"] != "Maria Souza" || resp.body["phone"] != "5511988880001" || resp.body["registered"] != true ||
+	org, _ := resp.Body["organization"].(map[string]any)
+	if resp.Body["name"] != "Maria Souza" || resp.Body["phone"] != "5511988880001" || resp.Body["registered"] != true ||
 		org["name"] != "Prefeitura de Itu" || org["cnpj"] != numericCNPJ {
-		t.Fatalf("create body: %v", resp.body)
+		t.Fatalf("create body: %v", resp.Body)
 	}
-	contactID := id(resp.body)
-	otherID := e.contact(agent, "João Lima", "5511988880002", otherOrgID, contab.ID)
+	contactID := id(resp.Body)
+	otherID := e.Contact(agent, "João Lima", "5511988880002", otherOrgID, contab.ID)
 
 	cases := []struct {
 		name string
@@ -220,27 +194,27 @@ func TestContactRegistration(t *testing.T) {
 		{"blank name", map[string]any{"name": "  ", "phone": "5511988880003", "organizationId": orgID}, http.StatusUnprocessableEntity},
 	}
 	for _, tc := range cases {
-		resp := e.do(http.MethodPost, "/api/contacts", agent, tc.body)
-		if resp.status != tc.want || resp.body["error"] == "" {
-			t.Errorf("%s: status %d, want %d (body %v)", tc.name, resp.status, tc.want, resp.body)
+		resp := e.Do(http.MethodPost, "/api/contacts", agent, tc.body)
+		if resp.Status != tc.want || resp.Body["error"] == "" {
+			t.Errorf("%s: status %d, want %d (body %v)", tc.name, resp.Status, tc.want, resp.Body)
 		}
 	}
 
 	path := fmt.Sprintf("/api/contacts/%d", contactID)
-	resp = e.do(http.MethodPut, path, agent, map[string]any{"name": "Maria Souza Lima", "phone": "5511988880009", "organizationId": otherOrgID, "sectorIds": []int64{contab.ID}})
-	org, _ = resp.body["organization"].(map[string]any)
-	if resp.status != http.StatusOK || resp.body["name"] != "Maria Souza Lima" || resp.body["phone"] != "5511988880009" || org["name"] != "Câmara de Itu" {
-		t.Fatalf("update: status %d, body %v", resp.status, resp.body)
+	resp = e.Do(http.MethodPut, path, agent, map[string]any{"name": "Maria Souza Lima", "phone": "5511988880009", "organizationId": otherOrgID, "sectorIds": []int64{contab.ID}})
+	org, _ = resp.Body["organization"].(map[string]any)
+	if resp.Status != http.StatusOK || resp.Body["name"] != "Maria Souza Lima" || resp.Body["phone"] != "5511988880009" || org["name"] != "Câmara de Itu" {
+		t.Fatalf("update: status %d, body %v", resp.Status, resp.Body)
 	}
-	if resp := e.do(http.MethodPut, path, agent, map[string]any{"name": "Maria", "phone": "5511988880002", "organizationId": orgID}); resp.status != http.StatusConflict {
-		t.Errorf("update to phone of %d: status %d, want 409", otherID, resp.status)
+	if resp := e.Do(http.MethodPut, path, agent, map[string]any{"name": "Maria", "phone": "5511988880002", "organizationId": orgID}); resp.Status != http.StatusConflict {
+		t.Errorf("update to phone of %d: status %d, want 409", otherID, resp.Status)
 	}
-	if resp := e.do(http.MethodPut, "/api/contacts/999999", agent, map[string]any{"name": "X", "phone": "5511988880010", "organizationId": orgID}); resp.status != http.StatusNotFound {
-		t.Errorf("update unknown: status %d, want 404", resp.status)
+	if resp := e.Do(http.MethodPut, "/api/contacts/999999", agent, map[string]any{"name": "X", "phone": "5511988880010", "organizationId": orgID}); resp.Status != http.StatusNotFound {
+		t.Errorf("update unknown: status %d, want 404", resp.Status)
 	}
 
 	var contacts int
-	if err := e.pool.QueryRow(t.Context(), "select count(*) from contacts").Scan(&contacts); err != nil {
+	if err := e.Pool.QueryRow(t.Context(), "select count(*) from contacts").Scan(&contacts); err != nil {
 		t.Fatal(err)
 	}
 	if contacts != 2 {
@@ -253,18 +227,18 @@ func TestContactRegistration(t *testing.T) {
 func TestContactPhoneUniqueUnderConcurrency(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
-	orgID := e.organization(token, "Prefeitura de Itu", "")
-	contab := e.sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+	orgID := e.Organization(token, "Prefeitura de Itu", "")
+	contab := e.Sector("Contabilidade")
 
 	const attempts = 8
 	statuses := make([]int, attempts)
 	var wg sync.WaitGroup
 	for i := range attempts {
 		wg.Go(func() {
-			resp := e.do(http.MethodPost, "/api/contacts", token, map[string]any{"name": fmt.Sprintf("Pessoa %d", i), "phone": "5511977770000", "organizationId": orgID, "sectorIds": []int64{contab.ID}})
-			statuses[i] = resp.status
+			resp := e.Do(http.MethodPost, "/api/contacts", token, map[string]any{"name": fmt.Sprintf("Pessoa %d", i), "phone": "5511977770000", "organizationId": orgID, "sectorIds": []int64{contab.ID}})
+			statuses[i] = resp.Status
 		})
 	}
 	wg.Wait()
@@ -286,19 +260,19 @@ func TestContactPhoneUniqueUnderConcurrency(t *testing.T) {
 func TestDirectorySearch(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
-	itu := e.organization(token, "Prefeitura de Itu", numericCNPJ)
-	salto := e.organization(token, "Câmara Municipal de Salto", alphanumericCNPJ)
-	e.organization(token, "Fundo 100% Educação", "")
-	contab := e.sector("Contabilidade")
-	e.contact(token, "Maria Souza", "5511988880001", itu, contab.ID)
-	e.contact(token, "José Pereira", "5511977770002", itu, contab.ID)
-	e.contact(token, "Ana Salto", "5519966660003", salto, contab.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+	itu := e.Organization(token, "Prefeitura de Itu", numericCNPJ)
+	salto := e.Organization(token, "Câmara Municipal de Salto", alphanumericCNPJ)
+	e.Organization(token, "Fundo 100% Educação", "")
+	contab := e.Sector("Contabilidade")
+	e.Contact(token, "Maria Souza", "5511988880001", itu, contab.ID)
+	e.Contact(token, "José Pereira", "5511977770002", itu, contab.ID)
+	e.Contact(token, "Ana Salto", "5519966660003", salto, contab.ID)
 
 	search := func(path, q string) []string {
 		t.Helper()
-		return names(e.doList(http.MethodGet, path+"?q="+url.QueryEscape(q), token))
+		return names(e.DoList(http.MethodGet, path+"?q="+url.QueryEscape(q), token))
 	}
 	contactCases := []struct {
 		q    string
@@ -352,13 +326,13 @@ func TestDirectorySearch(t *testing.T) {
 func TestDirectorySearchIsLimited(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.login("admin@exemplo.com", testPassword)
-	if _, err := e.pool.Exec(t.Context(),
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+	if _, err := e.Pool.Exec(t.Context(),
 		`insert into organizations (name) select 'Órgão ' || lpad(n::text, 3, '0') from generate_series(1, 60) n`); err != nil {
 		t.Fatal(err)
 	}
-	list := e.doList(http.MethodGet, "/api/organizations?q=ORGAO", token)
+	list := e.DoList(http.MethodGet, "/api/organizations?q=ORGAO", token)
 	if len(list) != 50 || list[0]["name"] != "Órgão 001" {
 		t.Fatalf("got %d results starting at %v, want the first 50 by name", len(list), list[0]["name"])
 	}
@@ -368,43 +342,43 @@ func TestDirectorySearchIsLimited(t *testing.T) {
 func TestContactSectorsAndModules(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab, rh := e.sector("Contabilidade"), e.sector("RH")
-	ged := e.sector("GED")
-	e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	e.user("suprh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	ana := e.login("ana@exemplo.com", testPassword)
-	sup := e.login("sup@exemplo.com", testPassword)
-	supRH := e.login("suprh@exemplo.com", testPassword)
-	admin := e.login("admin@exemplo.com", testPassword)
-	org := e.organization(admin, "Prefeitura", "")
+	contab, rh := e.Sector("Contabilidade"), e.Sector("RH")
+	ged := e.Sector("GED")
+	e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	e.User("suprh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	ana := e.Login("ana@exemplo.com", testPassword)
+	sup := e.Login("sup@exemplo.com", testPassword)
+	supRH := e.Login("suprh@exemplo.com", testPassword)
+	admin := e.Login("admin@exemplo.com", testPassword)
+	org := e.Organization(admin, "Prefeitura", "")
 
 	module := func(token string, sectorID int64, name string) int64 {
 		t.Helper()
-		resp := e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/modules", sectorID), token, map[string]string{"name": name})
-		if resp.status != http.StatusCreated {
-			t.Fatalf("create module: status %d, body %v", resp.status, resp.body)
+		resp := e.Do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/modules", sectorID), token, map[string]string{"name": name})
+		if resp.Status != http.StatusCreated {
+			t.Fatalf("create module: status %d, body %v", resp.Status, resp.Body)
 		}
-		return id(resp.body)
+		return id(resp.Body)
 	}
 	folha := module(sup, contab.ID, "Folha")
 	patrimonio := module(sup, contab.ID, "Patrimônio")
 	inativo := module(sup, contab.ID, "Inativo")
-	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/sectors/%d/modules/%d", contab.ID, inativo), sup, map[string]any{"name": "Inativo", "active": false}); resp.status != http.StatusOK {
-		t.Fatalf("deactivate module: status %d", resp.status)
+	if resp := e.Do(http.MethodPut, fmt.Sprintf("/api/sectors/%d/modules/%d", contab.ID, inativo), sup, map[string]any{"name": "Inativo", "active": false}); resp.Status != http.StatusOK {
+		t.Fatalf("deactivate module: status %d", resp.Status)
 	}
 	ponto := module(supRH, rh.ID, "Ponto")
 
 	// Módulos ativos: todos os papéis do setor; a rota de gestão continua restrita.
-	if list := e.doList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/active-modules", contab.ID), ana); fmt.Sprint(names(list)) != "[Folha Patrimônio]" {
+	if list := e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/active-modules", contab.ID), ana); fmt.Sprint(names(list)) != "[Folha Patrimônio]" {
 		t.Errorf("active modules: %v", list)
 	}
-	if resp := e.do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/active-modules", rh.ID), ana, nil); resp.status != http.StatusForbidden {
-		t.Errorf("active modules of another sector: status %d, want 403", resp.status)
+	if resp := e.Do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/active-modules", rh.ID), ana, nil); resp.Status != http.StatusForbidden {
+		t.Errorf("active modules of another sector: status %d, want 403", resp.Status)
 	}
-	if resp := e.do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/modules", contab.ID), ana, nil); resp.status != http.StatusForbidden {
-		t.Errorf("modules management by agent: status %d, want 403", resp.status)
+	if resp := e.Do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/modules", contab.ID), ana, nil); resp.Status != http.StatusForbidden {
+		t.Errorf("modules management by agent: status %d, want 403", resp.Status)
 	}
 
 	form := func(sectors, modules []int64) map[string]any {
@@ -412,7 +386,7 @@ func TestContactSectorsAndModules(t *testing.T) {
 	}
 	post := func(token string, sectors, modules []int64) int {
 		t.Helper()
-		return e.do(http.MethodPost, "/api/contacts", token, form(sectors, modules)).status
+		return e.Do(http.MethodPost, "/api/contacts", token, form(sectors, modules)).Status
 	}
 	// Recusas não deixam contato nem vínculo gravado.
 	for _, tc := range []struct {
@@ -434,27 +408,27 @@ func TestContactSectorsAndModules(t *testing.T) {
 			t.Errorf("%s: status %d, want %d", tc.name, got, tc.want)
 		}
 	}
-	if got := e.count("contacts"); got != 0 {
+	if got := e.Count("contacts"); got != 0 {
 		t.Fatalf("contacts = %d, want 0: refused requests must not write", got)
 	}
 
 	// O administrador escolhe vários setores e módulos de qualquer um deles.
-	resp := e.do(http.MethodPost, "/api/contacts", admin, form([]int64{contab.ID, rh.ID}, []int64{folha, ponto}))
-	if resp.status != http.StatusCreated {
-		t.Fatalf("create: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodPost, "/api/contacts", admin, form([]int64{contab.ID, rh.ID}, []int64{folha, ponto}))
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("create: status %d, body %v", resp.Status, resp.Body)
 	}
-	maria := id(resp.body)
+	maria := id(resp.Body)
 	links := func() string {
 		t.Helper()
-		got := e.do(http.MethodGet, fmt.Sprintf("/api/contacts/%d", maria), ana, nil)
-		if got.status != http.StatusOK {
-			t.Fatalf("get contact: status %d", got.status)
+		got := e.Do(http.MethodGet, fmt.Sprintf("/api/contacts/%d", maria), ana, nil)
+		if got.Status != http.StatusOK {
+			t.Fatalf("get contact: status %d", got.Status)
 		}
 		var sectors, modules []string
-		for _, s := range got.body["sectors"].([]any) {
+		for _, s := range got.Body["sectors"].([]any) {
 			sectors = append(sectors, s.(map[string]any)["name"].(string))
 		}
-		for _, m := range got.body["modules"].([]any) {
+		for _, m := range got.Body["modules"].([]any) {
 			modules = append(modules, m.(map[string]any)["name"].(string))
 		}
 		return fmt.Sprint(sectors, modules)
@@ -462,13 +436,13 @@ func TestContactSectorsAndModules(t *testing.T) {
 	if got := links(); got != "[Contabilidade RH] [Folha Ponto]" {
 		t.Fatalf("after create: %s", got)
 	}
-	if resp := e.do(http.MethodGet, "/api/contacts/999999", ana, nil); resp.status != http.StatusNotFound {
-		t.Errorf("get unknown contact: status %d, want 404", resp.status)
+	if resp := e.Do(http.MethodGet, "/api/contacts/999999", ana, nil); resp.Status != http.StatusNotFound {
+		t.Errorf("get unknown contact: status %d, want 404", resp.Status)
 	}
 
 	put := func(token string, sectors, modules []int64) int {
 		t.Helper()
-		return e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", maria), token, form(sectors, modules)).status
+		return e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", maria), token, form(sectors, modules)).Status
 	}
 	// A atendente troca os módulos do próprio setor; os do RH são preservados,
 	// mesmo que o formulário não os traga.
@@ -528,13 +502,13 @@ func TestContactSectorsAndModules(t *testing.T) {
 		{"module of a sector outside the contact", `insert into contact_modules (contact_id, module_id, sector_id) values ($1, $2, $3)`, []any{maria, ponto, rh.ID}},
 		{"module with the wrong sector", `insert into contact_modules (contact_id, module_id, sector_id) values ($1, $2, $3)`, []any{maria, ponto, contab.ID}},
 	} {
-		if _, err := e.pool.Exec(t.Context(), tc.sql, tc.args...); err == nil {
+		if _, err := e.Pool.Exec(t.Context(), tc.sql, tc.args...); err == nil {
 			t.Errorf("%s: accepted by the database", tc.name)
 		}
 	}
 	// Módulo já vinculado continua depois de desativado; a atendente pode mantê-lo ao salvar.
-	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/sectors/%d/modules/%d", contab.ID, folha), sup, map[string]any{"name": "Folha", "active": false}); resp.status != http.StatusOK {
-		t.Fatalf("deactivate module: status %d", resp.status)
+	if resp := e.Do(http.MethodPut, fmt.Sprintf("/api/sectors/%d/modules/%d", contab.ID, folha), sup, map[string]any{"name": "Folha", "active": false}); resp.Status != http.StatusOK {
+		t.Fatalf("deactivate module: status %d", resp.Status)
 	}
 	if got := put(ana, []int64{contab.ID}, []int64{folha}); got != http.StatusOK {
 		t.Errorf("keep deactivated module: status %d", got)
@@ -547,21 +521,21 @@ func TestContactSectorsAndModules(t *testing.T) {
 func TestContactSearchFilters(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab, rh := e.sector("Contabilidade"), e.sector("RH")
-	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
-	sup := e.login("sup@exemplo.com", testPassword)
-	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	admin := e.login("admin@exemplo.com", testPassword)
-	org := e.organization(admin, "Prefeitura", "")
-	resp := e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/modules", contab.ID), sup, map[string]string{"name": "Folha"})
-	folha := id(resp.body)
+	contab, rh := e.Sector("Contabilidade"), e.Sector("RH")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	sup := e.Login("sup@exemplo.com", testPassword)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	admin := e.Login("admin@exemplo.com", testPassword)
+	org := e.Organization(admin, "Prefeitura", "")
+	resp := e.Do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/modules", contab.ID), sup, map[string]string{"name": "Folha"})
+	folha := id(resp.Body)
 
-	e.contact(sup, "Ana", "5511988880001", org, contab.ID)
-	e.contact(admin, "Bia", "5511988880002", org, rh.ID)
-	resp = e.do(http.MethodPost, "/api/contacts", admin, map[string]any{"name": "Cris", "phone": "5511988880003", "organizationId": org,
+	e.Contact(sup, "Ana", "5511988880001", org, contab.ID)
+	e.Contact(admin, "Bia", "5511988880002", org, rh.ID)
+	resp = e.Do(http.MethodPost, "/api/contacts", admin, map[string]any{"name": "Cris", "phone": "5511988880003", "organizationId": org,
 		"sectorIds": []int64{contab.ID, rh.ID}, "moduleIds": []int64{folha}})
-	if resp.status != http.StatusCreated {
-		t.Fatalf("create: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("create: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	for _, tc := range []struct {
@@ -578,13 +552,13 @@ func TestContactSearchFilters(t *testing.T) {
 		// O filtro vale junto com todas as chaves da busca, não só com a última.
 		{fmt.Sprintf("?q=prefeitura&sectorId=%d", rh.ID), []string{"Bia", "Cris"}},
 	} {
-		if got := names(e.doList(http.MethodGet, "/api/contacts"+tc.query, sup)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+		if got := names(e.DoList(http.MethodGet, "/api/contacts"+tc.query, sup)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
 			t.Errorf("contacts%s: got %v, want %v", tc.query, got, tc.want)
 		}
 	}
 	for _, query := range []string{"?sectorId=abc", "?moduleId=0"} {
-		if resp := e.do(http.MethodGet, "/api/contacts"+query, sup, nil); resp.status != http.StatusUnprocessableEntity {
-			t.Errorf("contacts%s: status %d, want 422", query, resp.status)
+		if resp := e.Do(http.MethodGet, "/api/contacts"+query, sup, nil); resp.Status != http.StatusUnprocessableEntity {
+			t.Errorf("contacts%s: status %d, want 422", query, resp.Status)
 		}
 	}
 }
@@ -594,13 +568,13 @@ func TestContactSearchFilters(t *testing.T) {
 func TestContactLinksAreAudited(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab, rh := e.sector("Contabilidade"), e.sector("RH")
-	ana := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
-	admin := e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
-	anaToken := e.login("ana@exemplo.com", testPassword)
-	adminToken := e.login("admin@exemplo.com", testPassword)
-	org := e.organization(adminToken, "Prefeitura", "")
-	folha, err := e.q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: contab.ID, Name: "Folha"})
+	contab, rh := e.Sector("Contabilidade"), e.Sector("RH")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	admin := e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	anaToken := e.Login("ana@exemplo.com", testPassword)
+	adminToken := e.Login("admin@exemplo.com", testPassword)
+	org := e.Organization(adminToken, "Prefeitura", "")
+	folha, err := e.Q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: contab.ID, Name: "Folha"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -608,24 +582,24 @@ func TestContactLinksAreAudited(t *testing.T) {
 		return map[string]any{"name": "Maria", "phone": "5511988880001", "organizationId": org, "sectorIds": sectors, "moduleIds": modules}
 	}
 
-	resp := e.do(http.MethodPost, "/api/contacts", anaToken, form([]int64{contab.ID}, []int64{folha.ID}))
-	if resp.status != http.StatusCreated {
-		t.Fatalf("create: status %d, body %v", resp.status, resp.body)
+	resp := e.Do(http.MethodPost, "/api/contacts", anaToken, form([]int64{contab.ID}, []int64{folha.ID}))
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("create: status %d, body %v", resp.Status, resp.Body)
 	}
-	maria := id(resp.body)
+	maria := id(resp.Body)
 	path := fmt.Sprintf("/api/contacts/%d", maria)
 	// Sem mudança nos vínculos e com recusa, nada é registrado.
-	if resp := e.do(http.MethodPut, path, anaToken, form([]int64{contab.ID}, []int64{folha.ID})); resp.status != http.StatusOK {
-		t.Fatalf("update without changes: status %d", resp.status)
+	if resp := e.Do(http.MethodPut, path, anaToken, form([]int64{contab.ID}, []int64{folha.ID})); resp.Status != http.StatusOK {
+		t.Fatalf("update without changes: status %d", resp.Status)
 	}
-	if resp := e.do(http.MethodPut, path, anaToken, form([]int64{contab.ID, rh.ID}, nil)); resp.status != http.StatusForbidden {
-		t.Fatalf("refused update: status %d", resp.status)
+	if resp := e.Do(http.MethodPut, path, anaToken, form([]int64{contab.ID, rh.ID}, nil)); resp.Status != http.StatusForbidden {
+		t.Fatalf("refused update: status %d", resp.Status)
 	}
-	if resp := e.do(http.MethodPut, path, adminToken, form([]int64{rh.ID}, nil)); resp.status != http.StatusOK {
-		t.Fatalf("admin update: status %d, body %v", resp.status, resp.body)
+	if resp := e.Do(http.MethodPut, path, adminToken, form([]int64{rh.ID}, nil)); resp.Status != http.StatusOK {
+		t.Fatalf("admin update: status %d, body %v", resp.Status, resp.Body)
 	}
 
-	actions, changes := e.auditChanges("contact", maria)
+	actions, changes := e.AuditChanges("contact", maria)
 	if fmt.Sprint(actions) != "[contact_links_updated contact_links_updated]" {
 		t.Fatalf("audit actions: %v", actions)
 	}
@@ -638,7 +612,7 @@ func TestContactLinksAreAudited(t *testing.T) {
 		fmt.Sprint(changes[1]["module_ids"]["to"]) != "[]" {
 		t.Fatalf("audit update: %v", changes[1])
 	}
-	logs, err := e.q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: maria})
+	logs, err := e.Q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: maria})
 	if err != nil {
 		t.Fatal(err)
 	}

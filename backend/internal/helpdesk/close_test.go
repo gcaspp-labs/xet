@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"fmt"
@@ -26,27 +26,27 @@ func newClosing(t *testing.T) closing {
 	c := closing{conversation: newConversation(t)}
 	e := c.e
 	c.assign()
-	c.org = e.organization(c.supToken, "Prefeitura de Campinas", "")
+	c.org = e.Organization(c.supToken, "Prefeitura de Campinas", "")
 	for _, name := range []string{"Folha", "Patrimônio"} {
-		m, err := e.q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: c.sector.ID, Name: name})
+		m, err := e.Q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: c.sector.ID, Name: name})
 		if err != nil {
 			t.Fatal(err)
 		}
 		c.modules = append(c.modules, m.ID)
 	}
-	m, err := e.q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: c.sector.ID, Name: "Antigo"})
+	m, err := e.Q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: c.sector.ID, Name: "Antigo"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.q.UpdateModule(t.Context(), db.UpdateModuleParams{ID: m.ID, Name: m.Name, Active: false}); err != nil {
+	if _, err := e.Q.UpdateModule(t.Context(), db.UpdateModuleParams{ID: m.ID, Name: m.Name, Active: false}); err != nil {
 		t.Fatal(err)
 	}
 	c.inactive = m.ID
-	rh, err := e.q.GetUserByEmail(t.Context(), "rh@exemplo.com")
+	rh, err := e.Q.GetUserByEmail(t.Context(), "rh@exemplo.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err = e.q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: *rh.SectorID, Name: "Folha"})
+	m, err = e.Q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: *rh.SectorID, Name: "Folha"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,11 +56,11 @@ func newClosing(t *testing.T) closing {
 
 // register links the contact of the ticket to the organization.
 func (c closing) register() {
-	c.e.t.Helper()
-	resp := c.e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+	c.e.T.Helper()
+	resp := c.e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
 		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": c.org, "sectorIds": []int64{c.sector.ID}})
-	if resp.status != http.StatusOK {
-		c.e.t.Fatalf("register contact: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK {
+		c.e.T.Fatalf("register contact: status %d, body %v", resp.Status, resp.Body)
 	}
 }
 
@@ -72,8 +72,8 @@ func (c closing) form(org int64) map[string]any {
 }
 
 func (e *testEnv) closeForm(ticketID int64, token string, form map[string]any) response {
-	e.t.Helper()
-	return e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/close", ticketID), token, form)
+	e.T.Helper()
+	return e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/close", ticketID), token, form)
 }
 
 func with(form map[string]any, key string, value any) map[string]any {
@@ -94,14 +94,14 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 	c := newClosing(t)
 	e := c.e
 	c.register()
-	other := e.organization(c.supToken, "Câmara de Campinas", "")
+	other := e.Organization(c.supToken, "Câmara de Campinas", "")
 
 	// O formulário começa com os módulos ativos do setor, o órgão do contato e o início automático.
-	resp := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID), c.anaToken, nil)
-	if resp.status != http.StatusOK {
-		t.Fatalf("closing form: status %d", resp.status)
+	resp := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID), c.anaToken, nil)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("closing form: status %d", resp.Status)
 	}
-	form := resp.body
+	form := resp.Body
 	modules, _ := form["modules"].([]any)
 	if len(modules) != 2 || modules[0].(map[string]any)["name"] != "Folha" || modules[1].(map[string]any)["name"] != "Patrimônio" {
 		t.Fatalf("form modules = %v", form["modules"])
@@ -119,8 +119,8 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 	newEnd := time.Now().Add(-time.Minute).Truncate(time.Minute)
 	events := e.subscribe(c.supToken)
 	resp = e.closeForm(c.ticket.ID, c.anaToken, with(with(c.form(other), "startedAt", newStart), "endedAt", newEnd))
-	if resp.status != http.StatusOK || resp.body["status"] != "closed" {
-		t.Fatalf("close: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "closed" {
+		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
 	}
 	if ev := e.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
 		t.Fatalf("event = %+v", ev)
@@ -132,7 +132,7 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 		startedAt, endedAt      time.Time
 		closedAt                time.Time
 	)
-	if err := e.pool.QueryRow(t.Context(), `
+	if err := e.Pool.QueryRow(t.Context(), `
 		select organization_id, closed_by_id, assignee_id, closure_type::text, subject, started_at, ended_at, closed_at
 		from tickets where id = $1`, c.ticket.ID).
 		Scan(&org, &closedBy, &assignee, &closureType, &subject, &startedAt, &endedAt, &closedAt); err != nil {
@@ -145,7 +145,7 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 	}
 	// A troca de órgão vale só para o chamado.
 	var contactOrg int64
-	if err := e.pool.QueryRow(t.Context(), "select organization_id from contacts where id = $1", c.ticket.ContactID).Scan(&contactOrg); err != nil {
+	if err := e.Pool.QueryRow(t.Context(), "select organization_id from contacts where id = $1", c.ticket.ContactID).Scan(&contactOrg); err != nil {
 		t.Fatal(err)
 	}
 	if contactOrg != c.org {
@@ -153,18 +153,18 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 	}
 
 	// Os módulos e os horários ficam no detalhe do chamado.
-	recorded := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/modules", c.ticket.ID), c.biaToken)
+	recorded := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/modules", c.ticket.ID), c.biaToken)
 	if len(recorded) != 2 || recorded[0]["name"] != "Folha" || recorded[1]["name"] != "Patrimônio" {
 		t.Fatalf("ticket modules = %v", recorded)
 	}
-	detail := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil).body
+	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil).Body
 	if detail["status"] != "closed" || detail["subject"] != "Contracheque" || detail["resolution"] != "Enviada a segunda via." ||
 		detail["organization"].(map[string]any)["name"] != "Câmara de Campinas" || detail["endedAt"] == nil {
 		t.Fatalf("detail = %v", detail)
 	}
 
 	// A conversa mostra o encerramento, com quem encerrou.
-	logs := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.biaToken)
+	logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.biaToken)
 	if len(logs) != 2 || logs[1]["action"] != "ticket_closed" || logs[1]["actor"].(map[string]any)["name"] != "ana@exemplo.com" {
 		t.Fatalf("timeline = %v", logs)
 	}
@@ -191,11 +191,11 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 	}
 
 	// Encerrado, ninguém responde nem encerra de novo.
-	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Mais alguma coisa?"); resp.status != http.StatusConflict {
-		t.Fatalf("send after closing: status %d", resp.status)
+	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Mais alguma coisa?"); resp.Status != http.StatusConflict {
+		t.Fatalf("send after closing: status %d", resp.Status)
 	}
-	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.status != http.StatusConflict {
-		t.Fatalf("closing again: status %d", resp.status)
+	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.Status != http.StatusConflict {
+		t.Fatalf("closing again: status %d", resp.Status)
 	}
 }
 
@@ -205,11 +205,11 @@ func TestCloseWithAutomaticTimes(t *testing.T) {
 	e := c.e
 	c.register()
 	before := time.Now()
-	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.status != http.StatusOK {
-		t.Fatalf("close: status %d, body %v", resp.status, resp.body)
+	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.Status != http.StatusOK {
+		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
 	}
 	var startedAt, endedAt time.Time
-	if err := e.pool.QueryRow(t.Context(), "select started_at, ended_at from tickets where id = $1", c.ticket.ID).
+	if err := e.Pool.QueryRow(t.Context(), "select started_at, ended_at from tickets where id = $1", c.ticket.ID).
 		Scan(&startedAt, &endedAt); err != nil {
 		t.Fatal(err)
 	}
@@ -249,23 +249,23 @@ func TestCloseRequiresTheCompleteForm(t *testing.T) {
 		"start after automatic end": with(form, "startedAt", future),
 	} {
 		resp := e.closeForm(c.ticket.ID, c.anaToken, body)
-		if resp.status != http.StatusUnprocessableEntity {
-			t.Fatalf("%s: status %d, body %v", name, resp.status, resp.body)
+		if resp.Status != http.StatusUnprocessableEntity {
+			t.Fatalf("%s: status %d, body %v", name, resp.Status, resp.Body)
 		}
 	}
 	if got := e.assignment(c.ticket.ID); got.Status != "in_progress" {
 		t.Fatalf("ticket closed by an incomplete form: %+v", got)
 	}
-	if n := e.count("ticket_modules"); n != 0 {
+	if n := e.Count("ticket_modules"); n != 0 {
 		t.Fatalf("ticket_modules rows = %d", n)
 	}
 
 	// Módulo repetido conta uma vez.
 	resp := e.closeForm(c.ticket.ID, c.anaToken, with(form, "moduleIds", []int64{c.modules[0], c.modules[0]}))
-	if resp.status != http.StatusOK {
-		t.Fatalf("close: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
 	}
-	if n := e.count("ticket_modules"); n != 1 {
+	if n := e.Count("ticket_modules"); n != 1 {
 		t.Fatalf("ticket_modules rows = %d", n)
 	}
 }
@@ -279,39 +279,39 @@ func TestOnlyTheAssigneeCloses(t *testing.T) {
 	for name, token := range map[string]string{
 		"agent of the sector": c.biaToken, "supervisor": c.supToken, "admin": c.adminToken,
 	} {
-		if resp := e.closeForm(c.ticket.ID, token, c.form(c.org)); resp.status != http.StatusForbidden {
-			t.Fatalf("%s: status %d", name, resp.status)
+		if resp := e.closeForm(c.ticket.ID, token, c.form(c.org)); resp.Status != http.StatusForbidden {
+			t.Fatalf("%s: status %d", name, resp.Status)
 		}
 	}
-	if resp := e.closeForm(c.ticket.ID, c.rhToken, c.form(c.org)); resp.status != http.StatusForbidden {
-		t.Fatalf("other sector: status %d", resp.status)
+	if resp := e.closeForm(c.ticket.ID, c.rhToken, c.form(c.org)); resp.Status != http.StatusForbidden {
+		t.Fatalf("other sector: status %d", resp.Status)
 	}
 	if status, _, _ := e.get(fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID), c.rhToken); status != http.StatusForbidden {
 		t.Fatalf("closing form from another sector: status %d", status)
 	}
-	if resp := e.closeForm(c.ticket.ID, "", c.form(c.org)); resp.status != http.StatusUnauthorized {
-		t.Fatalf("without session: status %d", resp.status)
+	if resp := e.closeForm(c.ticket.ID, "", c.form(c.org)); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("without session: status %d", resp.Status)
 	}
 
 	// Chamado na fila não é encerrado: é assumido.
 	queued := e.queuedTicket(c.sector.ID, "MSG-2", "5511977776666")
-	if resp := e.closeForm(queued.ID, c.anaToken, c.form(c.org)); resp.status != http.StatusConflict {
-		t.Fatalf("queued ticket: status %d", resp.status)
+	if resp := e.closeForm(queued.ID, c.anaToken, c.form(c.org)); resp.Status != http.StatusConflict {
+		t.Fatalf("queued ticket: status %d", resp.Status)
 	}
 
 	// Após a transferência, encerra o novo responsável, e o anterior não.
 	bia := e.userID("bia@exemplo.com")
-	if resp := e.transfer(c.ticket.ID, bia, c.anaToken); resp.status != http.StatusOK {
-		t.Fatalf("transfer: status %d", resp.status)
+	if resp := e.transfer(c.ticket.ID, bia, c.anaToken); resp.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d", resp.Status)
 	}
-	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.status != http.StatusForbidden {
-		t.Fatalf("previous assignee: status %d", resp.status)
+	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.Status != http.StatusForbidden {
+		t.Fatalf("previous assignee: status %d", resp.Status)
 	}
-	if resp := e.closeForm(c.ticket.ID, c.biaToken, c.form(c.org)); resp.status != http.StatusOK {
-		t.Fatalf("new assignee: status %d, body %v", resp.status, resp.body)
+	if resp := e.closeForm(c.ticket.ID, c.biaToken, c.form(c.org)); resp.Status != http.StatusOK {
+		t.Fatalf("new assignee: status %d, body %v", resp.Status, resp.Body)
 	}
 	var closedBy int64
-	if err := e.pool.QueryRow(t.Context(), "select closed_by_id from tickets where id = $1", c.ticket.ID).Scan(&closedBy); err != nil {
+	if err := e.Pool.QueryRow(t.Context(), "select closed_by_id from tickets where id = $1", c.ticket.ID).Scan(&closedBy); err != nil {
 		t.Fatal(err)
 	}
 	if closedBy != bia {
@@ -325,13 +325,13 @@ func TestUnknownNumberMustBeRegisteredBeforeClosing(t *testing.T) {
 	e := c.e
 
 	// Sem cadastro, o formulário não sugere órgão e o encerramento é recusado.
-	form := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID), c.anaToken, nil).body
+	form := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID), c.anaToken, nil).Body
 	if form["organization"] != nil {
 		t.Fatalf("organization suggested for an unknown number: %v", form["organization"])
 	}
 	resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org))
-	if resp.status != http.StatusUnprocessableEntity || resp.body["error"] != "Cadastre o contato e vincule-o a um órgão antes de encerrar." {
-		t.Fatalf("unregistered contact: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Cadastre o contato e vincule-o a um órgão antes de encerrar." {
+		t.Fatalf("unregistered contact: status %d, body %v", resp.Status, resp.Body)
 	}
 	if got := e.assignment(c.ticket.ID); got.Status != "in_progress" {
 		t.Fatalf("ticket = %+v", got)
@@ -339,12 +339,12 @@ func TestUnknownNumberMustBeRegisteredBeforeClosing(t *testing.T) {
 
 	// Cadastrado e vinculado a um órgão, o formulário sugere esse órgão e o chamado encerra.
 	c.register()
-	form = e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID), c.anaToken, nil).body
+	form = e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID), c.anaToken, nil).Body
 	if form["organization"] == nil || form["organization"].(map[string]any)["id"] != float64(c.org) {
 		t.Fatalf("suggested organization = %v", form["organization"])
 	}
-	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.status != http.StatusOK {
-		t.Fatalf("close: status %d, body %v", resp.status, resp.body)
+	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.Status != http.StatusOK {
+		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
 	}
 }
 
@@ -353,8 +353,8 @@ func TestMessageAfterClosingByTheFormOpensNewTicket(t *testing.T) {
 	c := newClosing(t)
 	e := c.e
 	c.register()
-	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.status != http.StatusOK {
-		t.Fatalf("close: status %d, body %v", resp.status, resp.body)
+	if resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)); resp.Status != http.StatusOK {
+		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	e.receive(c.sector.ID, text("MSG-9", "5511988887777@s.whatsapp.net", "5511988887777", "Outra dúvida"))
@@ -369,7 +369,7 @@ func TestMessageAfterClosingByTheFormOpensNewTicket(t *testing.T) {
 	if got := len(e.messages(c.ticket.ID)); got != 1 {
 		t.Fatalf("messages of the closed ticket = %d", got)
 	}
-	history := e.doList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
+	history := e.DoList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
 	if len(history) != 2 || history[1]["status"] != "closed" || history[1]["subject"] != "Contracheque" {
 		t.Fatalf("history = %v", history)
 	}
@@ -386,7 +386,7 @@ func TestConcurrentClosingClosesOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range attempts {
 		wg.Go(func() {
-			statuses[i] = e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)).status
+			statuses[i] = e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)).Status
 		})
 	}
 	wg.Wait()
@@ -403,7 +403,7 @@ func TestConcurrentClosingClosesOnce(t *testing.T) {
 	if ok != 1 {
 		t.Fatalf("statuses = %v, want one success", statuses)
 	}
-	if n := e.count("ticket_modules"); n != 2 {
+	if n := e.Count("ticket_modules"); n != 2 {
 		t.Fatalf("ticket_modules rows = %d", n)
 	}
 	if actions, _ := c.ticketActions(); len(actions) != 3 {
@@ -427,7 +427,7 @@ func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
 	}
 	ticketOrg := func(id int64) *int64 {
 		var org *int64
-		if err := e.pool.QueryRow(t.Context(), "select organization_id from tickets where id = $1", id).Scan(&org); err != nil {
+		if err := e.Pool.QueryRow(t.Context(), "select organization_id from tickets where id = $1", id).Scan(&org); err != nil {
 			t.Fatal(err)
 		}
 		return org
@@ -441,20 +441,20 @@ func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
 		t.Fatalf("audit = %v %v", actions, changes)
 	}
 	var actor int64
-	if err := e.pool.QueryRow(t.Context(),
+	if err := e.Pool.QueryRow(t.Context(),
 		"select actor_id from audit_logs where ticket_id = $1 and action = 'ticket_organization_linked'", c.ticket.ID).Scan(&actor); err != nil {
 		t.Fatal(err)
 	}
 	if actor != c.ana.ID {
 		t.Fatalf("actor = %d", actor)
 	}
-	detail := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil).body
+	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil).Body
 	if detail["organization"] == nil || detail["organization"].(map[string]any)["id"] != float64(c.org) {
 		t.Fatalf("detail organization = %v", detail["organization"])
 	}
 
 	// Chamado que já tem órgão não muda quando o cadastro troca o órgão principal.
-	rh, err := e.q.GetUserByEmail(t.Context(), "rh@exemplo.com")
+	rh, err := e.Q.GetUserByEmail(t.Context(), "rh@exemplo.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,11 +463,11 @@ func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
 	if rhTicket.OrganizationID == nil || *rhTicket.OrganizationID != c.org {
 		t.Fatalf("rh ticket organization = %v", rhTicket.OrganizationID)
 	}
-	other := e.organization(c.supToken, "Câmara de Campinas", "")
-	resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+	other := e.Organization(c.supToken, "Câmara de Campinas", "")
+	resp := e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
 		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": other, "sectorIds": []int64{c.sector.ID}})
-	if resp.status != http.StatusOK {
-		t.Fatalf("update contact: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("update contact: status %d, body %v", resp.Status, resp.Body)
 	}
 	if org := ticketOrg(c.ticket.ID); *org != c.org {
 		t.Fatalf("ticket organization changed to %d", *org)
@@ -480,9 +480,9 @@ func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
 	}
 
 	// Cadastro inválido não grava nada.
-	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
-		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": 999999, "sectorIds": []int64{c.sector.ID}}); resp.status == http.StatusOK {
-		t.Fatalf("unknown organization accepted: %v", resp.body)
+	if resp := e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": 999999, "sectorIds": []int64{c.sector.ID}}); resp.Status == http.StatusOK {
+		t.Fatalf("unknown organization accepted: %v", resp.Body)
 	}
 }
 
@@ -495,10 +495,10 @@ func TestRegisteringContactWhileClosingDoesNotDeadlock(t *testing.T) {
 	// Encerramento e novo cadastro ao mesmo tempo travam na mesma ordem: os dois terminam.
 	var wg sync.WaitGroup
 	var closeStatus, registerStatus int
-	wg.Go(func() { closeStatus = e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)).status })
+	wg.Go(func() { closeStatus = e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)).Status })
 	wg.Go(func() {
-		registerStatus = e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
-			map[string]any{"name": "Maria Silva", "phone": "5511988887777", "organizationId": c.org, "sectorIds": []int64{c.sector.ID}}).status
+		registerStatus = e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+			map[string]any{"name": "Maria Silva", "phone": "5511988887777", "organizationId": c.org, "sectorIds": []int64{c.sector.ID}}).Status
 	})
 	wg.Wait()
 	if closeStatus != http.StatusOK || registerStatus != http.StatusOK {
@@ -514,13 +514,13 @@ func TestClosingFormReturnsTheModulesOfTheContact(t *testing.T) {
 	path := fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID)
 	marked := func() []any {
 		t.Helper()
-		resp := e.do(http.MethodGet, path, c.anaToken, nil)
-		if resp.status != http.StatusOK {
-			t.Fatalf("closing form: status %d", resp.status)
+		resp := e.Do(http.MethodGet, path, c.anaToken, nil)
+		if resp.Status != http.StatusOK {
+			t.Fatalf("closing form: status %d", resp.Status)
 		}
-		list, ok := resp.body["contactModuleIds"].([]any)
+		list, ok := resp.Body["contactModuleIds"].([]any)
 		if !ok {
-			t.Fatalf("contactModuleIds: %v", resp.body["contactModuleIds"])
+			t.Fatalf("contactModuleIds: %v", resp.Body["contactModuleIds"])
 		}
 		return list
 	}
@@ -530,24 +530,24 @@ func TestClosingFormReturnsTheModulesOfTheContact(t *testing.T) {
 
 	// O contato tem um módulo do setor, e um do RH, que o administrador marcou.
 	var rhSector int64
-	if err := e.pool.QueryRow(t.Context(), "select sector_id from modules where id = $1", c.rhModule).Scan(&rhSector); err != nil {
+	if err := e.Pool.QueryRow(t.Context(), "select sector_id from modules where id = $1", c.rhModule).Scan(&rhSector); err != nil {
 		t.Fatal(err)
 	}
-	resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.adminToken, map[string]any{
+	resp := e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.adminToken, map[string]any{
 		"name": "Maria", "phone": "5511988887777", "organizationId": c.org,
 		"sectorIds": []int64{c.sector.ID, rhSector}, "moduleIds": []int64{c.modules[0], c.rhModule},
 	})
-	if resp.status != http.StatusOK {
-		t.Fatalf("update contact: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("update contact: status %d, body %v", resp.Status, resp.Body)
 	}
 	if got := marked(); len(got) != 1 || int64(got[0].(float64)) != c.modules[0] {
 		t.Fatalf("marked = %v, want only %d", got, c.modules[0])
 	}
 
 	// Desativado depois, o módulo deixa de vir marcado.
-	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/sectors/%d/modules/%d", c.sector.ID, c.modules[0]), c.supToken,
-		map[string]any{"name": "Folha", "active": false}); resp.status != http.StatusOK {
-		t.Fatalf("deactivate: status %d", resp.status)
+	if resp := e.Do(http.MethodPut, fmt.Sprintf("/api/sectors/%d/modules/%d", c.sector.ID, c.modules[0]), c.supToken,
+		map[string]any{"name": "Folha", "active": false}); resp.Status != http.StatusOK {
+		t.Fatalf("deactivate: status %d", resp.Status)
 	}
 	if got := marked(); len(got) != 0 {
 		t.Fatalf("inactive module marked: %v", got)

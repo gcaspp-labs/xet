@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"fmt"
@@ -28,10 +28,10 @@ func newSectorTransfer(t *testing.T) sectorTransfer {
 }
 
 func (e *testEnv) userSector(email string) *int64 {
-	e.t.Helper()
-	u, err := e.q.GetUserByEmail(e.t.Context(), email)
+	e.T.Helper()
+	u, err := e.Q.GetUserByEmail(e.T.Context(), email)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return u.SectorID
 }
@@ -41,8 +41,8 @@ func (c sectorTransfer) transferForm(sectorID int64) map[string]any {
 }
 
 func (e *testEnv) transferSector(ticketID int64, token string, body map[string]any) response {
-	e.t.Helper()
-	return e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/transfer-sector", ticketID), token, body)
+	e.T.Helper()
+	return e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/transfer-sector", ticketID), token, body)
 }
 
 func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
@@ -52,7 +52,7 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 	e.connectSector(c.rh)
 
 	// O destino oferecido é outro setor ativo.
-	sectors := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/transfer-sectors", c.ticket.ID), c.anaToken)
+	sectors := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/transfer-sectors", c.ticket.ID), c.anaToken)
 	if len(sectors) != 1 || sectors[0]["id"] != float64(c.rh) || sectors[0]["name"] != "RH" {
 		t.Fatalf("transfer sectors = %v", sectors)
 	}
@@ -61,10 +61,10 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 	destination := e.subscribe(c.rhToken)
 	before := time.Now()
 	resp := e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh))
-	if resp.status != http.StatusOK {
-		t.Fatalf("transfer: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
 	}
-	nextID := int64(resp.body["id"].(float64))
+	nextID := int64(resp.Body["id"].(float64))
 	if ev := e.nextEvent(origin); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
 		t.Fatalf("origin event = %+v", ev)
 	}
@@ -75,7 +75,7 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 	// A etapa de origem fica encerrada como transferida, com o formulário completo.
 	var closureType, subject string
 	var closedBy int64
-	if err := e.pool.QueryRow(t.Context(), `
+	if err := e.Pool.QueryRow(t.Context(), `
 		select closure_type::text, subject, closed_by_id from tickets where id = $1`, c.ticket.ID).
 		Scan(&closureType, &subject, &closedBy); err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 	if closureType != "transferred" || subject != "Contracheque" || closedBy != c.ana.ID {
 		t.Fatalf("origin: type %s, subject %s, closed by %d", closureType, subject, closedBy)
 	}
-	if n := e.count("ticket_modules"); n != 2 {
+	if n := e.Count("ticket_modules"); n != 2 {
 		t.Fatalf("ticket_modules rows = %d", n)
 	}
 
@@ -94,7 +94,7 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 		t.Fatalf("destination tickets = %+v", tickets)
 	}
 	var previous int64
-	if err := e.pool.QueryRow(t.Context(), "select previous_ticket_id from tickets where id = $1", nextID).Scan(&previous); err != nil {
+	if err := e.Pool.QueryRow(t.Context(), "select previous_ticket_id from tickets where id = $1", nextID).Scan(&previous); err != nil {
 		t.Fatal(err)
 	}
 	if previous != c.ticket.ID {
@@ -111,12 +111,12 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 	}
 
 	// A origem mostra para onde foi e quem transferiu, sem acesso ao chamado do destino.
-	detail := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil).body
+	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil).Body
 	next, _ := detail["next"].(map[string]any)
 	if detail["closureType"] != "transferred" || next == nil || next["sectorName"] != "RH" || next["protocol"] != tickets[0].Protocol {
 		t.Fatalf("origin detail = %v", detail)
 	}
-	logs := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.biaToken)
+	logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.biaToken)
 	if l := logs[len(logs)-1]; l["action"] != "ticket_transferred_sector" || l["toSectorName"] != "RH" ||
 		l["actor"].(map[string]any)["name"] != "ana@exemplo.com" {
 		t.Fatalf("origin timeline = %v", logs)
@@ -126,7 +126,7 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 	}
 
 	// O destino vê a origem e lê a conversa anterior completa, sem agir nela.
-	detail = e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", nextID), c.rhToken, nil).body
+	detail = e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", nextID), c.rhToken, nil).Body
 	prev, _ := detail["previous"].(map[string]any)
 	if prev == nil || prev["id"] != float64(c.ticket.ID) || prev["sectorName"] != "Contabilidade" ||
 		prev["subject"] != "Contracheque" || prev["resolution"] != "Enviada a segunda via." || prev["closedByName"] != "ana@exemplo.com" {
@@ -137,26 +137,26 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 			t.Fatalf("destination reading origin%s: status %d", path, status)
 		}
 	}
-	if got := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/messages", c.ticket.ID), c.rhToken); len(got) != 1 {
+	if got := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/messages", c.ticket.ID), c.rhToken); len(got) != 1 {
 		t.Fatalf("origin messages = %v", got)
 	}
-	if r := e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notes", c.ticket.ID), c.rhToken, map[string]string{"body": "Nota"}); r.status != http.StatusForbidden {
-		t.Fatalf("note on origin from destination: status %d", r.status)
+	if r := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notes", c.ticket.ID), c.rhToken, map[string]string{"body": "Nota"}); r.Status != http.StatusForbidden {
+		t.Fatalf("note on origin from destination: status %d", r.Status)
 	}
 	body := c.data()
 	body["subject"] = "Outro"
-	if r := e.correct(c.ticket.ID, c.rhToken, body); r.status != http.StatusForbidden {
-		t.Fatalf("correction from destination: status %d", r.status)
+	if r := e.correct(c.ticket.ID, c.rhToken, body); r.Status != http.StatusForbidden {
+		t.Fatalf("correction from destination: status %d", r.Status)
 	}
 
 	// Ao assumir, o destino escreve a primeira mensagem, enviada pelo próprio número.
-	if r := e.assign(nextID, c.rhToken); r.status != http.StatusOK {
-		t.Fatalf("assign destination: status %d", r.status)
+	if r := e.assign(nextID, c.rhToken); r.Status != http.StatusOK {
+		t.Fatalf("assign destination: status %d", r.Status)
 	}
-	if r := e.sendText(nextID, c.rhToken, requestA, "Olá, aqui é o RH."); r.status != http.StatusOK {
-		t.Fatalf("first message: status %d, body %v", r.status, r.body)
+	if r := e.sendText(nextID, c.rhToken, requestA, "Olá, aqui é o RH."); r.Status != http.StatusOK {
+		t.Fatalf("first message: status %d, body %v", r.Status, r.Body)
 	}
-	sent := e.whatsapp.SentMessages()
+	sent := e.WhatsApp.SentMessages()
 	if msg, ok := sent[len(sent)-1].(messaging.TextMessage); !ok || msg.SectorID != c.rh || msg.Body != "Olá, aqui é o RH." {
 		t.Fatalf("WhatsApp message = %+v", sent[len(sent)-1])
 	}
@@ -166,9 +166,9 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 // as a correction.
 func (c sectorTransfer) data() map[string]any {
 	var startedAt, endedAt time.Time
-	if err := c.e.pool.QueryRow(c.e.t.Context(), "select started_at, ended_at from tickets where id = $1", c.ticket.ID).
+	if err := c.e.Pool.QueryRow(c.e.T.Context(), "select started_at, ended_at from tickets where id = $1", c.ticket.ID).
 		Scan(&startedAt, &endedAt); err != nil {
-		c.e.t.Fatal(err)
+		c.e.T.Fatal(err)
 	}
 	return map[string]any{
 		"subject": "Contracheque", "resolution": "Enviada a segunda via.", "moduleIds": c.modules,
@@ -185,8 +185,8 @@ func TestOnlyTheAssigneeTransfersToAnotherSector(t *testing.T) {
 	for name, token := range map[string]string{
 		"agent of the sector": c.biaToken, "supervisor": c.supToken, "admin": c.adminToken, "other sector": c.rhToken,
 	} {
-		if resp := e.transferSector(c.ticket.ID, token, form); resp.status != http.StatusForbidden {
-			t.Fatalf("%s: status %d", name, resp.status)
+		if resp := e.transferSector(c.ticket.ID, token, form); resp.Status != http.StatusForbidden {
+			t.Fatalf("%s: status %d", name, resp.Status)
 		}
 	}
 	for name, body := range map[string]map[string]any{
@@ -198,8 +198,8 @@ func TestOnlyTheAssigneeTransfersToAnotherSector(t *testing.T) {
 		"inactive module":   with(form, "moduleIds", []int64{c.inactive}),
 		"end in the future": with(form, "endedAt", time.Now().Add(time.Hour)),
 	} {
-		if resp := e.transferSector(c.ticket.ID, c.anaToken, body); resp.status != http.StatusUnprocessableEntity {
-			t.Fatalf("%s: status %d, body %v", name, resp.status, resp.body)
+		if resp := e.transferSector(c.ticket.ID, c.anaToken, body); resp.Status != http.StatusUnprocessableEntity {
+			t.Fatalf("%s: status %d, body %v", name, resp.Status, resp.Body)
 		}
 	}
 	if got := e.assignment(c.ticket.ID); got.Status != "in_progress" {
@@ -211,8 +211,8 @@ func TestOnlyTheAssigneeTransfersToAnotherSector(t *testing.T) {
 
 	// Chamado na fila não é transferido: é assumido.
 	queued := e.queuedTicket(c.sector.ID, "MSG-2", "5511977776666")
-	if resp := e.transferSector(queued.ID, c.anaToken, form); resp.status != http.StatusConflict {
-		t.Fatalf("queued ticket: status %d", resp.status)
+	if resp := e.transferSector(queued.ID, c.anaToken, form); resp.Status != http.StatusConflict {
+		t.Fatalf("queued ticket: status %d", resp.Status)
 	}
 }
 
@@ -221,8 +221,8 @@ func TestUnregisteredContactIsNotTransferredToAnotherSector(t *testing.T) {
 	c := sectorTransfer{closing: newClosing(t)}
 	c.rh = *c.e.userSector("rh@exemplo.com")
 	resp := c.e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh))
-	if resp.status != http.StatusUnprocessableEntity || resp.body["error"] != "Cadastre o contato e vincule-o a um órgão antes de transferir." {
-		t.Fatalf("status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Cadastre o contato e vincule-o a um órgão antes de transferir." {
+		t.Fatalf("status %d, body %v", resp.Status, resp.Body)
 	}
 }
 
@@ -235,14 +235,14 @@ func TestTransferToSectorWithOpenTicketIsRefused(t *testing.T) {
 	e.receive(c.rh, text("RH-1", "5511988887777@s.whatsapp.net", "5511988887777", "Férias"))
 
 	resp := e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh))
-	if resp.status != http.StatusConflict || resp.body["error"] != "O contato já tem chamado aberto no setor de destino. Nada foi transferido." {
-		t.Fatalf("status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusConflict || resp.Body["error"] != "O contato já tem chamado aberto no setor de destino. Nada foi transferido." {
+		t.Fatalf("status %d, body %v", resp.Status, resp.Body)
 	}
 	// Nada foi encerrado nem criado.
 	if got := e.assignment(c.ticket.ID); got.Status != "in_progress" {
 		t.Fatalf("origin = %+v", got)
 	}
-	if n := e.count("ticket_modules"); n != 0 {
+	if n := e.Count("ticket_modules"); n != 0 {
 		t.Fatalf("ticket_modules rows = %d", n)
 	}
 	if got := e.tickets(c.rh); len(got) != 1 {
@@ -263,7 +263,7 @@ func TestConcurrentTransfersToAnotherSectorTransferOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range attempts {
 		wg.Go(func() {
-			statuses[i] = e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)).status
+			statuses[i] = e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)).Status
 		})
 	}
 	wg.Wait()
@@ -289,15 +289,15 @@ func TestTransferLinksTheContactToTheTargetSector(t *testing.T) {
 	t.Parallel()
 	c := newSectorTransfer(t)
 	e := c.e
-	if resp := e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)); resp.status != http.StatusOK {
-		t.Fatalf("transfer: status %d, body %v", resp.status, resp.body)
+	if resp := e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)); resp.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
 	}
 	want := []int64{c.sector.ID, c.rh}
 	slices.Sort(want)
 	if got := e.contactSectors(c.ticket.ContactID); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("sectors = %v, want %v", got, want)
 	}
-	actions, changes := e.auditChanges("contact", c.ticket.ContactID)
+	actions, changes := e.AuditChanges("contact", c.ticket.ContactID)
 	if last := len(actions) - 1; actions[last] != "contact_sector_linked" || changes[last]["sector_id"]["to"] != float64(c.rh) {
 		t.Fatalf("audit: %v %v", actions, changes)
 	}

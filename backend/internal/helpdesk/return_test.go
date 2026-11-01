@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ import (
 )
 
 func (e *testEnv) returnToQueue(ticketID int64, token string) response {
-	e.t.Helper()
-	return e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/return", ticketID), token, nil)
+	e.T.Helper()
+	return e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/return", ticketID), token, nil)
 }
 
 func TestReturnToQueueAndSomeoneElseAssigns(t *testing.T) {
@@ -22,14 +22,14 @@ func TestReturnToQueueAndSomeoneElseAssigns(t *testing.T) {
 	c.assign()
 	bia := e.userID("bia@exemplo.com")
 	before := e.assignment(c.ticket.ID)
-	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Vou verificar."); resp.status != http.StatusOK {
-		t.Fatalf("send before returning: status %d", resp.status)
+	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Vou verificar."); resp.Status != http.StatusOK {
+		t.Fatalf("send before returning: status %d", resp.Status)
 	}
 
 	events := e.subscribe(c.supToken)
 	resp := e.returnToQueue(c.ticket.ID, c.anaToken)
-	if resp.status != http.StatusOK || resp.body["status"] != "queued" || resp.body["assigneeId"] != nil {
-		t.Fatalf("return: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["status"] != "queued" || resp.Body["assigneeId"] != nil {
+		t.Fatalf("return: status %d, body %v", resp.Status, resp.Body)
 	}
 	// O setor é avisado depois do commit.
 	if ev := e.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
@@ -43,8 +43,8 @@ func TestReturnToQueueAndSomeoneElseAssigns(t *testing.T) {
 	}
 
 	// Quem devolveu não responde mais; a mensagem do cliente entra no mesmo chamado.
-	if resp := e.sendText(c.ticket.ID, c.anaToken, requestB, "Ainda estou aqui"); resp.status != http.StatusForbidden {
-		t.Fatalf("previous assignee sending: status %d", resp.status)
+	if resp := e.sendText(c.ticket.ID, c.anaToken, requestB, "Ainda estou aqui"); resp.Status != http.StatusForbidden {
+		t.Fatalf("previous assignee sending: status %d", resp.Status)
 	}
 	e.receive(c.sector.ID, text("MSG-2", "5511988887777@s.whatsapp.net", "5511988887777", "Alguém pode ajudar?"))
 	if tickets := e.tickets(c.sector.ID); len(tickets) != 1 {
@@ -52,15 +52,15 @@ func TestReturnToQueueAndSomeoneElseAssigns(t *testing.T) {
 	}
 
 	// Outra pessoa assume e responde; o horário da primeira vez não muda.
-	if resp := e.assign(c.ticket.ID, c.biaToken); resp.status != http.StatusOK {
-		t.Fatalf("assign after return: status %d, body %v", resp.status, resp.body)
+	if resp := e.assign(c.ticket.ID, c.biaToken); resp.Status != http.StatusOK {
+		t.Fatalf("assign after return: status %d, body %v", resp.Status, resp.Body)
 	}
 	assigned := e.assignment(c.ticket.ID)
 	if assigned.Status != "in_progress" || *assigned.AssigneeID != bia || !assigned.AssignedAt.Equal(*before.AssignedAt) {
 		t.Fatalf("assignment after new assign = %+v (before %+v)", assigned, before)
 	}
-	if resp := e.sendText(c.ticket.ID, c.biaToken, requestC, "Assumi o seu atendimento."); resp.status != http.StatusOK {
-		t.Fatalf("new assignee sending: status %d, body %v", resp.status, resp.body)
+	if resp := e.sendText(c.ticket.ID, c.biaToken, requestC, "Assumi o seu atendimento."); resp.Status != http.StatusOK {
+		t.Fatalf("new assignee sending: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	// Auditoria com a situação e o responsável, e quem fez.
@@ -74,7 +74,7 @@ func TestReturnToQueueAndSomeoneElseAssigns(t *testing.T) {
 		t.Fatalf("return changes = %v", returned)
 	}
 	var actor int64
-	if err := e.pool.QueryRow(t.Context(),
+	if err := e.Pool.QueryRow(t.Context(),
 		"select actor_id from audit_logs where ticket_id = $1 and action = 'ticket_returned'", c.ticket.ID).Scan(&actor); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestReturnToQueueAndSomeoneElseAssigns(t *testing.T) {
 	}
 
 	// A conversa mostra a devolução, com quem fez e de quem era o chamado.
-	logs := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.supToken)
+	logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.supToken)
 	if len(logs) != 3 {
 		t.Fatalf("assignments = %v", logs)
 	}
@@ -101,12 +101,12 @@ func TestReturnToQueuePermissions(t *testing.T) {
 	c := newConversation(t)
 	e := c.e
 	rhSector := e.userSector("rh@exemplo.com")
-	e.user("suprh@exemplo.com", db.UserRoleSupervisor, rhSector)
-	supRHToken := e.login("suprh@exemplo.com", testPassword)
+	e.User("suprh@exemplo.com", db.UserRoleSupervisor, rhSector)
+	supRHToken := e.Login("suprh@exemplo.com", testPassword)
 
 	// Chamado na fila é recusado, mesmo para a supervisão.
-	if resp := e.returnToQueue(c.ticket.ID, c.supToken); resp.status != http.StatusConflict {
-		t.Fatalf("queued ticket: status %d", resp.status)
+	if resp := e.returnToQueue(c.ticket.ID, c.supToken); resp.Status != http.StatusConflict {
+		t.Fatalf("queued ticket: status %d", resp.Status)
 	}
 	c.assign()
 	if actions, _ := c.ticketActions(); len(actions) != 1 {
@@ -117,15 +117,15 @@ func TestReturnToQueuePermissions(t *testing.T) {
 	for name, token := range map[string]string{
 		"another agent": c.biaToken, "agent of another sector": c.rhToken, "supervisor of another sector": supRHToken,
 	} {
-		if resp := e.returnToQueue(c.ticket.ID, token); resp.status != http.StatusForbidden {
-			t.Fatalf("%s: status %d", name, resp.status)
+		if resp := e.returnToQueue(c.ticket.ID, token); resp.Status != http.StatusForbidden {
+			t.Fatalf("%s: status %d", name, resp.Status)
 		}
 	}
-	if resp := e.returnToQueue(c.ticket.ID, ""); resp.status != http.StatusUnauthorized {
-		t.Fatalf("without session: status %d", resp.status)
+	if resp := e.returnToQueue(c.ticket.ID, ""); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("without session: status %d", resp.Status)
 	}
-	if resp := e.returnToQueue(999999, c.adminToken); resp.status != http.StatusNotFound {
-		t.Fatalf("unknown ticket: status %d", resp.status)
+	if resp := e.returnToQueue(999999, c.adminToken); resp.Status != http.StatusNotFound {
+		t.Fatalf("unknown ticket: status %d", resp.Status)
 	}
 	if got := e.assignment(c.ticket.ID); got.Status != "in_progress" || *got.AssigneeID != c.ana.ID {
 		t.Fatalf("refused returns changed the ticket: %+v", got)
@@ -135,17 +135,17 @@ func TestReturnToQueuePermissions(t *testing.T) {
 	}
 
 	// Supervisor e administrador devolvem o chamado de outro atendente.
-	if resp := e.returnToQueue(c.ticket.ID, c.supToken); resp.status != http.StatusOK {
-		t.Fatalf("supervisor: status %d, body %v", resp.status, resp.body)
+	if resp := e.returnToQueue(c.ticket.ID, c.supToken); resp.Status != http.StatusOK {
+		t.Fatalf("supervisor: status %d, body %v", resp.Status, resp.Body)
 	}
 	c.assign()
-	if resp := e.returnToQueue(c.ticket.ID, c.adminToken); resp.status != http.StatusOK {
-		t.Fatalf("admin: status %d, body %v", resp.status, resp.body)
+	if resp := e.returnToQueue(c.ticket.ID, c.adminToken); resp.Status != http.StatusOK {
+		t.Fatalf("admin: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	// Repetir a devolução é recusado e não grava de novo.
-	if resp := e.returnToQueue(c.ticket.ID, c.adminToken); resp.status != http.StatusConflict {
-		t.Fatalf("repeated return: status %d", resp.status)
+	if resp := e.returnToQueue(c.ticket.ID, c.adminToken); resp.Status != http.StatusConflict {
+		t.Fatalf("repeated return: status %d", resp.Status)
 	}
 	actions, _ := c.ticketActions()
 	if len(actions) != 4 || actions[1] != "ticket_returned" || actions[3] != "ticket_returned" {
@@ -154,16 +154,16 @@ func TestReturnToQueuePermissions(t *testing.T) {
 
 	// Chamado encerrado ou cancelado é recusado.
 	c.assign()
-	e.closeTicket(c.ticket.ID, c.ana.ID, e.organization(c.supToken, "Prefeitura", ""))
-	if resp := e.returnToQueue(c.ticket.ID, c.anaToken); resp.status != http.StatusConflict {
-		t.Fatalf("closed ticket: status %d", resp.status)
+	e.closeTicket(c.ticket.ID, c.ana.ID, e.Organization(c.supToken, "Prefeitura", ""))
+	if resp := e.returnToQueue(c.ticket.ID, c.anaToken); resp.Status != http.StatusConflict {
+		t.Fatalf("closed ticket: status %d", resp.Status)
 	}
 	other := e.queuedTicket(c.sector.ID, "MSG-OUTRO", "5511977776666")
-	if resp := e.cancel(other.ID, c.supToken, "Engano."); resp.status != http.StatusOK {
-		t.Fatalf("cancel: status %d", resp.status)
+	if resp := e.cancel(other.ID, c.supToken, "Engano."); resp.Status != http.StatusOK {
+		t.Fatalf("cancel: status %d", resp.Status)
 	}
-	if resp := e.returnToQueue(other.ID, c.supToken); resp.status != http.StatusConflict {
-		t.Fatalf("cancelled ticket: status %d", resp.status)
+	if resp := e.returnToQueue(other.ID, c.supToken); resp.Status != http.StatusConflict {
+		t.Fatalf("cancelled ticket: status %d", resp.Status)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestOnlyOneConcurrentReturnWins(t *testing.T) {
 	for i := range statuses {
 		wg.Go(func() {
 			<-start
-			statuses[i] = e.returnToQueue(c.ticket.ID, c.anaToken).status
+			statuses[i] = e.returnToQueue(c.ticket.ID, c.anaToken).Status
 		})
 	}
 	close(start)
@@ -218,15 +218,15 @@ func TestReturnDoesNotCrossAssignOrCancel(t *testing.T) {
 	start := make(chan struct{})
 	wg.Go(func() {
 		<-start
-		returned = e.returnToQueue(c.ticket.ID, c.anaToken).status
+		returned = e.returnToQueue(c.ticket.ID, c.anaToken).Status
 	})
 	wg.Go(func() {
 		<-start
-		assigned = e.assign(c.ticket.ID, c.biaToken).status
+		assigned = e.assign(c.ticket.ID, c.biaToken).Status
 	})
 	wg.Go(func() {
 		<-start
-		cancelled = e.cancel(c.ticket.ID, c.supToken, "Engano.").status
+		cancelled = e.cancel(c.ticket.ID, c.supToken, "Engano.").Status
 	})
 	close(start)
 	wg.Wait()

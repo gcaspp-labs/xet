@@ -1,4 +1,4 @@
-package httpapi
+package helpdesk_test
 
 import (
 	"fmt"
@@ -11,24 +11,24 @@ import (
 )
 
 func (e *testEnv) transfer(ticketID, assigneeID int64, token string) response {
-	e.t.Helper()
-	return e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/transfer", ticketID), token,
+	e.T.Helper()
+	return e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/transfer", ticketID), token,
 		map[string]any{"assigneeId": assigneeID})
 }
 
 func (e *testEnv) userID(email string) int64 {
-	e.t.Helper()
-	u, err := e.q.GetUserByEmail(e.t.Context(), email)
+	e.T.Helper()
+	u, err := e.Q.GetUserByEmail(e.T.Context(), email)
 	if err != nil {
-		e.t.Fatal(err)
+		e.T.Fatal(err)
 	}
 	return u.ID
 }
 
 // ticketActions returns the audit actions of the ticket, oldest first.
 func (c conversation) ticketActions() ([]string, []map[string]map[string]any) {
-	c.e.t.Helper()
-	return c.e.auditChanges("ticket", c.ticket.ID)
+	c.e.T.Helper()
+	return c.e.AuditChanges("ticket", c.ticket.ID)
 }
 
 func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
@@ -38,15 +38,15 @@ func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
 	c.assign()
 	bia := e.userID("bia@exemplo.com")
 	before := e.assignment(c.ticket.ID)
-	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Vou verificar."); resp.status != http.StatusOK {
-		t.Fatalf("send before transfer: status %d", resp.status)
+	if resp := e.sendText(c.ticket.ID, c.anaToken, requestA, "Vou verificar."); resp.Status != http.StatusOK {
+		t.Fatalf("send before transfer: status %d", resp.Status)
 	}
 
 	supEvents := e.subscribe(c.supToken)
 	rhEvents := e.subscribe(c.rhToken)
 	resp := e.transfer(c.ticket.ID, bia, c.anaToken)
-	if resp.status != http.StatusOK || resp.body["assigneeId"] != float64(bia) || resp.body["status"] != "in_progress" {
-		t.Fatalf("transfer: status %d, body %v", resp.status, resp.body)
+	if resp.Status != http.StatusOK || resp.Body["assigneeId"] != float64(bia) || resp.Body["status"] != "in_progress" {
+		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
 	}
 	// O setor é avisado depois do commit; outro setor não recebe nada.
 	if ev := e.nextEvent(supEvents); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
@@ -54,11 +54,11 @@ func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
 	}
 
 	// O novo responsável responde; o anterior não, mesmo chamando a API.
-	if resp := e.sendText(c.ticket.ID, c.anaToken, requestB, "Ainda estou aqui"); resp.status != http.StatusForbidden {
-		t.Fatalf("previous assignee sending: status %d", resp.status)
+	if resp := e.sendText(c.ticket.ID, c.anaToken, requestB, "Ainda estou aqui"); resp.Status != http.StatusForbidden {
+		t.Fatalf("previous assignee sending: status %d", resp.Status)
 	}
-	if resp := e.sendText(c.ticket.ID, e.login("bia@exemplo.com", testPassword), requestC, "Assumi o seu atendimento."); resp.status != http.StatusOK {
-		t.Fatalf("new assignee sending: status %d, body %v", resp.status, resp.body)
+	if resp := e.sendText(c.ticket.ID, e.Login("bia@exemplo.com", testPassword), requestC, "Assumi o seu atendimento."); resp.Status != http.StatusOK {
+		t.Fatalf("new assignee sending: status %d, body %v", resp.Status, resp.Body)
 	}
 
 	// A transferência preserva mensagens e o horário em que o chamado foi assumido.
@@ -80,7 +80,7 @@ func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
 		t.Fatalf("transfer changes = %v", changes[1])
 	}
 	var actor int64
-	if err := e.pool.QueryRow(t.Context(),
+	if err := e.Pool.QueryRow(t.Context(),
 		"select actor_id from audit_logs where ticket_id = $1 and action = 'ticket_transferred_user'", c.ticket.ID).Scan(&actor); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
 	}
 
 	// A conversa mostra quando foi assumido e a transferência, com os nomes.
-	logs := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.supToken)
+	logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.supToken)
 	if len(logs) != 2 {
 		t.Fatalf("assignments = %v", logs)
 	}
@@ -106,7 +106,7 @@ func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
 
 	// O atendente do RH recebe primeiro o evento do próprio setor: nada do
 	// chamado transferido chegou antes.
-	rh, err := e.q.GetUserByEmail(t.Context(), "rh@exemplo.com")
+	rh, err := e.Q.GetUserByEmail(t.Context(), "rh@exemplo.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,51 +126,51 @@ func TestTransferPermissions(t *testing.T) {
 	rh := e.userID("rh@exemplo.com")
 
 	// Chamado na fila é assumido, não transferido.
-	if resp := e.transfer(c.ticket.ID, bia, c.supToken); resp.status != http.StatusConflict {
-		t.Fatalf("queued ticket: status %d", resp.status)
+	if resp := e.transfer(c.ticket.ID, bia, c.supToken); resp.Status != http.StatusConflict {
+		t.Fatalf("queued ticket: status %d", resp.Status)
 	}
 	c.assign()
 
 	// Atendente que não é o responsável é bloqueado; outro setor não acessa.
-	if resp := e.transfer(c.ticket.ID, bia, c.biaToken); resp.status != http.StatusForbidden {
-		t.Fatalf("agent taking a colleague's ticket: status %d", resp.status)
+	if resp := e.transfer(c.ticket.ID, bia, c.biaToken); resp.Status != http.StatusForbidden {
+		t.Fatalf("agent taking a colleague's ticket: status %d", resp.Status)
 	}
-	if resp := e.transfer(c.ticket.ID, rh, c.rhToken); resp.status != http.StatusForbidden {
-		t.Fatalf("other sector: status %d", resp.status)
+	if resp := e.transfer(c.ticket.ID, rh, c.rhToken); resp.Status != http.StatusForbidden {
+		t.Fatalf("other sector: status %d", resp.Status)
 	}
-	if resp := e.transfer(c.ticket.ID, bia, ""); resp.status != http.StatusUnauthorized {
-		t.Fatalf("without session: status %d", resp.status)
+	if resp := e.transfer(c.ticket.ID, bia, ""); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("without session: status %d", resp.Status)
 	}
 
 	// O destino é um usuário ativo do setor do chamado.
-	inactive := e.user("inativa@exemplo.com", db.UserRoleAgent, &c.sector.ID)
-	if _, err := e.pool.Exec(t.Context(), "update users set active = false where id = $1", inactive.ID); err != nil {
+	inactive := e.User("inativa@exemplo.com", db.UserRoleAgent, &c.sector.ID)
+	if _, err := e.Pool.Exec(t.Context(), "update users set active = false where id = $1", inactive.ID); err != nil {
 		t.Fatal(err)
 	}
 	for name, target := range map[string]int64{
 		"admin": admin, "other sector": rh, "inactive": inactive.ID, "unknown": 999999,
 	} {
-		if resp := e.transfer(c.ticket.ID, target, c.anaToken); resp.status != http.StatusUnprocessableEntity {
-			t.Fatalf("target %s: status %d", name, resp.status)
+		if resp := e.transfer(c.ticket.ID, target, c.anaToken); resp.Status != http.StatusUnprocessableEntity {
+			t.Fatalf("target %s: status %d", name, resp.Status)
 		}
 	}
-	if resp := e.do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/transfer", c.ticket.ID), c.anaToken, map[string]any{}); resp.status != http.StatusUnprocessableEntity {
-		t.Fatalf("without target: status %d", resp.status)
+	if resp := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/transfer", c.ticket.ID), c.anaToken, map[string]any{}); resp.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("without target: status %d", resp.Status)
 	}
 	if got := e.assignment(c.ticket.ID); *got.AssigneeID != c.ana.ID {
 		t.Fatalf("refused transfers changed the assignee: %+v", got)
 	}
 
 	// Supervisor e administrador transferem chamados de outros atendentes.
-	if resp := e.transfer(c.ticket.ID, sup, c.supToken); resp.status != http.StatusOK {
-		t.Fatalf("supervisor taking the ticket: status %d", resp.status)
+	if resp := e.transfer(c.ticket.ID, sup, c.supToken); resp.Status != http.StatusOK {
+		t.Fatalf("supervisor taking the ticket: status %d", resp.Status)
 	}
-	if resp := e.transfer(c.ticket.ID, bia, c.adminToken); resp.status != http.StatusOK {
-		t.Fatalf("admin transferring: status %d", resp.status)
+	if resp := e.transfer(c.ticket.ID, bia, c.adminToken); resp.Status != http.StatusOK {
+		t.Fatalf("admin transferring: status %d", resp.Status)
 	}
 	// Repetir para quem já é o responsável não grava de novo.
-	if resp := e.transfer(c.ticket.ID, bia, c.adminToken); resp.status != http.StatusOK || resp.body["assigneeId"] != float64(bia) {
-		t.Fatalf("repeated transfer: status %d, body %v", resp.status, resp.body)
+	if resp := e.transfer(c.ticket.ID, bia, c.adminToken); resp.Status != http.StatusOK || resp.Body["assigneeId"] != float64(bia) {
+		t.Fatalf("repeated transfer: status %d, body %v", resp.Status, resp.Body)
 	}
 	actions, _ := c.ticketActions()
 	if len(actions) != 3 || actions[1] != "ticket_transferred_user" || actions[2] != "ticket_transferred_user" {
@@ -178,9 +178,9 @@ func TestTransferPermissions(t *testing.T) {
 	}
 
 	// Chamado encerrado não é transferido.
-	e.closeTicket(c.ticket.ID, bia, e.organization(c.supToken, "Prefeitura", ""))
-	if resp := e.transfer(c.ticket.ID, sup, c.supToken); resp.status != http.StatusConflict {
-		t.Fatalf("closed ticket: status %d", resp.status)
+	e.closeTicket(c.ticket.ID, bia, e.Organization(c.supToken, "Prefeitura", ""))
+	if resp := e.transfer(c.ticket.ID, sup, c.supToken); resp.Status != http.StatusConflict {
+		t.Fatalf("closed ticket: status %d", resp.Status)
 	}
 }
 
@@ -195,7 +195,7 @@ func TestOnlyOneConcurrentTransferWins(t *testing.T) {
 	const targets = 8
 	ids := make([]int64, targets)
 	for i := range ids {
-		ids[i] = e.user(fmt.Sprintf("destino%d@exemplo.com", i), db.UserRoleAgent, &c.sector.ID).ID
+		ids[i] = e.User(fmt.Sprintf("destino%d@exemplo.com", i), db.UserRoleAgent, &c.sector.ID).ID
 	}
 	statuses := make([]int, targets)
 	var wg sync.WaitGroup
@@ -203,7 +203,7 @@ func TestOnlyOneConcurrentTransferWins(t *testing.T) {
 	for i := range ids {
 		wg.Go(func() {
 			<-start
-			statuses[i] = e.transfer(c.ticket.ID, ids[i], c.anaToken).status
+			statuses[i] = e.transfer(c.ticket.ID, ids[i], c.anaToken).Status
 		})
 	}
 	close(start)
