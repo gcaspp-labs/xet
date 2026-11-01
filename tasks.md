@@ -114,7 +114,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** áudio gravado chega ao celular como mensagem de voz; áudios, imagens e vídeos recebidos são exibidos no painel.
 
-### [ ] T11 — Iniciar conversa
+### [~] T11 — Iniciar conversa
 
 - Buscar contato e iniciar conversa pelo número do setor, criando chamado atribuído ao atendente.
 - Se já houver chamado aberto, direcionar para ele sem dar permissão de resposta.
