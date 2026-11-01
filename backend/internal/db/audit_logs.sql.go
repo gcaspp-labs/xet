@@ -41,7 +41,7 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 const listAuditLogsByEntity = `-- name: ListAuditLogsByEntity :many
 select id, ticket_id, entity_type, entity_id, action, actor_id, reason, changes, created_at from audit_logs
 where entity_type = $1 and entity_id = $2
-order by created_at, id
+order by id
 `
 
 type ListAuditLogsByEntityParams struct {
@@ -49,6 +49,9 @@ type ListAuditLogsByEntityParams struct {
 	EntityID   int64
 }
 
+// created_at is the start of the transaction: a writer that waited for a lock
+// gets an earlier time than the one it waited for. The id follows the order
+// the rows were written.
 func (q *Queries) ListAuditLogsByEntity(ctx context.Context, arg ListAuditLogsByEntityParams) ([]AuditLog, error) {
 	rows, err := q.db.Query(ctx, listAuditLogsByEntity, arg.EntityType, arg.EntityID)
 	if err != nil {
@@ -89,7 +92,7 @@ from audit_logs a
 left join users actor on actor.id = a.actor_id
 left join users from_user on from_user.id = (a.changes -> 'assignee_id' ->> 'from')::bigint
 left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::bigint
-where a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_closed')
+where a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_closed', 'ticket_corrected')
 order by a.created_at, a.id
 `
 
@@ -103,7 +106,7 @@ type ListTicketAssignmentLogsRow struct {
 	ToName    *string
 }
 
-// Start, assignment, transfers and closing of the ticket, oldest first, with the names of
+// Start, assignment, transfers, closing and corrections of the ticket, oldest first, with the names of
 // the actor and of the previous and new assignees.
 func (q *Queries) ListTicketAssignmentLogs(ctx context.Context, ticketID *int64) ([]ListTicketAssignmentLogsRow, error) {
 	rows, err := q.db.Query(ctx, listTicketAssignmentLogs, ticketID)
@@ -122,6 +125,53 @@ func (q *Queries) ListTicketAssignmentLogs(ctx context.Context, ticketID *int64)
 			&i.ActorName,
 			&i.FromName,
 			&i.ToName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketCorrections = `-- name: ListTicketCorrections :many
+select a.id, a.created_at, a.reason, a.changes, a.actor_id, u.name as actor_name
+from audit_logs a
+left join users u on u.id = a.actor_id
+where a.ticket_id = $1 and a.action = 'ticket_corrected'
+order by a.id
+`
+
+type ListTicketCorrectionsRow struct {
+	ID        int64
+	CreatedAt time.Time
+	Reason    *string
+	Changes   []byte
+	ActorID   *int64
+	ActorName *string
+}
+
+// Corrections of the closed ticket in the order they were written (each one
+// holds the lock of the ticket, so the id follows that order), with the name
+// of the author.
+func (q *Queries) ListTicketCorrections(ctx context.Context, ticketID *int64) ([]ListTicketCorrectionsRow, error) {
+	rows, err := q.db.Query(ctx, listTicketCorrections, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTicketCorrectionsRow
+	for rows.Next() {
+		var i ListTicketCorrectionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.Reason,
+			&i.Changes,
+			&i.ActorID,
+			&i.ActorName,
 		); err != nil {
 			return nil, err
 		}

@@ -6,6 +6,7 @@ import {
   MessagesSquare,
   Mic,
   Paperclip,
+  PencilLine,
   RotateCw,
   SendHorizontal,
   StickyNote,
@@ -26,6 +27,7 @@ import { useParams } from 'react-router'
 import { toast } from 'sonner'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { ConversationList } from '@/components/ConversationList'
+import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { TicketHistoryList } from '@/components/TicketHistory'
 import { Topbar } from '@/components/Topbar'
 import { TransferSheet } from '@/components/TransferSheet'
@@ -41,6 +43,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { type User, useCurrentUser } from '@/lib/auth'
 import {
   type AssignmentLog,
+  type Correction,
+  type CorrectionChange,
   type Message,
   type MessageStatus,
   type TicketDetail,
@@ -50,6 +54,7 @@ import {
   useAssignFromTicket,
   useAssignments,
   useContactHistory,
+  useCorrections,
   useMessages,
   useNotes,
   useOrganizationHistory,
@@ -168,6 +173,12 @@ function canClose(ticket: TicketDetail, user: User) {
   return ticket.status === 'in_progress' && conducts(ticket, user)
 }
 
+// Corrige o atendimento encerrado quem o encerrou e a supervisão do setor
+// (spec.md, Encerramento, retorno e correções).
+function canCorrect(ticket: TicketDetail, user: User) {
+  return ticket.status === 'closed' && (ticket.closedBy?.id === user.id || user.role !== 'agent')
+}
+
 function assignmentText(log: AssignmentLog) {
   if (log.action === 'ticket_started') {
     return `${log.toName} iniciou a conversa e assumiu o chamado`
@@ -177,6 +188,9 @@ function assignmentText(log: AssignmentLog) {
   }
   if (log.action === 'ticket_closed') {
     return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
+  }
+  if (log.action === 'ticket_corrected') {
+    return `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`
   }
   if (log.actor?.name === log.fromName) {
     return `${log.fromName} transferiu o chamado para ${log.toName}`
@@ -193,6 +207,8 @@ function AssignmentEntry({ log }: { log: AssignmentLog }) {
     >
       {log.action === 'ticket_closed' ? (
         <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : log.action === 'ticket_corrected' ? (
+        <PencilLine strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : (
         <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       )}
@@ -594,10 +610,72 @@ function SpokeWithField({ ticket, editable }: { ticket: TicketDetail; editable: 
   )
 }
 
+const correctionFields: Record<CorrectionChange['field'], string> = {
+  subject: 'Assunto',
+  resolution: 'Resolução',
+  organization: 'Órgão',
+  modules: 'Módulos',
+  started_at: 'Início',
+  ended_at: 'Fim',
+  spoke_with: 'Falou com',
+}
+
+function correctionValue(field: CorrectionChange['field'], value: CorrectionChange['from']) {
+  if (value === null || value.length === 0) {
+    return 'Não informado'
+  }
+  if (Array.isArray(value)) {
+    return value.join(', ')
+  }
+  return field === 'started_at' || field === 'ended_at' ? formatDateTime(value) : value
+}
+
+// Histórico de alterações do atendimento encerrado: autor, data, motivo e
+// valores anteriores e novos de cada campo corrigido.
+function CorrectionHistory({ corrections }: { corrections: Correction[] }) {
+  return (
+    <section>
+      <h3 className="overline text-ink-soft">Histórico de alterações</h3>
+      {corrections.length === 0 ? (
+        <p className="caption text-ink-faint">Nenhuma correção.</p>
+      ) : (
+        <ol aria-label="Histórico de alterações" className="mt-1 flex flex-col gap-2">
+          {corrections.map((correction) => (
+            <li
+              key={correction.id}
+              className="rounded-(--radius-7) border border-line-soft bg-card px-3 py-2"
+            >
+              <p className="caption text-ink-faint">
+                {correction.actor?.name ?? 'Sistema'} ·{' '}
+                <span className="mono-num">{formatDateTime(correction.createdAt)}</span>
+              </p>
+              <p className="whitespace-pre-wrap break-words">Motivo: {correction.reason}</p>
+              <dl className="mt-1 flex flex-col gap-1">
+                {correction.changes.map((change) => (
+                  <div key={change.field}>
+                    <dt className="label text-ink-soft">{correctionFields[change.field]}</dt>
+                    <dd className="caption break-words">
+                      <span className="text-ink-faint line-through">
+                        {correctionValue(change.field, change.from)}
+                      </span>{' '}
+                      → {correctionValue(change.field, change.to)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  )
+}
+
 function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
   const status = ticketStatusLabels[ticket.status]
   const closed = ticket.status === 'closed'
   const { data: modules = [] } = useTicketModules(ticket.id, closed)
+  const { data: corrections } = useCorrections(ticket.id, closed)
   const row = (label: string, value: ReactNode) => (
     <div>
       <dt className="label text-ink-soft">{label}</dt>
@@ -652,6 +730,7 @@ function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
         ticket={ticket}
         editable={conducts(ticket, user)}
       />
+      {corrections && <CorrectionHistory corrections={corrections} />}
     </dl>
   )
 }
@@ -756,6 +835,8 @@ export default function TicketPage() {
   const [closing, setClosing] = useState(false)
   // Nova chave a cada abertura: o formulário começa limpo, com o fim sugerido no momento.
   const [closingKey, setClosingKey] = useState(0)
+  const [correcting, setCorrecting] = useState(false)
+  const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
 
   if (error) {
     return (
@@ -801,6 +882,12 @@ export default function TicketPage() {
                   Transferir
                 </Button>
               )}
+              {canCorrect(ticket, user) && (
+                <Button onClick={() => setCorrecting(true)}>
+                  <PencilLine strokeWidth={1.7} aria-hidden />
+                  Corrigir
+                </Button>
+              )}
               {canClose(ticket, user) && (
                 <Button
                   onClick={() => {
@@ -818,6 +905,10 @@ export default function TicketPage() {
       />
       {/* Sempre montado: o botão some quando o chamado é encerrado. */}
       <ClosingSheet key={closingKey} ticket={ticket} open={closing} onOpenChange={setClosing} />
+      {/* Montado só aberto: começa com os dados atuais do atendimento. */}
+      {correcting && recordedModules && (
+        <CorrectionSheet ticket={ticket} recorded={recordedModules} onOpenChange={setCorrecting} />
+      )}
       {/* Sempre montado: quem transfere o próprio chamado perde o botão ao concluir. */}
       <TransferSheet ticket={ticket} open={transferring} onOpenChange={setTransferring} />
       {/* A tela de conversas usa a largura toda (design.md). */}

@@ -243,6 +243,7 @@ stateDiagram-v2
 | Encerramento | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável, e o contato travado para leitura (`for share`) e cadastrado: preenche os campos de encerramento com `closure_type = 'resolved'`, `closed_at = now()`, `closed_by_id` = responsável e `ended_at` informado ou `now()`; grava `ticket_modules` (módulos ativos do setor) e a auditoria `ticket_closed` na mesma transação |
 | Transferência entre setores | Encerra com o formulário completo e `closure_type = 'transferred'`; cria chamado `queued` no destino com `previous_ticket_id`, mesmo contato e órgão, e `arrived_at` = momento da transferência |
 | Cadastro do contato | Na mesma transação do cadastro, os chamados abertos do contato com `organization_id` vazio recebem o órgão do contato (travados com `for update`), com auditoria `ticket_organization_linked` em cada um |
+| Correção | Com o chamado travado (`for update`) e `closed`, por quem encerrou (`closed_by_id`), supervisor do setor ou administrador: altera `subject`, `resolution`, `organization_id`, `started_at`, `ended_at` e `spoke_with` e acrescenta ou remove linhas de `ticket_modules` (acrescentadas só entre os módulos ativos do setor; as já gravadas podem ficar mesmo inativas); auditoria `ticket_corrected` com `reason` na mesma transação. Sem nenhuma alteração, nada é gravado |
 | Mensagem após encerramento | Cria novo chamado (não reabre) |
 
 Chamados não são reabertos. O destino de uma transferência entre setores vê o histórico seguindo a cadeia de `previous_ticket_id`.
@@ -312,6 +313,8 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 
 Índices: `(ticket_id, created_at)` e `(entity_type, entity_id)`.
 
+Restrição: `action = 'ticket_corrected'` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`).
+
 A tabela é criada na T03 (primeira ação auditada: redefinição de senha), antes de existir `tickets`; a chave estrangeira de `ticket_id` é adicionada na migração que cria `tickets`.
 
 | Ação | Quando |
@@ -322,7 +325,7 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `ticket_transferred_sector` | Transferência entre setores (no chamado de origem) |
 | `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |
 | `ticket_closed` | Encerramento: `changes` com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados no formulário, `started_at` (de `arrived_at` para o informado) e `organization_id` |
-| `ticket_corrected` | Correção de chamado encerrado (exige `reason`) |
+| `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at`, `ended_at` e `spoke_with` |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |
 | `module_created`, `module_updated` | Administração de módulos |

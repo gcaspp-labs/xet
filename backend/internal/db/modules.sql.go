@@ -92,6 +92,36 @@ func (q *Queries) ListActiveModules(ctx context.Context, sectorID int64) ([]Modu
 	return items, nil
 }
 
+const listModuleNames = `-- name: ListModuleNames :many
+select id, name from modules
+where id = any($1::bigint[])
+`
+
+type ListModuleNamesRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) ListModuleNames(ctx context.Context, ids []int64) ([]ListModuleNamesRow, error) {
+	rows, err := q.db.Query(ctx, listModuleNames, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModuleNamesRow
+	for rows.Next() {
+		var i ListModuleNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listModules = `-- name: ListModules :many
 select id, sector_id, name, active, created_at, updated_at from modules
 where sector_id = $1

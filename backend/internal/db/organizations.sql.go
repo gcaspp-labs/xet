@@ -69,6 +69,36 @@ func (q *Queries) GetOrganizationForUpdate(ctx context.Context, id int64) (Organ
 	return i, err
 }
 
+const listOrganizationNames = `-- name: ListOrganizationNames :many
+select id, name from organizations
+where id = any($1::bigint[])
+`
+
+type ListOrganizationNamesRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) ListOrganizationNames(ctx context.Context, ids []int64) ([]ListOrganizationNamesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationNames, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationNamesRow
+	for rows.Next() {
+		var i ListOrganizationNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchOrganizations = `-- name: SearchOrganizations :many
 select id, name, cnpj, created_at, updated_at from organizations
 where $1::text = ''

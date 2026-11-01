@@ -137,7 +137,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** chamado só encerra com os dados completos; testes cobrem obrigatoriedade, vínculo e novo chamado após encerramento.
 
-### [ ] T14 — Correções com auditoria
+### [x] T14 — Correções com auditoria
 
 - Corrigir atendimento encerrado com motivo, restrito a quem encerrou e aos supervisores.
 - Auditoria com autor, data, motivo e valores anteriores e novos.
