@@ -6,13 +6,28 @@ import {
   Landmark,
   LogOut,
   MessagesSquare,
+  Monitor,
+  Moon,
   QrCode,
+  Settings,
+  Sun,
   Users,
   type LucideIcon,
 } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { DisconnectionNote } from '@/components/DisconnectionNote'
 import { RealtimeNote } from '@/components/RealtimeNote'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Sidebar,
   SidebarContent,
@@ -31,6 +46,7 @@ import {
 import { type Role, useCurrentUser, useLogout } from '@/lib/auth'
 import { roleLabels } from '@/lib/format'
 import { useRealtime } from '@/lib/realtime'
+import { type Theme, useTheme } from '@/lib/theme'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 
@@ -87,10 +103,53 @@ function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; ro
   )
 }
 
-export default function AppLayout() {
-  const { data: user } = useCurrentUser()
+const themeItems: { value: Theme; label: string; icon: LucideIcon }[] = [
+  { value: 'light', label: 'Claro', icon: Sun },
+  { value: 'dark', label: 'Escuro', icon: Moon },
+  { value: 'system', label: 'Sistema', icon: Monitor },
+]
+
+function SettingsMenu() {
+  const [theme, setTheme] = useTheme()
   const logout = useLogout()
   const navigate = useNavigate()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<SidebarMenuButton />}>
+        <Settings strokeWidth={1.7} className="size-[15px]!" aria-hidden />
+        <span>Configurações</span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Tema</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+            {themeItems.map((item) => (
+              <DropdownMenuRadioItem key={item.value} value={item.value}>
+                <item.icon strokeWidth={1.7} aria-hidden />
+                {item.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={logout.isPending}
+          onClick={() =>
+            logout.mutate(undefined, {
+              onSuccess: () => navigate('/login', { replace: true }),
+            })
+          }
+        >
+          <LogOut strokeWidth={1.7} aria-hidden />
+          Sair
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export default function AppLayout() {
+  const { data: user } = useCurrentUser()
   const online = useRealtime()
   if (!user) {
     return null
@@ -120,17 +179,7 @@ export default function AppLayout() {
           </div>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton
-                disabled={logout.isPending}
-                onClick={() =>
-                  logout.mutate(undefined, {
-                    onSuccess: () => navigate('/login', { replace: true }),
-                  })
-                }
-              >
-                <LogOut strokeWidth={1.7} className="size-[17px]!" aria-hidden />
-                <span>Sair</span>
-              </SidebarMenuButton>
+              <SettingsMenu />
             </SidebarMenuItem>
           </SidebarMenu>
           <p className="caption text-sidebar-foreground/60">g-lab</p>

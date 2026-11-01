@@ -1,12 +1,14 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { useTheme } from "@/lib/theme"
 
 // Toast do design system (design.md): rodapé central, ~2,5s, ícone de
-// confirmação em success. O tema segue o sistema, como os tokens.
+// confirmação em success. O tema acompanha a escolha do menu de configurações.
 const Toaster = ({ ...props }: ToasterProps) => {
+  const [theme] = useTheme()
   return (
     <Sonner
-      theme="system"
+      theme={theme}
       position="bottom-center"
       duration={2500}
       className="toaster group"
