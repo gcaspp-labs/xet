@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 )
@@ -107,7 +108,7 @@ func (s *server) createContact(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	c, err := s.directory.CreateContact(r.Context(), currentUser(r.Context()), req.input())
+	c, err := s.directory.CreateContact(r.Context(), auth.CurrentUser(r.Context()), req.input())
 	if err != nil {
 		s.directoryError(w, r, err)
 		return
@@ -125,7 +126,7 @@ func (s *server) updateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Pelo serviço de chamados: o cadastro completa o órgão dos chamados abertos do contato.
-	c, err := s.tickets.RegisterContact(r.Context(), currentUser(r.Context()), id, req.input())
+	c, err := s.tickets.RegisterContact(r.Context(), auth.CurrentUser(r.Context()), id, req.input())
 	if err != nil {
 		s.directoryError(w, r, err)
 		return

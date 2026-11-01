@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -74,7 +75,7 @@ func (s *server) listMessages(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.tickets.Messages(r.Context(), currentUser(r.Context()), ticketID)
+	rows, err := s.tickets.Messages(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return
@@ -119,7 +120,7 @@ func (s *server) sendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	msg, err := s.tickets.Send(r.Context(), s.opts.Messaging, currentUser(r.Context()), ticketID, out)
+	msg, err := s.tickets.Send(r.Context(), s.opts.Messaging, auth.CurrentUser(r.Context()), ticketID, out)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return
@@ -193,7 +194,7 @@ func (s *server) retryMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	msg, err := s.tickets.Retry(r.Context(), s.opts.Messaging, currentUser(r.Context()), messageID)
+	msg, err := s.tickets.Retry(r.Context(), s.opts.Messaging, auth.CurrentUser(r.Context()), messageID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return

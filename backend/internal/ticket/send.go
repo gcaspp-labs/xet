@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/gcaspp-labs/xet/backend/internal/audio"
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"

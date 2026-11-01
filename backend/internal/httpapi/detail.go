@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
@@ -53,7 +54,7 @@ func (s *server) getTicket(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	t, err := s.tickets.Detail(r.Context(), currentUser(r.Context()), ticketID)
+	t, err := s.tickets.Detail(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return

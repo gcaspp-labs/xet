@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
 
@@ -25,7 +26,7 @@ func (s *server) getMedia(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	file, content, err := s.tickets.Media(r.Context(), currentUser(r.Context()), mediaID)
+	file, content, err := s.tickets.Media(r.Context(), auth.CurrentUser(r.Context()), mediaID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return

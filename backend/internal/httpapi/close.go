@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -24,7 +25,7 @@ func (s *server) closingForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	form, err := s.tickets.ClosingForm(r.Context(), currentUser(r.Context()), ticketID)
+	form, err := s.tickets.ClosingForm(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return
@@ -77,7 +78,7 @@ func (s *server) closeTicket(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	t, err := s.tickets.Close(r.Context(), currentUser(r.Context()), ticketID, req.closing())
+	t, err := s.tickets.Close(r.Context(), auth.CurrentUser(r.Context()), ticketID, req.closing())
 	switch {
 	case err == nil:
 		httpx.WriteJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
@@ -98,7 +99,7 @@ func (s *server) listTicketModules(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.tickets.Modules(r.Context(), currentUser(r.Context()), ticketID)
+	rows, err := s.tickets.Modules(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return

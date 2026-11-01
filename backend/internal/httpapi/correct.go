@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -30,7 +31,7 @@ func (s *server) correctTicket(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	t, err := s.tickets.Correct(r.Context(), currentUser(r.Context()), ticketID, ticket.Correction{
+	t, err := s.tickets.Correct(r.Context(), auth.CurrentUser(r.Context()), ticketID, ticket.Correction{
 		Subject: req.Subject, Resolution: req.Resolution, ModuleIDs: req.ModuleIDs, OrganizationID: req.OrganizationID,
 		StartedAt: req.StartedAt, EndedAt: req.EndedAt, SpokeWith: req.SpokeWith, Reason: req.Reason,
 	})
@@ -72,7 +73,7 @@ func (s *server) listCorrections(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	logs, err := s.tickets.Corrections(r.Context(), currentUser(r.Context()), ticketID)
+	logs, err := s.tickets.Corrections(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return

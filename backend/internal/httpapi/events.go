@@ -9,7 +9,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 )
 
 // Default interval between session checks and pings of an open connection.
@@ -22,8 +22,8 @@ const eventsWriteTimeout = 10 * time.Second
 // checked periodically without renewing it, and the connection closes when
 // the session ends.
 func (s *server) events(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	token := sessionToken(r)
+	user := auth.CurrentUser(r.Context())
+	token := auth.SessionToken(r)
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		// Accept already wrote the response.

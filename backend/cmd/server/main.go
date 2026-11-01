@@ -15,10 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/gcaspp-labs/xet/backend/db/migrations"
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/config"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
+	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -138,7 +139,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), tickets, hub, opts),
+		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), users.NewService(pool), sectors, directory.NewService(pool), tickets, hub, opts),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

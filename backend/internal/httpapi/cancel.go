@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -22,7 +23,7 @@ func (s *server) cancelTicket(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	t, err := s.tickets.Cancel(r.Context(), currentUser(r.Context()), ticketID, req.Reason)
+	t, err := s.tickets.Cancel(r.Context(), auth.CurrentUser(r.Context()), ticketID, req.Reason)
 	switch {
 	case err == nil:
 		httpx.WriteJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})

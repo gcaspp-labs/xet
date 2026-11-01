@@ -7,6 +7,7 @@ import (
 
 	"github.com/skip2/go-qrcode"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -94,7 +95,7 @@ func (s *server) disconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	warning := ""
-	err := s.sectors.Disconnect(r.Context(), s.opts.Messaging, currentUser(r.Context()).ID, sectorID)
+	err := s.sectors.Disconnect(r.Context(), s.opts.Messaging, auth.CurrentUser(r.Context()).ID, sectorID)
 	switch {
 	case errors.Is(err, sector.ErrDeviceNotNotified):
 		s.logger.Warn("unlink sector device", "sector_id", sectorID, "error", err)

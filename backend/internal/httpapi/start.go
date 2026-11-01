@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -50,7 +51,7 @@ func (s *server) startConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	started, err := s.tickets.Start(r.Context(), s.opts.Messaging, currentUser(r.Context()), sectorID, req.ContactID, requestID, req.Body)
+	started, err := s.tickets.Start(r.Context(), s.opts.Messaging, auth.CurrentUser(r.Context()), sectorID, req.ContactID, requestID, req.Body)
 	switch {
 	case errors.Is(err, ticket.ErrSectorNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Setor não encontrado.")

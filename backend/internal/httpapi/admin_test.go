@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -653,7 +654,7 @@ func (e *testEnv) doList(method, path, token string) []map[string]any {
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		e.t.Fatal(err)

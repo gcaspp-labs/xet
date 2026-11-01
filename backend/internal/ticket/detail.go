@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 

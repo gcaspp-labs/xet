@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -23,7 +24,7 @@ func (s *server) transferTicket(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	t, err := s.tickets.Transfer(r.Context(), currentUser(r.Context()), ticketID, req.AssigneeID)
+	t, err := s.tickets.Transfer(r.Context(), auth.CurrentUser(r.Context()), ticketID, req.AssigneeID)
 	switch {
 	case err == nil:
 		httpx.WriteJSON(w, http.StatusOK, assignResponse{ID: t.ID, Status: t.Status, AssigneeID: t.AssigneeID, AssignedAt: t.AssignedAt})
@@ -58,7 +59,7 @@ func (s *server) listAssignments(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.tickets.AssignmentLogs(r.Context(), currentUser(r.Context()), ticketID)
+	rows, err := s.tickets.AssignmentLogs(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return

@@ -8,9 +8,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
+	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -19,8 +20,7 @@ import (
 )
 
 type Options struct {
-	// SecureCookie sets the Secure flag on the session cookie. Disabled only
-	// in development over plain HTTP.
+	// SecureCookie sets the Secure flag on the session cookie.
 	SecureCookie bool
 	// Messaging is the provider of the sector numbers.
 	Messaging messaging.Provider
@@ -42,7 +42,7 @@ type server struct {
 	opts      Options
 }
 
-func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *sector.Service, directoryService *directory.Service, ticketService *ticket.Service, hub *realtime.Hub, opts Options) http.Handler {
+func NewRouter(logger *slog.Logger, authService *auth.Service, userService *users.Service, sectorService *sector.Service, directoryService *directory.Service, ticketService *ticket.Service, hub *realtime.Hub, opts Options) http.Handler {
 	s := &server{
 		logger:    logger,
 		auth:      authService,
@@ -64,46 +64,41 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 		if opts.TestRoutes != nil {
 			r.Mount("/test", opts.TestRoutes)
 		}
-		r.Post("/auth/login", s.login)
-		r.Post("/auth/logout", s.logout)
+		authHandler := auth.NewHandler(logger, authService, opts.SecureCookie)
+		authHandler.Routes(r)
 
 		r.Group(func(r chi.Router) {
-			r.Use(s.requireUser)
-			r.Get("/auth/me", s.me)
+			r.Use(authHandler.RequireUser)
+			users.NewHandler(logger, userService).Routes(r)
 			r.Get("/ws", s.events)
-			r.With(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin)).
-				Put("/users/{userID}/password", s.resetPassword)
 
 			r.Get("/sectors", s.listSectors)
 
-			// Administração: setores e usuários só pelo administrador.
+			// Administração: setores só pelo administrador.
 			r.Group(func(r chi.Router) {
-				r.Use(requireRole(db.UserRoleAdmin))
+				r.Use(auth.RequireRole(db.UserRoleAdmin))
 				r.Post("/sectors", s.createSector)
 				r.Put("/sectors/{sectorID}", s.updateSector)
-				r.Get("/users", s.listUsers)
-				r.Post("/users", s.createUser)
-				r.Put("/users/{userID}", s.updateUser)
 			})
 
 			// Módulos: supervisor do próprio setor e administrador.
 			r.Route("/sectors/{sectorID}/modules", func(r chi.Router) {
-				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin), requireSector("sectorID"))
+				r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin), auth.RequireSector("sectorID"))
 				r.Get("/", s.listModules)
 				r.Post("/", s.createModule)
 				r.Put("/{moduleID}", s.updateModule)
 			})
 
 			// Módulos ativos do setor, para o cadastro de contatos e os filtros: todos os papéis do setor.
-			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/active-modules", s.listActiveModules)
+			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/active-modules", s.listActiveModules)
 
 			// Importar contatos da agenda do número do setor: todos os papéis do setor.
-			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/saved-contacts", s.listSavedContacts)
-			r.With(requireSector("sectorID")).Post("/sectors/{sectorID}/saved-contacts/import", s.importContacts)
+			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/saved-contacts", s.listSavedContacts)
+			r.With(auth.RequireSector("sectorID")).Post("/sectors/{sectorID}/saved-contacts/import", s.importContacts)
 
 			// Conexão do número: supervisor do próprio setor e administrador.
 			r.Route("/sectors/{sectorID}/connection", func(r chi.Router) {
-				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin), requireSector("sectorID"))
+				r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin), auth.RequireSector("sectorID"))
 				r.Get("/", s.getConnection)
 				r.Post("/", s.connect)
 				r.Delete("/", s.disconnect)
@@ -113,18 +108,18 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 			// Órgãos: todos consultam; supervisor e administrador cadastram e editam.
 			r.Get("/organizations", s.listOrganizations)
 			r.Group(func(r chi.Router) {
-				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
+				r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
 				r.Post("/organizations", s.createOrganization)
 				r.Put("/organizations/{organizationID}", s.updateOrganization)
 			})
 
 			// Painel: chamados abertos, carga de cada atendente e realizados hoje, para todos os papéis do setor.
-			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/tickets", s.listTickets)
-			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/workload", s.workload)
-			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/closed-today", s.listClosedToday)
+			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/tickets", s.listTickets)
+			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/workload", s.workload)
+			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/closed-today", s.listClosedToday)
 			// Iniciar conversa pelo número do setor, ou ir ao chamado aberto do contato.
-			r.With(requireSector("sectorID")).Post("/sectors/{sectorID}/conversations", s.startConversation)
-			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/contacts/{contactID}/open-ticket", s.openTicket)
+			r.With(auth.RequireSector("sectorID")).Post("/sectors/{sectorID}/conversations", s.startConversation)
+			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/contacts/{contactID}/open-ticket", s.openTicket)
 			// O serviço confere o setor do chamado e, para responder, o responsável.
 			r.Post("/tickets/{ticketID}/assign", s.assignTicket)
 			r.Post("/tickets/{ticketID}/transfer", s.transferTicket)

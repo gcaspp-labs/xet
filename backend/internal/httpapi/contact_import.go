@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 )
@@ -53,7 +54,7 @@ func (s *server) importContacts(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	result, err := s.directory.ImportContacts(r.Context(), s.opts.Messaging, currentUser(r.Context()), sectorID,
+	result, err := s.directory.ImportContacts(r.Context(), s.opts.Messaging, auth.CurrentUser(r.Context()), sectorID,
 		directory.ImportInput{Phones: req.Phones, OrganizationID: req.OrganizationID})
 	if err != nil {
 		s.directoryError(w, r, err)

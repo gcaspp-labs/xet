@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
 
@@ -21,7 +22,7 @@ func (s *server) setSpokeWith(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	t, err := s.tickets.SetSpokeWith(r.Context(), currentUser(r.Context()), ticketID, req.SpokeWith)
+	t, err := s.tickets.SetSpokeWith(r.Context(), auth.CurrentUser(r.Context()), ticketID, req.SpokeWith)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return
@@ -41,7 +42,7 @@ func (s *server) listNotes(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.tickets.Notes(r.Context(), currentUser(r.Context()), ticketID)
+	rows, err := s.tickets.Notes(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return
@@ -71,7 +72,7 @@ func (s *server) createNote(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escreva a nota.")
 		return
 	}
-	user := currentUser(r.Context())
+	user := auth.CurrentUser(r.Context())
 	n, err := s.tickets.AddNote(r.Context(), user, ticketID, body)
 	if err != nil {
 		s.ticketError(w, r, err)

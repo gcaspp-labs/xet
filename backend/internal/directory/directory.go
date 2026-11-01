@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 

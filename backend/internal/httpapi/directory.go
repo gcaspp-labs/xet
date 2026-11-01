@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
@@ -44,7 +45,7 @@ func (s *server) createOrganization(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	org, err := s.directory.CreateOrganization(r.Context(), currentUser(r.Context()).ID,
+	org, err := s.directory.CreateOrganization(r.Context(), auth.CurrentUser(r.Context()).ID,
 		directory.OrganizationInput{Name: req.Name, CNPJ: req.CNPJ})
 	if err != nil {
 		s.directoryError(w, r, err)
@@ -62,7 +63,7 @@ func (s *server) updateOrganization(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	org, err := s.directory.UpdateOrganization(r.Context(), currentUser(r.Context()).ID, id,
+	org, err := s.directory.UpdateOrganization(r.Context(), auth.CurrentUser(r.Context()).ID, id,
 		directory.OrganizationInput{Name: req.Name, CNPJ: req.CNPJ})
 	if err != nil {
 		s.directoryError(w, r, err)

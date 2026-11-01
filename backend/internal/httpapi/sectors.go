@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
@@ -46,7 +47,7 @@ func toModuleResponse(m db.Module) moduleResponse {
 // listSectors returns the sectors the user can see: all for admins, only
 // their own for agents and supervisors.
 func (s *server) listSectors(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user := auth.CurrentUser(r.Context())
 	if user.Role != db.UserRoleAdmin {
 		if user.SectorID == nil {
 			httpx.WriteJSON(w, http.StatusOK, []sectorResponse{})
@@ -82,7 +83,7 @@ func (s *server) createSector(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := s.sectors.Create(r.Context(), currentUser(r.Context()).ID, sector.SectorInput{Name: req.Name})
+	sec, err := s.sectors.Create(r.Context(), auth.CurrentUser(r.Context()).ID, sector.SectorInput{Name: req.Name})
 	if err != nil {
 		s.sectorError(w, r, err)
 		return
@@ -99,7 +100,7 @@ func (s *server) updateSector(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := s.sectors.Update(r.Context(), currentUser(r.Context()).ID, id, sector.SectorInput{Name: req.Name})
+	sec, err := s.sectors.Update(r.Context(), auth.CurrentUser(r.Context()).ID, id, sector.SectorInput{Name: req.Name})
 	if err != nil {
 		s.sectorError(w, r, err)
 		return
@@ -154,7 +155,7 @@ func (s *server) createModule(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	m, err := s.sectors.CreateModule(r.Context(), currentUser(r.Context()).ID, sectorID, req.Name)
+	m, err := s.sectors.CreateModule(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, req.Name)
 	if err != nil {
 		s.sectorError(w, r, err)
 		return
@@ -180,7 +181,7 @@ func (s *server) updateModule(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	m, err := s.sectors.UpdateModule(r.Context(), currentUser(r.Context()).ID, sectorID, moduleID,
+	m, err := s.sectors.UpdateModule(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, moduleID,
 		sector.ModuleInput{Name: req.Name, Active: *req.Active})
 	if err != nil {
 		s.sectorError(w, r, err)

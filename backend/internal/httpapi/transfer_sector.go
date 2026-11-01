@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -29,7 +30,7 @@ func (s *server) transferSector(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	next, err := s.tickets.TransferSector(r.Context(), currentUser(r.Context()), ticketID, req.SectorID, req.closing())
+	next, err := s.tickets.TransferSector(r.Context(), auth.CurrentUser(r.Context()), ticketID, req.SectorID, req.closing())
 	switch {
 	case err == nil:
 		httpx.WriteJSON(w, http.StatusOK, transferSectorResponse{ID: next.ID, Protocol: next.Protocol})
@@ -54,7 +55,7 @@ func (s *server) listTransferSectors(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sectors, err := s.tickets.TransferSectors(r.Context(), currentUser(r.Context()), ticketID)
+	sectors, err := s.tickets.TransferSectors(r.Context(), auth.CurrentUser(r.Context()), ticketID)
 	if err != nil {
 		s.ticketError(w, r, err)
 		return

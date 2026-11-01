@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -70,7 +71,7 @@ func (e *testEnv) sendForm(ticketID int64, token, requestID, field, name, mimeTy
 		e.t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", form.FormDataContentType())
-	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		e.t.Fatal(err)
@@ -89,7 +90,7 @@ func (e *testEnv) get(path, token string) (int, http.Header, []byte) {
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		e.t.Fatal(err)
@@ -449,7 +450,7 @@ func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Range", "bytes=0-3")
-	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: c.biaToken})
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: c.biaToken})
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)

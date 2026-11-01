@@ -14,6 +14,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
@@ -74,7 +75,7 @@ func (e *testEnv) dial(token string) (*websocket.Conn, int, error) {
 	defer cancel()
 	opts := &websocket.DialOptions{HTTPHeader: http.Header{}}
 	if token != "" {
-		opts.HTTPHeader.Set("Cookie", sessionCookie+"="+token)
+		opts.HTTPHeader.Set("Cookie", auth.SessionCookie+"="+token)
 	}
 	conn, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(e.url, "http")+"/api/ws", opts)
 	if resp == nil {

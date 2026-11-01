@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
 )
@@ -14,7 +15,7 @@ import (
 func TestCreateAdmin(t *testing.T) {
 	t.Parallel()
 	pool := testdb.New(t)
-	svc := auth.NewService(pool)
+	svc := users.NewService(pool)
 	ctx := t.Context()
 	args := []string{"-name", "Maria Admin", "-email", "maria@exemplo.com"}
 
@@ -26,7 +27,7 @@ func TestCreateAdmin(t *testing.T) {
 		t.Fatalf("output: %q", out.String())
 	}
 
-	_, user, _, err := svc.Login(ctx, "maria@exemplo.com", "Senha@123")
+	_, user, _, err := auth.NewService(pool).Login(ctx, "maria@exemplo.com", "Senha@123")
 	if err != nil {
 		t.Fatal(err)
 	}

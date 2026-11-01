@@ -16,9 +16,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
+	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -45,14 +46,14 @@ type testEnv struct {
 
 // newTestEnv starts the API on a fresh database. extra registers routes used
 // only by the test, behind the same session middleware as the real ones.
-func newTestEnv(t *testing.T, extra func(s *server, r chi.Router)) *testEnv {
+func newTestEnv(t *testing.T, extra func(a *auth.Handler, r chi.Router)) *testEnv {
 	t.Helper()
 	return startServer(t, testdb.New(t), extra)
 }
 
 // startServer starts the API on the database; a second call on the same
 // database simulates a restart of the service.
-func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.Router)) *testEnv {
+func startServer(t *testing.T, pool *pgxpool.Pool, extra func(a *auth.Handler, r chi.Router)) *testEnv {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	hub := realtime.NewHub()
@@ -74,14 +75,14 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 	})
 	sectors.SetProvider(whatsapp)
 	t.Cleanup(sectors.Wait)
-	handler := NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), tickets, hub, Options{
+	handler := NewRouter(logger, auth.NewService(pool), users.NewService(pool), sectors, directory.NewService(pool), tickets, hub, Options{
 		SecureCookie: true, Messaging: whatsapp, SessionCheckInterval: 200 * time.Millisecond,
 	})
 	if extra != nil {
-		s := &server{logger: logger, auth: auth.NewService(pool), opts: Options{SecureCookie: true}}
+		a := auth.NewHandler(logger, auth.NewService(pool), true)
 		r := chi.NewRouter()
 		r.Mount("/", handler)
-		r.Route("/test", func(r chi.Router) { extra(s, r) })
+		r.Route("/test", func(r chi.Router) { extra(a, r) })
 		handler = r
 	}
 	srv := httptest.NewServer(handler)
@@ -100,7 +101,7 @@ func (e *testEnv) sector(name string) db.Sector {
 
 func (e *testEnv) user(email string, role db.UserRole, sectorID *int64) db.User {
 	e.t.Helper()
-	hash, err := auth.HashPassword(testPassword)
+	hash, err := users.HashPassword(testPassword)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -134,7 +135,7 @@ func (e *testEnv) do(method, path, token string, body any) response {
 		e.t.Fatal(err)
 	}
 	if token != "" {
-		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: token})
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -157,7 +158,7 @@ func (e *testEnv) login(email, password string) string {
 		e.t.Fatalf("login %s: status %d, body %v", email, resp.status, resp.body)
 	}
 	for _, c := range resp.cookies {
-		if c.Name == sessionCookie {
+		if c.Name == auth.SessionCookie {
 			return c.Value
 		}
 	}
@@ -186,7 +187,7 @@ func TestLoginAndLogout(t *testing.T) {
 	}
 	var cookie *http.Cookie
 	for _, c := range resp.cookies {
-		if c.Name == sessionCookie {
+		if c.Name == auth.SessionCookie {
 			cookie = c
 		}
 	}
@@ -416,11 +417,11 @@ func TestResetPasswordPolicy(t *testing.T) {
 
 func TestRequireRoleAndSector(t *testing.T) {
 	t.Parallel()
-	e := newTestEnv(t, func(s *server, r chi.Router) {
+	e := newTestEnv(t, func(a *auth.Handler, r chi.Router) {
 		ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }
-		r.Use(s.requireUser)
-		r.With(requireSector("sectorID")).Get("/sectors/{sectorID}", ok)
-		r.With(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin)).Get("/supervision", ok)
+		r.Use(a.RequireUser)
+		r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}", ok)
+		r.With(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin)).Get("/supervision", ok)
 	})
 	contab := e.sector("Contabilidade")
 	rh := e.sector("RH")

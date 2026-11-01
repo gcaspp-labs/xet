@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
@@ -44,7 +45,7 @@ func (s *server) contactHistory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.tickets.ContactHistory(r.Context(), currentUser(r.Context()), contactID)
+	rows, err := s.tickets.ContactHistory(r.Context(), auth.CurrentUser(r.Context()), contactID)
 	if err != nil {
 		httpx.InternalError(s.logger, w, r, err)
 		return
@@ -58,7 +59,7 @@ func (s *server) organizationHistory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.tickets.OrganizationHistory(r.Context(), currentUser(r.Context()), organizationID)
+	rows, err := s.tickets.OrganizationHistory(r.Context(), auth.CurrentUser(r.Context()), organizationID)
 	if err != nil {
 		httpx.InternalError(s.logger, w, r, err)
 		return
