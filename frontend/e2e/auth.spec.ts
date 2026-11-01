@@ -28,7 +28,8 @@ test('usuário entra, mantém a sessão ao recarregar e sai', async ({ page }) =
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Sair' }).click()
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await page.getByRole('menuitem', { name: 'Sair' }).click()
   await expect(page).toHaveURL(/\/login$/)
 
   await page.goto('/')

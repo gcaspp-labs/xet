@@ -180,6 +180,16 @@
 }
 
 @layer base {
+  /* Barras de rolagem e seletores nativos acompanham o tema (design.md). */
+  :root {
+    color-scheme: light dark;
+  }
+  [data-theme='light'] {
+    color-scheme: light;
+  }
+  [data-theme='dark'] {
+    color-scheme: dark;
+  }
   * {
     @apply border-border;
   }

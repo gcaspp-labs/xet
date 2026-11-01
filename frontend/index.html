@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Central de Atendimento</title>
+    <script>
+      // Aplica o tema escolhido antes de pintar a tela; a mesma chave é usada em src/lib/theme.ts.
+      try {
+        const theme = localStorage.getItem('theme')
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.theme = theme
+        }
+      } catch {
+        // Sem acesso ao armazenamento do navegador, vale o tema do sistema.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
