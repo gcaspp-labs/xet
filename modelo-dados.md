@@ -28,6 +28,10 @@ erDiagram
     users ||--o{ sessions : possui
     organizations ||--o{ contacts : "órgão principal"
     contacts ||--o{ tickets : abre
+    contacts ||--o{ contact_sectors : ""
+    sectors ||--o{ contact_sectors : ""
+    contacts ||--o{ contact_modules : ""
+    modules ||--o{ contact_modules : ""
     organizations ||--o{ tickets : "órgão do chamado"
     users ||--o{ tickets : "responsável"
     tickets ||--o| tickets : "chamado anterior (transferência entre setores)"
@@ -49,10 +53,10 @@ erDiagram
 | `user_role` | `agent`, `supervisor`, `admin` | Atendente, supervisor do setor, administrador (supervisor global) |
 | `connection_status` | `disconnected`, `connecting`, `connected`, `logged_out` | Estado da conexão do número do setor; `logged_out` exige novo QR code |
 | `ticket_status` | `queued`, `in_progress`, `closed` | Na fila sem responsável, com responsável, encerrado |
-| `closure_type` | `resolved`, `transferred` | Encerrado normalmente ou etapa encerrada por transferência entre setores |
+| `closure_type` | `resolved`, `transferred`, `cancelled` | Encerrado normalmente, etapa encerrada por transferência entre setores ou cancelado sem lançar o atendimento |
 | `message_direction` | `inbound`, `outbound` | Recebida do cliente ou enviada pelo setor |
 | `message_origin` | `customer`, `agent`, `phone` | Enviada pelo cliente, por um atendente no sistema ou pelo celular fora do sistema |
-| `message_type` | `text`, `image`, `video`, `audio`, `document`, `unsupported` | `unsupported` cobre figurinhas, reações, localização e outros tipos fora do piloto |
+| `message_type` | `text`, `image`, `video`, `audio`, `document`, `unsupported`, `media_unavailable` | `unsupported` cobre figurinhas, reações, localização e outros tipos fora do piloto; `media_unavailable` é o arquivo recebido acima do limite ou que não baixou |
 | `message_status` | `pending`, `sent`, `delivered`, `read`, `failed` | Situação de entrega das mensagens enviadas |
 
 ## Organização interna
@@ -62,11 +66,12 @@ erDiagram
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `name` | text | Obrigatório, único |
-| `phone` | text | Obrigatório, único, somente dígitos com DDI (ex.: `5511999990000`) |
+| `phone` | text | Opcional; único quando preenchido, somente dígitos com DDI (ex.: `5511999990000`); vem do número lido no QR code e é apagado ao desvincular |
 | `provider` | text | Obrigatório; provedor de mensageria do setor: `whatsmeow` (piloto) ou `cloud_api` (futuro) |
 | `external_account_id` | text | Identificador da conta no provedor (no Whatsmeow, o JID do aparelho vinculado após o QR code) |
 | `connection_status` | connection_status | Padrão `disconnected` |
 | `last_connected_at` | timestamptz | Última conexão bem-sucedida |
+| `connection_error` | text | Motivo da recusa da última conexão (número já ligado a outro setor); limpo na conexão seguinte |
 | `active` | boolean | Padrão `true` |
 
 ### `modules` — Módulo/sistema atendido pelo setor
@@ -94,7 +99,7 @@ Módulos não são excluídos, apenas desativados, porque encerramentos antigos 
 
 Restrição: `(role = 'admin') = (sector_id is null)`.
 
-Usuários não são excluídos, apenas desativados, porque continuam como autores de mensagens, chamados e auditoria.
+Usuários não são excluídos, apenas desativados, porque continuam como autores de mensagens, chamados e auditoria. Com o usuário travado, a desativação e a troca de setor (inclusive ao virar administrador, que não tem setor) são recusadas se houver chamados `in_progress` com ele como responsável.
 
 **Permissões:**
 
@@ -102,12 +107,15 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | --- | --- | --- | --- |
 | Ver fila e chamados | Próprio setor | Próprio setor | Todos os setores |
 | Assumir, responder, transferir, encerrar | Próprio setor | Próprio setor | Todos os setores |
+| Cancelar chamado na fila | Próprio setor | Próprio setor | Todos os setores |
+| Cancelar ou devolver à fila chamado em atendimento | Só sendo o responsável | Próprio setor | Todos os setores |
 | Corrigir chamado encerrado | Só os que encerrou | Próprio setor | Todos os setores |
 | Gerenciar módulos | — | Próprio setor | Todos os setores |
 | Redefinir senha | — | Usuários do próprio setor | Todos |
 | Conectar número (QR code) e ver status | — | Próprio setor | Todos os setores |
 | Cadastrar setores e usuários | — | — | Sim |
 | Cadastrar contatos e vinculá-los a um órgão | Sim | Sim | Sim |
+| Importar contatos do WhatsApp do setor | Próprio setor | Próprio setor | Todos os setores |
 | Cadastrar e editar órgãos | — | Sim | Sim |
 
 Transferir entre atendentes: o responsável transfere o próprio chamado; supervisor (do setor) e administrador transferem qualquer chamado em atendimento. O destino é um usuário ativo do setor do chamado (atendente ou supervisor).
@@ -142,7 +150,7 @@ Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua sen
 | `phone` | text | Único quando preenchido, somente dígitos com DDI; obrigatório para contato cadastrado (vazio só em contato criado automaticamente sem telefone conhecido, identificado apenas por LID) |
 | `external_contact_id` | text | Identificador do contato no provedor, usado para casar mensagens recebidas; único quando preenchido |
 | `organization_id` | bigint → `organizations` | Órgão principal; vazio para contato ainda não vinculado |
-| `registered` | boolean | `false` para contatos criados automaticamente a partir de número desconhecido; `true` após cadastro pelo atendente |
+| `registered` | boolean | `false` para contatos criados automaticamente a partir de número desconhecido; `true` após cadastro pelo atendente ou importação com órgão |
 
 Restrições: `registered` ⇒ `organization_id` e `phone` preenchidos (contato cadastrado pelo atendente sempre tem órgão e telefone).
 
@@ -154,6 +162,26 @@ CNPJ: desde julho de 2026 a Receita Federal emite CNPJ alfanumérico (IN RFB 2.2
 
 Casamento de mensagens recebidas: números brasileiros podem chegar com ou sem o nono dígito, e o WhatsApp pode identificar contatos por LID em vez do telefone. A mensagem é ligada ao contato pelo `external_contact_id` resolvido pelo adaptador. Sem contato com esse identificador, procura-se o contato pelo telefone ou por sua variante com ou sem o nono dígito (celular brasileiro: `55` + DDD + `9` + 8 dígitos ou `55` + DDD + 8 dígitos começando por 6 a 9), preferindo o telefone exato; se ele ainda não tiver `external_contact_id`, passa a ter o identificador. Sem nenhum dos dois, é criado um contato com `registered = false`.
 
+### `contact_sectors` — Setores do contato
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `contact_id` | bigint → `contacts` | Chave primária composta |
+| `sector_id` | bigint → `sectors` | Chave primária composta |
+
+O setor organiza a lista de contatos e não restringe o acesso. O vínculo é criado no cadastro, na importação e, na mesma transação da ação, quando o contato escreve para o número do setor, recebe uma conversa iniciada por ele ou mensagem do celular do setor, ou é transferido para ele (`insert ... on conflict do nothing`). A migração preenche a tabela a partir dos chamados existentes; contatos sem chamado ficam sem setor até serem editados.
+
+Índice: `(sector_id, contact_id)` para o filtro da lista.
+
+### `contact_modules` — Módulos do contato
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `contact_id` | bigint → `contacts` | Chave primária composta |
+| `module_id` | bigint → `modules` | Chave primária composta; o módulo deve ser de um setor do contato (validado na transação do cadastro) |
+
+Opcional. Tirar um setor do contato remove os módulos desse setor na mesma transação. Índice: `(module_id)` para o filtro da lista.
+
 ## Atendimento
 
 ### `tickets` — Chamado
@@ -163,33 +191,33 @@ Casamento de mensagens recebidas: números brasileiros podem chegar com ou sem o
 | `protocol` | text | Obrigatório, único; formato `AAAA-NNNNNN` |
 | `sector_id` | bigint → `sectors` | Obrigatório |
 | `contact_id` | bigint → `contacts` | Obrigatório |
-| `organization_id` | bigint → `organizations` | Copiado do órgão principal do contato; editável no encerramento; obrigatório para encerrar |
+| `organization_id` | bigint → `organizations` | Copiado do órgão principal do contato; editável no encerramento; obrigatório para encerrar, exceto no cancelamento |
 | `assignee_id` | bigint → `users` | Responsável atual |
 | `status` | ticket_status | Obrigatório |
 | `previous_ticket_id` | bigint → `tickets` | Chamado de origem em transferência entre setores; único |
 | `created_by_id` | bigint → `users` | Preenchido quando o atendente iniciou a conversa |
 | `spoke_with` | text | "Falou com", para telefones usados por mais de uma pessoa |
 | `arrived_at` | timestamptz | Obrigatório; primeira mensagem do chamado |
-| `assigned_at` | timestamptz | Primeira vez que alguém assumiu; não muda em transferências |
+| `assigned_at` | timestamptz | Primeira vez que alguém assumiu; não muda em transferências nem ao devolver à fila; vazio em chamado cancelado direto da fila |
 | `started_at` | timestamptz | Obrigatório; padrão `arrived_at`; editável no encerramento |
 | `ended_at` | timestamptz | Preenchido ao encerrar; editável |
 | `closed_at` | timestamptz | Momento real do encerramento; não editável |
-| `closed_by_id` | bigint → `users` | Quem encerrou |
+| `closed_by_id` | bigint → `users` | Quem encerrou ou cancelou |
 | `closure_type` | closure_type | Preenchido ao encerrar |
-| `subject` | text | Obrigatório para encerrar |
-| `resolution` | text | Obrigatório para encerrar |
+| `subject` | text | Obrigatório para encerrar, exceto no cancelamento |
+| `resolution` | text | Obrigatório para encerrar, exceto no cancelamento |
 
 Restrições:
 
 - `status = 'queued'` ⇒ `assignee_id` vazio.
 - `status in ('in_progress', 'closed')` ⇒ `assignee_id` preenchido.
-- `status = 'closed'` ⇒ `organization_id`, `ended_at`, `closed_at`, `closed_by_id`, `closure_type`, `subject` e `resolution` preenchidos.
+- `status = 'closed'` ⇒ `ended_at`, `closed_at`, `closed_by_id` e `closure_type` preenchidos e, exceto em `closure_type = 'cancelled'`, também `organization_id`, `subject` e `resolution`.
 - `ended_at >= started_at`.
 - Índice único parcial em `(sector_id, contact_id) where status <> 'closed'`: um chamado aberto por contato e setor.
 - Encerrar exige ao menos um registro em `ticket_modules` (validado na transação de encerramento).
 - O contato do chamado precisa estar com `registered = true` para encerrar.
 
-Índices: `(sector_id, status)` para a fila; `(assignee_id) where status = 'in_progress'` para a contagem por atendente; `(contact_id)` e `(organization_id)` para o histórico.
+Índices: `(sector_id, status)` para a fila; `(assignee_id) where status = 'in_progress'` para a contagem por atendente; `(contact_id)` e `(organization_id)` para o histórico; `(sector_id, closed_at) where status = 'closed'` para os realizados do dia.
 
 ### `ticket_modules` — Módulos atendidos no chamado
 
@@ -229,6 +257,9 @@ stateDiagram-v2
     in_progress --> in_progress: transferência entre atendentes
     in_progress --> closed: encerramento (resolved)
     in_progress --> closed: transferência entre setores (transferred)
+    in_progress --> queued: devolver à fila
+    queued --> closed: cancelamento (cancelled)
+    in_progress --> closed: cancelamento (cancelled)
     closed --> [*]
 ```
 
@@ -244,6 +275,8 @@ stateDiagram-v2
 | Transferência entre setores | Com as mesmas travas e conferências do encerramento (somente o responsável), encerra com o formulário completo e `closure_type = 'transferred'`; cria chamado `queued` no destino (outro setor ativo) com `previous_ticket_id`, mesmo contato, o órgão do formulário e `arrived_at` = momento da transferência. Se o contato já tiver chamado aberto no destino (índice único parcial), a transação é desfeita e a transferência recusada. Auditoria `ticket_transferred_sector` na origem, na mesma transação. Os eventos dos dois setores são publicados depois do commit |
 | Cadastro do contato | Na mesma transação do cadastro, os chamados abertos do contato com `organization_id` vazio recebem o órgão do contato (travados com `for update`), com auditoria `ticket_organization_linked` em cada um |
 | Correção | Com o chamado travado (`for update`) e `closed`, por quem encerrou (`closed_by_id`), supervisor do setor ou administrador: altera `subject`, `resolution`, `organization_id`, `started_at`, `ended_at` e `spoke_with` e acrescenta ou remove linhas de `ticket_modules` (acrescentadas só entre os módulos ativos do setor; as já gravadas podem ficar mesmo inativas); auditoria `ticket_corrected` com `reason` na mesma transação. Sem nenhuma alteração, nada é gravado |
+| Devolver à fila | Com o chamado travado (`for update`) e `in_progress`, pelo responsável, supervisor do setor ou administrador: `status = 'queued'`, `assignee_id` vazio, `assigned_at` mantido; auditoria `ticket_returned` na mesma transação |
+| Cancelamento | Com o chamado travado (`for update`) e aberto, conforme as permissões: `closure_type = 'cancelled'`, `closed_at` e `ended_at` = agora, `closed_by_id` = quem cancelou; vindo da fila, `assignee_id` = quem cancelou, porque chamado encerrado exige responsável (`assigned_at` fica vazio). Não exige contato cadastrado nem `ticket_modules`; auditoria `ticket_cancelled` com `reason` na mesma transação. Chamado cancelado não é corrigido |
 | Mensagem após encerramento | Cria novo chamado (não reabre) |
 
 Chamados não são reabertos. O destino de uma transferência entre setores vê o histórico seguindo a cadeia de `previous_ticket_id`: quem tem acesso ao setor de um chamado lê também todos os chamados anteriores da cadeia (detalhe, mensagens, arquivos, notas, módulos e correções), sem poder agir neles. A origem vê o setor e o protocolo do chamado seguinte, sem acesso a ele.
@@ -274,7 +307,7 @@ Restrições:
 - Único em `(sector_id, external_message_id)` quando preenchido: garante idempotência em reconexões e reentregas.
 - Único em `client_request_id` quando preenchido: garante idempotência no envio pelo sistema.
 - `direction = 'inbound'` ⇔ `origin = 'customer'`.
-- `type in ('image', 'video', 'audio', 'document')` ⇒ `media_id` preenchido.
+- `type in ('image', 'video', 'audio', 'document')` ⇒ `media_id` preenchido. `media_unavailable` não tem `media_id`; `body` guarda a legenda ou o nome do arquivo.
 
 Índice: `(ticket_id, sent_at)` para exibir a conversa.
 
@@ -308,12 +341,12 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 | `entity_id` | bigint | Obrigatório |
 | `action` | text | Ver tabela abaixo |
 | `actor_id` | bigint → `users` | Quem fez; vazio para ações do sistema |
-| `reason` | text | Obrigatório em correções |
+| `reason` | text | Obrigatório em correções e cancelamentos |
 | `changes` | jsonb | Valores anteriores e novos: `{"campo": {"from": ..., "to": ...}}` |
 
 Índices: `(ticket_id, created_at)` e `(entity_type, entity_id)`.
 
-Restrição: `action = 'ticket_corrected'` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`).
+Restrição: `action in ('ticket_corrected', 'ticket_cancelled')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o cancelamento).
 
 A tabela é criada na T03 (primeira ação auditada: redefinição de senha), antes de existir `tickets`; a chave estrangeira de `ticket_id` é adicionada na migração que cria `tickets`.
 
@@ -326,10 +359,13 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |
 | `ticket_closed` | Encerramento: `changes` com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados no formulário, `started_at` (de `arrived_at` para o informado) e `organization_id` |
 | `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at`, `ended_at` e `spoke_with` |
+| `ticket_cancelled` | Cancelamento (exige `reason`): `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
+| `ticket_returned` | Devolver à fila: `changes` com `status` e `assignee_id` |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |
 | `module_created`, `module_updated` | Administração de módulos |
 | `organization_created`, `organization_updated` | Administração de órgãos |
+| `contacts_imported` | Importação de contatos, na entidade `sector`: `changes` com as quantidades de contatos criados e já existentes |
 
 Conexão do número: `sector_connected` é gravado quando o setor passa a `connected` vindo de outro estado ou com outra conta vinculada; `sector_disconnected`, quando sai de `connected`. Os estados intermediários (`connecting`) e as reconexões automáticas que não passam por `connected` não geram auditoria. Os dois registros são ações do sistema (`actor_id` vazio) e guardam em `changes` o estado da conexão e a conta vinculada.
 

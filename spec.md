@@ -9,7 +9,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 ## Estrutura e implantação
 
 - A empresa possui seis setores: Contabilidade, Suprimentos, Tributos, RH, GED e Social.
-- Setores serão cadastrados livremente no sistema, cada um com seu número de WhatsApp. No início, apenas a Contabilidade será cadastrada.
+- Setores serão cadastrados livremente no sistema, cada um com seu número de WhatsApp, vinculado pelo QR code. No início, apenas a Contabilidade será cadastrada.
 - Hoje há até quatro atendentes por setor. A solução deverá contemplar expansão para até 20 por setor, totalizando 120 atendentes.
 - O piloto será feito no setor de Contabilidade.
 - A conexão inicial será feita com Whatsmeow, biblioteca em Go que utiliza o protocolo do WhatsApp Web.
@@ -36,9 +36,11 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 
 - O administrador geral cadastra usuários, setores e permissões.
 - O supervisor gerencia a lista de módulos/sistemas do próprio setor. As listas serão cadastradas no sistema, sem necessidade de defini-las antes da implementação.
-- Setores são cadastrados e editados (nome e número). Nesta etapa não há desativação de setor.
+- Setores são cadastrados e editados pelo nome. Nesta etapa não há desativação de setor.
+- O telefone do setor não é digitado: vem do número lido no QR code ao conectar. Número já ligado a outro setor é recusado: o aparelho é desvinculado e a tela de conexão mostra o motivo. O telefone é apagado quando o número é desvinculado e continua na tela durante quedas temporárias da conexão.
 - Ao cadastrar um usuário, o administrador digita a senha inicial, que segue a mesma regra de complexidade da redefinição, e a repassa ao usuário.
 - Usuários não são excluídos, apenas desativados; desativar encerra as sessões abertas. O administrador não pode desativar a própria conta nem alterar o próprio papel, para não perder o acesso à administração.
+- A desativação ou a troca de setor de um usuário é recusada enquanto ele tiver chamados em atendimento, informando quantos são; os chamados precisam ser transferidos antes.
 - A tela de usuários é exclusiva do administrador. A redefinição de senha pelo supervisor existe na API, mas ainda não tem tela.
 
 ## Órgãos e contatos
@@ -47,14 +49,30 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - Os órgãos são pré-cadastrados por supervisores e administradores, com nome e CNPJ opcional (único quando informado). O CNPJ é validado pelos dígitos verificadores e aceita o formato numérico e o alfanumérico emitido pela Receita Federal desde julho de 2026.
 - O contato é a pessoa que conversa pelo WhatsApp, com nome e telefone, vinculada a um órgão principal pré-cadastrado. É raro um contato representar mais de um órgão.
 - Cada chamado ficará vinculado ao contato e ao órgão. O órgão vem do cadastro do contato e pode ser alterado no formulário de encerramento quando o atendimento for de outro órgão; a alteração vale só para aquele chamado.
-- No piloto, órgãos e contatos serão cadastrados manualmente. A importação por planilha (CSV) fica para uma etapa posterior.
+- Órgãos são cadastrados manualmente. Contatos são cadastrados manualmente ou importados do WhatsApp do setor. A importação por planilha (CSV) fica para uma etapa posterior.
 - Cada telefone corresponde a um único contato. Quando um telefone for usado por mais de uma pessoa, o atendente poderá anotar no chamado com quem falou.
 - A busca deverá permitir localizar órgãos e contatos por nome, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
 - Mensagens de números desconhecidos entrarão normalmente na fila.
 - A mensagem recebida é ligada ao contato pelo identificador do WhatsApp gravado no contato. Na primeira mensagem de um contato cadastrado manualmente, ainda sem esse identificador, vale o telefone, aceitando também a variante brasileira com ou sem o nono dígito do celular (ex.: 5511987654321 e 551187654321); o identificador passa a ser gravado no contato.
 - Número desconhecido gera um contato não cadastrado, com o nome do perfil do WhatsApp ou, sem ele, o telefone. Se o WhatsApp não informar o telefone (contato identificado apenas por LID), o contato fica sem telefone, com o nome do perfil ou "Contato sem telefone"; o atendente informa o telefone ao cadastrá-lo.
-- Antes de finalizar um chamado de número desconhecido, o atendente deverá cadastrar o contato e vinculá-lo a um órgão pré-cadastrado.
+- Antes de encerrar um chamado de número desconhecido, o atendente deverá cadastrar o contato e vinculá-lo a um órgão pré-cadastrado. O cancelamento dispensa o cadastro.
 - Ao cadastrar o contato, os chamados abertos dele que ainda estão sem órgão passam a ter o órgão do cadastro, com registro na auditoria. Chamados que já têm órgão não mudam; a troca continua sendo feita no encerramento.
+
+### Setores e módulos do contato
+
+- O contato pode pertencer a vários setores. O setor organiza a lista e não restringe o acesso: o cadastro continua único para todos os setores.
+- No cadastro manual, ao menos um setor é obrigatório, com o setor de quem cadastra já marcado; o administrador escolhe.
+- A lista de contatos abre em "Meu setor", com opção de ver todos. A busca de "Nova conversa" usa o mesmo filtro. O administrador abre em todos.
+- O contato entra no setor sozinho ao escrever para o número dele, ao receber uma conversa iniciada por ele, em mensagem enviada pelo celular do setor ou ao ser transferido para ele.
+- Módulos no contato são opcionais e pertencem aos setores do contato. Eles filtram a lista e vêm marcados no formulário de encerramento.
+
+### Importar contatos do WhatsApp
+
+- Todos os papéis importam, pelo número conectado do próprio setor; o administrador escolhe o setor. A importação é sempre uma ação manual, nunca automática ao conectar.
+- A lista mostra só quem tem nome salvo na agenda do número e telefone. A pessoa marca os contatos ou usa "selecionar todos".
+- O órgão é opcional e vale para o lote. Com órgão, o contato fica cadastrado; sem órgão, fica não cadastrado e é completado antes do encerramento.
+- Os contatos importados entram no setor do número.
+- Telefone que já existe, com ou sem o nono dígito, não é sobrescrito: só ganha o vínculo com o setor. Importar de novo não duplica.
 
 ## Recebimento e distribuição
 
@@ -64,6 +82,10 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 4. Outros integrantes autorizados do setor conseguem visualizar o chamado e identificar seu responsável.
 
 Não haverá distribuição automática nem limite de chamados ativos por atendente.
+
+Ao assumir pelo painel, a conversa abre em seguida. A linha inteira do chamado no painel também abre a conversa. Encerrar, transferir para outro setor, cancelar e devolver à fila levam de volta ao painel; a correção continua na mesma tela.
+
+O painel mostra também os **realizados hoje**: todos os atendimentos do setor encerrados no dia, no horário de Brasília e pelo momento real do encerramento, com "Você" nos próprios. Transferidos para outro setor e cancelados aparecem identificados. Cada linha abre o chamado. O administrador vê o setor escolhido no painel.
 
 Fora do expediente, as mensagens entrarão na fila normalmente, sem resposta automática.
 
@@ -77,6 +99,7 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 - Arquivos enviados pelo painel têm até 16 MB. Imagens JPEG e PNG vão como imagem, vídeos MP4 como vídeo e os demais arquivos como documento, com o nome original. O envio de áudio gravado como mensagem de voz é tratado à parte.
 - O responsável grava áudio no próprio painel, pode ouvi-lo ou descartá-lo antes de enviar, e o envia como mensagem de voz do WhatsApp, sem legenda e com até 16 MB. Uma gravação que não pode ser lida como áudio é recusada com aviso para gravar de novo. O navegador só libera o microfone com o painel acessado por HTTPS (ou em `localhost`); fora disso, a tela avisa que a gravação está indisponível.
 - Imagens e vídeos, recebidos ou enviados, aparecem com pré-visualização na conversa (a imagem abre em tamanho real numa nova aba) e áudios tocam num player no próprio painel. Os demais arquivos abrem ou são baixados pelo link.
+- Arquivos recebidos têm até 100 MB. Arquivo acima do limite, ou que não baixa depois de algumas tentativas, vira mensagem no chamado com o aviso "arquivo não pôde ser baixado". A mensagem não se perde nem fica presa em reentrega.
 - Cada mensagem enviada mostra a situação de entrega: enviando, enviada, entregue, lida ou falhou. A situação só avança (uma confirmação atrasada de entrega não desfaz a leitura); uma mensagem marcada como falha volta a avançar se o WhatsApp confirmar a entrega.
 - Mensagem que falhou (número desconectado, erro do WhatsApp ou serviço reiniciado durante o envio) não é reenviada automaticamente: o responsável usa "Reenviar", que tenta a mesma mensagem de novo, sem duplicá-la no WhatsApp.
 - Notas internas podem ser escritas por qualquer pessoa com acesso ao setor do chamado, mesmo sem ser o responsável e também em chamado encerrado. Não são enviadas ao cliente, nem editadas ou excluídas.
@@ -93,6 +116,7 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 - O chamado aberto é verificado ao escolher o contato, antes de escrever a mensagem; se ele surgir enquanto a mensagem é escrita (por exemplo, o cliente mandou mensagem ou outro atendente iniciou ao mesmo tempo), a mensagem não é enviada e o atendente é direcionado ao chamado existente.
 - O contato precisa ter telefone. O administrador escolhe por qual setor iniciar a conversa, como no painel.
 - Iniciar a conversa já conta como assumir o chamado: fica registrado no histórico, e a conversa começa com "Fulano iniciou a conversa e assumiu o chamado".
+- A tela de nova conversa tem um botão para cadastrar o contato ali mesmo; ao salvar, o novo contato já fica escolhido para a primeira mensagem.
 
 ## Transferências
 
@@ -104,6 +128,11 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 - O destino é um atendente ou supervisor ativo do setor do chamado, diferente do responsável atual. Administradores não são destino. Chamado na fila não é transferido: é assumido.
 - A partir da transferência, só o novo responsável responde; o anterior passa a ver a conversa apenas para leitura.
 - A conversa mostra, entre as mensagens e na ordem do tempo, quando o chamado foi assumido, cada transferência e o encerramento, com quem fez, de quem para quem e quando.
+
+### Devolver à fila
+
+- O responsável, os supervisores do setor e os administradores devolvem à fila um chamado em atendimento, por exemplo quando foi assumido por engano.
+- A devolução fica registrada no histórico e aparece na conversa. O momento em que o chamado foi assumido pela primeira vez não muda.
 
 ### Entre setores
 
@@ -138,7 +167,7 @@ Ao clicar em finalizar, o sistema abrirá o formulário de registro. O chamado s
 - Encerra o chamado em atendimento somente o responsável; supervisores e administradores também precisam ser o responsável (na ausência dele, o supervisor transfere o chamado para si e encerra). Chamado na fila não é encerrado: é assumido.
 - O fim não pode ser anterior ao início nem estar no futuro. Sem edição, o fim é o momento em que o formulário é salvo.
 - O órgão sugerido é o do chamado ou, se ele ainda não tiver, o órgão principal do contato. Contato não cadastrado (número desconhecido) precisa ser cadastrado e vinculado a um órgão antes de salvar o formulário.
-- Os módulos selecionáveis são os ativos do setor do chamado.
+- Os módulos selecionáveis são os ativos do setor do chamado. Os módulos do contato que estiverem entre eles já vêm marcados, e a pessoa pode alterar.
 
 Cada setor terá sua própria lista de módulos/sistemas. Um chamado poderá tratar de vários módulos, com uma resolução geral.
 
@@ -156,6 +185,14 @@ Alterações nos horários deverão ficar registradas no histórico de auditoria
 - Correções exigirão um motivo. Uma correção que não altera nenhum dado é recusada, sem registro.
 - O sistema registrará autor, data, motivo e alterações realizadas (valores anteriores e novos). O chamado mostra o histórico de alterações nos detalhes, e a conversa mostra, na ordem do tempo, quem corrigiu o atendimento e quando.
 
+## Cancelamento
+
+- Cancelar finaliza o chamado sem lançar o atendimento, para spam, golpes e engano. Dispensa o formulário de encerramento, o cadastro do contato e o órgão.
+- Na fila, qualquer pessoa do setor cancela, sem assumir. Em atendimento, cancelam o responsável, os supervisores do setor e os administradores.
+- O motivo é um texto livre obrigatório. A conversa mostra quem cancelou, quando e o motivo.
+- O chamado cancelado fica no histórico, identificado como cancelado, e não é corrigido nem reaberto. Notas internas continuam permitidas.
+- Uma nova mensagem do mesmo número abre outro chamado, como após um encerramento.
+
 ## Armazenamento
 
 - O sistema armazenará mensagens e anexos durante o piloto. Isso é necessário porque o Whatsmeow não recupera o histórico antigo sob demanda, os links de mídia do WhatsApp expiram e a transferência entre setores exige histórico compartilhado entre números diferentes.
@@ -171,6 +208,8 @@ Alterações nos horários deverão ficar registradas no histórico de auditoria
 - Busca de clientes e abertura de conversas pela equipe.
 - Transferências entre atendentes e setores.
 - Formulário de encerramento e histórico de alterações.
+- Cancelamento de atendimento e lista de atendimentos realizados no dia.
+- Importação de contatos do WhatsApp do setor.
 
 Fora do piloto: etiquetas, importação por planilha, grupos, exibição de reações, figurinhas e localização, e tratamento de mensagens editadas ou apagadas pelo cliente. Mensagens de tipos não suportados aparecerão no histórico como aviso ("tipo de mensagem não suportado"), sem se perder silenciosamente.
 
@@ -193,6 +232,12 @@ Fora do piloto: etiquetas, importação por planilha, grupos, exibição de rea�
 - Receber mensagens fora do expediente sem resposta automática.
 - Receber e ouvir áudios, enviar áudio gravado e visualizar imagens e vídeos.
 - Alertar os supervisores na desconexão do número e reconectar por QR code.
+- Assumir pelo painel abre a conversa; ao encerrar, voltar ao painel e ver o atendimento nos realizados do dia.
+- Cancelar um chamado de spam sem cadastrar o contato, com motivo e auditoria.
+- Devolver um chamado em atendimento à fila.
+- Receber arquivo acima do limite como aviso, sem perder a mensagem.
+- Preencher o telefone do setor pelo QR code e recusar número já ligado a outro setor.
+- Importar contatos do número do setor sem duplicar os já cadastrados.
 
 ## Arquitetura técnica
 

@@ -16,7 +16,7 @@ Regra geral: o shadcn/ui fornece o comportamento e a acessibilidade dos componen
 - As variáveis do shadcn são mapeadas uma única vez para os tokens, sem bloco `.dark` próprio: como os tokens já mudam com o tema, o shadcn acompanha automaticamente.
 - O mapeamento é feito direto nas cores do Tailwind (`--color-*` em `@theme inline`), sem as variáveis intermediárias do shadcn: a variável `--accent` do shadcn colide com o token `--accent` do design system.
 - A variante `dark:` do Tailwind segue a mesma regra do design system: `data-theme="dark"`, ou tema escuro do sistema operacional sem `data-theme="light"`.
-- Tema claro é o padrão; o escuro segue o sistema operacional. Não há seletor de tema no piloto.
+- A pessoa escolhe Claro, Escuro ou Sistema no menu de configurações; sem escolha, vale Sistema, que segue o sistema operacional. A escolha fica no navegador e é aplicada em `data-theme` antes de pintar a tela. O `color-scheme` acompanha o tema, para barras de rolagem e seletores nativos, e os avisos (`sonner`) também.
 
 | Variável do shadcn | Token do design system |
 | --- | --- |
@@ -65,10 +65,13 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | Note | `Alert` (variante `warning`) | Ícone de aviso + uma frase em `warning-ink` sobre `warning-soft`, sem título |
 | EmptyState | `Empty` | Ícone de 30px a 50% e uma frase em `ink-faint` |
 | Sidebar | `Sidebar` | Escura nos dois temas; marca no topo; abaixo de 760px vira gaveta |
+| Menu de configurações | `DropdownMenu` | No rodapé da barra lateral, abaixo do nome do usuário: botão "Configurações" com a escolha de tema e "Sair". Ícones de 15px |
 | Topbar | Componente próprio | Fixa sobre `paper`: breadcrumb, título `title-page` e no máximo uma ação primária |
 | KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption` |
 
 Componentes sem equivalente no design system (ex.: balões de conversa, player de áudio, indicador de conexão) são compostos com os mesmos tokens e regras: `surface` e `line` para contêineres, raios pequenos, sem sombra fora de camadas flutuantes, estados com palavra além da cor.
+
+Player de áudio: componente próprio, usado na gravação e nas mensagens. Botão de tocar e pausar, barra de progresso e tempo em `mono-num`, sobre `surface` e `line`, com os raios pequenos do design system. A barra funciona por teclado e a duração aparece uma única vez.
 
 ## Ícones
 

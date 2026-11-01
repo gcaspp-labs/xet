@@ -32,9 +32,10 @@ O pacote `internal/messaging` define a interface e os tipos neutros; cada proved
 
 - **Envio:** `SendText`, `SendMedia` (imagem, vídeo, áudio, documento) com destinatário, conteúdo e identificador de idempotência; retorna o identificador externo da mensagem.
 - **Eventos recebidos:** mensagem recebida, mensagem enviada por fora do sistema, atualização de status (enviada, entregue, lida, falhou), mudança de conexão. O adaptador entrega eventos já traduzidos para os tipos neutros; o domínio nunca vê tipos do provedor.
-- **Mídia:** o adaptador baixa a mídia e entrega o conteúdo; o domínio grava pelo adaptador de armazenamento.
-- **Conexão:** iniciar, encerrar e consultar status por setor. O pareamento por QR code é específico do Whatsmeow e fica fora do contrato comum, exposto apenas pelo adaptador Whatsmeow.
+- **Mídia:** o adaptador baixa a mídia e entrega o conteúdo; o domínio grava pelo adaptador de armazenamento. Acima do limite de recebimento (100 MB), ou se o download falhar depois de algumas tentativas, o adaptador entrega a mensagem sem o conteúdo (`media_unavailable`), sem baixar o arquivo.
+- **Conexão:** iniciar, encerrar e consultar status por setor. O pareamento por QR code é específico do Whatsmeow e fica fora do contrato comum, exposto apenas pelo adaptador Whatsmeow (interface opcional `QRPairing`). O evento de conexão informa o telefone da conta vinculada.
 - **Contato:** resolver telefone em identificador externo do contato.
+- **Agenda:** a leitura dos contatos salvos no número é uma interface opcional (`ContactBook`), no mesmo padrão de `QRPairing`, porque a API oficial pode não oferecer a agenda. Sem ela, a importação de contatos fica indisponível para o setor.
 
 ### Conexão do número
 
@@ -96,7 +97,7 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 - A gravação chega na mesma rota de envio de arquivos (`POST /api/tickets/{id}/messages`, multipart), no campo `voice` em vez de `file`. O pacote `internal/audio` grava a entrada num arquivo temporário (MP4 exige leitura com saltos, que um pipe não permite), converte para OGG/Opus mono a 48 kHz (`libopus`, 32 kbit/s) e lê a duração da última página OGG. Só o arquivo convertido é guardado, com o tipo `audio/ogg; codecs=opus`, e enviado com a marcação de mensagem de voz (PTT no Whatsmeow).
 - A conversão acontece depois da conferência de idempotência: repetir o envio devolve a mensagem registrada sem converter de novo.
 - O `ffmpeg` (com `libopus`) precisa estar instalado onde o backend roda: na imagem Docker do backend, no CI e na máquina de desenvolvimento.
-- Imagens e vídeos são exibidos com pré-visualização no painel e áudios com o player nativo do navegador (`<audio>`). A rota `GET /api/media/{id}` atende pedidos parciais (`Range`), para os players avançarem e voltarem.
+- Imagens e vídeos são exibidos com pré-visualização no painel. Áudios, recebidos ou gravados, tocam num player próprio, feito sobre um elemento `<audio>` sem os controles nativos, para seguir o design system. A rota `GET /api/media/{id}` atende pedidos parciais (`Range`), para os players avançarem e voltarem.
 
 ## Monitoramento
 
@@ -160,6 +161,7 @@ Ferramentas de desenvolvimento (não entram no binário, executadas via Docker c
 | Estilo | Tailwind CSS |
 | Design system | `github:gcaspp-labs/glab-design-system` (tokens, logos), fixado por commit; aplicação em [design.md](design.md) |
 | Componentes | shadcn/ui (estilo `base-nova`, sobre Base UI; padrão atual do shadcn), adaptado ao design system |
+| Tema | Preferência guardada no `localStorage` do navegador, por aparelho, e aplicada em `data-theme` antes de pintar a tela. Não vai para o banco |
 | Fontes | `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-serif`, `@fontsource/ibm-plex-mono` (servidas localmente) |
 | Ícones | lucide-react, com traço 1,7 |
 | Notificações na tela | sonner |
