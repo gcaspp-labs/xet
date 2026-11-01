@@ -23,6 +23,13 @@ export async function signIn(page: Page, email: string, password: string) {
   await expect(page).not.toHaveURL(/\/login$/)
 }
 
+// Troca de usuário: sai da página antes de limpar os cookies. Uma requisição ainda em andamento
+// renovaria o cookie ao responder, e a tela de login redirecionaria o usuário anterior ao painel.
+export async function clearSession(page: Page) {
+  await page.goto('about:blank')
+  await page.context().clearCookies()
+}
+
 // Os testes rodam em paralelo no mesmo banco: nomes, e-mails e números são únicos por teste.
 export function unique() {
   const id = `${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(-9)
