@@ -216,7 +216,10 @@ func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Messa
 		}
 
 		if phone != "" {
-			contact, err = q.GetContactByPhone(ctx, phoneVariants(phone))
+			if err := directory.LockPhone(ctx, q, phone); err != nil {
+				return db.Contact{}, false, err
+			}
+			contact, err = q.GetContactByPhone(ctx, directory.PhoneVariants(phone))
 			if err == nil {
 				// A contact known by another provider ID (such as its LID) keeps it.
 				return contact, contact.ExternalContactID == nil, nil
@@ -248,22 +251,6 @@ func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Messa
 		// A concurrent message created the contact first; look it up again.
 	}
 	return db.Contact{}, false, fmt.Errorf("contact %s could not be matched", msg.ExternalContactID)
-}
-
-// phoneVariants returns the phone and, for a Brazilian mobile number, the
-// same number with or without the ninth digit.
-func phoneVariants(phone string) []string {
-	variants := []string{phone}
-	if len(phone) < 5 || phone[:2] != "55" {
-		return variants
-	}
-	switch {
-	case len(phone) == 13 && phone[4] == '9':
-		variants = append(variants, phone[:4]+phone[5:])
-	case len(phone) == 12 && phone[4] >= '6':
-		variants = append(variants, phone[:4]+"9"+phone[4:])
-	}
-	return variants
 }
 
 // openTicket locks the open ticket of the contact in the sector, or opens a

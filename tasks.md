@@ -258,7 +258,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** dá para cadastrar um contato e enviar a primeira mensagem sem sair da tela; telefone já cadastrado mostra o aviso sem fechar a conversa.
 
-### [ ] T29 — Importar contatos do WhatsApp
+### [x] T29 — Importar contatos do WhatsApp
 
 - Interface opcional `ContactBook`, no padrão de `QRPairing` (`internal/messaging/messaging.go`), no adaptador Whatsmeow (`Store.Contacts.GetAllContacts`, com telefone resolvido quando o contato vem por LID) e no falso. Só entram contatos com nome salvo e telefone.
 - Levar `phoneVariants` (`internal/ticket/inbound.go`) para `internal/directory`, para usar a mesma regra do nono dígito.

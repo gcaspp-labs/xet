@@ -1,7 +1,8 @@
-import { BookUser, Plus } from 'lucide-react'
+import { BookUser, Download, Plus } from 'lucide-react'
 import { useDeferredValue, useState } from 'react'
 import { ContactFilters } from '@/components/ContactFilters'
 import { ContactSheet } from '@/components/ContactSheet'
+import { ImportContactsSheet } from '@/components/ImportContactsSheet'
 import { SearchBox } from '@/components/SearchBox'
 import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
@@ -30,6 +31,8 @@ export default function ContactsPage() {
   // Nova chave a cada abertura: o formulário começa sempre limpo.
   const [sheetKey, setSheetKey] = useState(0)
   const [history, setHistory] = useState<Contact | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importKey, setImportKey] = useState(0)
 
   const openSheet = (contact: Contact | null) => {
     setEditing(contact)
@@ -43,10 +46,22 @@ export default function ContactsPage() {
         breadcrumb="Cadastro"
         title="Contatos"
         action={
-          <Button onClick={() => openSheet(null)}>
-            <Plus strokeWidth={1.7} aria-hidden />
-            Novo contato
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportKey((key) => key + 1)
+                setImportOpen(true)
+              }}
+            >
+              <Download strokeWidth={1.7} aria-hidden />
+              Importar contatos
+            </Button>
+            <Button onClick={() => openSheet(null)}>
+              <Plus strokeWidth={1.7} aria-hidden />
+              Novo contato
+            </Button>
+          </div>
         }
       />
       <PageContent>
@@ -156,6 +171,11 @@ export default function ContactsPage() {
         )}
       </PageContent>
       <ContactSheet key={sheetKey} contact={editing} open={open} onOpenChange={setOpen} />
+      <ImportContactsSheet
+        key={`import-${importKey}`}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+      />
       <HistorySheet
         target={history && { kind: 'contact', id: history.id, name: history.name }}
         onClose={() => setHistory(null)}

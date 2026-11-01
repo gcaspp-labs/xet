@@ -74,6 +74,8 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 
 - Todos os papéis importam, pelo número conectado do próprio setor; o administrador escolhe o setor. A importação é sempre uma ação manual, nunca automática ao conectar.
 - A lista mostra só quem tem nome salvo na agenda do número e telefone. A pessoa marca os contatos ou usa "selecionar todos".
+- A lista indica quem já existe no cadastro, com ou sem o nono dígito. Quem já existe pode ser marcado, para ganhar o vínculo com o setor.
+- A busca da lista filtra por nome ou telefone, sem diferenciar maiúsculas nem acentos. "Selecionar todos" vale para os contatos mostrados, e os já marcados continuam marcados ao mudar a busca.
 - O órgão é opcional e vale para o lote. Com órgão, o contato fica cadastrado; sem órgão, fica não cadastrado e é completado antes do encerramento.
 - Os contatos importados entram no setor do número.
 - Telefone que já existe, com ou sem o nono dígito, não é sobrescrito: só ganha o vínculo com o setor. Importar de novo não duplica.

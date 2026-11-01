@@ -99,6 +99,10 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 			// Módulos ativos do setor, para o cadastro de contatos e os filtros: todos os papéis do setor.
 			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/active-modules", s.listActiveModules)
 
+			// Importar contatos da agenda do número do setor: todos os papéis do setor.
+			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/saved-contacts", s.listSavedContacts)
+			r.With(requireSector("sectorID")).Post("/sectors/{sectorID}/saved-contacts/import", s.importContacts)
+
 			// Conexão do número: supervisor do próprio setor e administrador.
 			r.Route("/sectors/{sectorID}/connection", func(r chi.Router) {
 				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin), requireSector("sectorID"))

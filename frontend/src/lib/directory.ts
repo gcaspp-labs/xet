@@ -156,6 +156,36 @@ export function useActiveModulesOf(sectorIds: number[]) {
   })
 }
 
+export type SavedContact = { name: string; phone: string; exists: boolean }
+
+export type ImportResult = { created: number; existing: number; unavailable: number }
+
+// Agenda do número do setor. Sem nova tentativa: número desconectado é um aviso, não uma falha passageira.
+export function useSavedContacts(sectorId: number | undefined) {
+  return useQuery({
+    queryKey: ['sectors', sectorId, 'saved-contacts'],
+    queryFn: () => api<SavedContact[]>(`/sectors/${sectorId}/saved-contacts`),
+    enabled: sectorId !== undefined,
+    retry: false,
+  })
+}
+
+// Envia só os telefones escolhidos; o servidor lê os nomes de novo.
+export function useImportContacts() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      sectorId,
+      ...body
+    }: {
+      sectorId: number
+      phones: string[]
+      organizationId: number
+    }) => api<ImportResult>(`/sectors/${sectorId}/saved-contacts/import`, { method: 'POST', body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: contactsKey }),
+  })
+}
+
 export function useSaveContact() {
   const queryClient = useQueryClient()
   return useMutation({

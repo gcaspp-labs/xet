@@ -47,8 +47,9 @@ type Adapter struct {
 }
 
 var (
-	_ messaging.Provider  = (*Adapter)(nil)
-	_ messaging.QRPairing = (*Adapter)(nil)
+	_ messaging.Provider    = (*Adapter)(nil)
+	_ messaging.QRPairing   = (*Adapter)(nil)
+	_ messaging.ContactBook = (*Adapter)(nil)
 )
 
 // New opens the device store in the service database, creating or upgrading
@@ -234,6 +235,41 @@ func (a *Adapter) ResolveContact(ctx context.Context, sectorID int64, phone stri
 		return "", messaging.ErrContactNotFound
 	}
 	return resp[0].JID.String(), nil
+}
+
+// SavedContacts reads the address book synced from the phone. A contact known
+// by LID gets its phone from the LID mappings of the store, and one without a
+// saved name or a known phone is left out.
+func (a *Adapter) SavedContacts(ctx context.Context, sectorID int64) ([]messaging.SavedContact, error) {
+	cli, err := a.client(sectorID)
+	if err != nil {
+		return nil, err
+	}
+	all, err := cli.Store.Contacts.GetAllContacts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get all contacts: %w", err)
+	}
+	out := make([]messaging.SavedContact, 0, len(all))
+	for jid, info := range all {
+		name := info.FullName
+		if name == "" {
+			name = info.FirstName
+		}
+		if name == "" {
+			continue
+		}
+		switch jid.Server {
+		case types.DefaultUserServer:
+		case types.HiddenUserServer:
+			if jid, err = cli.Store.LIDs.GetPNForLID(ctx, jid); err != nil || jid.IsEmpty() {
+				continue
+			}
+		default:
+			continue
+		}
+		out = append(out, messaging.SavedContact{Name: name, Phone: jid.User})
+	}
+	return out, nil
 }
 
 // messageID derives the WhatsApp message ID from the idempotency key, so a

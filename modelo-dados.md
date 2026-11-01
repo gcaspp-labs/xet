@@ -163,6 +163,8 @@ CNPJ: desde julho de 2026 a Receita Federal emite CNPJ alfanumérico (IN RFB 2.2
 
 Casamento de mensagens recebidas: números brasileiros podem chegar com ou sem o nono dígito, e o WhatsApp pode identificar contatos por LID em vez do telefone. A mensagem é ligada ao contato pelo `external_contact_id` resolvido pelo adaptador. Sem contato com esse identificador, procura-se o contato pelo telefone ou por sua variante com ou sem o nono dígito (celular brasileiro: `55` + DDD + `9` + 8 dígitos ou `55` + DDD + 8 dígitos começando por 6 a 9), preferindo o telefone exato; se ele ainda não tiver `external_contact_id`, passa a ter o identificador. Sem nenhum dos dois, é criado um contato com `registered = false`.
 
+Corrida do nono dígito: a restrição de telefone único não vê as duas variantes como o mesmo número. Por isso, a recepção de mensagens e a importação tomam, na transação, uma trava consultiva (`pg_advisory_xact_lock`) pela variante mais curta do telefone antes de procurar e criar o contato. A importação toma as travas em ordem, para não haver impasse. O cadastro manual continua comparando só o telefone exato.
+
 ### `contact_sectors` — Setores do contato
 
 | Coluna | Tipo | Regras |
@@ -368,8 +370,8 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `module_created`, `module_updated` | Administração de módulos |
 | `organization_created`, `organization_updated` | Administração de órgãos |
 | `contact_links_updated` | Cadastro ou edição muda setores ou módulos do contato, na entidade `contact`: `changes` só com o que mudou entre `sector_ids` e `module_ids` (listas ordenadas) |
-| `contact_sector_linked` | Contato entra no setor sozinho, na entidade `contact`: `changes` com `sector_id` de vazio para o setor; `actor_id` vazio em mensagem recebida ou enviada pelo celular, e quem agiu na nova conversa e na transferência. Vínculo já existente não gera registro |
-| `contacts_imported` | Importação de contatos, na entidade `sector`: `changes` com as quantidades de contatos criados e já existentes |
+| `contact_sector_linked` | Contato entra no setor sozinho ou pela importação, na entidade `contact`: `changes` com `sector_id` de vazio para o setor; `actor_id` vazio em mensagem recebida ou enviada pelo celular, e quem agiu na nova conversa, na transferência e na importação. Vínculo já existente não gera registro |
+| `contacts_imported` | Importação de contatos, na entidade `sector`: `changes` com as quantidades de contatos criados (`created`) e já existentes (`existing`), de vazio para o número |
 
 Conexão do número: `sector_connected` é gravado quando o setor passa a `connected` vindo de outro estado ou com outra conta vinculada; `sector_disconnected`, quando sai de `connected`. Os estados intermediários (`connecting`) e as reconexões automáticas que não passam por `connected` não geram auditoria. Os dois registros são ações do sistema (`actor_id` vazio), exceto ao desvincular pela tela de conexão, quando `sector_disconnected` guarda o autor, mesmo que a conexão já estivesse caída; repetir não gera novo registro. Guardam em `changes` o estado da conexão, a conta vinculada, o telefone e o motivo da recusa. Número recusado por já estar em outro setor não chega a `connected` e por isso não gera `sector_connected`.
 

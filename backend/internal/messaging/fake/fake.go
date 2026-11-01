@@ -46,13 +46,16 @@ type Adapter struct {
 	revoked map[revokedAccount]bool
 	// Sectors whose next Disconnect cannot reach the device.
 	unreachable map[int64]bool
-	sent        map[string]string
-	Sent        []any
+	// Address book of each sector number.
+	saved map[int64][]messaging.SavedContact
+	sent  map[string]string
+	Sent  []any
 }
 
 var (
-	_ messaging.Provider  = (*Adapter)(nil)
-	_ messaging.QRPairing = (*Adapter)(nil)
+	_ messaging.Provider    = (*Adapter)(nil)
+	_ messaging.QRPairing   = (*Adapter)(nil)
+	_ messaging.ContactBook = (*Adapter)(nil)
 )
 
 func New(handler messaging.EventHandler) *Adapter {
@@ -61,6 +64,7 @@ func New(handler messaging.EventHandler) *Adapter {
 		sessions:    map[int64]*session{},
 		revoked:     map[revokedAccount]bool{},
 		unreachable: map[int64]bool{},
+		saved:       map[int64][]messaging.SavedContact{},
 		sent:        map[string]string{},
 	}
 }
@@ -220,6 +224,22 @@ func (a *Adapter) QRCode(sectorID int64) (string, bool) {
 	defer a.mu.Unlock()
 	qr := a.session(sectorID).qr
 	return qr, qr != ""
+}
+
+// SetSavedContacts simulates the address book of the sector number.
+func (a *Adapter) SetSavedContacts(sectorID int64, contacts ...messaging.SavedContact) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.saved[sectorID] = contacts
+}
+
+func (a *Adapter) SavedContacts(_ context.Context, sectorID int64) ([]messaging.SavedContact, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.session(sectorID).status != messaging.StatusConnected {
+		return nil, messaging.ErrNotConnected
+	}
+	return append([]messaging.SavedContact(nil), a.saved[sectorID]...), nil
 }
 
 func (a *Adapter) SendText(_ context.Context, msg messaging.TextMessage) (string, error) {

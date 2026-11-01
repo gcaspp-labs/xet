@@ -183,3 +183,19 @@ type QRPairing interface {
 	// QRCode returns the code to show while the sector is pairing.
 	QRCode(sectorID int64) (string, bool)
 }
+
+// SavedContact is an entry of the address book of the sector number.
+type SavedContact struct {
+	// Name is the name saved on the phone, not the profile name.
+	Name string
+	// Phone holds the digits with country code.
+	Phone string
+}
+
+// ContactBook is implemented by providers that can read the address book of
+// the number (Whatsmeow). It is not part of the common contract: the official
+// API may not offer it.
+type ContactBook interface {
+	// SavedContacts returns the address book of the sector number.
+	SavedContacts(ctx context.Context, sectorID int64) ([]SavedContact, error)
+}
