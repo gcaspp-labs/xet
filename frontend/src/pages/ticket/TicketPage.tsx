@@ -28,6 +28,7 @@ import {
 } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { AudioPlayer } from '@/components/AudioPlayer'
 import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { ConversationList } from '@/components/ConversationList'
@@ -128,20 +129,12 @@ function MessageMedia({ message }: { message: Message }) {
       )
     case 'audio':
       return (
-        <div className="flex items-center gap-2">
-          <audio
-            src={src}
-            controls
-            preload="metadata"
-            aria-label="Áudio"
-            className="w-72 max-w-full"
-          />
-          {message.media.durationSeconds !== null && (
-            <span className="mono-num caption text-ink-faint" aria-label="Duração do áudio">
-              {formatDuration(message.media.durationSeconds)}
-            </span>
-          )}
-        </div>
+        <AudioPlayer
+          src={src}
+          label="Áudio"
+          durationSeconds={message.media.durationSeconds}
+          className="w-72 max-w-full"
+        />
       )
   }
   return (
@@ -482,13 +475,12 @@ function Composer({ ticketId }: { ticketId: number }) {
         </div>
       ) : voice ? (
         <div className="flex items-center gap-2">
-          <audio
+          <AudioPlayer
             src={voice.url}
-            controls
-            aria-label="Áudio gravado"
-            className="h-9 min-w-0 flex-1"
+            label="Áudio gravado"
+            durationSeconds={voice.seconds}
+            className="flex-1"
           />
-          <span className="mono-num caption text-ink-faint">{formatDuration(voice.seconds)}</span>
           <Button
             variant="ghost"
             size="icon"
