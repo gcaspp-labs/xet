@@ -1,5 +1,13 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  clearSession,
+  seedDirectory,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 // Liga os números dos setores pelo adaptador falso e cadastra os módulos da origem.
 async function prepare(baseURL: string, origin: number, destination: number) {
@@ -86,7 +94,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
       hasText: `${originName} transferiu o chamado para o setor ${destination.sector.name}`,
     }),
   ).toBeVisible()
-  await page.context().clearCookies()
+  await clearSession(page)
 
   // O destino recebe o chamado na fila, com a origem e a conversa anterior.
   await signIn(page, destination.agent, userPassword)

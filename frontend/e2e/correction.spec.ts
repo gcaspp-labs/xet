@@ -1,5 +1,13 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  clearSession,
+  seedDirectory,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 type Response = { ok(): boolean; json(): Promise<unknown> }
 
@@ -95,7 +103,7 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
     },
   })
   expect(blocked.status()).toBe(403)
-  await page.context().clearCookies()
+  await clearSession(page)
 
   // Quem encerrou corrige; sem motivo, a correção é recusada.
   await signIn(page, agent, userPassword)
@@ -136,7 +144,7 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   await sheet.getByLabel('Motivo da correção').fill('Conferência.')
   await sheet.getByRole('button', { name: 'Salvar correção' }).click()
   await expect(sheet).toContainText('Nenhum dado foi alterado.')
-  await page.context().clearCookies()
+  await clearSession(page)
 
   // O supervisor do setor também corrige.
   await signIn(page, supervisor, userPassword)
