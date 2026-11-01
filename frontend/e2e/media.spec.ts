@@ -23,6 +23,38 @@ async function phone(request: APIRequestContext, sectorId: number, action: strin
   expect(response.ok()).toBeTruthy()
 }
 
+test('arquivo indisponível vira aviso na conversa e na última mensagem do painel', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { phone: number, id } = unique()
+  const delivery = {
+    externalMessageId: `E2E-${id}`,
+    phone: number,
+    contactName: 'Clara Cliente',
+    type: 'media_unavailable',
+    body: 'video-grande.mp4',
+  }
+  // A reentrega da mesma mensagem não duplica o aviso.
+  await phone(request, sector.id, 'receive', delivery)
+  await phone(request, sector.id, 'receive', delivery)
+
+  await signIn(page, agent, userPassword)
+  await expect(page.getByText('Arquivo não pôde ser baixado: video-grande.mp4')).toBeVisible()
+  await page.getByRole('link', { name: 'Clara Cliente' }).click()
+
+  const received = page
+    .getByRole('region', { name: 'Conversa', exact: true })
+    .getByRole('listitem', { name: 'Mensagem recebida' })
+  await expect(received).toHaveCount(1)
+  await expect(received).toContainText('Arquivo não pôde ser baixado')
+  await expect(received).toContainText('video-grande.mp4')
+})
+
 test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem de voz', async ({
   page,
   request,

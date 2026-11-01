@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Role } from '@/lib/auth'
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'unsupported'
+export type MessageType =
+  'text' | 'image' | 'video' | 'audio' | 'document' | 'unsupported' | 'media_unavailable'
 
 export type TicketSummary = {
   id: number
@@ -89,6 +90,7 @@ const mediaLabels: Record<Exclude<MessageType, 'text'>, string> = {
   audio: 'Áudio',
   document: 'Documento',
   unsupported: 'Tipo de mensagem não suportado',
+  media_unavailable: 'Arquivo não pôde ser baixado',
 }
 
 // Prévia da última mensagem do chamado, como na lista de conversas do WhatsApp.
