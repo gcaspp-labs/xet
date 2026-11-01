@@ -1118,6 +1118,44 @@ func (q *Queries) RemoveTicketModules(ctx context.Context, arg RemoveTicketModul
 	return err
 }
 
+const returnTicketToQueue = `-- name: ReturnTicketToQueue :one
+update tickets
+set status = 'queued', assignee_id = null
+where id = $1
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+// The caller holds the lock of the ticket and checked it is in progress.
+// assigned_at stays: it is the first time someone took the ticket.
+func (q *Queries) ReturnTicketToQueue(ctx context.Context, id int64) (Ticket, error) {
+	row := q.db.QueryRow(ctx, returnTicketToQueue, id)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const setTicketOrganization = `-- name: SetTicketOrganization :one
 update tickets
 set organization_id = $1

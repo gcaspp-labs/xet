@@ -122,6 +122,7 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 			// O serviço confere o setor do chamado e, para responder, o responsável.
 			r.Post("/tickets/{ticketID}/assign", s.assignTicket)
 			r.Post("/tickets/{ticketID}/transfer", s.transferTicket)
+			r.Post("/tickets/{ticketID}/return", s.returnTicket)
 			r.Get("/tickets/{ticketID}/assignments", s.listAssignments)
 			r.Get("/tickets/{ticketID}/closing-form", s.closingForm)
 			r.Post("/tickets/{ticketID}/close", s.closeTicket)

@@ -54,6 +54,9 @@ var (
 // ErrCannotCancel refuses an agent who is not the assignee of a ticket in progress.
 var ErrCannotCancel = errors.New("user may not cancel the ticket")
 
+// ErrCannotReturn refuses an agent who is not the assignee of the ticket.
+var ErrCannotReturn = errors.New("user may not return the ticket to the queue")
+
 // errNotQueued rolls back an assignment that found the ticket taken.
 var errNotQueued = errors.New("ticket not queued")
 

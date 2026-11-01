@@ -154,6 +154,14 @@ set assignee_id = @assignee_id
 where id = @id
 returning *;
 
+-- name: ReturnTicketToQueue :one
+-- The caller holds the lock of the ticket and checked it is in progress.
+-- assigned_at stays: it is the first time someone took the ticket.
+update tickets
+set status = 'queued', assignee_id = null
+where id = @id
+returning *;
+
 -- name: AddTicketModules :many
 -- Records the active modules of the sector among the given ones; the caller
 -- compares the result with what was asked. Modules are locked for share so
