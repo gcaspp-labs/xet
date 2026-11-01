@@ -45,7 +45,7 @@ func names(list []map[string]any) []string {
 func TestOrganizationsRequireSupervisorOrAdmin(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
@@ -185,7 +185,7 @@ func TestOrganizationCNPJValidation(t *testing.T) {
 func TestContactRegistration(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
 	sup := e.login("sup@exemplo.com", testPassword)

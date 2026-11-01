@@ -8,18 +8,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 )
 
-var ErrNotPairing = errors.New("sector is not pairing")
+var (
+	ErrNotPairing = errors.New("sector is not pairing")
+	// ErrDeviceUnreachable simulates a device that cannot be told of the unlink.
+	ErrDeviceUnreachable = errors.New("device unreachable")
+)
+
+var phoneAccount = regexp.MustCompile(`^[0-9]{10,15}$`)
 
 type session struct {
 	status    messaging.ConnectionStatus
 	accountID string
 	qr        string
+}
+
+type revokedAccount struct {
+	sectorID  int64
+	accountID string
 }
 
 type Adapter struct {
@@ -28,10 +41,13 @@ type Adapter struct {
 	mu       sync.Mutex
 	sessions map[int64]*session
 	qrCount  int
-	// Accounts unlinked by the phone; connecting with them fails as logged out.
-	revoked map[string]bool
-	sent    map[string]string
-	Sent    []any
+	// Accounts unlinked by the phone, per sector like a device of the provider;
+	// connecting with them fails as logged out.
+	revoked map[revokedAccount]bool
+	// Sectors whose next Disconnect cannot reach the device.
+	unreachable map[int64]bool
+	sent        map[string]string
+	Sent        []any
 }
 
 var (
@@ -41,10 +57,11 @@ var (
 
 func New(handler messaging.EventHandler) *Adapter {
 	return &Adapter{
-		handler:  handler,
-		sessions: map[int64]*session{},
-		revoked:  map[string]bool{},
-		sent:     map[string]string{},
+		handler:     handler,
+		sessions:    map[int64]*session{},
+		revoked:     map[revokedAccount]bool{},
+		unreachable: map[int64]bool{},
+		sent:        map[string]string{},
 	}
 }
 
@@ -57,6 +74,16 @@ func (a *Adapter) session(sectorID int64) *session {
 	return s
 }
 
+// accountPhone reads the phone of accounts like 5511999990000@s.whatsapp.net,
+// as Whatsmeow does; other accounts have no phone.
+func accountPhone(accountID string) string {
+	user, _, _ := strings.Cut(accountID, "@")
+	if !phoneAccount.MatchString(user) {
+		return ""
+	}
+	return user
+}
+
 // set changes the session under the lock and emits the change after
 // releasing it, so the handler may call back into the adapter.
 func (a *Adapter) set(ctx context.Context, sectorID int64, change func(s *session)) error {
@@ -66,6 +93,7 @@ func (a *Adapter) set(ctx context.Context, sectorID int64, change func(s *sessio
 	ev := messaging.ConnectionChanged{SectorID: sectorID, Status: s.status}
 	if s.status == messaging.StatusConnected {
 		ev.AccountID = s.accountID
+		ev.Phone = accountPhone(s.accountID)
 	}
 	a.mu.Unlock()
 	return a.handler(ctx, ev)
@@ -76,7 +104,7 @@ func (a *Adapter) set(ctx context.Context, sectorID int64, change func(s *sessio
 func (a *Adapter) Connect(ctx context.Context, account messaging.Account) error {
 	a.mu.Lock()
 	current := a.session(account.SectorID).status
-	revoked := a.revoked[account.AccountID]
+	revoked := a.revoked[revokedAccount{account.SectorID, account.AccountID}]
 	a.mu.Unlock()
 	if current == messaging.StatusConnected {
 		return nil
@@ -142,7 +170,7 @@ func (a *Adapter) Drop(ctx context.Context, sectorID int64) error {
 func (a *Adapter) LogOut(ctx context.Context, sectorID int64) error {
 	return a.set(ctx, sectorID, func(s *session) {
 		if s.accountID != "" {
-			a.revoked[s.accountID] = true
+			a.revoked[revokedAccount{sectorID, s.accountID}] = true
 		}
 		s.status, s.accountID, s.qr = messaging.StatusLoggedOut, "", ""
 	})
@@ -158,8 +186,27 @@ func (a *Adapter) SendOutside(ctx context.Context, sectorID int64, msg messaging
 	return a.handler(ctx, messaging.MessageSentOutside{SectorID: sectorID, Message: msg})
 }
 
+// Disconnect unlinks the account. An unreachable device ends the session the
+// same way and reports the error, like the real provider.
 func (a *Adapter) Disconnect(ctx context.Context, sectorID int64) error {
-	return a.LogOut(ctx, sectorID)
+	a.mu.Lock()
+	unreachable := a.unreachable[sectorID]
+	delete(a.unreachable, sectorID)
+	a.mu.Unlock()
+	if err := a.LogOut(ctx, sectorID); err != nil {
+		return err
+	}
+	if unreachable {
+		return ErrDeviceUnreachable
+	}
+	return nil
+}
+
+// FailNextDisconnect makes the next Disconnect of the sector unable to reach the device.
+func (a *Adapter) FailNextDisconnect(sectorID int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.unreachable[sectorID] = true
 }
 
 func (a *Adapter) Status(sectorID int64) messaging.ConnectionStatus {

@@ -1,6 +1,8 @@
-import { CircleAlert, QrCode, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { CircleAlert, QrCode, RefreshCw, Unlink } from 'lucide-react'
+import { type FormEvent, useState } from 'react'
 import { useSearchParams } from 'react-router'
+import { toast } from 'sonner'
+import { FormSheet } from '@/components/FormSheet'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -24,12 +26,68 @@ import {
 } from '@/components/ui/select'
 import { type Sector, useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
-import { qrCodeUrl, useConnect, useConnection } from '@/lib/connection'
+import { qrCodeUrl, useConnect, useConnection, useDisconnect } from '@/lib/connection'
 import { connectionLabels, formatDateTime, formatPhone } from '@/lib/format'
+
+// Drawer de confirmação para desvincular o número (spec.md, Administração).
+function DisconnectSheet({
+  sector,
+  phone,
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  sector: Sector
+  phone: string | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onDone: (warning?: string) => void
+}) {
+  const disconnect = useDisconnect(sector.id)
+
+  const changeOpen = (next: boolean) => {
+    if (!next) {
+      disconnect.reset()
+    }
+    onOpenChange(next)
+  }
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (disconnect.isPending) {
+      return
+    }
+    disconnect.mutate(undefined, {
+      onSuccess: ({ warning }) => {
+        toast.success('Número desvinculado')
+        onDone(warning)
+        changeOpen(false)
+      },
+    })
+  }
+
+  const number = phone ? `O número ${formatPhone(phone)}` : 'O número'
+  return (
+    <FormSheet
+      open={open}
+      onOpenChange={changeOpen}
+      title="Desvincular número"
+      description={`${number} deixa de atender o setor ${sector.name}. Os chamados abertos continuam no sistema, e as respostas falham até um número ser conectado de novo.`}
+      submitLabel="Desvincular número"
+      pending={disconnect.isPending}
+      error={disconnect.error?.message}
+      onSubmit={submit}
+    >
+      {null}
+    </FormSheet>
+  )
+}
 
 function ConnectionPanel({ sector }: { sector: Sector }) {
   const { data: connection, dataUpdatedAt, refetch, isFetching } = useConnection(sector.id)
   const connect = useConnect(sector.id)
+  const [confirming, setConfirming] = useState(false)
+  const [warning, setWarning] = useState<string>()
   if (!connection) {
     return null
   }
@@ -40,7 +98,9 @@ function ConnectionPanel({ sector }: { sector: Sector }) {
     <Card>
       <CardHeader>
         <CardTitle>{sector.name}</CardTitle>
-        <CardDescription className="mono-num">{formatPhone(sector.phone)}</CardDescription>
+        <CardDescription className={connection.phone ? 'mono-num' : undefined}>
+          {connection.phone ? formatPhone(connection.phone) : 'Não conectado'}
+        </CardDescription>
         <CardAction>
           <Badge tone={label.tone}>{label.label}</Badge>
         </CardAction>
@@ -56,8 +116,15 @@ function ConnectionPanel({ sector }: { sector: Sector }) {
           <Alert variant="warning">
             <CircleAlert strokeWidth={1.7} aria-hidden />
             <AlertDescription>
-              O número foi desvinculado pelo celular. Conecte de novo pelo QR code.
+              {connection.connectionError ??
+                'O número foi desvinculado. Conecte de novo pelo QR code.'}
             </AlertDescription>
+          </Alert>
+        )}
+        {warning && connection.status === 'logged_out' && (
+          <Alert variant="warning">
+            <CircleAlert strokeWidth={1.7} aria-hidden />
+            <AlertDescription>{warning}</AlertDescription>
           </Alert>
         )}
         {connect.error && (
@@ -96,8 +163,21 @@ function ConnectionPanel({ sector }: { sector: Sector }) {
             <RefreshCw strokeWidth={1.7} aria-hidden />
             Atualizar
           </Button>
+          {connection.linked && (
+            <Button variant="destructive" onClick={() => setConfirming(true)}>
+              <Unlink strokeWidth={1.7} aria-hidden />
+              Desvincular número
+            </Button>
+          )}
         </div>
       </CardContent>
+      <DisconnectSheet
+        sector={sector}
+        phone={connection.phone}
+        open={confirming}
+        onOpenChange={setConfirming}
+        onDone={setWarning}
+      />
     </Card>
   )
 }

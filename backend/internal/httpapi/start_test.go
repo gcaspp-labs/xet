@@ -249,7 +249,7 @@ func TestStartConversationPermissions(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e := c.e
-	rh := e.sector("Tributos", "5511999990002")
+	rh := e.sector("Tributos")
 	carla := e.contact(c.anaToken, "Carla Souza", "5513988881111", e.organization(c.supToken, "Prefeitura", ""))
 
 	// Só pelo número do próprio setor; o administrador inicia em qualquer setor.

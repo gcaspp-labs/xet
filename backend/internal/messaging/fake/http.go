@@ -24,7 +24,8 @@ func (a *Adapter) Handler() http.Handler {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		a.control(w, r, func(sectorID int64) error {
 			if body.AccountID == "" {
-				body.AccountID = fmt.Sprintf("fake-account-%d", sectorID)
+				// Único por setor, para os testes que não tratam da recusa de número.
+				body.AccountID = fmt.Sprintf("%d@s.whatsapp.net", 5511900000000+sectorID)
 			}
 			return a.Pair(r.Context(), sectorID, body.AccountID)
 		})
@@ -87,6 +88,13 @@ func (a *Adapter) Handler() http.Handler {
 		}
 		a.control(w, r, func(sectorID int64) error {
 			return a.UpdateStatus(r.Context(), sectorID, body.Status, body.ExternalMessageIDs...)
+		})
+	})
+	// The next unlink of the sector cannot reach the device.
+	r.Post("/messaging/sectors/{sectorID}/unreachable", func(w http.ResponseWriter, r *http.Request) {
+		a.control(w, r, func(sectorID int64) error {
+			a.FailNextDisconnect(sectorID)
+			return nil
 		})
 	})
 	r.Post("/messaging/sectors/{sectorID}/logout", func(w http.ResponseWriter, r *http.Request) {

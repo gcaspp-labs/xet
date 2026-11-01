@@ -225,7 +225,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** desativar e trocar de setor são recusados com chamados e passam depois de transferir; editar o nome ou o e-mail continua livre.
 
-### [ ] T26 — Telefone do setor pelo QR code
+### [x] T26 — Telefone do setor pelo QR code
 
 - Migração: `sectors.phone` opcional e nova coluna `connection_error`. O telefone sai do formulário e da API de setores.
 - O evento de conexão passa a informar o telefone da conta (no Whatsmeow, de `Store.ID`). `HandleConnection` (`internal/sector/connection.go`) grava o telefone e o apaga em `logged_out`.

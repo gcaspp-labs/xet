@@ -175,7 +175,7 @@ func protocol(n int) string {
 func TestReceiveFromUnknownNumberOpensQueuedTicket(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 
 	first := text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Bom dia, preciso de ajuda")
 	first.ContactName = "Maria do Perfil"
@@ -235,8 +235,8 @@ func TestReceiveFromUnknownNumberOpensQueuedTicket(t *testing.T) {
 func TestProtocolSequenceIsSharedBySectors(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 
 	e.receive(contab.ID, text("A", "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
 	// O mesmo contato tem um chamado aberto em cada setor.
@@ -259,7 +259,7 @@ func TestProtocolSequenceIsSharedBySectors(t *testing.T) {
 func TestRepeatedMessageIsRecordedOnce(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 
 	msg := text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Oi")
 	e.receive(contab.ID, msg)
@@ -298,7 +298,7 @@ func TestRepeatedMessageIsRecordedOnce(t *testing.T) {
 func TestConcurrentMessagesOpenOneTicket(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 10)
@@ -331,7 +331,7 @@ func TestConcurrentMessagesOpenOneTicket(t *testing.T) {
 func TestOneOpenTicketPerContactAndSectorInDatabase(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	e.receive(contab.ID, text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Oi"))
 	tk := e.tickets(contab.ID)[0]
 
@@ -347,7 +347,7 @@ func TestOneOpenTicketPerContactAndSectorInDatabase(t *testing.T) {
 func TestMessageAfterClosingOpensNewTicket(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	agent := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	org, err := e.q.CreateOrganization(t.Context(), db.CreateOrganizationParams{Name: "Prefeitura"})
 	if err != nil {
@@ -374,7 +374,7 @@ func TestMessageAfterClosingOpensNewTicket(t *testing.T) {
 func TestGroupMessagesAreIgnored(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 
 	e.receive(contab.ID, messaging.Message{ExternalMessageID: "GRP-1", Group: true, Type: messaging.TypeText, Body: "Oi, grupo", SentAt: time.Now()})
 	e.sendOutside(contab.ID, messaging.Message{ExternalMessageID: "GRP-2", Group: true, Type: messaging.TypeText, Body: "Resposta no grupo", SentAt: time.Now()})
@@ -387,7 +387,7 @@ func TestGroupMessagesAreIgnored(t *testing.T) {
 func TestRegisteredContactIsMatchedByPhoneVariant(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	token := e.login("sup@exemplo.com", testPassword)
 	orgID := e.organization(token, "Câmara Municipal", "")
@@ -435,7 +435,7 @@ func TestRegisteredContactIsMatchedByPhoneVariant(t *testing.T) {
 func TestContactKnownOnlyByLID(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 
 	e.receive(contab.ID, text("MSG-1", "123456789012345@lid", "", "Oi"))
 	named := text("MSG-2", "999456789012345@lid", "", "Olá")
@@ -468,7 +468,7 @@ func TestContactKnownOnlyByLID(t *testing.T) {
 func TestMessagesSentFromThePhone(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 
 	// Sem chamado aberto, a mensagem do celular abre um chamado na fila.
 	e.sendOutside(contab.ID, text("OUT-1", "5511988887777@s.whatsapp.net", "5511988887777", "Bom dia, aqui é da contabilidade"))
@@ -506,7 +506,7 @@ func TestMessagesSentFromThePhone(t *testing.T) {
 func TestUnavailableMediaBecomesNotice(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	const contact, phone = "5511988887777@s.whatsapp.net", "5511988887777"
 
 	// Abre o chamado mesmo sem o arquivo, e a reentrega não duplica o aviso.
@@ -553,7 +553,7 @@ func TestUnavailableMediaBecomesNotice(t *testing.T) {
 func TestMediaIsSavedOnArrival(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	const contact, phone = "5511988887777@s.whatsapp.net", "5511988887777"
 
 	doc := text("DOC-1", contact, phone, "Segue a nota")

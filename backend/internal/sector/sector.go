@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
@@ -21,44 +22,52 @@ import (
 const defaultProvider = "whatsmeow"
 
 var (
-	ErrNotFound        = errors.New("sector not found")
-	ErrInvalidName     = errors.New("invalid name")
-	ErrInvalidPhone    = errors.New("invalid phone")
-	ErrNameTaken       = errors.New("sector name already in use")
-	ErrPhoneTaken      = errors.New("sector phone already in use")
-	ErrModuleNotFound  = errors.New("module not found")
-	ErrModuleNameTaken = errors.New("module name already in use in the sector")
+	ErrNotFound    = errors.New("sector not found")
+	ErrInvalidName = errors.New("invalid name")
+	ErrNameTaken   = errors.New("sector name already in use")
+	ErrPhoneTaken  = errors.New("sector phone already in use")
+	// ErrDeviceNotNotified means the number was unlinked in the system but the
+	// provider could not remove the device.
+	ErrDeviceNotNotified = errors.New("device not notified")
+	ErrModuleNotFound    = errors.New("module not found")
+	ErrModuleNameTaken   = errors.New("module name already in use in the sector")
 )
-
-var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
-
-// phoneFormatting is stripped so "+55 (11) 99999-0000" is stored as digits.
-var phoneFormatting = strings.NewReplacer(" ", "", "(", "", ")", "", "-", "", "+", "", ".", "")
 
 type Service struct {
 	pool *pgxpool.Pool
 	q    *db.Queries
 	hub  *realtime.Hub
+
+	// provider unlinks the device of a refused number, out of the event that
+	// reported it; background tracks that work.
+	provider   messaging.Provider
+	background sync.WaitGroup
 }
 
 func NewService(pool *pgxpool.Pool, hub *realtime.Hub) *Service {
 	return &Service{pool: pool, q: db.New(pool), hub: hub}
 }
 
+// SetProvider gives the service the provider that delivers its events; it is
+// created after the service because it needs the event handler.
+func (s *Service) SetProvider(p messaging.Provider) {
+	s.provider = p
+}
+
+// Wait blocks until the background work ends.
+func (s *Service) Wait() {
+	s.background.Wait()
+}
+
 // SectorInput holds the editable fields of a sector.
 type SectorInput struct {
-	Name  string
-	Phone string
+	Name string
 }
 
 func (in SectorInput) normalize() (SectorInput, error) {
 	in.Name = strings.TrimSpace(in.Name)
-	in.Phone = phoneFormatting.Replace(in.Phone)
 	if in.Name == "" {
 		return in, ErrInvalidName
-	}
-	if !phonePattern.MatchString(in.Phone) {
-		return in, ErrInvalidPhone
 	}
 	return in, nil
 }
@@ -94,13 +103,12 @@ func (s *Service) Create(ctx context.Context, actorID int64, in SectorInput) (db
 	var sector db.Sector
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		sector, err = q.CreateSector(ctx, db.CreateSectorParams{Name: in.Name, Phone: in.Phone, Provider: defaultProvider})
+		sector, err = q.CreateSector(ctx, db.CreateSectorParams{Name: in.Name, Provider: defaultProvider})
 		if err != nil {
 			return sectorError("create sector", err)
 		}
 		changes := audit.Changes{}
 		changes.Set("name", nil, sector.Name)
-		changes.Set("phone", nil, sector.Phone)
 		changes.Set("provider", nil, sector.Provider)
 		return record(ctx, q, "sector", sector.ID, "sector_created", &actorID, changes)
 	})
@@ -110,7 +118,7 @@ func (s *Service) Create(ctx context.Context, actorID int64, in SectorInput) (db
 	return sector, nil
 }
 
-// Update changes the name and phone of a sector, locking its row and
+// Update changes the name of a sector, locking its row and
 // recording what changed in the same transaction.
 func (s *Service) Update(ctx context.Context, actorID, id int64, in SectorInput) (db.Sector, error) {
 	in, err := in.normalize()
@@ -130,12 +138,11 @@ func (s *Service) Update(ctx context.Context, actorID, id int64, in SectorInput)
 		}
 		changes := audit.Changes{}
 		changes.Set("name", before.Name, in.Name)
-		changes.Set("phone", before.Phone, in.Phone)
 		if changes.Empty() {
 			sector = before
 			return nil
 		}
-		sector, err = q.UpdateSector(ctx, db.UpdateSectorParams{ID: id, Name: in.Name, Phone: in.Phone})
+		sector, err = q.UpdateSector(ctx, db.UpdateSectorParams{ID: id, Name: in.Name})
 		if err != nil {
 			return sectorError("update sector", err)
 		}
