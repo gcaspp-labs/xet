@@ -113,6 +113,7 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 - No CI o `ffmpeg` vem do binário estático da imagem `mwader/static-ffmpeg`, fixada por digest no `Makefile` (`make ci-ffmpeg`), em vez do `apt-get`, que levava mais de um minuto e chegou a travar.
 - O lint do backend monta no container os caches do Go e do golangci-lint (`LINT_CACHE_DIR`, padrão `~/.cache/xet-lint`), guardados no CI com `actions/cache`.
 - Quando os testes ponta a ponta falham, o relatório e os traces do Playwright ficam como artefato por 7 dias.
+- Os testes ponta a ponta rodam contra o build de produção do frontend (`vite build` + `vite preview`, com o mesmo proxy de `/api`), não contra o servidor de desenvolvimento. O servidor de desenvolvimento compila cada módulo no primeiro acesso: com vários navegadores em paralelo e o cache vazio, como no CI, os primeiros carregamentos estouravam os tempos de espera e os testes falhavam ao acaso.
 
 ## Bibliotecas padrão
 

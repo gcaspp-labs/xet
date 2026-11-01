@@ -72,7 +72,8 @@ for (const theme of [
     const logo = page.getByRole('img', { name: 'GCASPP LAB' })
     await expect(logo).toHaveCount(1)
     await expect(logo).toBeVisible()
-    await expect(logo).toHaveAttribute('src', new RegExp(`${theme.logo}\\.svg`))
+    // O build de produção acrescenta um hash de 8 caracteres ao nome do arquivo.
+    await expect(logo).toHaveAttribute('src', new RegExp(`/${theme.logo}(-[\\w-]{8})?\\.svg$`))
   })
 }
 
