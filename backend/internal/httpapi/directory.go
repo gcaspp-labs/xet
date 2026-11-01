@@ -6,6 +6,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
+	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 )
 
 type organizationResponse struct {
@@ -97,6 +98,12 @@ func (s *server) directoryError(w http.ResponseWriter, r *http.Request, err erro
 		writeError(w, http.StatusUnprocessableEntity, "Escolha no máximo um módulo por setor.")
 	case errors.Is(err, directory.ErrInvalidModules):
 		writeError(w, http.StatusUnprocessableEntity, "Escolha módulos ativos dos setores do contato.")
+	case errors.Is(err, directory.ErrNoContactsChosen):
+		writeError(w, http.StatusUnprocessableEntity, "Selecione ao menos um contato.")
+	case errors.Is(err, directory.ErrNoContactBook):
+		writeError(w, http.StatusConflict, "Este número não oferece a agenda de contatos. Cadastre os contatos manualmente.")
+	case errors.Is(err, messaging.ErrNotConnected):
+		writeError(w, http.StatusConflict, "Número desconectado. Reconecte pelo QR code.")
 	default:
 		s.internalError(w, r, err)
 	}

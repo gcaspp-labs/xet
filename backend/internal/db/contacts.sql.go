@@ -69,6 +69,43 @@ func (q *Queries) CreateContact(ctx context.Context, arg CreateContactParams) (C
 	return i, err
 }
 
+const createImportedContact = `-- name: CreateImportedContact :one
+insert into contacts (name, phone, organization_id, registered)
+values ($1, $2, $3, $4)
+on conflict do nothing
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+`
+
+type CreateImportedContactParams struct {
+	Name           string
+	Phone          *string
+	OrganizationID *int64
+	Registered     bool
+}
+
+// A concurrent import or message may insert the same phone first; then no row
+// is returned and the caller looks it up again.
+func (q *Queries) CreateImportedContact(ctx context.Context, arg CreateImportedContactParams) (Contact, error) {
+	row := q.db.QueryRow(ctx, createImportedContact,
+		arg.Name,
+		arg.Phone,
+		arg.OrganizationID,
+		arg.Registered,
+	)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.ExternalContactID,
+		&i.OrganizationID,
+		&i.Registered,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createUnregisteredContact = `-- name: CreateUnregisteredContact :one
 insert into contacts (name, phone, external_contact_id, registered)
 values ($1, $2, $3, false)

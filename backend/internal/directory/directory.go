@@ -36,12 +36,30 @@ var (
 	ErrSectorNotAllowed     = errors.New("sector not allowed")
 	ErrInvalidModules       = errors.New("invalid modules")
 	ErrOneModulePerSector   = errors.New("one module per sector")
+	ErrNoContactsChosen     = errors.New("no contacts chosen")
+	ErrNoContactBook        = errors.New("provider has no address book")
 )
 
 var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
 
 // phoneFormatting is stripped so "+55 (11) 99999-0000" is stored as digits.
 var phoneFormatting = strings.NewReplacer(" ", "", "(", "", ")", "", "-", "", "+", "", ".", "")
+
+// PhoneVariants returns the phone and, for a Brazilian mobile number, the
+// same number with or without the ninth digit.
+func PhoneVariants(phone string) []string {
+	variants := []string{phone}
+	if len(phone) < 5 || phone[:2] != "55" {
+		return variants
+	}
+	switch {
+	case len(phone) == 13 && phone[4] == '9':
+		variants = append(variants, phone[:4]+phone[5:])
+	case len(phone) == 12 && phone[4] >= '6':
+		variants = append(variants, phone[:4]+"9"+phone[4:])
+	}
+	return variants
+}
 
 // cnpjFormatting is stripped so "12.ABC.345/01DE-35" is stored as 12ABC34501DE35.
 var cnpjFormatting = strings.NewReplacer(" ", "", ".", "", "/", "", "-", "")
