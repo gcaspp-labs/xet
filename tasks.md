@@ -155,7 +155,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 Levantados nos primeiros testes com o número real e na revisão do código.
 
-### [ ] T20 — Organização do backend
+### [~] T20 — Organização do backend
 
 Só reorganiza, para facilitar a leitura e reduzir conflitos nas tasks seguintes. Nenhuma regra, rota, resposta da API, consulta SQL ou migração muda. Cada passo vai em um commit próprio, para a revisão acompanhar com `git diff -M`.
 
