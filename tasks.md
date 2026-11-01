@@ -269,7 +269,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** importa selecionados e todos, com e sem órgão; repetir a importação e a variante do nono dígito não duplicam nem sobrescrevem, só vinculam o setor; atendente não importa de outro setor; há verificação manual com o número real.
 
-### [~] T30 — Reorganizar o backend por módulos
+### [x] T30 — Reorganizar o backend por módulos
 
 Só muda onde o código fica, para ler o backend por funcionalidade. Comportamento, API, banco e frontend não mudam.
 
