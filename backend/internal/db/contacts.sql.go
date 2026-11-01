@@ -255,6 +255,30 @@ func (q *Queries) LinkContactSector(ctx context.Context, arg LinkContactSectorPa
 	return result.RowsAffected(), nil
 }
 
+const listExistingPhones = `-- name: ListExistingPhones :many
+select phone::text from contacts where phone = any($1::text[])
+`
+
+func (q *Queries) ListExistingPhones(ctx context.Context, phones []string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExistingPhones, phones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var phone string
+		if err := rows.Scan(&phone); err != nil {
+			return nil, err
+		}
+		items = append(items, phone)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listModulesOfContacts = `-- name: ListModulesOfContacts :many
 select cm.contact_id, m.id, m.sector_id, m.name
 from contact_modules cm
@@ -327,6 +351,17 @@ func (q *Queries) ListSectorsOfContacts(ctx context.Context, contactIds []int64)
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockContactPhone = `-- name: LockContactPhone :exec
+select pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes finding and creating the contact of a phone until the transaction
+// ends; the unique phone does not see the ninth digit variants as one number.
+func (q *Queries) LockContactPhone(ctx context.Context, phoneKey string) error {
+	_, err := q.db.Exec(ctx, lockContactPhone, phoneKey)
+	return err
 }
 
 const removeContactModules = `-- name: RemoveContactModules :exec

@@ -104,6 +104,14 @@ values (@name, @phone, @organization_id, @registered)
 on conflict do nothing
 returning *;
 
+-- name: LockContactPhone :exec
+-- Serializes finding and creating the contact of a phone until the transaction
+-- ends; the unique phone does not see the ninth digit variants as one number.
+select pg_advisory_xact_lock(hashtextextended(@phone_key::text, 0));
+
+-- name: ListExistingPhones :many
+select phone::text from contacts where phone = any(@phones::text[]);
+
 -- name: GetContactForShare :one
 -- Keeps the registration of the contact from changing until the transaction ends.
 select * from contacts where id = @id for share;

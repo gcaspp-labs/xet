@@ -216,6 +216,9 @@ func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Messa
 		}
 
 		if phone != "" {
+			if err := directory.LockPhone(ctx, q, phone); err != nil {
+				return db.Contact{}, false, err
+			}
 			contact, err = q.GetContactByPhone(ctx, directory.PhoneVariants(phone))
 			if err == nil {
 				// A contact known by another provider ID (such as its LID) keeps it.

@@ -3,6 +3,7 @@
 package directory
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -59,6 +60,21 @@ func PhoneVariants(phone string) []string {
 		variants = append(variants, phone[:4]+"9"+phone[4:])
 	}
 	return variants
+}
+
+// LockPhone makes concurrent transactions finding or creating the contact of
+// this phone, or of its variant with or without the ninth digit, wait for each
+// other until the commit, so they cannot create one contact for each variant.
+func LockPhone(ctx context.Context, q *db.Queries, phone string) error {
+	if err := q.LockContactPhone(ctx, phoneKey(phone)); err != nil {
+		return fmt.Errorf("lock phone: %w", err)
+	}
+	return nil
+}
+
+// phoneKey is the same for both variants of a phone: the shortest one.
+func phoneKey(phone string) string {
+	return slices.MinFunc(PhoneVariants(phone), func(a, b string) int { return cmp.Compare(len(a), len(b)) })
 }
 
 // cnpjFormatting is stripped so "12.ABC.345/01DE-35" is stored as 12ABC34501DE35.
