@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -77,25 +78,25 @@ type loginRequest struct {
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	token, user, expiresAt, err := s.auth.Login(r.Context(), req.Email, req.Password)
 	if errors.Is(err, auth.ErrInvalidCredentials) {
-		writeError(w, http.StatusUnauthorized, "E-mail ou senha incorretos.")
+		httpx.WriteError(w, http.StatusUnauthorized, "E-mail ou senha incorretos.")
 		return
 	}
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	s.setSessionCookie(w, token, expiresAt)
-	writeJSON(w, http.StatusOK, toUserResponse(user))
+	httpx.WriteJSON(w, http.StatusOK, toUserResponse(user))
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if err := s.auth.Logout(r.Context(), sessionToken(r)); err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	s.clearSessionCookie(w)
@@ -103,7 +104,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) me(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, toUserResponse(currentUser(r.Context())))
+	httpx.WriteJSON(w, http.StatusOK, toUserResponse(currentUser(r.Context())))
 }
 
 type resetPasswordRequest struct {
@@ -113,11 +114,11 @@ type resetPasswordRequest struct {
 func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	targetID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "Usuário não encontrado.")
+		httpx.WriteError(w, http.StatusNotFound, "Usuário não encontrado.")
 		return
 	}
 	var req resetPasswordRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 
@@ -126,15 +127,15 @@ func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, auth.ErrWeakPassword):
-		writeError(w, http.StatusUnprocessableEntity, msgWeakPassword)
+		httpx.WriteError(w, http.StatusUnprocessableEntity, msgWeakPassword)
 	case errors.Is(err, auth.ErrPasswordTooLong):
-		writeError(w, http.StatusUnprocessableEntity, "A senha pode ter no máximo 72 caracteres.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "A senha pode ter no máximo 72 caracteres.")
 	case errors.Is(err, auth.ErrUserNotFound):
-		writeError(w, http.StatusNotFound, "Usuário não encontrado.")
+		httpx.WriteError(w, http.StatusNotFound, "Usuário não encontrado.")
 	case errors.Is(err, auth.ErrForbidden):
-		writeError(w, http.StatusForbidden, "Você não tem permissão para redefinir a senha deste usuário.")
+		httpx.WriteError(w, http.StatusForbidden, "Você não tem permissão para redefinir a senha deste usuário.")
 	default:
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 	}
 }
 
@@ -146,11 +147,11 @@ func (s *server) requireUser(next http.Handler) http.Handler {
 		user, expiresAt, err := s.auth.Authenticate(r.Context(), token)
 		if errors.Is(err, auth.ErrInvalidSession) {
 			s.clearSessionCookie(w)
-			writeError(w, http.StatusUnauthorized, "Entre com seu e-mail e senha para continuar.")
+			httpx.WriteError(w, http.StatusUnauthorized, "Entre com seu e-mail e senha para continuar.")
 			return
 		}
 		if err != nil {
-			s.internalError(w, r, err)
+			httpx.InternalError(s.logger, w, r, err)
 			return
 		}
 		s.setSessionCookie(w, token, expiresAt)
@@ -163,7 +164,7 @@ func requireRole(roles ...db.UserRole) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !currentUser(r.Context()).HasRole(roles...) {
-				writeError(w, http.StatusForbidden, "Você não tem permissão para esta ação.")
+				httpx.WriteError(w, http.StatusForbidden, "Você não tem permissão para esta ação.")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -179,7 +180,7 @@ func requireSector(param string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sectorID, err := strconv.ParseInt(chi.URLParam(r, param), 10, 64)
 			if err != nil || !currentUser(r.Context()).CanAccessSector(sectorID) {
-				writeError(w, http.StatusForbidden, "Você não tem acesso a este setor.")
+				httpx.WriteError(w, http.StatusForbidden, "Você não tem acesso a este setor.")
 				return
 			}
 			next.ServeHTTP(w, r)

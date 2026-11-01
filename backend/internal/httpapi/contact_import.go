@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 )
 
@@ -15,7 +16,7 @@ type savedContactResponse struct {
 
 // listSavedContacts shows the address book of the sector number, to choose whom to import.
 func (s *server) listSavedContacts(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
@@ -28,7 +29,7 @@ func (s *server) listSavedContacts(w http.ResponseWriter, r *http.Request) {
 	for i, c := range saved {
 		out[i] = savedContactResponse{Name: c.Name, Phone: c.Phone, Exists: c.Exists}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 type importContactsRequest struct {
@@ -44,12 +45,12 @@ type importContactsResponse struct {
 }
 
 func (s *server) importContacts(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
 	var req importContactsRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	result, err := s.directory.ImportContacts(r.Context(), s.opts.Messaging, currentUser(r.Context()), sectorID,
@@ -58,5 +59,5 @@ func (s *server) importContacts(w http.ResponseWriter, r *http.Request) {
 		s.directoryError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, importContactsResponse{Created: result.Created, Existing: result.Existing, Unavailable: result.Unavailable})
+	httpx.WriteJSON(w, http.StatusOK, importContactsResponse{Created: result.Created, Existing: result.Existing, Unavailable: result.Unavailable})
 }

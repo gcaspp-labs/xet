@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
@@ -26,7 +27,7 @@ func (s *server) correctTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req correctRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	t, err := s.tickets.Correct(r.Context(), currentUser(r.Context()), ticketID, ticket.Correction{
@@ -35,17 +36,17 @@ func (s *server) correctTicket(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
+		httpx.WriteJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
 	case errors.Is(err, ticket.ErrCannotCorrect):
-		writeError(w, http.StatusForbidden, "Apenas quem encerrou o atendimento e a supervisão do setor podem corrigi-lo.")
+		httpx.WriteError(w, http.StatusForbidden, "Apenas quem encerrou o atendimento e a supervisão do setor podem corrigi-lo.")
 	case errors.Is(err, ticket.ErrNotClosed):
-		writeError(w, http.StatusConflict, "Só atendimentos encerrados são corrigidos.")
+		httpx.WriteError(w, http.StatusConflict, "Só atendimentos encerrados são corrigidos.")
 	case errors.Is(err, ticket.ErrCancelled):
-		writeError(w, http.StatusConflict, "Chamado cancelado não é corrigido.")
+		httpx.WriteError(w, http.StatusConflict, "Chamado cancelado não é corrigido.")
 	case errors.Is(err, ticket.ErrReasonRequired):
-		writeError(w, http.StatusUnprocessableEntity, "Informe o motivo da correção.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Informe o motivo da correção.")
 	case errors.Is(err, ticket.ErrNoChanges):
-		writeError(w, http.StatusUnprocessableEntity, "Nenhum dado foi alterado.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Nenhum dado foi alterado.")
 	default:
 		s.closingError(w, r, err)
 	}
@@ -60,7 +61,7 @@ type fieldChangeResponse struct {
 type correctionResponse struct {
 	ID        int64                 `json:"id"`
 	CreatedAt time.Time             `json:"createdAt"`
-	Actor     *refResponse          `json:"actor"`
+	Actor     *httpx.Ref            `json:"actor"`
 	Reason    string                `json:"reason"`
 	Changes   []fieldChangeResponse `json:"changes"`
 }
@@ -80,11 +81,11 @@ func (s *server) listCorrections(w http.ResponseWriter, r *http.Request) {
 	for i, l := range logs {
 		out[i] = correctionResponse{ID: l.ID, CreatedAt: l.CreatedAt, Reason: l.Reason, Changes: make([]fieldChangeResponse, len(l.Changes))}
 		if l.ActorID != nil && l.ActorName != nil {
-			out[i].Actor = &refResponse{ID: *l.ActorID, Name: *l.ActorName}
+			out[i].Actor = &httpx.Ref{ID: *l.ActorID, Name: *l.ActorName}
 		}
 		for j, c := range l.Changes {
 			out[i].Changes[j] = fieldChangeResponse{Field: c.Field, From: c.From, To: c.To}
 		}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }

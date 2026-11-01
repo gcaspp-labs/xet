@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // correction is a ticket closed by Ana with the closing form, with the times

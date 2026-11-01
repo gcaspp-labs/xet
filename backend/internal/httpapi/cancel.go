@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
@@ -18,17 +19,17 @@ func (s *server) cancelTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req cancelRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	t, err := s.tickets.Cancel(r.Context(), currentUser(r.Context()), ticketID, req.Reason)
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
+		httpx.WriteJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
 	case errors.Is(err, ticket.ErrCannotCancel):
-		writeError(w, http.StatusForbidden, "Apenas o responsável pelo chamado ou a supervisão do setor pode cancelá-lo.")
+		httpx.WriteError(w, http.StatusForbidden, "Apenas o responsável pelo chamado ou a supervisão do setor pode cancelá-lo.")
 	case errors.Is(err, ticket.ErrReasonRequired):
-		writeError(w, http.StatusUnprocessableEntity, "Informe o motivo do cancelamento.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Informe o motivo do cancelamento.")
 	default:
 		s.ticketError(w, r, err)
 	}

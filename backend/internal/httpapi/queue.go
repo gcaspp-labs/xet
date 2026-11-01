@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -24,7 +25,7 @@ type ticketSummaryResponse struct {
 	AssignedAt       *time.Time            `json:"assignedAt"`
 	Contact          ticketContactResponse `json:"contact"`
 	OrganizationName *string               `json:"organizationName"`
-	Assignee         *refResponse          `json:"assignee"`
+	Assignee         *httpx.Ref            `json:"assignee"`
 	LastMessage      *lastMessageResponse  `json:"lastMessage"`
 }
 
@@ -41,7 +42,7 @@ func toTicketSummaryResponse(t ticket.Summary) ticketSummaryResponse {
 		OrganizationName: t.OrganizationName,
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {
-		out.Assignee = &refResponse{ID: *t.AssigneeID, Name: *t.AssigneeName}
+		out.Assignee = &httpx.Ref{ID: *t.AssigneeID, Name: *t.AssigneeName}
 	}
 	if m := t.LastMessage; m != nil {
 		out.LastMessage = &lastMessageResponse{Type: m.Type, Body: m.Body, Origin: m.Origin, SentAt: m.SentAt}
@@ -67,38 +68,38 @@ type assignResponse struct {
 // listTickets returns the open tickets of the sector: the queue and the
 // tickets in progress with their assignee.
 func (s *server) listTickets(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
 	tickets, err := s.tickets.ListOpen(r.Context(), sectorID)
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	out := make([]ticketSummaryResponse, len(tickets))
 	for i, t := range tickets {
 		out[i] = toTicketSummaryResponse(t)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 // workload returns how many tickets in progress each user of the sector has.
 func (s *server) workload(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
 	rows, err := s.tickets.Workload(r.Context(), sectorID)
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	out := make([]workloadResponse, len(rows))
 	for i, u := range rows {
 		out[i] = workloadResponse{ID: u.ID, Name: u.Name, Role: u.Role, Active: u.Active, ActiveTickets: u.ActiveTickets}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 func (s *server) assignTicket(w http.ResponseWriter, r *http.Request) {
@@ -109,16 +110,16 @@ func (s *server) assignTicket(w http.ResponseWriter, r *http.Request) {
 	t, err := s.tickets.Assign(r.Context(), currentUser(r.Context()), ticketID)
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, assignResponse{ID: t.ID, Status: t.Status, AssigneeID: t.AssigneeID, AssignedAt: t.AssignedAt})
+		httpx.WriteJSON(w, http.StatusOK, assignResponse{ID: t.ID, Status: t.Status, AssigneeID: t.AssigneeID, AssignedAt: t.AssignedAt})
 	case errors.Is(err, ticket.ErrNotFound):
-		writeError(w, http.StatusNotFound, "Chamado não encontrado.")
+		httpx.WriteError(w, http.StatusNotFound, "Chamado não encontrado.")
 	case errors.Is(err, ticket.ErrForbidden):
-		writeError(w, http.StatusForbidden, "Você não tem acesso a este setor.")
+		httpx.WriteError(w, http.StatusForbidden, "Você não tem acesso a este setor.")
 	case errors.Is(err, ticket.ErrAlreadyAssigned):
-		writeError(w, http.StatusConflict, "Este chamado já foi assumido por outro atendente.")
+		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi assumido por outro atendente.")
 	case errors.Is(err, ticket.ErrClosed):
-		writeError(w, http.StatusConflict, "Este chamado já foi encerrado.")
+		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi encerrado.")
 	default:
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 	}
 }

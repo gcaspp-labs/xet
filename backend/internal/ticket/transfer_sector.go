@@ -7,11 +7,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // TransferSector closes the ticket with the closing form as transferred and

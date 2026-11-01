@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
@@ -32,16 +33,16 @@ type openTicketResponse struct {
 // startConversation sends the first message to a contact through the sector
 // number, creating a ticket assigned to the user.
 func (s *server) startConversation(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
 	var req startConversationRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	if strings.TrimSpace(req.Body) == "" {
-		writeError(w, http.StatusUnprocessableEntity, "Escreva a mensagem.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escreva a mensagem.")
 		return
 	}
 	var requestID pgtype.UUID
@@ -52,13 +53,13 @@ func (s *server) startConversation(w http.ResponseWriter, r *http.Request) {
 	started, err := s.tickets.Start(r.Context(), s.opts.Messaging, currentUser(r.Context()), sectorID, req.ContactID, requestID, req.Body)
 	switch {
 	case errors.Is(err, ticket.ErrSectorNotFound):
-		writeError(w, http.StatusNotFound, "Setor não encontrado.")
+		httpx.WriteError(w, http.StatusNotFound, "Setor não encontrado.")
 		return
 	case errors.Is(err, ticket.ErrUnknownContact):
-		writeError(w, http.StatusUnprocessableEntity, "Contato não encontrado.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Contato não encontrado.")
 		return
 	case errors.Is(err, ticket.ErrContactWithoutPhone):
-		writeError(w, http.StatusUnprocessableEntity, "Este contato não tem telefone. Informe o telefone no cadastro para iniciar a conversa.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Este contato não tem telefone. Informe o telefone no cadastro para iniciar a conversa.")
 		return
 	case err != nil:
 		s.ticketError(w, r, err)
@@ -71,24 +72,24 @@ func (s *server) startConversation(w http.ResponseWriter, r *http.Request) {
 		out.Message = &msg
 		status = http.StatusCreated
 	}
-	writeJSON(w, status, out)
+	httpx.WriteJSON(w, status, out)
 }
 
 // openTicket tells the panel whether the contact already has an open ticket
 // in the sector, to direct the user to it before writing the first message.
 func (s *server) openTicket(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
-	contactID, ok := urlID(w, r, "contactID", "Contato não encontrado.")
+	contactID, ok := httpx.URLID(w, r, "contactID", "Contato não encontrado.")
 	if !ok {
 		return
 	}
 	id, err := s.tickets.OpenTicketID(r.Context(), sectorID, contactID)
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, openTicketResponse{TicketID: id})
+	httpx.WriteJSON(w, http.StatusOK, openTicketResponse{TicketID: id})
 }

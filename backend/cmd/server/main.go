@@ -17,14 +17,14 @@ import (
 	"github.com/gcaspp-labs/xet/backend/db/migrations"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/config"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
+	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging/whatsmeow"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
-	"github.com/gcaspp-labs/xet/backend/internal/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 

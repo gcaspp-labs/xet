@@ -7,6 +7,7 @@ import (
 
 	"github.com/skip2/go-qrcode"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
@@ -47,7 +48,7 @@ func (s *server) writeConnectionWarning(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	_, pairing := s.qrCode(sectorID)
-	writeJSON(w, http.StatusOK, connectionResponse{
+	httpx.WriteJSON(w, http.StatusOK, connectionResponse{
 		Status:          sec.ConnectionStatus,
 		LastConnectedAt: sec.LastConnectedAt,
 		Phone:           sec.Phone,
@@ -59,7 +60,7 @@ func (s *server) writeConnectionWarning(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *server) getConnection(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
@@ -69,7 +70,7 @@ func (s *server) getConnection(w http.ResponseWriter, r *http.Request) {
 // connect starts the session of the sector number; without a linked account
 // it starts a new pairing and the response says the QR code is ready.
 func (s *server) connect(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
@@ -79,7 +80,7 @@ func (s *server) connect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.logger.Error("connect sector", "sector_id", sectorID, "error", err)
-		writeError(w, http.StatusBadGateway, "Não foi possível conectar ao WhatsApp. Tente novamente em instantes.")
+		httpx.WriteError(w, http.StatusBadGateway, "Não foi possível conectar ao WhatsApp. Tente novamente em instantes.")
 		return
 	}
 	s.writeConnection(w, r, sectorID)
@@ -88,7 +89,7 @@ func (s *server) connect(w http.ResponseWriter, r *http.Request) {
 // disconnect unlinks the sector number. Unlinked here but not on the device,
 // the answer is still a success and asks to remove it by the phone.
 func (s *server) disconnect(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
@@ -107,18 +108,18 @@ func (s *server) disconnect(w http.ResponseWriter, r *http.Request) {
 
 // connectionQR serves the pairing QR code as a PNG image.
 func (s *server) connectionQR(w http.ResponseWriter, r *http.Request) {
-	sectorID, ok := urlID(w, r, "sectorID", "Setor não encontrado.")
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
 	code, ok := s.qrCode(sectorID)
 	if !ok {
-		writeError(w, http.StatusNotFound, "Nenhum QR code disponível. Conecte o número para gerar um novo.")
+		httpx.WriteError(w, http.StatusNotFound, "Nenhum QR code disponível. Conecte o número para gerar um novo.")
 		return
 	}
 	png, err := qrcode.Encode(code, qrcode.Medium, 320)
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")

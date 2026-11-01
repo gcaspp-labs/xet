@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -11,7 +12,7 @@ type ticketDetailResponse struct {
 	ID           int64                   `json:"id"`
 	Protocol     string                  `json:"protocol"`
 	Status       db.TicketStatus         `json:"status"`
-	Sector       refResponse             `json:"sector"`
+	Sector       httpx.Ref               `json:"sector"`
 	SpokeWith    *string                 `json:"spokeWith"`
 	ArrivedAt    time.Time               `json:"arrivedAt"`
 	AssignedAt   *time.Time              `json:"assignedAt"`
@@ -21,9 +22,9 @@ type ticketDetailResponse struct {
 	Subject      *string                 `json:"subject"`
 	Resolution   *string                 `json:"resolution"`
 	Contact      ticketContactResponse   `json:"contact"`
-	Organization *refResponse            `json:"organization"`
-	Assignee     *refResponse            `json:"assignee"`
-	ClosedBy     *refResponse            `json:"closedBy"`
+	Organization *httpx.Ref              `json:"organization"`
+	Assignee     *httpx.Ref              `json:"assignee"`
+	ClosedBy     *httpx.Ref              `json:"closedBy"`
 	ClosureType  *db.ClosureType         `json:"closureType"`
 	Previous     *previousTicketResponse `json:"previous"`
 	Next         *nextTicketResponse     `json:"next"`
@@ -59,20 +60,20 @@ func (s *server) getTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	out := ticketDetailResponse{
 		ID: t.ID, Protocol: t.Protocol, Status: t.Status,
-		Sector:    refResponse{ID: t.SectorID, Name: t.SectorName},
+		Sector:    httpx.Ref{ID: t.SectorID, Name: t.SectorName},
 		SpokeWith: t.SpokeWith, ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt,
 		StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt,
 		Subject: t.Subject, Resolution: t.Resolution,
 		Contact: ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},
 	}
 	if t.OrganizationID != nil && t.OrganizationName != nil {
-		out.Organization = &refResponse{ID: *t.OrganizationID, Name: *t.OrganizationName}
+		out.Organization = &httpx.Ref{ID: *t.OrganizationID, Name: *t.OrganizationName}
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {
-		out.Assignee = &refResponse{ID: *t.AssigneeID, Name: *t.AssigneeName}
+		out.Assignee = &httpx.Ref{ID: *t.AssigneeID, Name: *t.AssigneeName}
 	}
 	if t.ClosedByID != nil && t.ClosedByName != nil {
-		out.ClosedBy = &refResponse{ID: *t.ClosedByID, Name: *t.ClosedByName}
+		out.ClosedBy = &httpx.Ref{ID: *t.ClosedByID, Name: *t.ClosedByName}
 	}
 	if t.ClosureType.Valid {
 		out.ClosureType = &t.ClosureType.ClosureType
@@ -86,5 +87,5 @@ func (s *server) getTicket(w http.ResponseWriter, r *http.Request) {
 	if t.NextProtocol != nil && t.NextSectorName != nil {
 		out.Next = &nextTicketResponse{Protocol: *t.NextProtocol, SectorName: *t.NextSectorName}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }

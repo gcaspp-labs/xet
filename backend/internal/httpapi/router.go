@@ -7,13 +7,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-playground/validator/v10"
 
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -39,7 +39,6 @@ type server struct {
 	directory *directory.Service
 	tickets   *ticket.Service
 	hub       *realtime.Hub
-	validate  *validator.Validate
 	opts      Options
 }
 
@@ -51,7 +50,6 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 		directory: directoryService,
 		tickets:   ticketService,
 		hub:       hub,
-		validate:  validator.New(validator.WithRequiredStructEnabled()),
 		opts:      opts,
 	}
 
@@ -164,7 +162,7 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 }
 
 func health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {

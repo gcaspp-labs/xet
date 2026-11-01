@@ -14,9 +14,9 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/audio"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // MaxFileSize is the largest attachment sent through the panel (spec.md, Conversa).

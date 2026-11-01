@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/directory"
 )
 
@@ -19,21 +20,21 @@ type contactResponse struct {
 	Phone        *string                 `json:"phone"`
 	Registered   bool                    `json:"registered"`
 	Organization *organizationResponse   `json:"organization"`
-	Sectors      []refResponse           `json:"sectors"`
+	Sectors      []httpx.Ref             `json:"sectors"`
 	Modules      []contactModuleResponse `json:"modules"`
 }
 
 func toContactResponse(c directory.Contact) contactResponse {
 	out := contactResponse{
 		ID: c.ID, Name: c.Name, Phone: c.Phone, Registered: c.Registered,
-		Sectors: make([]refResponse, len(c.Sectors)),
+		Sectors: make([]httpx.Ref, len(c.Sectors)),
 		Modules: make([]contactModuleResponse, len(c.Modules)),
 	}
 	if c.OrganizationID != nil && c.OrganizationName != nil {
 		out.Organization = &organizationResponse{ID: *c.OrganizationID, Name: *c.OrganizationName, CNPJ: c.OrganizationCNPJ}
 	}
 	for i, sec := range c.Sectors {
-		out.Sectors[i] = refResponse{ID: sec.ID, Name: sec.Name}
+		out.Sectors[i] = httpx.Ref{ID: sec.ID, Name: sec.Name}
 	}
 	for i, m := range c.Modules {
 		out.Modules[i] = contactModuleResponse{ID: m.ID, SectorID: m.SectorID, Name: m.Name}
@@ -57,24 +58,24 @@ func (s *server) listContacts(w http.ResponseWriter, r *http.Request) {
 	sectorID, okSector := filterID(r, "sectorId")
 	moduleID, okModule := filterID(r, "moduleId")
 	if !okSector || !okModule {
-		writeError(w, http.StatusUnprocessableEntity, "Filtro inválido.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Filtro inválido.")
 		return
 	}
 	contacts, err := s.directory.SearchContacts(r.Context(),
 		directory.ContactFilter{Query: r.URL.Query().Get("q"), SectorID: sectorID, ModuleID: moduleID})
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	out := make([]contactResponse, len(contacts))
 	for i, c := range contacts {
 		out[i] = toContactResponse(c)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 func (s *server) getContact(w http.ResponseWriter, r *http.Request) {
-	id, ok := urlID(w, r, "contactID", "Contato não encontrado.")
+	id, ok := httpx.URLID(w, r, "contactID", "Contato não encontrado.")
 	if !ok {
 		return
 	}
@@ -83,7 +84,7 @@ func (s *server) getContact(w http.ResponseWriter, r *http.Request) {
 		s.directoryError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toContactResponse(c))
+	httpx.WriteJSON(w, http.StatusOK, toContactResponse(c))
 }
 
 type contactRequest struct {
@@ -103,7 +104,7 @@ func (req contactRequest) input() directory.ContactInput {
 
 func (s *server) createContact(w http.ResponseWriter, r *http.Request) {
 	var req contactRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	c, err := s.directory.CreateContact(r.Context(), currentUser(r.Context()), req.input())
@@ -111,16 +112,16 @@ func (s *server) createContact(w http.ResponseWriter, r *http.Request) {
 		s.directoryError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toContactResponse(c))
+	httpx.WriteJSON(w, http.StatusCreated, toContactResponse(c))
 }
 
 func (s *server) updateContact(w http.ResponseWriter, r *http.Request) {
-	id, ok := urlID(w, r, "contactID", "Contato não encontrado.")
+	id, ok := httpx.URLID(w, r, "contactID", "Contato não encontrado.")
 	if !ok {
 		return
 	}
 	var req contactRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	// Pelo serviço de chamados: o cadastro completa o órgão dos chamados abertos do contato.
@@ -129,5 +130,5 @@ func (s *server) updateContact(w http.ResponseWriter, r *http.Request) {
 		s.directoryError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toContactResponse(c))
+	httpx.WriteJSON(w, http.StatusOK, toContactResponse(c))
 }

@@ -9,10 +9,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/gcaspp-labs/xet/backend/internal/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // phoneTakenReason is shown on the connection screen. It does not name the

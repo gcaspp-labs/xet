@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // closing is a conversation in progress with Ana, whose contact is not yet

@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
 
 type spokeWithRequest struct {
@@ -16,7 +18,7 @@ func (s *server) setSpokeWith(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req spokeWithRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	t, err := s.tickets.SetSpokeWith(r.Context(), currentUser(r.Context()), ticketID, req.SpokeWith)
@@ -24,14 +26,14 @@ func (s *server) setSpokeWith(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": t.ID, "spokeWith": t.SpokeWith})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": t.ID, "spokeWith": t.SpokeWith})
 }
 
 type noteResponse struct {
-	ID        int64       `json:"id"`
-	Body      string      `json:"body"`
-	CreatedAt time.Time   `json:"createdAt"`
-	Author    refResponse `json:"author"`
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
+	Author    httpx.Ref `json:"author"`
 }
 
 func (s *server) listNotes(w http.ResponseWriter, r *http.Request) {
@@ -46,9 +48,9 @@ func (s *server) listNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]noteResponse, len(rows))
 	for i, n := range rows {
-		out[i] = noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: refResponse{ID: n.AuthorID, Name: n.AuthorName}}
+		out[i] = noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: httpx.Ref{ID: n.AuthorID, Name: n.AuthorName}}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 type noteRequest struct {
@@ -61,12 +63,12 @@ func (s *server) createNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req noteRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	body := strings.TrimSpace(req.Body)
 	if body == "" {
-		writeError(w, http.StatusUnprocessableEntity, "Escreva a nota.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escreva a nota.")
 		return
 	}
 	user := currentUser(r.Context())
@@ -75,5 +77,5 @@ func (s *server) createNote(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: refResponse{ID: user.ID, Name: user.Name}})
+	httpx.WriteJSON(w, http.StatusCreated, noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: httpx.Ref{ID: user.ID, Name: user.Name}})
 }

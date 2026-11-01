@@ -5,14 +5,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
 type closingFormResponse struct {
-	Modules          []refResponse `json:"modules"`
-	ContactModuleIDs []int64       `json:"contactModuleIds"`
-	Organization     *refResponse  `json:"organization"`
-	StartedAt        time.Time     `json:"startedAt"`
+	Modules          []httpx.Ref `json:"modules"`
+	ContactModuleIDs []int64     `json:"contactModuleIds"`
+	Organization     *httpx.Ref  `json:"organization"`
+	StartedAt        time.Time   `json:"startedAt"`
 }
 
 // closingForm returns what the closing form starts with: the active modules
@@ -29,17 +30,17 @@ func (s *server) closingForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := closingFormResponse{
-		Modules:          make([]refResponse, len(form.Modules)),
+		Modules:          make([]httpx.Ref, len(form.Modules)),
 		ContactModuleIDs: append([]int64{}, form.ContactModuleIDs...),
 		StartedAt:        form.StartedAt,
 	}
 	for i, m := range form.Modules {
-		out.Modules[i] = refResponse{ID: m.ID, Name: m.Name}
+		out.Modules[i] = httpx.Ref{ID: m.ID, Name: m.Name}
 	}
 	if o := form.Organization; o != nil {
-		out.Organization = &refResponse{ID: o.ID, Name: o.Name}
+		out.Organization = &httpx.Ref{ID: o.ID, Name: o.Name}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 type closeRequest struct {
@@ -73,19 +74,19 @@ func (s *server) closeTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req closeRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	t, err := s.tickets.Close(r.Context(), currentUser(r.Context()), ticketID, req.closing())
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
+		httpx.WriteJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
 	case errors.Is(err, ticket.ErrNotAssignee):
-		writeError(w, http.StatusForbidden, "Apenas o responsável pelo chamado pode encerrá-lo.")
+		httpx.WriteError(w, http.StatusForbidden, "Apenas o responsável pelo chamado pode encerrá-lo.")
 	case errors.Is(err, ticket.ErrNotInProgress):
-		writeError(w, http.StatusConflict, "Este chamado está na fila. Assuma o chamado antes de encerrar.")
+		httpx.WriteError(w, http.StatusConflict, "Este chamado está na fila. Assuma o chamado antes de encerrar.")
 	case errors.Is(err, ticket.ErrContactNotRegistered):
-		writeError(w, http.StatusUnprocessableEntity, "Cadastre o contato e vincule-o a um órgão antes de encerrar.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Cadastre o contato e vincule-o a um órgão antes de encerrar.")
 	default:
 		s.closingError(w, r, err)
 	}
@@ -102,9 +103,9 @@ func (s *server) listTicketModules(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	out := make([]refResponse, len(rows))
+	out := make([]httpx.Ref, len(rows))
 	for i, m := range rows {
-		out[i] = refResponse{ID: m.ID, Name: m.Name}
+		out[i] = httpx.Ref{ID: m.ID, Name: m.Name}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }

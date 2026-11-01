@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // SetSpokeWith records who the assignee talked to, for phones shared by more

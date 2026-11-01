@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -34,18 +35,18 @@ func writeHistory(w http.ResponseWriter, rows []ticket.HistoryEntry) {
 			out[i].ClosureType = &t.ClosureType.ClosureType
 		}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 // contactHistory lists the tickets of the contact in the sectors of the user.
 func (s *server) contactHistory(w http.ResponseWriter, r *http.Request) {
-	contactID, ok := urlID(w, r, "contactID", "Contato não encontrado.")
+	contactID, ok := httpx.URLID(w, r, "contactID", "Contato não encontrado.")
 	if !ok {
 		return
 	}
 	rows, err := s.tickets.ContactHistory(r.Context(), currentUser(r.Context()), contactID)
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	writeHistory(w, rows)
@@ -53,13 +54,13 @@ func (s *server) contactHistory(w http.ResponseWriter, r *http.Request) {
 
 // organizationHistory lists the tickets of the organization in the sectors of the user.
 func (s *server) organizationHistory(w http.ResponseWriter, r *http.Request) {
-	organizationID, ok := urlID(w, r, "organizationID", "Órgão não encontrado.")
+	organizationID, ok := httpx.URLID(w, r, "organizationID", "Órgão não encontrado.")
 	if !ok {
 		return
 	}
 	rows, err := s.tickets.OrganizationHistory(r.Context(), currentUser(r.Context()), organizationID)
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return
 	}
 	writeHistory(w, rows)

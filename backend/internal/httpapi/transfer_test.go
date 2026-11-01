@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 func (e *testEnv) transfer(ticketID, assigneeID int64, token string) response {

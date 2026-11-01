@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 )
 
 func (e *testEnv) cancel(ticketID int64, token, reason string) response {

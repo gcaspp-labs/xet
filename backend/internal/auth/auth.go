@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/gcaspp-labs/xet/backend/internal/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 

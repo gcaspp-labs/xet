@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gcaspp-labs/xet/backend/internal/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
 // Provider of new sectors; the official API comes later (arquitetura.md).

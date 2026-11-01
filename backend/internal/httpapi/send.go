@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
@@ -30,7 +31,7 @@ type messageResponse struct {
 	Status        *db.MessageStatus   `json:"status"`
 	FailureReason *string             `json:"failureReason"`
 	SentAt        time.Time           `json:"sentAt"`
-	Author        *refResponse        `json:"author"`
+	Author        *httpx.Ref          `json:"author"`
 	Media         *mediaResponse      `json:"media"`
 }
 
@@ -43,7 +44,7 @@ func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
 		out.Status = &m.Status.MessageStatus
 	}
 	if m.AuthorID != nil && m.AuthorName != nil {
-		out.Author = &refResponse{ID: *m.AuthorID, Name: *m.AuthorName}
+		out.Author = &httpx.Ref{ID: *m.AuthorID, Name: *m.AuthorName}
 	}
 	if m.MediaID != nil && m.MediaMimeType != nil && m.MediaSizeBytes != nil {
 		out.Media = &mediaResponse{ID: *m.MediaID, MimeType: *m.MediaMimeType, FileName: m.MediaFileName, SizeBytes: *m.MediaSizeBytes, DurationSeconds: m.MediaDurationSeconds}
@@ -82,7 +83,7 @@ func (s *server) listMessages(w http.ResponseWriter, r *http.Request) {
 	for i, m := range rows {
 		out[i] = toMessageResponse(m)
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 type textMessageRequest struct {
@@ -105,11 +106,11 @@ func (s *server) sendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		var req textMessageRequest
-		if !s.decodeJSON(w, r, &req) {
+		if !httpx.DecodeJSON(w, r, &req) {
 			return
 		}
 		if strings.TrimSpace(req.Body) == "" {
-			writeError(w, http.StatusUnprocessableEntity, "Escreva a mensagem.")
+			httpx.WriteError(w, http.StatusUnprocessableEntity, "Escreva a mensagem.")
 			return
 		}
 		out.Body = req.Body
@@ -123,7 +124,7 @@ func (s *server) sendMessage(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toSentMessageResponse(msg))
+	httpx.WriteJSON(w, http.StatusOK, toSentMessageResponse(msg))
 }
 
 func (s *server) readFileMessage(w http.ResponseWriter, r *http.Request) (ticket.Outgoing, bool) {
@@ -133,9 +134,9 @@ func (s *server) readFileMessage(w http.ResponseWriter, r *http.Request) (ticket
 	if err := r.ParseMultipartForm(ticket.MaxFileSize + multipartOverhead); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			writeError(w, http.StatusRequestEntityTooLarge, tooLarge)
+			httpx.WriteError(w, http.StatusRequestEntityTooLarge, tooLarge)
 		} else {
-			writeError(w, http.StatusBadRequest, "Requisição inválida.")
+			httpx.WriteError(w, http.StatusBadRequest, "Requisição inválida.")
 		}
 		return out, false
 	}
@@ -151,21 +152,21 @@ func (s *server) readFileMessage(w http.ResponseWriter, r *http.Request) (ticket
 		out.Voice = err == nil
 	}
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "Escolha um arquivo.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha um arquivo.")
 		return out, false
 	}
 	defer func() { _ = file.Close() }()
 	if header.Size > ticket.MaxFileSize {
-		writeError(w, http.StatusRequestEntityTooLarge, tooLarge)
+		httpx.WriteError(w, http.StatusRequestEntityTooLarge, tooLarge)
 		return out, false
 	}
 	data, err := io.ReadAll(file)
 	if err != nil {
-		s.internalError(w, r, err)
+		httpx.InternalError(s.logger, w, r, err)
 		return out, false
 	}
 	if len(data) == 0 {
-		writeError(w, http.StatusUnprocessableEntity, "O arquivo está vazio.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "O arquivo está vazio.")
 		return out, false
 	}
 	mimeType := header.Header.Get("Content-Type")
@@ -181,14 +182,14 @@ func (s *server) readFileMessage(w http.ResponseWriter, r *http.Request) (ticket
 
 func parseRequestID(w http.ResponseWriter, raw string, dst *pgtype.UUID) bool {
 	if err := dst.Scan(raw); err != nil || !dst.Valid {
-		writeError(w, http.StatusUnprocessableEntity, "Identificador de envio inválido.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Identificador de envio inválido.")
 		return false
 	}
 	return true
 }
 
 func (s *server) retryMessage(w http.ResponseWriter, r *http.Request) {
-	messageID, ok := urlID(w, r, "messageID", "Mensagem não encontrada.")
+	messageID, ok := httpx.URLID(w, r, "messageID", "Mensagem não encontrada.")
 	if !ok {
 		return
 	}
@@ -197,5 +198,5 @@ func (s *server) retryMessage(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toSentMessageResponse(msg))
+	httpx.WriteJSON(w, http.StatusOK, toSentMessageResponse(msg))
 }

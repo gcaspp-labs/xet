@@ -6,6 +6,8 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
 
 type mediaResponse struct {
@@ -19,7 +21,7 @@ type mediaResponse struct {
 
 // getMedia serves an attachment to whoever may see its ticket.
 func (s *server) getMedia(w http.ResponseWriter, r *http.Request) {
-	mediaID, ok := urlID(w, r, "mediaID", "Arquivo não encontrado.")
+	mediaID, ok := httpx.URLID(w, r, "mediaID", "Arquivo não encontrado.")
 	if !ok {
 		return
 	}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
@@ -25,23 +26,23 @@ func (s *server) transferSector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req transferSectorRequest
-	if !s.decodeJSON(w, r, &req) {
+	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
 	next, err := s.tickets.TransferSector(r.Context(), currentUser(r.Context()), ticketID, req.SectorID, req.closing())
 	switch {
 	case err == nil:
-		writeJSON(w, http.StatusOK, transferSectorResponse{ID: next.ID, Protocol: next.Protocol})
+		httpx.WriteJSON(w, http.StatusOK, transferSectorResponse{ID: next.ID, Protocol: next.Protocol})
 	case errors.Is(err, ticket.ErrNotAssignee):
-		writeError(w, http.StatusForbidden, "Apenas o responsável pelo chamado pode transferi-lo para outro setor.")
+		httpx.WriteError(w, http.StatusForbidden, "Apenas o responsável pelo chamado pode transferi-lo para outro setor.")
 	case errors.Is(err, ticket.ErrNotInProgress):
-		writeError(w, http.StatusConflict, "Este chamado está na fila. Assuma o chamado antes de transferir.")
+		httpx.WriteError(w, http.StatusConflict, "Este chamado está na fila. Assuma o chamado antes de transferir.")
 	case errors.Is(err, ticket.ErrInvalidSector):
-		writeError(w, http.StatusUnprocessableEntity, "Escolha outro setor ativo.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha outro setor ativo.")
 	case errors.Is(err, ticket.ErrOpenInSector):
-		writeError(w, http.StatusConflict, "O contato já tem chamado aberto no setor de destino. Nada foi transferido.")
+		httpx.WriteError(w, http.StatusConflict, "O contato já tem chamado aberto no setor de destino. Nada foi transferido.")
 	case errors.Is(err, ticket.ErrContactNotRegistered):
-		writeError(w, http.StatusUnprocessableEntity, "Cadastre o contato e vincule-o a um órgão antes de transferir.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Cadastre o contato e vincule-o a um órgão antes de transferir.")
 	default:
 		s.closingError(w, r, err)
 	}
@@ -58,9 +59,9 @@ func (s *server) listTransferSectors(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	out := make([]refResponse, len(sectors))
+	out := make([]httpx.Ref, len(sectors))
 	for i, sec := range sectors {
-		out[i] = refResponse{ID: sec.ID, Name: sec.Name}
+		out[i] = httpx.Ref{ID: sec.ID, Name: sec.Name}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
