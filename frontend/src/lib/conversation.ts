@@ -15,6 +15,8 @@ export type TicketDetail = {
   spokeWith: string | null
   arrivedAt: string
   assignedAt: string | null
+  startedAt: string
+  endedAt: string | null
   closedAt: string | null
   subject: string | null
   resolution: string | null
@@ -78,6 +80,8 @@ export const ticketKey = (ticketId: number) => ['tickets', ticketId]
 const messagesKey = (ticketId: number) => ['tickets', ticketId, 'messages']
 const assignmentsKey = (ticketId: number) => ['tickets', ticketId, 'assignments']
 const notesKey = (ticketId: number) => ['tickets', ticketId, 'notes']
+const closingFormKey = (ticketId: number) => ['tickets', ticketId, 'closing-form']
+const modulesKey = (ticketId: number) => ['tickets', ticketId, 'modules']
 export const historyKey = ['history']
 
 // Identificador de envio (UUID v4). crypto.randomUUID só existe em HTTPS ou
@@ -229,6 +233,58 @@ export function useTransferTicket(ticketId: number, sectorId: number) {
         queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+      ]),
+  })
+}
+
+// Ponto de partida do formulário de encerramento: módulos ativos do setor,
+// órgão sugerido (do chamado ou do contato) e início automático.
+export type ClosingForm = {
+  modules: { id: number; name: string }[]
+  organization: { id: number; name: string } | null
+  startedAt: string
+}
+
+// Horários omitidos ficam automáticos: início na chegada, fim ao salvar.
+export type ClosingInput = {
+  subject: string
+  resolution: string
+  moduleIds: number[]
+  organizationId: number
+  startedAt?: string
+  endedAt?: string
+}
+
+export function useClosingForm(ticketId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: closingFormKey(ticketId),
+    queryFn: () => api<ClosingForm>(`/tickets/${ticketId}/closing-form`),
+    enabled,
+  })
+}
+
+// Módulos registrados no encerramento.
+export function useTicketModules(ticketId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: modulesKey(ticketId),
+    queryFn: () => api<{ id: number; name: string }[]>(`/tickets/${ticketId}/modules`),
+    enabled,
+  })
+}
+
+// Salva o formulário e encerra o chamado; o backend confere o responsável,
+// o cadastro do contato, os módulos e os horários.
+export function useCloseTicket(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: ClosingInput) =>
+      api<void>(`/tickets/${ticketId}/close`, { method: 'POST', body }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
+        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),
   })
 }
