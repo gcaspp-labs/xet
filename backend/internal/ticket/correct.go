@@ -47,16 +47,15 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
 		return db.Ticket{}, err
 	}
-	in.Subject, in.Resolution = strings.TrimSpace(in.Subject), strings.TrimSpace(in.Resolution)
 	in.SpokeWith, in.Reason = strings.TrimSpace(in.SpokeWith), strings.TrimSpace(in.Reason)
-	slices.Sort(in.ModuleIDs)
-	in.ModuleIDs = slices.Compact(in.ModuleIDs)
 	if in.Reason == "" {
 		return db.Ticket{}, ErrReasonRequired
 	}
-	if in.Subject == "" || in.Resolution == "" || len(in.ModuleIDs) == 0 {
-		return db.Ticket{}, ErrIncompleteClosing
+	form, err := normalizeClosing(Closing{Subject: in.Subject, Resolution: in.Resolution, ModuleIDs: in.ModuleIDs})
+	if err != nil {
+		return db.Ticket{}, err
 	}
+	in.Subject, in.Resolution, in.ModuleIDs = form.Subject, form.Resolution, form.ModuleIDs
 	// The database keeps microseconds; truncating makes an unchanged time compare equal.
 	in.StartedAt = in.StartedAt.Truncate(time.Microsecond).UTC()
 	in.EndedAt = in.EndedAt.Truncate(time.Microsecond).UTC()
@@ -65,7 +64,7 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 	}
 
 	var ticket db.Ticket
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		t, err := q.GetTicketForUpdate(ctx, ticketID)
 		if err != nil {
