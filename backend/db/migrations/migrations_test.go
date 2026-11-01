@@ -87,3 +87,41 @@ func TestContactSectorsAreFilledFromTickets(t *testing.T) {
 		t.Fatalf("links = %q, want %q", got, want)
 	}
 }
+
+// Com mais de um módulo no mesmo setor, a migração mantém o mais antigo.
+func TestContactModulesKeepOnePerSector(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 16); err != nil {
+		t.Fatalf("up to 16: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow'), ('RH', 'whatsmeow');
+		insert into modules (sector_id, name) values (1, 'Folha'), (1, 'Patrimônio'), (2, 'Ponto');
+		insert into contacts (name, registered) values ('Maria', false);
+		insert into contact_sectors (contact_id, sector_id) values (1, 1), (1, 2);
+		insert into contact_modules (contact_id, module_id) values (1, 1), (1, 2), (1, 3);`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := p.UpTo(ctx, 17); err != nil {
+		t.Fatalf("up to 17: %v", err)
+	}
+	var got string
+	if err := db.QueryRowContext(ctx, `
+		select string_agg(module_id || ':' || sector_id, ' ' order by module_id)
+		from contact_modules`).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if want := "1:1 3:2"; got != want {
+		t.Fatalf("modules = %q, want %q", got, want)
+	}
+}

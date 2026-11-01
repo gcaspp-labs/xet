@@ -648,6 +648,20 @@ func TestMessagesLinkTheContactToTheSector(t *testing.T) {
 		t.Fatalf("after message to another sector: %v", got)
 	}
 
+	// Só o vínculo novo vai à auditoria, como ação do sistema.
+	actions, changes := e.auditChanges("contact", maria)
+	if fmt.Sprint(actions) != "[contact_sector_linked contact_sector_linked]" ||
+		changes[1]["sector_id"]["to"] != float64(rh.ID) {
+		t.Fatalf("audit: %v %v", actions, changes)
+	}
+	logs, err := e.q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: maria})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if logs[0].ActorID != nil {
+		t.Fatalf("audit actor = %d, want the system", *logs[0].ActorID)
+	}
+
 	e.sendOutside(rh.ID, text("OUT-1", "5511977776666@s.whatsapp.net", "5511977776666", "Enviada pelo celular"))
 	var joao int64
 	for _, c := range e.contacts() {

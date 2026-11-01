@@ -10,9 +10,9 @@ import (
 )
 
 const addContactModules = `-- name: AddContactModules :exec
-insert into contact_modules (contact_id, module_id)
-select $1, unnest($2::bigint[])
-on conflict do nothing
+insert into contact_modules (contact_id, module_id, sector_id)
+select $1, id, sector_id from modules
+where id = any($2::bigint[])
 `
 
 type AddContactModulesParams struct {
@@ -197,7 +197,7 @@ func (q *Queries) GetContactWithOrganization(ctx context.Context, id int64) (Get
 	return i, err
 }
 
-const linkContactSector = `-- name: LinkContactSector :exec
+const linkContactSector = `-- name: LinkContactSector :execrows
 insert into contact_sectors (contact_id, sector_id)
 values ($1, $2)
 on conflict do nothing
@@ -208,10 +208,14 @@ type LinkContactSectorParams struct {
 	SectorID  int64
 }
 
-// The contact enters the sector by itself: a repeated link has no effect.
-func (q *Queries) LinkContactSector(ctx context.Context, arg LinkContactSectorParams) error {
-	_, err := q.db.Exec(ctx, linkContactSector, arg.ContactID, arg.SectorID)
-	return err
+// The contact enters the sector by itself: a repeated link has no effect and
+// affects no rows.
+func (q *Queries) LinkContactSector(ctx context.Context, arg LinkContactSectorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkContactSector, arg.ContactID, arg.SectorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listModulesOfContacts = `-- name: ListModulesOfContacts :many

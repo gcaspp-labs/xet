@@ -35,6 +35,7 @@ var (
 	ErrInvalidSector        = errors.New("invalid sector")
 	ErrSectorNotAllowed     = errors.New("sector not allowed")
 	ErrInvalidModules       = errors.New("invalid modules")
+	ErrOneModulePerSector   = errors.New("one module per sector")
 )
 
 var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
@@ -368,18 +369,24 @@ func UpdateContact(ctx context.Context, q *db.Queries, actor auth.User, id int64
 	return getContact(ctx, q, id)
 }
 
-// saveLinks applies the sectors and modules of the form. The actor changes
-// only the sectors it can access, and the modules of those sectors; the other
-// links are kept as they are, whatever the form says (spec.md, Setores e
-// módulos do contato). Only what the form changed is written, so a sector the
-// contact has just entered by a message is not lost.
+// saveLinks applies the sectors and modules of the form and records what
+// changed. The actor changes only the sectors it can access, and the modules
+// of those sectors; the other links are kept as they are, whatever the form
+// says (spec.md, Setores e módulos do contato). Only what the form changed is
+// written, so a sector the contact has just entered by a message is not lost.
 func saveLinks(ctx context.Context, q *db.Queries, actor auth.User, contactID int64, in ContactInput) error {
 	sectors, err := q.ListSectorsOfContacts(ctx, []int64{contactID})
 	if err != nil {
 		return fmt.Errorf("list contact sectors: %w", err)
 	}
+	modules, err := q.ListModulesOfContacts(ctx, []int64{contactID})
+	if err != nil {
+		return fmt.Errorf("list contact modules: %w", err)
+	}
 	var kept, removed []int64
-	for _, sec := range sectors {
+	sectorsBefore := make([]int64, len(sectors))
+	for i, sec := range sectors {
+		sectorsBefore[i] = sec.ID
 		if slices.Contains(in.SectorIDs, sec.ID) || !actor.CanAccessSector(sec.ID) {
 			kept = append(kept, sec.ID)
 		} else {
@@ -412,55 +419,117 @@ func saveLinks(ctx context.Context, q *db.Queries, actor auth.User, contactID in
 	if err := q.AddContactSectors(ctx, db.AddContactSectorsParams{ContactID: contactID, SectorIds: added}); err != nil {
 		return fmt.Errorf("add contact sectors: %w", err)
 	}
-	return saveModules(ctx, q, actor, contactID, slices.Concat(kept, added), in.ModuleIDs)
+	sectorsAfter := slices.Concat(kept, added)
+	modulesAfter, err := saveModules(ctx, q, actor, contactID, modules, sectorsAfter, in.ModuleIDs)
+	if err != nil {
+		return err
+	}
+
+	modulesBefore := make([]int64, len(modules))
+	for i, m := range modules {
+		modulesBefore[i] = m.ID
+	}
+	changes := audit.Changes{}
+	setList(changes, "sector_ids", sectorsBefore, sectorsAfter)
+	setList(changes, "module_ids", modulesBefore, modulesAfter)
+	if changes.Empty() {
+		return nil
+	}
+	return recordContact(ctx, q, contactID, "contact_links_updated", &actor.ID, changes)
 }
 
-// saveModules applies the modules of the form, which must belong to the
-// sectors of the contact. A new module must be active; one already linked may
-// stay after being deactivated. Modules of a sector the contact left go away.
-func saveModules(ctx context.Context, q *db.Queries, actor auth.User, contactID int64, sectorIDs, moduleIDs []int64) error {
-	current, err := q.ListModulesOfContacts(ctx, []int64{contactID})
-	if err != nil {
-		return fmt.Errorf("list contact modules: %w", err)
-	}
+// saveModules applies the modules of the form and returns those of the contact
+// after it. They must belong to the sectors of the contact, at most one in each
+// sector. A new module must be active; one already linked may stay after being
+// deactivated. The module of a sector the contact left goes away with the link.
+func saveModules(ctx context.Context, q *db.Queries, actor auth.User, contactID int64, current []db.ListModulesOfContactsRow, sectorIDs, moduleIDs []int64) ([]int64, error) {
 	linked := func(id int64) bool {
 		return slices.ContainsFunc(current, func(m db.ListModulesOfContactsRow) bool { return m.ID == id })
 	}
 	requested, err := q.GetModulesForShare(ctx, moduleIDs)
 	if err != nil {
-		return fmt.Errorf("get modules: %w", err)
+		return nil, fmt.Errorf("get modules: %w", err)
 	}
 	if len(requested) != len(moduleIDs) {
-		return ErrInvalidModules
+		return nil, ErrInvalidModules
 	}
-	var added []int64
+	var added, after []int64
+	moduleOfSector := make(map[int64]int64) // to find a second module in a sector
 	for _, m := range requested {
 		if !slices.Contains(sectorIDs, m.SectorID) {
-			return ErrInvalidModules
+			return nil, ErrInvalidModules
 		}
+		moduleOfSector[m.SectorID] = m.ID
+		after = append(after, m.ID)
 		if linked(m.ID) {
 			continue
 		}
 		if !actor.CanAccessSector(m.SectorID) {
-			return ErrSectorNotAllowed
+			return nil, ErrSectorNotAllowed
 		}
 		if !m.Active {
-			return ErrInvalidModules
+			return nil, ErrInvalidModules
 		}
 		added = append(added, m.ID)
 	}
+	if len(moduleOfSector) != len(requested) {
+		return nil, ErrOneModulePerSector
+	}
 	var removed []int64
 	for _, m := range current {
-		inSector := slices.Contains(sectorIDs, m.SectorID)
-		if !inSector || (actor.CanAccessSector(m.SectorID) && !slices.Contains(moduleIDs, m.ID)) {
+		switch {
+		case slices.Contains(moduleIDs, m.ID):
+		case !slices.Contains(sectorIDs, m.SectorID) || actor.CanAccessSector(m.SectorID):
 			removed = append(removed, m.ID)
+		default:
+			after = append(after, m.ID)
 		}
 	}
 	if err := q.RemoveContactModules(ctx, db.RemoveContactModulesParams{ContactID: contactID, ModuleIds: removed}); err != nil {
-		return fmt.Errorf("remove contact modules: %w", err)
+		return nil, fmt.Errorf("remove contact modules: %w", err)
 	}
 	if err := q.AddContactModules(ctx, db.AddContactModulesParams{ContactID: contactID, ModuleIds: added}); err != nil {
-		return fmt.Errorf("add contact modules: %w", err)
+		return nil, constraintError("add contact modules", err)
+	}
+	return after, nil
+}
+
+// LinkSector puts the contact in the sector by itself, inside the caller's
+// transaction, when it writes to the number of the sector, receives a
+// conversation from it or is transferred to it. The audit is recorded only when
+// the link is new. A nil actor is the system.
+func LinkSector(ctx context.Context, q *db.Queries, contactID, sectorID int64, actorID *int64) error {
+	n, err := q.LinkContactSector(ctx, db.LinkContactSectorParams{ContactID: contactID, SectorID: sectorID})
+	if err != nil {
+		return fmt.Errorf("link contact sector: %w", err)
+	}
+	if n == 0 {
+		return nil
+	}
+	return recordContact(ctx, q, contactID, "contact_sector_linked", actorID, audit.Changes{"sector_id": {From: nil, To: sectorID}})
+}
+
+// setList records a list of IDs when it changed, both sides sorted.
+func setList(changes audit.Changes, field string, from, to []int64) {
+	from, to = append([]int64{}, sortedIDs(from)...), append([]int64{}, sortedIDs(to)...)
+	if !slices.Equal(from, to) {
+		changes[field] = audit.Change{From: from, To: to}
+	}
+}
+
+func recordContact(ctx context.Context, q *db.Queries, contactID int64, action string, actorID *int64, changes audit.Changes) error {
+	raw, err := changes.JSON()
+	if err != nil {
+		return err
+	}
+	if err := q.CreateAuditLog(ctx, db.CreateAuditLogParams{
+		EntityType: "contact",
+		EntityID:   contactID,
+		Action:     action,
+		ActorID:    actorID,
+		Changes:    raw,
+	}); err != nil {
+		return fmt.Errorf("audit: %w", err)
 	}
 	return nil
 }
@@ -543,6 +612,10 @@ func constraintError(op string, err error) error {
 			return ErrOrganizationRequired
 		case "organizations_name_check", "contacts_name_check":
 			return ErrInvalidName
+		case "contact_modules_contact_id_sector_id_key":
+			return ErrOneModulePerSector
+		case "contact_modules_module_sector_fkey", "contact_modules_contact_sector_fkey":
+			return ErrInvalidModules
 		}
 	}
 	return fmt.Errorf("%s: %w", op, err)

@@ -92,7 +92,9 @@ func (s *server) directoryError(w http.ResponseWriter, r *http.Request, err erro
 	case errors.Is(err, directory.ErrInvalidSector):
 		writeError(w, http.StatusUnprocessableEntity, "Escolha setores ativos.")
 	case errors.Is(err, directory.ErrSectorNotAllowed):
-		writeError(w, http.StatusForbidden, "Você altera somente o próprio setor do contato e os módulos dele.")
+		writeError(w, http.StatusForbidden, "Você altera somente o próprio setor do contato e o módulo dele.")
+	case errors.Is(err, directory.ErrOneModulePerSector):
+		writeError(w, http.StatusUnprocessableEntity, "Escolha no máximo um módulo por setor.")
 	case errors.Is(err, directory.ErrInvalidModules):
 		writeError(w, http.StatusUnprocessableEntity, "Escolha módulos ativos dos setores do contato.")
 	default:

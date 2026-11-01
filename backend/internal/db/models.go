@@ -544,6 +544,7 @@ type Contact struct {
 type ContactModule struct {
 	ContactID int64
 	ModuleID  int64
+	SectorID  int64
 }
 
 type ContactSector struct {

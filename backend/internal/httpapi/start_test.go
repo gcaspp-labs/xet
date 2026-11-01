@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 )
 
@@ -378,6 +379,13 @@ func TestStartConversationLinksTheContactToTheSector(t *testing.T) {
 	slices.Sort(want)
 	if got := e.contactSectors(carla); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("sectors = %v, want %v", got, want)
+	}
+	logs, err := e.q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "contact", EntityID: carla})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := logs[len(logs)-1]; last.Action != "contact_sector_linked" || last.ActorID == nil || *last.ActorID != c.ana.ID {
+		t.Fatalf("audit: %+v", last)
 	}
 	// Repetir a requisição não duplica o vínculo.
 	if resp := e.startConversation(c.sector.ID, carla, c.anaToken, requestA, "Bom dia"); resp.status >= 300 {

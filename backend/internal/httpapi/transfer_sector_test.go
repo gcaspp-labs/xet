@@ -297,4 +297,8 @@ func TestTransferLinksTheContactToTheTargetSector(t *testing.T) {
 	if got := e.contactSectors(c.ticket.ContactID); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("sectors = %v, want %v", got, want)
 	}
+	actions, changes := e.auditChanges("contact", c.ticket.ContactID)
+	if last := len(actions) - 1; actions[last] != "contact_sector_linked" || changes[last]["sector_id"]["to"] != float64(c.rh) {
+		t.Fatalf("audit: %v %v", actions, changes)
+	}
 }

@@ -49,8 +49,9 @@ join modules m on m.id = cm.module_id
 where cm.contact_id = any(@contact_ids::bigint[])
 order by lower(m.name), m.id;
 
--- name: LinkContactSector :exec
--- The contact enters the sector by itself: a repeated link has no effect.
+-- name: LinkContactSector :execrows
+-- The contact enters the sector by itself: a repeated link has no effect and
+-- affects no rows.
 insert into contact_sectors (contact_id, sector_id)
 values (@contact_id, @sector_id)
 on conflict do nothing;
@@ -65,9 +66,9 @@ delete from contact_sectors
 where contact_id = @contact_id and sector_id = any(@sector_ids::bigint[]);
 
 -- name: AddContactModules :exec
-insert into contact_modules (contact_id, module_id)
-select @contact_id, unnest(@module_ids::bigint[])
-on conflict do nothing;
+insert into contact_modules (contact_id, module_id, sector_id)
+select @contact_id, id, sector_id from modules
+where id = any(@module_ids::bigint[]);
 
 -- name: RemoveContactModules :exec
 delete from contact_modules
