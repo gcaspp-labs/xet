@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -13,15 +14,23 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
 )
 
+const (
+	downloadAttempts   = 3
+	downloadTimeout    = 2 * time.Minute
+	downloadRetryDelay = 2 * time.Second
+)
+
+// downloadable is a media message that reports the size of its file.
+type downloadable interface {
+	whatsmeow.DownloadableMessage
+	GetFileLength() uint64
+}
+
 // message emits a received message, or one sent from the phone of the sector.
 func (s *session) message(evt *events.Message) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), eventTimeout)
 	defer cancel()
-	msg, ok, err := s.translate(ctx, evt)
-	if err != nil {
-		s.adapter.logger.Error("translate whatsapp message", "sector_id", s.sectorID, "message_id", evt.Info.ID, "error", err)
-		return false
-	}
+	msg, ok := s.translate(ctx, evt)
 	if !ok {
 		return true
 	}
@@ -36,11 +45,11 @@ func (s *session) message(evt *events.Message) bool {
 // its media. Edits and protocol messages (deletions, settings, key sharing)
 // are outside the pilot and are skipped; other unknown kinds become
 // unsupported, so they still show up in the history.
-func (s *session) translate(ctx context.Context, evt *events.Message) (messaging.Message, bool, error) {
+func (s *session) translate(ctx context.Context, evt *events.Message) (messaging.Message, bool) {
 	info := evt.Info
 	m := evt.Message
 	if m == nil || evt.IsEdit || m.GetProtocolMessage() != nil || info.Chat == types.StatusBroadcastJID {
-		return messaging.Message{}, false, nil
+		return messaging.Message{}, false
 	}
 
 	msg := messaging.Message{
@@ -50,7 +59,7 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 	}
 	if info.IsGroup {
 		// Groups are ignored by the pilot: no contact and no download.
-		return msg, true, nil
+		return msg, true
 	}
 
 	contact := s.contact(ctx, info)
@@ -62,7 +71,6 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 		msg.ContactName = info.PushName
 	}
 
-	var err error
 	switch {
 	case m.GetConversation() != "":
 		msg.Type, msg.Body = messaging.TypeText, m.GetConversation()
@@ -71,26 +79,23 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 	case m.GetImageMessage() != nil:
 		img := m.GetImageMessage()
 		msg.Type, msg.Body = messaging.TypeImage, img.GetCaption()
-		msg.Media, err = s.download(ctx, img, img.GetMimetype(), "", 0)
+		s.attach(ctx, &msg, img, img.GetMimetype(), "", 0)
 	case m.GetVideoMessage() != nil:
 		video := m.GetVideoMessage()
 		msg.Type, msg.Body = messaging.TypeVideo, video.GetCaption()
-		msg.Media, err = s.download(ctx, video, video.GetMimetype(), "", video.GetSeconds())
+		s.attach(ctx, &msg, video, video.GetMimetype(), "", video.GetSeconds())
 	case m.GetAudioMessage() != nil:
 		audio := m.GetAudioMessage()
 		msg.Type = messaging.TypeAudio
-		msg.Media, err = s.download(ctx, audio, audio.GetMimetype(), "", audio.GetSeconds())
+		s.attach(ctx, &msg, audio, audio.GetMimetype(), "", audio.GetSeconds())
 	case m.GetDocumentMessage() != nil:
 		doc := m.GetDocumentMessage()
 		msg.Type, msg.Body = messaging.TypeDocument, doc.GetCaption()
-		msg.Media, err = s.download(ctx, doc, doc.GetMimetype(), doc.GetFileName(), 0)
+		s.attach(ctx, &msg, doc, doc.GetMimetype(), doc.GetFileName(), 0)
 	default:
 		msg.Type = messaging.TypeUnsupported
 	}
-	if err != nil {
-		return messaging.Message{}, false, err
-	}
-	return msg, true, nil
+	return msg, true
 }
 
 // contact returns the phone-number JID of the other side of a chat. WhatsApp
@@ -114,12 +119,52 @@ func (s *session) contact(ctx context.Context, info types.MessageInfo) types.JID
 	return chat
 }
 
-func (s *session) download(ctx context.Context, msg whatsmeow.DownloadableMessage, mimeType, fileName string, seconds uint32) (*messaging.Media, error) {
-	data, err := s.client.Download(ctx, msg)
+// attach downloads the file of the message. A file that cannot be had turns
+// the message into media_unavailable, so it enters the ticket as a notice
+// instead of being delivered again forever.
+func (s *session) attach(ctx context.Context, msg *messaging.Message, file downloadable, mimeType, fileName string, seconds uint32) {
+	data, err := s.download(ctx, file)
 	if err != nil {
-		return nil, fmt.Errorf("download media: %w", err)
+		s.adapter.logger.Warn("whatsapp media unavailable", "sector_id", s.sectorID, "message_id", msg.ExternalMessageID, "error", err)
+		msg.Type = messaging.TypeMediaUnavailable
+		if msg.Body == "" {
+			msg.Body = fileName
+		}
+		return
 	}
-	return &messaging.Media{Data: data, MimeType: mimeType, FileName: fileName, DurationSeconds: int(seconds)}, nil
+	msg.Media = &messaging.Media{Data: data, MimeType: mimeType, FileName: fileName, DurationSeconds: int(seconds)}
+}
+
+// download checks the reported size before fetching the file and tries a few
+// times. Each attempt has its own timeout, longer than the one of the event:
+// a large file on a slow link is not a reason to give up on it.
+func (s *session) download(ctx context.Context, file downloadable) ([]byte, error) {
+	if size := file.GetFileLength(); size > messaging.MaxReceivedFileSize {
+		return nil, fmt.Errorf("reported size %d is above the limit", size)
+	}
+	var err error
+	for attempt := range downloadAttempts {
+		if attempt > 0 {
+			time.Sleep(downloadRetryDelay)
+		}
+		var data []byte
+		data, err = s.downloadOnce(ctx, file)
+		if err != nil {
+			continue
+		}
+		// The reported size comes from the sender and may be wrong.
+		if len(data) > messaging.MaxReceivedFileSize {
+			return nil, fmt.Errorf("downloaded size %d is above the limit", len(data))
+		}
+		return data, nil
+	}
+	return nil, fmt.Errorf("download media: %w", err)
+}
+
+func (s *session) downloadOnce(ctx context.Context, file downloadable) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), downloadTimeout)
+	defer cancel()
+	return s.client.Download(ctx, file)
 }
 
 // receipt reports the delivery of messages sent to a contact.

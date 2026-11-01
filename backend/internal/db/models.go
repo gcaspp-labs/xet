@@ -326,12 +326,13 @@ func AllMessageStatusValues() []MessageStatus {
 type MessageType string
 
 const (
-	MessageTypeText        MessageType = "text"
-	MessageTypeImage       MessageType = "image"
-	MessageTypeVideo       MessageType = "video"
-	MessageTypeAudio       MessageType = "audio"
-	MessageTypeDocument    MessageType = "document"
-	MessageTypeUnsupported MessageType = "unsupported"
+	MessageTypeText             MessageType = "text"
+	MessageTypeImage            MessageType = "image"
+	MessageTypeVideo            MessageType = "video"
+	MessageTypeAudio            MessageType = "audio"
+	MessageTypeDocument         MessageType = "document"
+	MessageTypeUnsupported      MessageType = "unsupported"
+	MessageTypeMediaUnavailable MessageType = "media_unavailable"
 )
 
 func (e *MessageType) Scan(src interface{}) error {
@@ -376,7 +377,8 @@ func (e MessageType) Valid() bool {
 		MessageTypeVideo,
 		MessageTypeAudio,
 		MessageTypeDocument,
-		MessageTypeUnsupported:
+		MessageTypeUnsupported,
+		MessageTypeMediaUnavailable:
 		return true
 	}
 	return false
@@ -390,6 +392,7 @@ func AllMessageTypeValues() []MessageType {
 		MessageTypeAudio,
 		MessageTypeDocument,
 		MessageTypeUnsupported,
+		MessageTypeMediaUnavailable,
 	}
 }
 

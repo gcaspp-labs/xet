@@ -43,7 +43,14 @@ const (
 	// TypeUnsupported covers stickers, reactions, locations and other types
 	// outside the pilot, kept as a notice in the history.
 	TypeUnsupported MessageType = "unsupported"
+	// TypeMediaUnavailable is a received file above MaxReceivedFileSize or that
+	// did not download, delivered without content. Body holds the caption or
+	// the file name.
+	TypeMediaUnavailable MessageType = "media_unavailable"
 )
+
+// MaxReceivedFileSize is the limit of a received file (spec.md, Conversa).
+const MaxReceivedFileSize = 100 << 20
 
 // DeliveryStatus is the delivery progress of a sent message.
 type DeliveryStatus string
