@@ -155,3 +155,17 @@ from ticket_modules tm
 join modules m on m.id = tm.module_id
 where tm.ticket_id = @ticket_id
 order by lower(m.name), m.id;
+
+-- name: GetOpenTicketsOfContactForUpdate :many
+-- Open tickets of the contact in every sector, locked in id order. Locking the
+-- tickets before the contact keeps the order used by the closing.
+select * from tickets
+where contact_id = @contact_id and status <> 'closed'
+order by id
+for update;
+
+-- name: SetTicketOrganization :one
+update tickets
+set organization_id = @organization_id
+where id = @id
+returning *;

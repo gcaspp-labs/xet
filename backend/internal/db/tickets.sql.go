@@ -308,6 +308,57 @@ func (q *Queries) GetOpenTicketID(ctx context.Context, arg GetOpenTicketIDParams
 	return id, err
 }
 
+const getOpenTicketsOfContactForUpdate = `-- name: GetOpenTicketsOfContactForUpdate :many
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at from tickets
+where contact_id = $1 and status <> 'closed'
+order by id
+for update
+`
+
+// Open tickets of the contact in every sector, locked in id order. Locking the
+// tickets before the contact keeps the order used by the closing.
+func (q *Queries) GetOpenTicketsOfContactForUpdate(ctx context.Context, contactID int64) ([]Ticket, error) {
+	rows, err := q.db.Query(ctx, getOpenTicketsOfContactForUpdate, contactID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Ticket
+	for rows.Next() {
+		var i Ticket
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.SectorID,
+			&i.ContactID,
+			&i.OrganizationID,
+			&i.AssigneeID,
+			&i.Status,
+			&i.PreviousTicketID,
+			&i.CreatedByID,
+			&i.SpokeWith,
+			&i.ArrivedAt,
+			&i.AssignedAt,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.ClosedAt,
+			&i.ClosedByID,
+			&i.ClosureType,
+			&i.Subject,
+			&i.Resolution,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTicket = `-- name: GetTicket :one
 select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at from tickets
 where id = $1
@@ -729,6 +780,47 @@ func (q *Queries) NextProtocolNumber(ctx context.Context, year int32) (int32, er
 	var last_value int32
 	err := row.Scan(&last_value)
 	return last_value, err
+}
+
+const setTicketOrganization = `-- name: SetTicketOrganization :one
+update tickets
+set organization_id = $1
+where id = $2
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type SetTicketOrganizationParams struct {
+	OrganizationID *int64
+	ID             int64
+}
+
+func (q *Queries) SetTicketOrganization(ctx context.Context, arg SetTicketOrganizationParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, setTicketOrganization, arg.OrganizationID, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const setTicketSpokeWith = `-- name: SetTicketSpokeWith :one

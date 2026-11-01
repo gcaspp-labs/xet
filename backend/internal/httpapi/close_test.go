@@ -163,14 +163,20 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 		t.Fatalf("detail = %v", detail)
 	}
 
+	// A conversa mostra o encerramento, com quem encerrou.
+	logs := e.doList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.biaToken)
+	if len(logs) != 2 || logs[1]["action"] != "ticket_closed" || logs[1]["actor"].(map[string]any)["name"] != "ana@exemplo.com" {
+		t.Fatalf("timeline = %v", logs)
+	}
+
 	// A auditoria registra o encerramento com os horários e o órgão alterados.
 	actions, changes := c.ticketActions()
-	if len(actions) != 2 || actions[1] != "ticket_closed" {
+	if len(actions) != 3 || actions[1] != "ticket_organization_linked" || actions[2] != "ticket_closed" {
 		t.Fatalf("audit actions = %v", actions)
 	}
-	closed := changes[1]
-	// O chamado do número desconhecido nasceu sem órgão.
-	if closed["status"]["to"] != "closed" || closed["organization_id"]["from"] != nil ||
+	closed := changes[2]
+	// O cadastro do contato deu ao chamado o órgão principal; o encerramento o trocou.
+	if closed["status"]["to"] != "closed" || closed["organization_id"]["from"] != float64(c.org) ||
 		closed["organization_id"]["to"] != float64(other) || closed["subject"]["to"] != "Contracheque" {
 		t.Fatalf("closing changes = %v", closed)
 	}
@@ -212,12 +218,11 @@ func TestCloseWithAutomaticTimes(t *testing.T) {
 	}
 	// Sem alteração, o início não aparece como alterado nem o órgão como trocado.
 	_, changes := c.ticketActions()
-	if _, ok := changes[1]["started_at"]; ok {
-		t.Fatalf("unchanged start recorded: %v", changes[1])
+	if _, ok := changes[2]["started_at"]; ok {
+		t.Fatalf("unchanged start recorded: %v", changes[2])
 	}
-	if _, ok := changes[1]["organization_id"]; !ok {
-		// O chamado de número desconhecido nasceu sem órgão: ele é preenchido no encerramento.
-		t.Fatalf("organization not recorded: %v", changes[1])
+	if _, ok := changes[2]["organization_id"]; ok {
+		t.Fatalf("unchanged organization recorded: %v", changes[2])
 	}
 }
 
@@ -401,7 +406,102 @@ func TestConcurrentClosingClosesOnce(t *testing.T) {
 	if n := e.count("ticket_modules"); n != 2 {
 		t.Fatalf("ticket_modules rows = %d", n)
 	}
+	if actions, _ := c.ticketActions(); len(actions) != 3 {
+		t.Fatalf("audit actions = %v", actions)
+	}
+}
+
+func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
+	t.Parallel()
+	c := newClosing(t)
+	e := c.e
+	if c.ticket.OrganizationID != nil {
+		t.Fatalf("unknown number ticket born with organization %d", *c.ticket.OrganizationID)
+	}
+	events := e.subscribe(c.supToken)
+
+	// O cadastro dá o órgão ao chamado aberto, com auditoria e aviso ao setor.
+	c.register()
+	if ev := e.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
+		t.Fatalf("event = %+v", ev)
+	}
+	ticketOrg := func(id int64) *int64 {
+		var org *int64
+		if err := e.pool.QueryRow(t.Context(), "select organization_id from tickets where id = $1", id).Scan(&org); err != nil {
+			t.Fatal(err)
+		}
+		return org
+	}
+	if org := ticketOrg(c.ticket.ID); org == nil || *org != c.org {
+		t.Fatalf("ticket organization = %v, want %d", org, c.org)
+	}
+	actions, changes := c.ticketActions()
+	if len(actions) != 2 || actions[1] != "ticket_organization_linked" ||
+		changes[1]["organization_id"]["from"] != nil || changes[1]["organization_id"]["to"] != float64(c.org) {
+		t.Fatalf("audit = %v %v", actions, changes)
+	}
+	var actor int64
+	if err := e.pool.QueryRow(t.Context(),
+		"select actor_id from audit_logs where ticket_id = $1 and action = 'ticket_organization_linked'", c.ticket.ID).Scan(&actor); err != nil {
+		t.Fatal(err)
+	}
+	if actor != c.ana.ID {
+		t.Fatalf("actor = %d", actor)
+	}
+	detail := e.do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil).body
+	if detail["organization"] == nil || detail["organization"].(map[string]any)["id"] != float64(c.org) {
+		t.Fatalf("detail organization = %v", detail["organization"])
+	}
+
+	// Chamado que já tem órgão não muda quando o cadastro troca o órgão principal.
+	rh, err := e.q.GetUserByEmail(t.Context(), "rh@exemplo.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.receive(*rh.SectorID, text("RH-1", "5511988887777@s.whatsapp.net", "5511988887777", "Oi, RH"))
+	rhTicket := e.tickets(*rh.SectorID)[0]
+	if rhTicket.OrganizationID == nil || *rhTicket.OrganizationID != c.org {
+		t.Fatalf("rh ticket organization = %v", rhTicket.OrganizationID)
+	}
+	other := e.organization(c.supToken, "Câmara de Campinas", "")
+	resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": other})
+	if resp.status != http.StatusOK {
+		t.Fatalf("update contact: status %d, body %v", resp.status, resp.body)
+	}
+	if org := ticketOrg(c.ticket.ID); *org != c.org {
+		t.Fatalf("ticket organization changed to %d", *org)
+	}
+	if org := ticketOrg(rhTicket.ID); *org != c.org {
+		t.Fatalf("rh ticket organization changed to %d", *org)
+	}
 	if actions, _ := c.ticketActions(); len(actions) != 2 {
 		t.Fatalf("audit actions = %v", actions)
+	}
+
+	// Cadastro inválido não grava nada.
+	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": 999999}); resp.status == http.StatusOK {
+		t.Fatalf("unknown organization accepted: %v", resp.body)
+	}
+}
+
+func TestRegisteringContactWhileClosingDoesNotDeadlock(t *testing.T) {
+	t.Parallel()
+	c := newClosing(t)
+	e := c.e
+	c.register()
+
+	// Encerramento e novo cadastro ao mesmo tempo travam na mesma ordem: os dois terminam.
+	var wg sync.WaitGroup
+	var closeStatus, registerStatus int
+	wg.Go(func() { closeStatus = e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)).status })
+	wg.Go(func() {
+		registerStatus = e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+			map[string]any{"name": "Maria Silva", "phone": "5511988887777", "organizationId": c.org}).status
+	})
+	wg.Wait()
+	if closeStatus != http.StatusOK || registerStatus != http.StatusOK {
+		t.Fatalf("close %d, register %d", closeStatus, registerStatus)
 	}
 }

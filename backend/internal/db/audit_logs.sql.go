@@ -89,7 +89,7 @@ from audit_logs a
 left join users actor on actor.id = a.actor_id
 left join users from_user on from_user.id = (a.changes -> 'assignee_id' ->> 'from')::bigint
 left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::bigint
-where a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user')
+where a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_closed')
 order by a.created_at, a.id
 `
 
@@ -103,7 +103,7 @@ type ListTicketAssignmentLogsRow struct {
 	ToName    *string
 }
 
-// Start, assignment and transfers of the ticket, oldest first, with the names of
+// Start, assignment, transfers and closing of the ticket, oldest first, with the names of
 // the actor and of the previous and new assignees.
 func (q *Queries) ListTicketAssignmentLogs(ctx context.Context, ticketID *int64) ([]ListTicketAssignmentLogsRow, error) {
 	rows, err := q.db.Query(ctx, listTicketAssignmentLogs, ticketID)

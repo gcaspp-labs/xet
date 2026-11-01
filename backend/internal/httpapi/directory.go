@@ -128,7 +128,8 @@ func (s *server) updateContact(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	c, err := s.directory.UpdateContact(r.Context(), id,
+	// Pelo serviço de chamados: o cadastro completa o órgão dos chamados abertos do contato.
+	c, err := s.tickets.RegisterContact(r.Context(), currentUser(r.Context()), id,
 		directory.ContactInput{Name: req.Name, Phone: req.Phone, OrganizationID: req.OrganizationID})
 	if err != nil {
 		s.directoryError(w, r, err)
