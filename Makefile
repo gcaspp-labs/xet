@@ -10,6 +10,16 @@ DEV_DATABASE_URL ?= postgres://xet:xet@localhost:5440/xet?sslmode=disable
 E2E_DB_CONTAINER := xet-e2e-db
 E2E_DATABASE_URL := postgres://xet:xet@localhost:15432/xet?sslmode=disable
 
+# Com NoNewPrivs (shell do Claude Code), o /snap/bin/docker falha no snap-confine.
+# Nesse caso, chama o binário do snap direto, pelo socket do Docker.
+SNAP_DOCKER_BIN := /snap/docker/current/bin
+ifneq ($(wildcard $(SNAP_DOCKER_BIN)/docker),)
+ifneq ($(shell grep -q '^NoNewPrivs:[[:space:]]*1' /proc/self/status && echo yes),)
+export PATH := $(SNAP_DOCKER_BIN):$(PATH)
+export DOCKER_HOST ?= unix:///var/run/docker.sock
+endif
+endif
+
 .PHONY: dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend ci-ffmpeg up down logs create-admin dev-create-admin
 
 ## Desenvolvimento: banco em :5440, backend em :8090 e frontend em :5173 (com proxy para o backend).
