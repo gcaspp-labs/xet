@@ -1,7 +1,8 @@
-import { CircleAlert, Inbox, MessagesSquare, UserCheck } from 'lucide-react'
+import { CircleAlert, Inbox, MessageSquarePlus, MessagesSquare, UserCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
+import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -241,10 +242,30 @@ export default function PanelPage() {
   const sectorId = user?.sectorId ?? chosen ?? sectors[0]?.id
   const sector = sectors.find((s) => s.id === sectorId)
   const sectorItems = sectors.map((s) => ({ value: s.id.toString(), label: s.name }))
+  const [starting, setStarting] = useState(false)
 
   return (
     <>
-      <Topbar breadcrumb={sector?.name} title="Atendimento" />
+      <Topbar
+        breadcrumb={sector?.name}
+        title="Atendimento"
+        action={
+          sector && (
+            <Button onClick={() => setStarting(true)}>
+              <MessageSquarePlus strokeWidth={1.7} aria-hidden />
+              Nova conversa
+            </Button>
+          )
+        }
+      />
+      {sector && (
+        <NewConversationSheet
+          key={`${sector.id}-${starting}`}
+          sectorId={sector.id}
+          open={starting}
+          onOpenChange={setStarting}
+        />
+      )}
       <PageContent>
         {user?.role === 'admin' && sectors.length > 0 && (
           <Field className="max-w-[260px]">

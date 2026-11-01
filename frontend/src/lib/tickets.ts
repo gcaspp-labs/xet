@@ -80,3 +80,32 @@ export function lastMessagePreview(ticket: TicketSummary) {
         : mediaLabels[message.type]
   return message.origin === 'phone' ? `Pelo celular: ${content}` : content
 }
+
+type StartedConversation = {
+  ticketId: number
+  // Verdadeiro quando o contato já tinha chamado aberto no setor: nada foi enviado.
+  existing: boolean
+}
+
+// Chamado aberto do contato no setor, conferido ao escolher o contato.
+export function openTicketOf(sectorId: number, contactId: number) {
+  return api<{ ticketId: number | null }>(`/sectors/${sectorId}/contacts/${contactId}/open-ticket`)
+}
+
+// Inicia a conversa pelo número do setor: a primeira mensagem cria o chamado
+// atribuído ao usuário. O mesmo requestId numa nova tentativa não duplica.
+export function useStartConversation(sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { contactId: number; requestId: string; body: string }) =>
+      api<StartedConversation>(`/sectors/${sectorId}/conversations`, {
+        method: 'POST',
+        body: { contactId: input.contactId, clientRequestId: input.requestId, body: input.body },
+      }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+      ]),
+  })
+}
