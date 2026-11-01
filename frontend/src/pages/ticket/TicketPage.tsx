@@ -175,20 +175,27 @@ function assignmentText(log: AssignmentLog) {
   if (log.action === 'ticket_assigned') {
     return `${log.toName} assumiu o chamado`
   }
+  if (log.action === 'ticket_closed') {
+    return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
+  }
   if (log.actor?.name === log.fromName) {
     return `${log.fromName} transferiu o chamado para ${log.toName}`
   }
   return `${log.actor?.name ?? 'Sistema'} transferiu o chamado de ${log.fromName} para ${log.toName}`
 }
 
-// Registro de responsável entre as mensagens, na ordem do tempo.
+// Registro de responsável ou de encerramento entre as mensagens, na ordem do tempo.
 function AssignmentEntry({ log }: { log: AssignmentLog }) {
   return (
     <li
       aria-label="Registro do chamado"
       className="caption flex items-center gap-1.5 self-center rounded-(--radius-7) border border-line-soft bg-muted px-2.5 py-1 text-ink-soft"
     >
-      <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      {log.action === 'ticket_closed' ? (
+        <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : (
+        <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      )}
       <span>
         {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
       </span>

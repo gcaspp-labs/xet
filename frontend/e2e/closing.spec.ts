@@ -71,6 +71,12 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await contactSheet.getByRole('button', { name: 'Salvar' }).click()
   await expect(page.getByText('Contato salvo')).toBeVisible()
   await expect(sheet).not.toContainText('Contato não cadastrado')
+  // O cadastro já dá ao chamado o órgão do contato.
+  const ticketId = page.url().split('/').pop()
+  const detail = await page.request.get(`/api/tickets/${ticketId}`)
+  expect(((await detail.json()) as { organization: { name: string } }).organization.name).toBe(
+    organization,
+  )
 
   // O fim não pode ficar antes do início.
   await sheet.getByLabel('Fim').fill('2000-01-01T10:00')
@@ -87,6 +93,12 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   // O registro aparece nos detalhes e ninguém mais responde.
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Chamado encerrado.')
+  const agentName = agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
+  await expect(
+    conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
+      hasText: `${agentName} encerrou o chamado`,
+    }),
+  ).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
   const details = page.getByRole('region', { name: 'Chamado' })
