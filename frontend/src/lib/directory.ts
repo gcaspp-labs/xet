@@ -156,7 +156,7 @@ export function useActiveModulesOf(sectorIds: number[]) {
   })
 }
 
-export type SavedContact = { name: string; phone: string }
+export type SavedContact = { name: string; phone: string; exists: boolean }
 
 export type ImportResult = { created: number; existing: number; unavailable: number }
 

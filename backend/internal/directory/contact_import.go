@@ -31,9 +31,43 @@ type ImportResult struct {
 	Unavailable int
 }
 
-// SavedContacts lists who can be imported from the sector number: only who has
+// BookEntry is someone who can be imported. Exists reports a contact with this
+// phone or its variant, which the import keeps as it is.
+type BookEntry struct {
+	messaging.SavedContact
+	Exists bool
+}
+
+// ListSavedContacts lists the address book of the sector number, saying who is
+// already a contact.
+func (s *Service) ListSavedContacts(ctx context.Context, provider messaging.Provider, sectorID int64) ([]BookEntry, error) {
+	saved, err := savedContacts(ctx, provider, sectorID)
+	if err != nil {
+		return nil, err
+	}
+	var phones []string
+	for _, c := range saved {
+		phones = append(phones, PhoneVariants(c.Phone)...)
+	}
+	rows, err := s.q.ListExistingPhones(ctx, phones)
+	if err != nil {
+		return nil, fmt.Errorf("list existing phones: %w", err)
+	}
+	existing := make(map[string]bool, len(rows))
+	for _, phone := range rows {
+		existing[phone] = true
+	}
+	out := make([]BookEntry, len(saved))
+	for i, c := range saved {
+		exists := slices.ContainsFunc(PhoneVariants(c.Phone), func(phone string) bool { return existing[phone] })
+		out[i] = BookEntry{SavedContact: c, Exists: exists}
+	}
+	return out, nil
+}
+
+// savedContacts reads who can be imported from the sector number: only who has
 // a saved name and a phone, by name.
-func SavedContacts(ctx context.Context, provider messaging.Provider, sectorID int64) ([]messaging.SavedContact, error) {
+func savedContacts(ctx context.Context, provider messaging.Provider, sectorID int64) ([]messaging.SavedContact, error) {
 	book, ok := provider.(messaging.ContactBook)
 	if !ok {
 		return nil, ErrNoContactBook
@@ -68,7 +102,7 @@ func (s *Service) ImportContacts(ctx context.Context, provider messaging.Provide
 	if len(phones) == 0 {
 		return ImportResult{}, ErrNoContactsChosen
 	}
-	saved, err := SavedContacts(ctx, provider, sectorID)
+	saved, err := savedContacts(ctx, provider, sectorID)
 	if err != nil {
 		return ImportResult{}, err
 	}
@@ -92,7 +126,8 @@ func (s *Service) ImportContacts(ctx context.Context, provider messaging.Provide
 				return fmt.Errorf("get organization: %w", err)
 			}
 		}
-		// Sorted, so concurrent imports wait for each other instead of deadlocking.
+		// In the order of the phone locks, so concurrent imports wait for each
+		// other instead of deadlocking.
 		for _, phone := range phones {
 			name, ok := names[phone]
 			if !ok {
@@ -122,13 +157,18 @@ func (s *Service) ImportContacts(ctx context.Context, provider messaging.Provide
 
 func sortedPhones(phones []string) []string {
 	phones = slices.Clone(phones)
-	slices.Sort(phones)
+	slices.SortFunc(phones, func(a, b string) int {
+		return cmp.Or(cmp.Compare(phoneKey(a), phoneKey(b)), cmp.Compare(a, b))
+	})
 	return slices.Compact(phones)
 }
 
 // findOrImportContact returns the contact of the phone or its variant,
 // creating it when there is none. It is registered only with an organization.
 func findOrImportContact(ctx context.Context, q *db.Queries, name, phone string, organizationID *int64) (id int64, created bool, err error) {
+	if err := LockPhone(ctx, q, phone); err != nil {
+		return 0, false, err
+	}
 	for attempt := 0; attempt < 2; attempt++ {
 		contact, err := q.GetContactByPhone(ctx, PhoneVariants(phone))
 		if err == nil {

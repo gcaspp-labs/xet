@@ -9,6 +9,8 @@ import (
 type savedContactResponse struct {
 	Name  string `json:"name"`
 	Phone string `json:"phone"`
+	// Exists reports a contact with this phone, with or without the ninth digit.
+	Exists bool `json:"exists"`
 }
 
 // listSavedContacts shows the address book of the sector number, to choose whom to import.
@@ -17,14 +19,14 @@ func (s *server) listSavedContacts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	saved, err := directory.SavedContacts(r.Context(), s.opts.Messaging, sectorID)
+	saved, err := s.directory.ListSavedContacts(r.Context(), s.opts.Messaging, sectorID)
 	if err != nil {
 		s.directoryError(w, r, err)
 		return
 	}
 	out := make([]savedContactResponse, len(saved))
 	for i, c := range saved {
-		out[i] = savedContactResponse{Name: c.Name, Phone: c.Phone}
+		out[i] = savedContactResponse{Name: c.Name, Phone: c.Phone, Exists: c.Exists}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

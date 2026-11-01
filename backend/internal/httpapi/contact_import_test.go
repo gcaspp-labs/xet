@@ -99,6 +99,18 @@ func TestSavedContactsShowOnlyNameAndPhone(t *testing.T) {
 	if n := e.contactCount(); n != 0 {
 		t.Fatalf("contacts after listing: %d", n)
 	}
+	if list[0]["exists"] != false || list[1]["exists"] != false {
+		t.Fatalf("exists before importing: %v", list)
+	}
+
+	// Quem já existe é indicado, também pela variante do nono dígito.
+	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
+	org := e.organization(e.login("admin@exemplo.com", testPassword), "Prefeitura", "")
+	e.contact(token, "Cadastrada", "551188880001", org, contab.ID)
+	list = e.doList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/saved-contacts", contab.ID), token)
+	if list[0]["exists"] != true || list[1]["exists"] != false {
+		t.Fatalf("exists after registering the variant: %v", list)
+	}
 }
 
 func TestImportContacts(t *testing.T) {
@@ -396,5 +408,61 @@ func TestImportContactsConcurrently(t *testing.T) {
 	}
 	if n := e.contactCount(); n != 20 {
 		t.Fatalf("contacts: %d", n)
+	}
+}
+
+// O mesmo número, com e sem o nono dígito, importado em setores diferentes enquanto
+// uma mensagem chega, vira um único contato.
+func TestPhoneVariantsDoNotRace(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab, rh := e.sector("Contabilidade"), e.sector("RH")
+	e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	e.user("bia@exemplo.com", db.UserRoleAgent, &rh.ID)
+	ana, bia := e.login("ana@exemplo.com", testPassword), e.login("bia@exemplo.com", testPassword)
+	const total = 30
+	var withNinth, withoutNinth []string
+	var contabBook, rhBook []messaging.SavedContact
+	for i := range total {
+		withNinth = append(withNinth, fmt.Sprintf("551198880%04d", i))
+		withoutNinth = append(withoutNinth, fmt.Sprintf("55118880%04d", i))
+		contabBook = append(contabBook, messaging.SavedContact{Name: "Com nono", Phone: withNinth[i]})
+		rhBook = append(rhBook, messaging.SavedContact{Name: "Sem nono", Phone: withoutNinth[i]})
+	}
+	e.connectBook(contab.ID, contabBook...)
+	e.connectBook(rh.ID, rhBook...)
+
+	var wg sync.WaitGroup
+	var fromContab, fromRH response
+	wg.Go(func() {
+		fromContab = e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/saved-contacts/import", contab.ID), ana, map[string]any{"phones": withNinth})
+	})
+	wg.Go(func() {
+		fromRH = e.do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/saved-contacts/import", rh.ID), bia, map[string]any{"phones": withoutNinth})
+	})
+	received := make([]error, total)
+	for i := range total {
+		wg.Go(func() {
+			received[i] = e.whatsapp.Receive(t.Context(), rh.ID, messaging.Message{
+				ExternalMessageID: fmt.Sprintf("race-%d", i),
+				ExternalContactID: withNinth[i] + "@s.whatsapp.net",
+				Phone:             withNinth[i],
+				Type:              messaging.TypeText,
+				Body:              "Olá",
+			})
+		})
+	}
+	wg.Wait()
+
+	if fromContab.status != http.StatusOK || fromRH.status != http.StatusOK {
+		t.Fatalf("imports: %d %v, %d %v", fromContab.status, fromContab.body, fromRH.status, fromRH.body)
+	}
+	for i, err := range received {
+		if err != nil {
+			t.Fatalf("message %d: %v", i, err)
+		}
+	}
+	if n := e.contactCount(); n != total {
+		t.Fatalf("contacts: %d, want %d", n, total)
 	}
 }

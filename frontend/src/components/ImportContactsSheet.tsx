@@ -1,6 +1,8 @@
 import { type FormEventHandler, useState } from 'react'
 import { OrganizationPicker } from '@/components/ContactSheet'
 import { FormSheet } from '@/components/FormSheet'
+import { SearchBox } from '@/components/SearchBox'
+import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { FieldDescription, Field, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import {
@@ -15,10 +17,24 @@ import { useCurrentUser } from '@/lib/auth'
 import {
   type ImportResult,
   type Organization,
+  type SavedContact,
   useImportContacts,
   useSavedContacts,
 } from '@/lib/directory'
 import { formatPhone } from '@/lib/format'
+
+// Compara sem diferenciar maiúsculas nem acentos ("joao" encontra "João").
+function folded(text: string) {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+}
+
+function matches(contact: SavedContact, query: string) {
+  const digits = query.replace(/\D/g, '')
+  return (
+    folded(contact.name).includes(folded(query.trim())) ||
+    (digits !== '' && contact.phone.includes(digits))
+  )
+}
 
 function plural(count: number, one: string, many: string) {
   return `${count} ${count === 1 ? one : many}`
@@ -40,6 +56,7 @@ export function ImportContactsSheet({
   const sectorId = isAdmin ? chosenSector : (user?.sectorId ?? undefined)
   const book = useSavedContacts(open ? sectorId : undefined)
   const saved = book.data ?? []
+  const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string[]>([])
   const [organization, setOrganization] = useState<Organization | null>(null)
   const [missing, setMissing] = useState(false)
@@ -50,7 +67,19 @@ export function ImportContactsSheet({
     .filter((sector) => sector.active)
     .map((sector) => ({ value: String(sector.id), label: sector.name }))
   const chosen = selected.filter((phone) => saved.some((contact) => contact.phone === phone))
-  const allChosen = saved.length > 0 && chosen.length === saved.length
+  // "Selecionar todos" vale para os mostrados; os demais continuam como estão.
+  const visible = saved.filter((contact) => matches(contact, query))
+  const visibleChosen = visible.filter((contact) => selected.includes(contact.phone))
+  const allChosen = visible.length > 0 && visibleChosen.length === visible.length
+  const toggleVisible = (checked: boolean) => {
+    const phones = visible.map((contact) => contact.phone)
+    setMissing(false)
+    setSelected(
+      checked
+        ? [...new Set([...selected, ...phones])]
+        : selected.filter((phone) => !phones.includes(phone)),
+    )
+  }
 
   const toggle = (phone: string, checked: boolean) => {
     setMissing(false)
@@ -158,33 +187,51 @@ export function ImportContactsSheet({
           </Field>
           <FieldSet>
             <FieldLegend variant="label">Contatos da agenda</FieldLegend>
-            <label className="flex items-center gap-2 body-strong">
-              <Checkbox
-                checked={allChosen}
-                indeterminate={chosen.length > 0 && !allChosen}
-                onCheckedChange={(checked) => {
-                  setMissing(false)
-                  setSelected(checked ? saved.map((contact) => contact.phone) : [])
-                }}
+            {/* Enter na busca não envia a importação. */}
+            <div onKeyDown={(event) => event.key === 'Enter' && event.preventDefault()}>
+              <SearchBox
+                value={query}
+                onChange={setQuery}
+                label="Buscar na agenda"
+                placeholder="Nome ou telefone"
               />
-              Selecionar todos ({saved.length})
-            </label>
-            <ul className="flex flex-col gap-2">
-              {saved.map((contact) => (
-                <li key={contact.phone}>
-                  <label className="flex items-center gap-2">
-                    <Checkbox
-                      checked={selected.includes(contact.phone)}
-                      onCheckedChange={(checked) => toggle(contact.phone, checked)}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{contact.name}</span>
-                    <span className="mono-num caption text-ink-faint">
-                      {formatPhone(contact.phone)}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+            </div>
+            <p className="caption text-ink-faint">
+              {plural(chosen.length, 'contato selecionado', 'contatos selecionados')}
+            </p>
+            {visible.length > 0 ? (
+              <>
+                <label className="flex items-center gap-2 body-strong">
+                  <Checkbox
+                    checked={allChosen}
+                    indeterminate={visibleChosen.length > 0 && !allChosen}
+                    onCheckedChange={toggleVisible}
+                  />
+                  Selecionar todos ({visible.length})
+                </label>
+                <ul className="flex flex-col gap-2">
+                  {visible.map((contact) => (
+                    <li key={contact.phone}>
+                      <label className="flex items-center gap-2">
+                        <Checkbox
+                          checked={selected.includes(contact.phone)}
+                          onCheckedChange={(checked) => toggle(contact.phone, checked)}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{contact.name}</span>
+                          <span className="mono-num caption block text-ink-faint">
+                            {formatPhone(contact.phone)}
+                          </span>
+                        </span>
+                        {contact.exists && <Badge tone="neutral">Já existe</Badge>}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-ink-faint">Nenhum contato encontrado.</p>
+            )}
           </FieldSet>
         </>
       )}

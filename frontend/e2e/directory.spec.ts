@@ -343,6 +343,27 @@ test('atendente importa contatos selecionados da agenda, com e sem órgão', asy
   // Selecionar todos, sem órgão: Ana já existe e continua com o órgão dela.
   await page.getByRole('button', { name: 'Importar contatos' }).click()
   const again = page.getByRole('dialog', { name: 'Importar contatos' })
+  await expect(again.getByRole('listitem').filter({ hasText: `Ana ${id}` })).toContainText(
+    'Já existe',
+  )
+  await expect(again.getByRole('listitem').filter({ hasText: `Bia ${id}` })).not.toContainText(
+    'Já existe',
+  )
+
+  // A busca ignora acentos, e "Selecionar todos" vale para os mostrados.
+  const search = again.getByRole('searchbox', { name: 'Buscar na agenda' })
+  await search.fill(`CÁIO ${id}`)
+  await search.press('Enter')
+  await expect(again.getByRole('checkbox', { name: new RegExp(`Bia ${id}`) })).toHaveCount(0)
+  await again.getByRole('checkbox', { name: 'Selecionar todos (1)' }).click()
+  await search.fill(phoneOf(2))
+  await expect(again.getByRole('checkbox', { name: new RegExp(`Caio ${id}`) })).toHaveCount(0)
+  await again.getByRole('checkbox', { name: 'Selecionar todos (1)' }).click()
+  await expect(again.getByText('2 contatos selecionados')).toBeVisible()
+  await search.fill('nome que não existe')
+  await expect(again.getByText('Nenhum contato encontrado.')).toBeVisible()
+  await search.fill('')
+  await expect(again.getByRole('checkbox', { name: new RegExp(`Caio ${id}`) })).toBeChecked()
   await again.getByRole('checkbox', { name: 'Selecionar todos (3)' }).click()
   await again.getByRole('button', { name: 'Importar contatos' }).click()
   await expect(again.getByText('2 contatos criados.')).toBeVisible()
@@ -381,6 +402,7 @@ test('importação mantém o contato da variante com nono dígito e só vincula 
 
   await page.getByRole('button', { name: 'Importar contatos' }).click()
   const drawer = page.getByRole('dialog', { name: 'Importar contatos' })
+  await expect(drawer.getByText('Já existe')).toBeVisible()
   await drawer.getByRole('checkbox', { name: 'Selecionar todos (1)' }).click()
   await drawer.getByRole('button', { name: 'Importar contatos' }).click()
   await expect(drawer.getByText('0 contatos criados.')).toBeVisible()
