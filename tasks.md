@@ -178,7 +178,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** a skill descreve as camadas, os gatilhos e o registro do que foi lido; toda task pendente tem a linha `**Ler:**`, com títulos que existem nos documentos e arquivos que existem no repositório.
 
-### [ ] T21 — Fluxo do painel e realizados hoje
+### [~] T21 — Fluxo do painel e realizados hoje
 
 - "Assumir" no painel abre a conversa; a linha inteira do chamado também abre, com link esticado sobre a linha, sem perder o teclado, e o botão "Assumir" continua clicável.
 - Encerrar e transferir para outro setor voltam ao painel. A correção continua na mesma tela.
