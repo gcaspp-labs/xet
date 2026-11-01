@@ -118,7 +118,7 @@ func (h *Handler) createSector(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := h.service.Create(r.Context(), auth.CurrentUser(r.Context()).ID, SectorInput{Name: req.Name})
+	sec, err := h.service.Create(r.Context(), auth.CurrentUser(r.Context()).ID, SectorInput(req))
 	if err != nil {
 		WriteError(h.logger, w, r, err)
 		return
@@ -135,7 +135,7 @@ func (h *Handler) updateSector(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := h.service.Update(r.Context(), auth.CurrentUser(r.Context()).ID, id, SectorInput{Name: req.Name})
+	sec, err := h.service.Update(r.Context(), auth.CurrentUser(r.Context()).ID, id, SectorInput(req))
 	if err != nil {
 		WriteError(h.logger, w, r, err)
 		return

@@ -55,7 +55,7 @@ type UserResponse struct {
 }
 
 func toUserResponse(u User) UserResponse {
-	return UserResponse{ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role, SectorID: u.SectorID}
+	return UserResponse(u)
 }
 
 func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {

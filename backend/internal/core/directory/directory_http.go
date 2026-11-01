@@ -75,7 +75,7 @@ func (h *Handler) createOrganization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	org, err := h.service.CreateOrganization(r.Context(), auth.CurrentUser(r.Context()).ID,
-		OrganizationInput{Name: req.Name, CNPJ: req.CNPJ})
+		OrganizationInput(req))
 	if err != nil {
 		WriteError(h.logger, w, r, err)
 		return
@@ -93,7 +93,7 @@ func (h *Handler) updateOrganization(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	org, err := h.service.UpdateOrganization(r.Context(), auth.CurrentUser(r.Context()).ID, id,
-		OrganizationInput{Name: req.Name, CNPJ: req.CNPJ})
+		OrganizationInput(req))
 	if err != nil {
 		WriteError(h.logger, w, r, err)
 		return
@@ -222,10 +222,7 @@ type ContactRequest struct {
 }
 
 func (req ContactRequest) Input() ContactInput {
-	return ContactInput{
-		Name: req.Name, Phone: req.Phone, OrganizationID: req.OrganizationID,
-		SectorIDs: req.SectorIDs, ModuleIDs: req.ModuleIDs,
-	}
+	return ContactInput(req)
 }
 
 func (h *Handler) createContact(w http.ResponseWriter, r *http.Request) {

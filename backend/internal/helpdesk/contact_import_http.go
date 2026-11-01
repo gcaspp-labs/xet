@@ -57,12 +57,12 @@ func (h *Handler) importContacts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.service.ImportContacts(r.Context(), h.provider, auth.CurrentUser(r.Context()), sectorID,
-		ImportInput{Phones: req.Phones, OrganizationID: req.OrganizationID})
+		ImportInput(req))
 	if err != nil {
 		h.contactImportError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, importContactsResponse{Created: result.Created, Existing: result.Existing, Unavailable: result.Unavailable})
+	httpx.WriteJSON(w, http.StatusOK, importContactsResponse(result))
 }
 
 func (h *Handler) contactImportError(w http.ResponseWriter, r *http.Request, err error) {

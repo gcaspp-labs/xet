@@ -203,7 +203,7 @@ frontend/                Aplicação React
 deploy/                  Docker Compose, Caddyfile
 ```
 
-`internal/core` não importa módulos, e um módulo importa só o `core` e os pacotes de apoio (`db`, `config`, `testdb`, `testapi`), nunca outro módulo. As duas regras são garantidas pelo `depguard`, em `backend/.golangci.yml`: o `make lint` falha se forem quebradas. Módulo novo ganha pasta própria em `internal/`, uma regra no `depguard` e uma linha em `internal/server`.
+`internal/core` não importa módulos, e um módulo importa só o `core` e os pacotes de apoio (`db`, `testdb`, `testapi`), nunca outro módulo. As duas regras são garantidas pelo `depguard`, em `backend/.golangci.yml`: o `make lint` falha se forem quebradas. Módulo novo ganha pasta própria em `internal/`, uma regra no `depguard` e uma linha em `internal/server`.
 
 Cada pacote com rotas expõe um `Handler` com `Routes(r chi.Router)`; `internal/server` só os monta. As rotas de `auth` ficam fora da exigência de sessão, porque incluem o login, e as dos demais já chegam com ela.
 

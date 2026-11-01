@@ -30,10 +30,7 @@ func (h *Handler) correctTicket(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	t, err := h.service.Correct(r.Context(), auth.CurrentUser(r.Context()), ticketID, Correction{
-		Subject: req.Subject, Resolution: req.Resolution, ModuleIDs: req.ModuleIDs, OrganizationID: req.OrganizationID,
-		StartedAt: req.StartedAt, EndedAt: req.EndedAt, SpokeWith: req.SpokeWith, Reason: req.Reason,
-	})
+	t, err := h.service.Correct(r.Context(), auth.CurrentUser(r.Context()), ticketID, Correction(req))
 	switch {
 	case err == nil:
 		httpx.WriteJSON(w, http.StatusOK, closeResponse{ID: t.ID, Status: string(t.Status), StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt})
@@ -84,7 +81,7 @@ func (h *Handler) listCorrections(w http.ResponseWriter, r *http.Request) {
 			out[i].Actor = &httpx.Ref{ID: *l.ActorID, Name: *l.ActorName}
 		}
 		for j, c := range l.Changes {
-			out[i].Changes[j] = fieldChangeResponse{Field: c.Field, From: c.From, To: c.To}
+			out[i].Changes[j] = fieldChangeResponse(c)
 		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)

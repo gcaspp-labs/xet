@@ -3,6 +3,7 @@ version: "2"
 linters:
   enable:
     - bodyclose
+    - depguard
     - errorlint
     - gocritic
     - misspell
@@ -11,6 +12,35 @@ linters:
     - sqlclosecheck
     - unconvert
   settings:
+    # Fronteiras entre módulos (arquitetura.md, Estrutura do repositório): tudo em
+    # internal é proibido, exceto o que cada regra libera. Módulo novo ganha a sua.
+    depguard:
+      rules:
+        core:
+          list-mode: lax
+          files:
+            - "**/internal/core/**"
+          allow:
+            - github.com/gcaspp-labs/xet/backend/internal/core
+            - github.com/gcaspp-labs/xet/backend/internal/db
+            - github.com/gcaspp-labs/xet/backend/internal/testapi
+            - github.com/gcaspp-labs/xet/backend/internal/testdb
+          deny:
+            - pkg: github.com/gcaspp-labs/xet/backend/internal
+              desc: core não importa módulos
+        helpdesk:
+          list-mode: lax
+          files:
+            - "**/internal/helpdesk/**"
+          allow:
+            - github.com/gcaspp-labs/xet/backend/internal/helpdesk
+            - github.com/gcaspp-labs/xet/backend/internal/core
+            - github.com/gcaspp-labs/xet/backend/internal/db
+            - github.com/gcaspp-labs/xet/backend/internal/testapi
+            - github.com/gcaspp-labs/xet/backend/internal/testdb
+          deny:
+            - pkg: github.com/gcaspp-labs/xet/backend/internal
+              desc: um módulo importa só o core, nunca outro módulo
     errcheck:
       exclude-functions:
         - (io.Closer).Close

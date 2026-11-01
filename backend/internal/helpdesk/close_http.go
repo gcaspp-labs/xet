@@ -53,10 +53,7 @@ type closeRequest struct {
 }
 
 func (req closeRequest) closing() Closing {
-	return Closing{
-		Subject: req.Subject, Resolution: req.Resolution, ModuleIDs: req.ModuleIDs,
-		OrganizationID: req.OrganizationID, StartedAt: req.StartedAt, EndedAt: req.EndedAt,
-	}
+	return Closing(req)
 }
 
 type closeResponse struct {

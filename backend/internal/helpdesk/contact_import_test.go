@@ -2,19 +2,11 @@ package helpdesk_test
 
 import (
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 
-	"github.com/gcaspp-labs/xet/backend/internal/server"
-
-	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
-	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
-	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
-	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
@@ -331,12 +323,7 @@ func TestImportContactsWithoutContactBook(t *testing.T) {
 	contab := e.Sector("Contabilidade")
 	e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	e.connectBook(contab.ID, messaging.SavedContact{Name: "Maria", Phone: "5511988880001"})
-	handler := server.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), server.Services{
-		Auth: auth.NewService(e.Pool), Users: users.NewService(e.Pool), Sectors: e.Sectors, Directory: directory.NewService(e.Pool), Helpdesk: e.TicketService, Hub: realtime.NewHub(),
-	}, server.Options{
-		SecureCookie: true, Messaging: providerWithoutBook{e.WhatsApp},
-	})
-	srv := httptest.NewServer(handler)
+	srv := httptest.NewServer(e.RouterWith(providerWithoutBook{e.WhatsApp}))
 	t.Cleanup(srv.Close)
 	official := *e.Env
 	official.URL = srv.URL

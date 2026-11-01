@@ -11,8 +11,6 @@ import (
 
 const testPassword = testapi.Password
 
-type response = testapi.Response
-
 var id = testapi.ID
 
 type testEnv struct{ *testapi.Env }

@@ -23,6 +23,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/server"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
@@ -41,6 +42,14 @@ type Env struct {
 	WhatsApp *fake.Adapter
 	// Files holds the attachments of the messages.
 	Files storage.Storage
+}
+
+// RouterWith is the router of the API on the same database with another
+// provider, for a test of what a provider may not offer.
+func (e *Env) RouterWith(provider messaging.Provider) http.Handler {
+	return server.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), server.Services{
+		Auth: auth.NewService(e.Pool), Users: users.NewService(e.Pool), Sectors: e.Sectors, Directory: directory.NewService(e.Pool), Helpdesk: e.TicketService, Hub: realtime.NewHub(),
+	}, server.Options{SecureCookie: true, Messaging: provider})
 }
 
 // New starts the API on a fresh database. extra registers routes used only by
