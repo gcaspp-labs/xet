@@ -147,7 +147,7 @@ func TestStartConversationIsIdempotent(t *testing.T) {
 		t.Fatalf("sent to WhatsApp = %+v", sent)
 	}
 
-	// O mesmo identificador não serve para outro autor nem outro contato.
+	// O mesmo identificador não serve para outra pessoa nem outro contato.
 	if resp := e.startConversation(c.sector.ID, carla, c.biaToken, requestA, "Bom dia"); resp.status != http.StatusConflict {
 		t.Fatalf("other author: status %d", resp.status)
 	}

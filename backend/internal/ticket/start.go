@@ -132,6 +132,13 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 	})
 	switch {
 	case errors.Is(err, errOpenTicket):
+		// The open ticket may be the one a concurrent request with the same
+		// client_request_id has just created: then this is a repetition.
+		if m, err := s.q.GetMessageByClientRequestID(ctx, requestID); err == nil {
+			return repeatedStart(m, actor, sectorID, contactID)
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return Started{}, fmt.Errorf("get message by request: %w", err)
+		}
 		return Started{TicketID: existing, Existing: true}, nil
 	case errors.Is(err, errDuplicate):
 		// A concurrent request with the same client_request_id won; its
