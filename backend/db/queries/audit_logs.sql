@@ -5,7 +5,10 @@ values (@ticket_id, @entity_type, @entity_id, @action, @actor_id, @reason, @chan
 -- name: ListAuditLogsByEntity :many
 select * from audit_logs
 where entity_type = @entity_type and entity_id = @entity_id
-order by created_at, id;
+-- created_at is the start of the transaction: a writer that waited for a lock
+-- gets an earlier time than the one it waited for. The id follows the order
+-- the rows were written.
+order by id;
 
 -- name: ListTicketAssignmentLogs :many
 -- Start, assignment, transfers, closing and corrections of the ticket, oldest first, with the names of
@@ -23,9 +26,11 @@ where a.ticket_id = @ticket_id and a.action in ('ticket_started', 'ticket_assign
 order by a.created_at, a.id;
 
 -- name: ListTicketCorrections :many
--- Corrections of the closed ticket, oldest first, with the name of the author.
+-- Corrections of the closed ticket in the order they were written (each one
+-- holds the lock of the ticket, so the id follows that order), with the name
+-- of the author.
 select a.id, a.created_at, a.reason, a.changes, a.actor_id, u.name as actor_name
 from audit_logs a
 left join users u on u.id = a.actor_id
 where a.ticket_id = @ticket_id and a.action = 'ticket_corrected'
-order by a.created_at, a.id;
+order by a.id;

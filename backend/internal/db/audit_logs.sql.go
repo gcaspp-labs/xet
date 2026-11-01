@@ -41,7 +41,7 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 const listAuditLogsByEntity = `-- name: ListAuditLogsByEntity :many
 select id, ticket_id, entity_type, entity_id, action, actor_id, reason, changes, created_at from audit_logs
 where entity_type = $1 and entity_id = $2
-order by created_at, id
+order by id
 `
 
 type ListAuditLogsByEntityParams struct {
@@ -49,6 +49,9 @@ type ListAuditLogsByEntityParams struct {
 	EntityID   int64
 }
 
+// created_at is the start of the transaction: a writer that waited for a lock
+// gets an earlier time than the one it waited for. The id follows the order
+// the rows were written.
 func (q *Queries) ListAuditLogsByEntity(ctx context.Context, arg ListAuditLogsByEntityParams) ([]AuditLog, error) {
 	rows, err := q.db.Query(ctx, listAuditLogsByEntity, arg.EntityType, arg.EntityID)
 	if err != nil {
@@ -138,7 +141,7 @@ select a.id, a.created_at, a.reason, a.changes, a.actor_id, u.name as actor_name
 from audit_logs a
 left join users u on u.id = a.actor_id
 where a.ticket_id = $1 and a.action = 'ticket_corrected'
-order by a.created_at, a.id
+order by a.id
 `
 
 type ListTicketCorrectionsRow struct {
@@ -150,7 +153,9 @@ type ListTicketCorrectionsRow struct {
 	ActorName *string
 }
 
-// Corrections of the closed ticket, oldest first, with the name of the author.
+// Corrections of the closed ticket in the order they were written (each one
+// holds the lock of the ticket, so the id follows that order), with the name
+// of the author.
 func (q *Queries) ListTicketCorrections(ctx context.Context, ticketID *int64) ([]ListTicketCorrectionsRow, error) {
 	rows, err := q.db.Query(ctx, listTicketCorrections, ticketID)
 	if err != nil {
