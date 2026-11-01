@@ -65,12 +65,14 @@ select
     t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name,
-    t.assignee_id, u.name as assignee_name
+    t.assignee_id, u.name as assignee_name,
+    t.closed_by_id, cb.name as closed_by_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
 left join users u on u.id = t.assignee_id
+left join users cb on cb.id = t.closed_by_id
 where t.id = @id;
 
 -- name: SetTicketSpokeWith :one
@@ -167,5 +169,23 @@ for update;
 -- name: SetTicketOrganization :one
 update tickets
 set organization_id = @organization_id
+where id = @id
+returning *;
+
+-- name: ListTicketModuleIDs :many
+select module_id from ticket_modules
+where ticket_id = @ticket_id
+order by module_id;
+
+-- name: RemoveTicketModules :exec
+delete from ticket_modules
+where ticket_id = @ticket_id and module_id = any(@module_ids::bigint[]);
+
+-- name: CorrectTicket :one
+-- Correction of a closed ticket. The caller holds the lock of the ticket and
+-- checked it may be corrected.
+update tickets
+set subject = @subject, resolution = @resolution, organization_id = @organization_id,
+    started_at = @started_at, ended_at = @ended_at, spoke_with = @spoke_with
 where id = @id
 returning *;

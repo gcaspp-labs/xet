@@ -23,3 +23,7 @@ returning *;
 select * from modules
 where sector_id = @sector_id and active
 order by lower(name), id;
+
+-- name: ListModuleNames :many
+select id, name from modules
+where id = any(@ids::bigint[]);

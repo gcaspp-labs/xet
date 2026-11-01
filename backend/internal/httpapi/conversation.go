@@ -36,6 +36,7 @@ type ticketDetailResponse struct {
 	Contact      ticketContactResponse `json:"contact"`
 	Organization *ticketUserResponse   `json:"organization"`
 	Assignee     *ticketUserResponse   `json:"assignee"`
+	ClosedBy     *ticketUserResponse   `json:"closedBy"`
 }
 
 type mediaResponse struct {
@@ -164,6 +165,9 @@ func (s *server) getTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {
 		out.Assignee = &ticketUserResponse{ID: *t.AssigneeID, Name: *t.AssigneeName}
+	}
+	if t.ClosedByID != nil && t.ClosedByName != nil {
+		out.ClosedBy = &ticketUserResponse{ID: *t.ClosedByID, Name: *t.ClosedByName}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -8,7 +8,7 @@ where entity_type = @entity_type and entity_id = @entity_id
 order by created_at, id;
 
 -- name: ListTicketAssignmentLogs :many
--- Start, assignment, transfers and closing of the ticket, oldest first, with the names of
+-- Start, assignment, transfers, closing and corrections of the ticket, oldest first, with the names of
 -- the actor and of the previous and new assignees.
 select
     a.id, a.action, a.created_at,
@@ -19,5 +19,13 @@ from audit_logs a
 left join users actor on actor.id = a.actor_id
 left join users from_user on from_user.id = (a.changes -> 'assignee_id' ->> 'from')::bigint
 left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::bigint
-where a.ticket_id = @ticket_id and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_closed')
+where a.ticket_id = @ticket_id and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_closed', 'ticket_corrected')
+order by a.created_at, a.id;
+
+-- name: ListTicketCorrections :many
+-- Corrections of the closed ticket, oldest first, with the name of the author.
+select a.id, a.created_at, a.reason, a.changes, a.actor_id, u.name as actor_name
+from audit_logs a
+left join users u on u.id = a.actor_id
+where a.ticket_id = @ticket_id and a.action = 'ticket_corrected'
 order by a.created_at, a.id;

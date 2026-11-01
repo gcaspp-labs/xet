@@ -146,6 +146,63 @@ func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Ticke
 	return i, err
 }
 
+const correctTicket = `-- name: CorrectTicket :one
+update tickets
+set subject = $1, resolution = $2, organization_id = $3,
+    started_at = $4, ended_at = $5, spoke_with = $6
+where id = $7
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type CorrectTicketParams struct {
+	Subject        *string
+	Resolution     *string
+	OrganizationID *int64
+	StartedAt      time.Time
+	EndedAt        *time.Time
+	SpokeWith      *string
+	ID             int64
+}
+
+// Correction of a closed ticket. The caller holds the lock of the ticket and
+// checked it may be corrected.
+func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, correctTicket,
+		arg.Subject,
+		arg.Resolution,
+		arg.OrganizationID,
+		arg.StartedAt,
+		arg.EndedAt,
+		arg.SpokeWith,
+		arg.ID,
+	)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createQueuedTicket = `-- name: CreateQueuedTicket :one
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, arrived_at, started_at)
 values ($1, $2, $3, $4, 'queued', $5, $5)
@@ -399,12 +456,14 @@ select
     t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name,
-    t.assignee_id, u.name as assignee_name
+    t.assignee_id, u.name as assignee_name,
+    t.closed_by_id, cb.name as closed_by_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
 left join users u on u.id = t.assignee_id
+left join users cb on cb.id = t.closed_by_id
 where t.id = $1
 `
 
@@ -430,6 +489,8 @@ type GetTicketDetailRow struct {
 	OrganizationName  *string
 	AssigneeID        *int64
 	AssigneeName      *string
+	ClosedByID        *int64
+	ClosedByName      *string
 }
 
 func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetailRow, error) {
@@ -457,6 +518,8 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.OrganizationName,
 		&i.AssigneeID,
 		&i.AssigneeName,
+		&i.ClosedByID,
+		&i.ClosedByName,
 	)
 	return i, err
 }
@@ -734,6 +797,32 @@ func (q *Queries) ListSectorWorkload(ctx context.Context, sectorID int64) ([]Lis
 	return items, nil
 }
 
+const listTicketModuleIDs = `-- name: ListTicketModuleIDs :many
+select module_id from ticket_modules
+where ticket_id = $1
+order by module_id
+`
+
+func (q *Queries) ListTicketModuleIDs(ctx context.Context, ticketID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listTicketModuleIDs, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var module_id int64
+		if err := rows.Scan(&module_id); err != nil {
+			return nil, err
+		}
+		items = append(items, module_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTicketModules = `-- name: ListTicketModules :many
 select m.id, m.name
 from ticket_modules tm
@@ -780,6 +869,21 @@ func (q *Queries) NextProtocolNumber(ctx context.Context, year int32) (int32, er
 	var last_value int32
 	err := row.Scan(&last_value)
 	return last_value, err
+}
+
+const removeTicketModules = `-- name: RemoveTicketModules :exec
+delete from ticket_modules
+where ticket_id = $1 and module_id = any($2::bigint[])
+`
+
+type RemoveTicketModulesParams struct {
+	TicketID  int64
+	ModuleIds []int64
+}
+
+func (q *Queries) RemoveTicketModules(ctx context.Context, arg RemoveTicketModulesParams) error {
+	_, err := q.db.Exec(ctx, removeTicketModules, arg.TicketID, arg.ModuleIds)
+	return err
 }
 
 const setTicketOrganization = `-- name: SetTicketOrganization :one

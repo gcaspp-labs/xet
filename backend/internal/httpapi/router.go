@@ -126,6 +126,8 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 			r.Get("/tickets/{ticketID}/closing-form", s.closingForm)
 			r.Post("/tickets/{ticketID}/close", s.closeTicket)
 			r.Get("/tickets/{ticketID}/modules", s.listTicketModules)
+			r.Post("/tickets/{ticketID}/correct", s.correctTicket)
+			r.Get("/tickets/{ticketID}/corrections", s.listCorrections)
 			r.Get("/tickets/{ticketID}", s.getTicket)
 			r.Get("/tickets/{ticketID}/messages", s.listMessages)
 			r.Post("/tickets/{ticketID}/messages", s.sendMessage)

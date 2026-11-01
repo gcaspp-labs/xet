@@ -27,3 +27,7 @@ limit @max_results;
 
 -- name: GetOrganization :one
 select * from organizations where id = @id;
+
+-- name: ListOrganizationNames :many
+select id, name from organizations
+where id = any(@ids::bigint[]);
