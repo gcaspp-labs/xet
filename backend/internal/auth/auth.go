@@ -40,6 +40,16 @@ var (
 	ErrSelfLockout        = errors.New("admin cannot deactivate or change the role of their own account")
 )
 
+// UserHasTicketsError refuses deactivating or moving a user who still has
+// tickets in progress, which need to be transferred first.
+type UserHasTicketsError struct {
+	Count int32
+}
+
+func (e *UserHasTicketsError) Error() string {
+	return fmt.Sprintf("user has %d tickets in progress", e.Count)
+}
+
 // User is the authenticated user attached to a request.
 type User struct {
 	ID       int64
@@ -334,7 +344,8 @@ func (s *Service) CreateUser(ctx context.Context, actor User, in UserInput, pass
 
 // UpdateUser changes a user's data, locking the row. Deactivating a user ends
 // their sessions in the same transaction. An administrator cannot deactivate
-// or change the role of their own account (spec.md).
+// or change the role of their own account, and a user with tickets in progress
+// cannot be deactivated or change sectors (spec.md).
 func (s *Service) UpdateUser(ctx context.Context, actor User, targetID int64, in UserInput) (db.User, error) {
 	if !actor.HasRole(db.UserRoleAdmin) {
 		return db.User{}, ErrForbidden
@@ -366,6 +377,16 @@ func (s *Service) UpdateUser(ctx context.Context, actor User, targetID int64, in
 		if changes.Empty() {
 			u = before
 			return nil
+		}
+		// Becoming an admin also changes the sector, since admins have none.
+		if _, moved := changes["sector_id"]; moved || (before.Active && !in.Active) {
+			count, err := q.CountInProgressTicketsOfAssignee(ctx, &targetID)
+			if err != nil {
+				return fmt.Errorf("count tickets: %w", err)
+			}
+			if count > 0 {
+				return &UserHasTicketsError{Count: count}
+			}
 		}
 		u, err = q.UpdateUser(ctx, db.UpdateUserParams{
 			ID:       targetID,

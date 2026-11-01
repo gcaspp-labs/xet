@@ -251,6 +251,18 @@ func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (T
 	return i, err
 }
 
+const countInProgressTicketsOfAssignee = `-- name: CountInProgressTicketsOfAssignee :one
+select count(*)::integer from tickets
+where assignee_id = $1 and status = 'in_progress'
+`
+
+func (q *Queries) CountInProgressTicketsOfAssignee(ctx context.Context, assigneeID *int64) (int32, error) {
+	row := q.db.QueryRow(ctx, countInProgressTicketsOfAssignee, assigneeID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createQueuedTicket = `-- name: CreateQueuedTicket :one
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, arrived_at, started_at)
 values ($1, $2, $3, $4, 'queued', $5, $5)

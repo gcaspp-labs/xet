@@ -69,6 +69,10 @@ where (u.sector_id = @sector_id and u.active) or t.id is not null
 group by u.id
 order by lower(u.name), u.id;
 
+-- name: CountInProgressTicketsOfAssignee :one
+select count(*)::integer from tickets
+where assignee_id = @assignee_id and status = 'in_progress';
+
 -- name: GetTicketForUpdate :one
 select * from tickets
 where id = @id

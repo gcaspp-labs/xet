@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, request as apiRequest, test, type Page } from '@playwright/test'
 import { admin, login, seedSector, signIn, unique, userPassword } from './fixtures'
 
 async function chooseOption(page: Page, label: string, option: string) {
@@ -101,6 +101,91 @@ test('administrador edita setor e desativa usuário', async ({ page, browser, ba
   await login(agentPage, agent, userPassword)
   await expect(agentPage.getByRole('alert')).toHaveText('E-mail ou senha incorretos.')
   await context.close()
+})
+
+test('usuário com chamado em atendimento só é desativado ou trocado de setor depois de transferir', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  const other = await seedSector(baseURL!)
+
+  const adminApi = await apiRequest.newContext({ baseURL })
+  await adminApi.post('/api/auth/login', {
+    data: { email: admin.email, password: admin.password },
+  })
+  expect((await adminApi.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
+  expect((await adminApi.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
+  await adminApi.dispose()
+  const received = await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+    data: {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName: 'Joana Cliente',
+      body: 'Preciso da segunda via da guia',
+    },
+  })
+  expect(received.ok()).toBeTruthy()
+
+  // O atendente assume pela API; o teste é da tela de usuários.
+  const agentApi = await apiRequest.newContext({ baseURL })
+  await agentApi.post('/api/auth/login', { data: { email: agent, password: userPassword } })
+  const tickets = (await (await agentApi.get(`/api/sectors/${sector.id}/tickets`)).json()) as {
+    id: number
+  }[]
+  expect((await agentApi.post(`/api/tickets/${tickets[0].id}/assign`)).ok()).toBeTruthy()
+
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/usuarios')
+  const row = page.getByRole('row', { name: new RegExp(agent) })
+  await row.getByRole('button', { name: /^Editar/ }).click()
+  const drawer = page.getByRole('dialog', { name: 'Editar usuário' })
+  const refusal =
+    'O usuário tem 1 chamado em atendimento. Transfira antes de desativar ou trocar de setor.'
+
+  // Desativar é recusado, e o aviso aparece no formulário, que continua aberto.
+  await drawer.getByRole('switch', { name: 'Ativo' }).click()
+  await drawer.getByRole('button', { name: 'Salvar' }).click()
+  await expect(drawer.getByRole('alert')).toHaveText(refusal)
+
+  // Trocar de setor também.
+  await drawer.getByRole('switch', { name: 'Ativo' }).click()
+  await chooseOption(page, 'Setor', other.sector.name)
+  await drawer.getByRole('button', { name: 'Salvar' }).click()
+  await expect(drawer.getByRole('alert')).toHaveText(refusal)
+  await drawer.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(row).toContainText('Ativo')
+  await expect(row).toContainText(sector.name)
+
+  // Editar o nome continua livre.
+  await row.getByRole('button', { name: /^Editar/ }).click()
+  await drawer.getByLabel('Nome').fill('Atendente renomeado')
+  await drawer.getByRole('button', { name: 'Salvar' }).click()
+  await expect(drawer).toBeHidden()
+  const renamed = page.getByRole('row', { name: new RegExp(agent) })
+  await expect(renamed).toContainText('Atendente renomeado')
+
+  // Depois de transferir, a desativação passa.
+  const workload = (await (await agentApi.get(`/api/sectors/${sector.id}/workload`)).json()) as {
+    id: number
+    name: string
+  }[]
+  const target = workload.find((u) => u.name === supervisor.replace('.', ' ').split('@')[0])
+  expect(
+    (
+      await agentApi.post(`/api/tickets/${tickets[0].id}/transfer`, {
+        data: { assigneeId: target!.id },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await agentApi.dispose()
+
+  await renamed.getByRole('button', { name: /^Editar/ }).click()
+  await drawer.getByRole('switch', { name: 'Ativo' }).click()
+  await drawer.getByRole('button', { name: 'Salvar' }).click()
+  await expect(drawer).toBeHidden()
+  await expect(renamed).toContainText('Inativo')
 })
 
 test('administrador redefine a senha de um usuário', async ({ page, browser, baseURL }) => {
