@@ -96,6 +96,9 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 				r.Put("/{moduleID}", s.updateModule)
 			})
 
+			// Módulos ativos do setor, para o cadastro de contatos e os filtros: todos os papéis do setor.
+			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/active-modules", s.listActiveModules)
+
 			// Conexão do número: supervisor do próprio setor e administrador.
 			r.Route("/sectors/{sectorID}/connection", func(r chi.Router) {
 				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin), requireSector("sectorID"))
@@ -147,6 +150,7 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 
 			// Contatos: o cadastro é único para todos os setores e aberto a todos os papéis.
 			r.Get("/contacts", s.listContacts)
+			r.Get("/contacts/{contactID}", s.getContact)
 			r.Post("/contacts", s.createContact)
 			r.Put("/contacts/{contactID}", s.updateContact)
 		})

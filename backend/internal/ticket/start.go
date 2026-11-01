@@ -105,6 +105,9 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 		if err != nil {
 			return fmt.Errorf("create ticket: %w", err)
 		}
+		if err := q.LinkContactSector(ctx, db.LinkContactSectorParams{ContactID: contactID, SectorID: sectorID}); err != nil {
+			return fmt.Errorf("link contact sector: %w", err)
+		}
 		// Starting counts as assigning: the ticket is born with the user.
 		changes := audit.Changes{}
 		changes.Set("status", (*string)(nil), string(t.Status))

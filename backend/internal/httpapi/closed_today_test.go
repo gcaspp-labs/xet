@@ -38,7 +38,7 @@ func TestClosedTodayListsWhatTheSectorClosed(t *testing.T) {
 		t.Fatalf("assign: status %d", resp.status)
 	}
 	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", moved.ContactID), c.anaToken,
-		map[string]any{"name": "Rui", "phone": "5511977776666", "organizationId": c.org}); resp.status != http.StatusOK {
+		map[string]any{"name": "Rui", "phone": "5511977776666", "organizationId": c.org, "sectorIds": []int64{c.sector.ID}}); resp.status != http.StatusOK {
 		t.Fatalf("register contact: status %d, body %v", resp.status, resp.body)
 	}
 	if resp := e.transferSector(moved.ID, c.anaToken, c.transferForm(c.rh)); resp.status != http.StatusOK {

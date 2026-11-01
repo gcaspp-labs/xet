@@ -58,7 +58,7 @@ func newClosing(t *testing.T) closing {
 func (c closing) register() {
 	c.e.t.Helper()
 	resp := c.e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
-		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": c.org})
+		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": c.org, "sectorIds": []int64{c.sector.ID}})
 	if resp.status != http.StatusOK {
 		c.e.t.Fatalf("register contact: status %d, body %v", resp.status, resp.body)
 	}
@@ -465,7 +465,7 @@ func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
 	}
 	other := e.organization(c.supToken, "Câmara de Campinas", "")
 	resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
-		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": other})
+		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": other, "sectorIds": []int64{c.sector.ID}})
 	if resp.status != http.StatusOK {
 		t.Fatalf("update contact: status %d, body %v", resp.status, resp.body)
 	}
@@ -481,7 +481,7 @@ func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
 
 	// Cadastro inválido não grava nada.
 	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
-		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": 999999}); resp.status == http.StatusOK {
+		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": 999999, "sectorIds": []int64{c.sector.ID}}); resp.status == http.StatusOK {
 		t.Fatalf("unknown organization accepted: %v", resp.body)
 	}
 }
@@ -498,10 +498,58 @@ func TestRegisteringContactWhileClosingDoesNotDeadlock(t *testing.T) {
 	wg.Go(func() { closeStatus = e.closeForm(c.ticket.ID, c.anaToken, c.form(c.org)).status })
 	wg.Go(func() {
 		registerStatus = e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
-			map[string]any{"name": "Maria Silva", "phone": "5511988887777", "organizationId": c.org}).status
+			map[string]any{"name": "Maria Silva", "phone": "5511988887777", "organizationId": c.org, "sectorIds": []int64{c.sector.ID}}).status
 	})
 	wg.Wait()
 	if closeStatus != http.StatusOK || registerStatus != http.StatusOK {
 		t.Fatalf("close %d, register %d", closeStatus, registerStatus)
+	}
+}
+
+// Os módulos do contato vêm marcados: só os ativos e do setor do chamado.
+func TestClosingFormReturnsTheModulesOfTheContact(t *testing.T) {
+	t.Parallel()
+	c := newClosing(t)
+	e := c.e
+	path := fmt.Sprintf("/api/tickets/%d/closing-form", c.ticket.ID)
+	marked := func() []any {
+		t.Helper()
+		resp := e.do(http.MethodGet, path, c.anaToken, nil)
+		if resp.status != http.StatusOK {
+			t.Fatalf("closing form: status %d", resp.status)
+		}
+		list, ok := resp.body["contactModuleIds"].([]any)
+		if !ok {
+			t.Fatalf("contactModuleIds: %v", resp.body["contactModuleIds"])
+		}
+		return list
+	}
+	if got := marked(); len(got) != 0 {
+		t.Fatalf("contact without modules: %v", got)
+	}
+
+	// O contato tem um módulo do setor, e um do RH, que o administrador marcou.
+	var rhSector int64
+	if err := e.pool.QueryRow(t.Context(), "select sector_id from modules where id = $1", c.rhModule).Scan(&rhSector); err != nil {
+		t.Fatal(err)
+	}
+	resp := e.do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.adminToken, map[string]any{
+		"name": "Maria", "phone": "5511988887777", "organizationId": c.org,
+		"sectorIds": []int64{c.sector.ID, rhSector}, "moduleIds": []int64{c.modules[0], c.rhModule},
+	})
+	if resp.status != http.StatusOK {
+		t.Fatalf("update contact: status %d, body %v", resp.status, resp.body)
+	}
+	if got := marked(); len(got) != 1 || int64(got[0].(float64)) != c.modules[0] {
+		t.Fatalf("marked = %v, want only %d", got, c.modules[0])
+	}
+
+	// Desativado depois, o módulo deixa de vir marcado.
+	if resp := e.do(http.MethodPut, fmt.Sprintf("/api/sectors/%d/modules/%d", c.sector.ID, c.modules[0]), c.supToken,
+		map[string]any{"name": "Folha", "active": false}); resp.status != http.StatusOK {
+		t.Fatalf("deactivate: status %d", resp.status)
+	}
+	if got := marked(); len(got) != 0 {
+		t.Fatalf("inactive module marked: %v", got)
 	}
 }

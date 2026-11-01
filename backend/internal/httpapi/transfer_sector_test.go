@@ -3,6 +3,7 @@ package httpapi
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -281,5 +282,19 @@ func TestConcurrentTransfersToAnotherSectorTransferOnce(t *testing.T) {
 	}
 	if got := e.tickets(c.rh); len(got) != 1 {
 		t.Fatalf("destination tickets = %+v", got)
+	}
+}
+
+func TestTransferLinksTheContactToTheTargetSector(t *testing.T) {
+	t.Parallel()
+	c := newSectorTransfer(t)
+	e := c.e
+	if resp := e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)); resp.status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", resp.status, resp.body)
+	}
+	want := []int64{c.sector.ID, c.rh}
+	slices.Sort(want)
+	if got := e.contactSectors(c.ticket.ContactID); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("sectors = %v, want %v", got, want)
 	}
 }

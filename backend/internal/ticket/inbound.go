@@ -97,6 +97,12 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 				return fmt.Errorf("set contact external id: %w", err)
 			}
 		}
+		// After the contact is written, so saving its registration, which
+		// writes the contact and then the links, never waits on this link
+		// while this transaction waits on the contact.
+		if err := q.LinkContactSector(ctx, db.LinkContactSectorParams{ContactID: contact.ID, SectorID: sectorID}); err != nil {
+			return fmt.Errorf("link contact sector: %w", err)
+		}
 
 		var mediaID *int64
 		if media != nil {

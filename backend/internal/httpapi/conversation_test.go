@@ -673,8 +673,8 @@ func TestHistoryByContactAndOrganization(t *testing.T) {
 	adminToken := e.login("admin@exemplo.com", testPassword)
 
 	org := e.organization(supToken, "Câmara Municipal", "")
-	maria := e.contact(anaToken, "Maria", "5511988887777", org)
-	joao := e.contact(anaToken, "João", "5511977776666", org)
+	maria := e.contact(anaToken, "Maria", "5511988887777", org, contab.ID)
+	joao := e.contact(anaToken, "João", "5511977776666", org, contab.ID)
 
 	// Maria: um chamado encerrado e outro aberto na Contabilidade, e um no RH. João: um na Contabilidade.
 	first := e.queuedTicket(contab.ID, "M-1", "5511988887777")

@@ -36,3 +36,7 @@ returning *;
 select * from sectors
 where active and provider = @provider and external_account_id is not null
 order by id;
+
+-- name: ListActiveSectorIDs :many
+select id from sectors
+where id = any(@ids::bigint[]) and active;

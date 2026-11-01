@@ -63,6 +63,9 @@ func (s *Service) TransferSector(ctx context.Context, actor auth.User, ticketID,
 		if err != nil {
 			return fmt.Errorf("create transferred ticket: %w", err)
 		}
+		if err := q.LinkContactSector(ctx, db.LinkContactSectorParams{ContactID: closed.ContactID, SectorID: target.ID}); err != nil {
+			return fmt.Errorf("link contact sector: %w", err)
+		}
 		changes["sector_id"] = audit.Change{From: closed.SectorID, To: target.ID}
 		changes["next_ticket_id"] = audit.Change{From: nil, To: next.ID}
 		return recordTicket(ctx, q, closed.ID, "ticket_transferred_sector", actor.ID, changes)

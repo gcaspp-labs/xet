@@ -9,13 +9,15 @@ import (
 )
 
 type closingFormResponse struct {
-	Modules      []refResponse `json:"modules"`
-	Organization *refResponse  `json:"organization"`
-	StartedAt    time.Time     `json:"startedAt"`
+	Modules          []refResponse `json:"modules"`
+	ContactModuleIDs []int64       `json:"contactModuleIds"`
+	Organization     *refResponse  `json:"organization"`
+	StartedAt        time.Time     `json:"startedAt"`
 }
 
 // closingForm returns what the closing form starts with: the active modules
-// of the sector, the suggested organization and the automatic start.
+// of the sector, those of the contact among them, the suggested organization
+// and the automatic start.
 func (s *server) closingForm(w http.ResponseWriter, r *http.Request) {
 	ticketID, ok := urlTicketID(w, r)
 	if !ok {
@@ -26,7 +28,11 @@ func (s *server) closingForm(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	out := closingFormResponse{Modules: make([]refResponse, len(form.Modules)), StartedAt: form.StartedAt}
+	out := closingFormResponse{
+		Modules:          make([]refResponse, len(form.Modules)),
+		ContactModuleIDs: append([]int64{}, form.ContactModuleIDs...),
+		StartedAt:        form.StartedAt,
+	}
 	for i, m := range form.Modules {
 		out.Modules[i] = refResponse{ID: m.ID, Name: m.Name}
 	}
