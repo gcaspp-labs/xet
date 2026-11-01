@@ -98,6 +98,10 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 
 - Transferir a responsabilidade do chamado e preservar mensagens, registros e contexto.
 - Registrar a transferência no histórico.
+- Transfere o chamado em atendimento o próprio responsável. Supervisores do setor e administradores também transferem chamados de outros atendentes (por exemplo, na ausência do responsável); o atendente que não é o responsável não transfere.
+- O destino é um atendente ou supervisor ativo do setor do chamado, diferente do responsável atual. Administradores não são destino. Chamado na fila não é transferido: é assumido.
+- A partir da transferência, só o novo responsável responde; o anterior passa a ver a conversa apenas para leitura.
+- A conversa mostra, entre as mensagens e na ordem do tempo, quando o chamado foi assumido e cada transferência, com quem fez, de quem para quem e quando.
 
 ### Entre setores
 
