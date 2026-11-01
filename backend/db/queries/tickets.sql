@@ -66,13 +66,21 @@ select
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name,
     t.assignee_id, u.name as assignee_name,
-    t.closed_by_id, cb.name as closed_by_name
+    t.closed_by_id, cb.name as closed_by_name, t.closure_type,
+    p.id as previous_id, p.protocol as previous_protocol, ps.name as previous_sector_name,
+    p.subject as previous_subject, p.resolution as previous_resolution, pb.name as previous_closed_by_name,
+    n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
 left join users u on u.id = t.assignee_id
 left join users cb on cb.id = t.closed_by_id
+left join tickets p on p.id = t.previous_ticket_id
+left join sectors ps on ps.id = p.sector_id
+left join users pb on pb.id = p.closed_by_id
+left join tickets n on n.previous_ticket_id = t.id
+left join sectors ns on ns.id = n.sector_id
 where t.id = @id;
 
 -- name: SetTicketSpokeWith :one
@@ -145,7 +153,7 @@ returning module_id;
 -- name: CloseTicket :one
 -- The caller holds the lock of the ticket and checked it may be closed.
 update tickets
-set status = 'closed', closure_type = 'resolved', closed_at = now(), closed_by_id = assignee_id,
+set status = 'closed', closure_type = @closure_type::closure_type, closed_at = now(), closed_by_id = assignee_id,
     subject = @subject, resolution = @resolution, organization_id = @organization_id,
     started_at = @started_at, ended_at = coalesce(sqlc.narg(ended_at), now())
 where id = @id
@@ -189,3 +197,22 @@ set subject = @subject, resolution = @resolution, organization_id = @organizatio
     started_at = @started_at, ended_at = @ended_at, spoke_with = @spoke_with
 where id = @id
 returning *;
+
+-- name: CreateTransferredTicket :one
+-- Ticket of the destination of a transfer between sectors. An open ticket of
+-- the contact in the destination wins; then no row is returned and the
+-- caller refuses the transfer.
+insert into tickets (protocol, sector_id, contact_id, organization_id, status, previous_ticket_id, arrived_at, started_at)
+values (@protocol, @sector_id, @contact_id, @organization_id, 'queued', @previous_ticket_id, now(), now())
+on conflict (sector_id, contact_id) where status <> 'closed' do nothing
+returning *;
+
+-- name: ListLaterTicketSectors :many
+-- Sectors of the tickets that continue the given one through transfers
+-- between sectors; their users read the whole chain before them.
+with recursive later as (
+    select f.id, f.sector_id from tickets f where f.previous_ticket_id = @id::bigint
+    union all
+    select t.id, t.sector_id from tickets t join later l on t.previous_ticket_id = l.id
+)
+select distinct sector_id from later;

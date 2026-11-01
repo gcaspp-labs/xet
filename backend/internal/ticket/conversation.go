@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -84,6 +85,30 @@ func (s *Service) accessible(ctx context.Context, actor auth.User, ticketID int6
 	return t, nil
 }
 
+// viewable returns the ticket when the user may read it: its sector is
+// accessible or a later ticket of the chain of transfers between sectors is
+// (spec.md, Transferências). Acting on the ticket still needs accessible.
+func (s *Service) viewable(ctx context.Context, actor auth.User, ticketID int64) (db.Ticket, error) {
+	t, err := s.q.GetTicket(ctx, ticketID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.Ticket{}, ErrNotFound
+	}
+	if err != nil {
+		return db.Ticket{}, fmt.Errorf("get ticket: %w", err)
+	}
+	if actor.CanAccessSector(t.SectorID) {
+		return t, nil
+	}
+	sectors, err := s.q.ListLaterTicketSectors(ctx, ticketID)
+	if err != nil {
+		return db.Ticket{}, fmt.Errorf("list later ticket sectors: %w", err)
+	}
+	if slices.ContainsFunc(sectors, actor.CanAccessSector) {
+		return t, nil
+	}
+	return db.Ticket{}, ErrForbidden
+}
+
 // conducts checks, on the locked ticket, that the user may conduct the
 // conversation: the ticket is open and the user is its assignee. Admins and
 // supervisors are no exception (spec.md).
@@ -99,7 +124,7 @@ func conducts(t db.Ticket, actor auth.User) error {
 
 // Detail returns the ticket with its contact, organization and assignee.
 func (s *Service) Detail(ctx context.Context, actor auth.User, ticketID int64) (db.GetTicketDetailRow, error) {
-	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+	if _, err := s.viewable(ctx, actor, ticketID); err != nil {
 		return db.GetTicketDetailRow{}, err
 	}
 	d, err := s.q.GetTicketDetail(ctx, ticketID)
@@ -111,7 +136,7 @@ func (s *Service) Detail(ctx context.Context, actor auth.User, ticketID int64) (
 
 // Messages returns the conversation of the ticket in the order it happened.
 func (s *Service) Messages(ctx context.Context, actor auth.User, ticketID int64) ([]db.ListTicketMessagesRow, error) {
-	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+	if _, err := s.viewable(ctx, actor, ticketID); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListTicketMessages(ctx, ticketID)
@@ -441,7 +466,7 @@ func (s *Service) SetSpokeWith(ctx context.Context, actor auth.User, ticketID in
 
 // Notes returns the internal notes of the ticket, oldest first.
 func (s *Service) Notes(ctx context.Context, actor auth.User, ticketID int64) ([]db.ListTicketNotesRow, error) {
-	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+	if _, err := s.viewable(ctx, actor, ticketID); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListTicketNotes(ctx, ticketID)
@@ -468,15 +493,15 @@ func (s *Service) AddNote(ctx context.Context, actor auth.User, ticketID int64, 
 
 // Media opens an attachment of a message of a ticket the user may see.
 func (s *Service) Media(ctx context.Context, actor auth.User, mediaID int64) (db.MediaFile, io.ReadCloser, error) {
-	sectorID, err := s.q.GetMediaFileSector(ctx, &mediaID)
+	ticketID, err := s.q.GetMediaFileTicket(ctx, &mediaID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.MediaFile{}, nil, ErrMediaNotFound
 	}
 	if err != nil {
-		return db.MediaFile{}, nil, fmt.Errorf("get media sector: %w", err)
+		return db.MediaFile{}, nil, fmt.Errorf("get media ticket: %w", err)
 	}
-	if !actor.CanAccessSector(sectorID) {
-		return db.MediaFile{}, nil, ErrForbidden
+	if _, err := s.viewable(ctx, actor, ticketID); err != nil {
+		return db.MediaFile{}, nil, err
 	}
 	file, err := s.q.GetMediaFile(ctx, mediaID)
 	if err != nil {

@@ -198,7 +198,7 @@ type rawChange struct {
 
 // Corrections returns the corrections of the ticket, oldest first.
 func (s *Service) Corrections(ctx context.Context, actor auth.User, ticketID int64) ([]CorrectionLog, error) {
-	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+	if _, err := s.viewable(ctx, actor, ticketID); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListTicketCorrections(ctx, &ticketID)

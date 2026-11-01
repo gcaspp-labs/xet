@@ -100,10 +100,9 @@ order by m.sent_at, m.id;
 select * from media_files
 where id = @id;
 
--- name: GetMediaFileSector :one
--- Sector of the ticket whose message holds the file, to check the access.
-select t.sector_id
+-- name: GetMediaFileTicket :one
+-- Ticket whose message holds the file, to check the access.
+select m.ticket_id
 from messages m
-join tickets t on t.id = m.ticket_id
 where m.media_id = @media_id
 limit 1;
