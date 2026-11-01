@@ -1,25 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
 import { TriangleAlert } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { FormProvider, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { ContactSheet, OrganizationPicker } from '@/components/ContactSheet'
+import { ClosingFields } from '@/components/ClosingFields'
+import { ContactSheet } from '@/components/ContactSheet'
 import { FormSheet } from '@/components/FormSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -27,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { checkPeriod, closingShape, localInput } from '@/lib/closing'
 import {
   type TicketDetail,
   ticketKey,
@@ -36,32 +27,9 @@ import {
   useTransferSector,
   useTransferSectors,
 } from '@/lib/conversation'
-import type { Organization } from '@/lib/directory'
 import { formatPhone } from '@/lib/format'
 
-// Valor de <input type="datetime-local"> no horário do navegador: 2026-03-02T14:05.
-const localInput = (date: Date) => format(date, "yyyy-MM-dd'T'HH:mm")
-
-const schema = z
-  .object({
-    subject: z.string().trim().min(1, 'Informe o assunto.'),
-    resolution: z.string().trim().min(1, 'Informe a resolução.'),
-    moduleIds: z.array(z.number()).min(1, 'Selecione ao menos um módulo.'),
-    organization: z
-      .object({ id: z.number(), name: z.string(), cnpj: z.string().nullable() })
-      .nullable()
-      .refine((value) => value !== null, 'Selecione o órgão do atendimento.'),
-    startedAt: z.string().min(1, 'Informe o início.'),
-    endedAt: z.string().min(1, 'Informe o fim.'),
-  })
-  .refine((values) => new Date(values.endedAt) <= new Date(), {
-    path: ['endedAt'],
-    message: 'O fim não pode estar no futuro.',
-  })
-  .refine((values) => values.endedAt >= values.startedAt, {
-    path: ['endedAt'],
-    message: 'O fim precisa ser depois do início.',
-  })
+const schema = z.object(closingShape).superRefine(checkPeriod)
 
 type FormValues = z.input<typeof schema>
 
@@ -96,14 +64,7 @@ export function ClosingSheet({
     endedAt: localInput(new Date()),
   }))
 
-  const {
-    register,
-    control,
-    handleSubmit,
-    getValues,
-    setValue,
-    formState: { errors },
-  } = useForm<FormValues, unknown, z.output<typeof schema>>({
+  const methods = useForm<FormValues, unknown, z.output<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
       subject: '',
@@ -113,6 +74,7 @@ export function ClosingSheet({
       ...suggested,
     },
   })
+  const { handleSubmit, getValues, setValue } = methods
 
   // O órgão sugerido chega com o formulário ou depois do cadastro do contato.
   useEffect(() => {
@@ -237,101 +199,17 @@ export function ClosingSheet({
             <FieldError errors={sectorError ? [{ message: sectorError }] : []} />
           </Field>
         )}
-        <Field data-invalid={!!errors.subject}>
-          <FieldLabel htmlFor="closing-subject">Assunto</FieldLabel>
-          <Input
-            id="closing-subject"
-            maxLength={500}
-            aria-invalid={!!errors.subject}
-            {...register('subject')}
+        <FormProvider {...methods}>
+          <ClosingFields
+            idPrefix="closing"
+            modules={form?.modules ?? []}
+            emptyModules={
+              form
+                ? 'O setor não tem módulos ativos. Peça a um supervisor para cadastrá-los.'
+                : undefined
+            }
           />
-          <FieldError errors={[errors.subject]} />
-        </Field>
-        <Field data-invalid={!!errors.resolution}>
-          <FieldLabel htmlFor="closing-resolution">Resolução</FieldLabel>
-          <Textarea
-            id="closing-resolution"
-            maxLength={10000}
-            aria-invalid={!!errors.resolution}
-            {...register('resolution')}
-          />
-          <FieldError errors={[errors.resolution]} />
-        </Field>
-        <Controller
-          control={control}
-          name="moduleIds"
-          render={({ field }) => (
-            <FieldSet data-invalid={!!errors.moduleIds}>
-              <FieldLegend variant="label">Módulos</FieldLegend>
-              {form && form.modules.length === 0 && (
-                <FieldDescription>
-                  O setor não tem módulos ativos. Peça a um supervisor para cadastrá-los.
-                </FieldDescription>
-              )}
-              <div className="flex flex-col gap-2">
-                {form?.modules.map((module) => (
-                  <label key={module.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={field.value.includes(module.id)}
-                      onCheckedChange={(checked) =>
-                        field.onChange(
-                          checked
-                            ? [...field.value, module.id]
-                            : field.value.filter((id) => id !== module.id),
-                        )
-                      }
-                    />
-                    {module.name}
-                  </label>
-                ))}
-              </div>
-              <FieldError errors={[errors.moduleIds]} />
-            </FieldSet>
-          )}
-        />
-        <Field data-invalid={!!errors.organization}>
-          <FieldLabel htmlFor="closing-organization">Órgão</FieldLabel>
-          <Controller
-            control={control}
-            name="organization"
-            render={({ field }) => (
-              <OrganizationPicker
-                // Recria o campo quando o órgão sugerido chega, para mostrar o nome.
-                key={field.value?.id ?? 'none'}
-                id="closing-organization"
-                value={field.value as Organization | null}
-                onChange={field.onChange}
-                invalid={!!errors.organization}
-              />
-            )}
-          />
-          <FieldDescription>Trocar o órgão vale só para este chamado.</FieldDescription>
-          <FieldError errors={[errors.organization]} />
-        </Field>
-        <div className="grid gap-[15px] sm:grid-cols-2">
-          <Field data-invalid={!!errors.startedAt}>
-            <FieldLabel htmlFor="closing-started-at">Início</FieldLabel>
-            <Input
-              id="closing-started-at"
-              type="datetime-local"
-              className="mono-num"
-              aria-invalid={!!errors.startedAt}
-              {...register('startedAt')}
-            />
-            <FieldError errors={[errors.startedAt]} />
-          </Field>
-          <Field data-invalid={!!errors.endedAt}>
-            <FieldLabel htmlFor="closing-ended-at">Fim</FieldLabel>
-            <Input
-              id="closing-ended-at"
-              type="datetime-local"
-              className="mono-num"
-              aria-invalid={!!errors.endedAt}
-              {...register('endedAt')}
-            />
-            <FieldError errors={[errors.endedAt]} />
-          </Field>
-        </div>
+        </FormProvider>
         <FieldDescription>
           Alterações de horário ficam registradas no histórico de auditoria.
         </FieldDescription>
