@@ -197,9 +197,10 @@ Levantados nos primeiros testes com o número real.
 - Migração: `sectors.phone` opcional e nova coluna `connection_error`. O telefone sai do formulário e da API de setores.
 - O evento de conexão passa a informar o telefone da conta (no Whatsmeow, de `Store.ID`). `HandleConnection` (`internal/sector/connection.go`) grava o telefone e o apaga em `logged_out`.
 - Número já ligado a outro setor (`sectors_phone_key`): grava o motivo e desvincula o aparelho fora da transação e fora do tratamento do evento. A tela de conexão mostra o motivo.
+- Informar um tipo de plataforma conhecido em `store.DeviceProps` (`internal/messaging/whatsmeow/whatsmeow.go`): com o tipo desconhecido, o celular mostra "Outro dispositivo" em vez de "Central de Atendimento". Essas informações só são enviadas no pareamento, então um número já conectado precisa ler o QR code de novo.
 - As telas mostram "Não conectado" sem telefone. Ajustar `seedSector` (`frontend/e2e/fixtures.ts`) e os testes de setor e de conexão.
 
-**Pronto quando:** conectar preenche o telefone; número de outro setor é recusado com o motivo na tela, sem erro 500; uma queda temporária mantém o telefone e desvincular o apaga; há verificação manual com o número real.
+**Pronto quando:** conectar preenche o telefone; número de outro setor é recusado com o motivo na tela, sem erro 500; uma queda temporária mantém o telefone e desvincular o apaga; há verificação manual com o número real, em que o celular deixa de mostrar "Outro dispositivo".
 
 ### [ ] T26 — Setores e módulos do contato
 
