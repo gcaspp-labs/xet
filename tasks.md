@@ -127,7 +127,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** novo responsável responde, o anterior não; a transferência aparece no histórico.
 
-### [ ] T13 — Encerramento
+### [~] T13 — Encerramento
 
 - Formulário com assunto, resolução e módulos obrigatórios; cliente, atendente e setor automáticos; início e fim editáveis.
 - Troca de órgão no encerramento, apenas para o chamado.

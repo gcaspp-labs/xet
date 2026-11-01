@@ -129,6 +129,11 @@ Ao clicar em finalizar, o sistema abrirá o formulário de registro. O chamado s
 | Início | Automático: chegada da primeira mensagem do cliente ou, em conversa iniciada pelo atendente, envio da primeira mensagem; editável |
 | Fim | Preenchido automaticamente e editável |
 
+- Encerra o chamado em atendimento somente o responsável; supervisores e administradores também precisam ser o responsável (na ausência dele, o supervisor transfere o chamado para si e encerra). Chamado na fila não é encerrado: é assumido.
+- O fim não pode ser anterior ao início nem estar no futuro. Sem edição, o fim é o momento em que o formulário é salvo.
+- O órgão sugerido é o do chamado ou, se ele ainda não tiver, o órgão principal do contato. Contato não cadastrado (número desconhecido) precisa ser cadastrado e vinculado a um órgão antes de salvar o formulário.
+- Os módulos selecionáveis são os ativos do setor do chamado.
+
 Cada setor terá sua própria lista de módulos/sistemas. Um chamado poderá tratar de vários módulos, com uma resolução geral.
 
 O momento em que o chamado foi assumido é registrado separadamente, permitindo medir o tempo de espera na fila.
