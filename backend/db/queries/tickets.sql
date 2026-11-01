@@ -44,6 +44,21 @@ left join users u on u.id = t.assignee_id
 where t.sector_id = @sector_id and t.status <> 'closed'
 order by t.arrived_at, t.id;
 
+-- name: ListClosedTickets :many
+-- Tickets of the sector closed in the period, by the real closing moment,
+-- with the contact and who closed them, latest first.
+select
+    t.id, t.protocol, t.closure_type, t.closed_at,
+    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    o.name as organization_name,
+    t.closed_by_id, u.name as closed_by_name
+from tickets t
+join contacts c on c.id = t.contact_id
+left join organizations o on o.id = t.organization_id
+join users u on u.id = t.closed_by_id
+where t.sector_id = @sector_id and t.status = 'closed' and t.closed_at >= @closed_from and t.closed_at < @closed_until
+order by t.closed_at desc, t.id desc;
+
 -- name: ListSectorWorkload :many
 -- Active users of the sector and anyone else (such as an admin) with tickets
 -- in progress there, with the number of tickets in progress of each one.
