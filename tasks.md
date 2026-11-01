@@ -289,7 +289,7 @@ Só muda onde o código fica, para ler o backend por funcionalidade. Comportamen
 
 **Pronto quando:** `make lint`, `make test` e `make check-generated` passam; a lista de métodos e URLs extraída com `chi.Walk` é idêntica antes e depois; o número de funções `Test*` não diminui e nenhuma asserção muda; uma importação proibida colocada de propósito faz o `make lint` falhar; `git diff main -- backend/db/migrations backend/db/queries frontend/` fica vazio; login, abrir um chamado e enviar mensagem funcionam no `make dev`.
 
-### [ ] T31 — Menu de configurações e tema
+### [x] T31 — Menu de configurações e tema
 
 - Botão "Configurações" no rodapé da barra lateral (`AppLayout`), com "Sair" e tema Claro, Escuro ou Sistema. Adicionar o `DropdownMenu` do shadcn, sem biblioteca nova.
 - Escolha guardada no `localStorage` e aplicada antes de pintar a tela; `color-scheme` no CSS e `sonner` acompanhando o tema (hoje fixo em `system`).
