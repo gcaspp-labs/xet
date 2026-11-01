@@ -32,7 +32,8 @@ export function FormSheet({
   onOpenChange: (open: boolean) => void
   title: string
   description?: string
-  submitLabel: string
+  // Sem rótulo, não há ação primária: o drawer só informa.
+  submitLabel?: string
   cancelLabel?: string
   pending: boolean
   error?: string
@@ -65,9 +66,11 @@ export function FormSheet({
         </div>
         <SheetFooter>
           <SheetClose render={<Button variant="ghost" />}>{cancelLabel}</SheetClose>
-          <Button type="submit" form={formId} disabled={pending}>
-            {submitLabel}
-          </Button>
+          {submitLabel && (
+            <Button type="submit" form={formId} disabled={pending}>
+              {submitLabel}
+            </Button>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>

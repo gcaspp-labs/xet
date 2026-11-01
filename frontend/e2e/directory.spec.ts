@@ -286,3 +286,133 @@ test('o administrador abre os contatos em todos os setores e escolhe o setor', a
   await expect(drawer.getByRole('checkbox', { name: first.sector.name })).not.toBeChecked()
   await expect(drawer.getByRole('checkbox', { name: second.sector.name })).not.toBeChecked()
 })
+
+async function connectBook(
+  baseURL: string,
+  sectorId: number,
+  contacts: { name: string; phone: string }[],
+) {
+  const api = await apiRequest.newContext({ baseURL })
+  const login = await api.post('/api/auth/login', {
+    data: { email: admin.email, password: admin.password },
+  })
+  expect(login.ok()).toBeTruthy()
+  const connect = await api.post(`/api/sectors/${sectorId}/connection`)
+  expect(connect.ok()).toBeTruthy()
+  const pair = await api.post(`/api/test/messaging/sectors/${sectorId}/pair`)
+  expect(pair.ok()).toBeTruthy()
+  const book = await api.post(`/api/test/messaging/sectors/${sectorId}/saved-contacts`, {
+    data: { contacts },
+  })
+  expect(book.ok()).toBeTruthy()
+  await api.dispose()
+}
+
+test('atendente importa contatos selecionados da agenda, com e sem órgão', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const phoneOf = (digit: number) => `5511${id.slice(0, -1)}${digit}`
+  await seedDirectory(baseURL!, [{ name: `Prefeitura ${id}` }], [])
+  await connectBook(baseURL!, sector.id, [
+    { name: `Ana ${id}`, phone: phoneOf(1) },
+    { name: `Bia ${id}`, phone: phoneOf(2) },
+    { name: `Caio ${id}`, phone: phoneOf(3) },
+  ])
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Contatos' }).click()
+
+  // Só os selecionados, com órgão: ficam cadastrados e no setor.
+  await page.getByRole('button', { name: 'Importar contatos' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Importar contatos' })
+  await drawer.getByRole('button', { name: 'Importar contatos' }).click()
+  await expect(drawer.getByRole('alert')).toHaveText('Selecione ao menos um contato.')
+  await drawer.getByRole('checkbox', { name: new RegExp(`Ana ${id}`) }).click()
+  await drawer.getByLabel('Órgão').fill(`Prefeitura ${id}`)
+  await page.getByRole('option', { name: `Prefeitura ${id}` }).click()
+  await drawer.getByRole('button', { name: 'Importar contatos' }).click()
+  await expect(drawer.getByText('1 contato criado.')).toBeVisible()
+  await drawer.getByRole('button', { name: 'Fechar' }).first().click()
+  await expect(page.getByRole('row', { name: new RegExp(`Ana ${id}`) })).toContainText(
+    `Prefeitura ${id}`,
+  )
+  await expect(page.getByRole('row', { name: new RegExp(`Bia ${id}`) })).toHaveCount(0)
+
+  // Selecionar todos, sem órgão: Ana já existe e continua com o órgão dela.
+  await page.getByRole('button', { name: 'Importar contatos' }).click()
+  const again = page.getByRole('dialog', { name: 'Importar contatos' })
+  await again.getByRole('checkbox', { name: 'Selecionar todos (3)' }).click()
+  await again.getByRole('button', { name: 'Importar contatos' }).click()
+  await expect(again.getByText('2 contatos criados.')).toBeVisible()
+  await expect(again.getByText(/^1 contato já existia/)).toBeVisible()
+  await again.getByRole('button', { name: 'Fechar' }).first().click()
+  await expect(page.getByRole('row', { name: new RegExp(`Bia ${id}`) })).toContainText('Sem órgão')
+  await expect(page.getByRole('row', { name: new RegExp(`Ana ${id}`) })).toContainText(
+    `Prefeitura ${id}`,
+  )
+})
+
+test('importação mantém o contato da variante com nono dígito e só vincula o setor', async ({
+  page,
+  baseURL,
+}) => {
+  const first = await seedSector(baseURL!)
+  const second = await seedSector(baseURL!)
+  const { id } = unique()
+  // 55 + DDD + 9 + 8 dígitos, e a mesma pessoa sem o nono dígito na agenda.
+  const eight = `8${id.slice(-7)}`
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Órgão ${id}` }],
+    [
+      {
+        name: `Cadastrada ${id}`,
+        phone: `55119${eight}`,
+        organization: 0,
+        sector: first.sector.id,
+      },
+    ],
+  )
+  await connectBook(baseURL!, second.sector.id, [{ name: `Agenda ${id}`, phone: `5511${eight}` }])
+  await signIn(page, second.supervisor, userPassword)
+  await page.getByRole('link', { name: 'Contatos' }).click()
+
+  await page.getByRole('button', { name: 'Importar contatos' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Importar contatos' })
+  await drawer.getByRole('checkbox', { name: 'Selecionar todos (1)' }).click()
+  await drawer.getByRole('button', { name: 'Importar contatos' }).click()
+  await expect(drawer.getByText('0 contatos criados.')).toBeVisible()
+  await drawer.getByRole('button', { name: 'Fechar' }).first().click()
+
+  const row = page.getByRole('row', { name: new RegExp(`Cadastrada ${id}`) })
+  await expect(row).toContainText(second.sector.name)
+  await expect(row).toContainText(`Órgão ${id}`)
+  await expect(page.getByRole('row', { name: new RegExp(`Agenda ${id}`) })).toHaveCount(0)
+})
+
+test('administrador escolhe o setor; número desconectado mostra o aviso', async ({
+  page,
+  baseURL,
+}) => {
+  const connected = await seedSector(baseURL!)
+  const disconnected = await seedSector(baseURL!)
+  const { id, phone } = unique()
+  await connectBook(baseURL!, connected.sector.id, [{ name: `Dora ${id}`, phone }])
+  await signIn(page, admin.email, admin.password)
+  await page.getByRole('link', { name: 'Contatos' }).click()
+
+  await page.getByRole('button', { name: 'Importar contatos' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Importar contatos' })
+  await drawer.getByLabel('Setor').click()
+  await page.getByRole('option', { name: disconnected.sector.name }).click()
+  await expect(drawer.getByRole('alert')).toHaveText('Número desconectado. Reconecte pelo QR code.')
+  await expect(drawer.getByRole('button', { name: 'Importar contatos' })).toHaveCount(0)
+
+  await drawer.getByLabel('Setor').click()
+  await page.getByRole('option', { name: connected.sector.name }).click()
+  await drawer.getByRole('checkbox', { name: new RegExp(`Dora ${id}`) }).click()
+  await drawer.getByRole('button', { name: 'Importar contatos' }).click()
+  await expect(drawer.getByText('1 contato criado.')).toBeVisible()
+})
