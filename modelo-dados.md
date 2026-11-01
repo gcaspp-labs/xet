@@ -66,7 +66,7 @@ erDiagram
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `name` | text | Obrigatório, único |
-| `phone` | text | Opcional; único quando preenchido, somente dígitos com DDI (ex.: `5511999990000`); vem do número lido no QR code e é apagado ao desvincular |
+| `phone` | text | Opcional; único quando preenchido, somente dígitos com DDI (ex.: `5511999990000`); vem do número lido no QR code e é apagado ao desvincular; a migração apagou o digitado em setores sem conta vinculada |
 | `provider` | text | Obrigatório; provedor de mensageria do setor: `whatsmeow` (piloto) ou `cloud_api` (futuro) |
 | `external_account_id` | text | Identificador da conta no provedor (no Whatsmeow, o JID do aparelho vinculado após o QR code) |
 | `connection_status` | connection_status | Padrão `disconnected` |
@@ -367,7 +367,7 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `organization_created`, `organization_updated` | Administração de órgãos |
 | `contacts_imported` | Importação de contatos, na entidade `sector`: `changes` com as quantidades de contatos criados e já existentes |
 
-Conexão do número: `sector_connected` é gravado quando o setor passa a `connected` vindo de outro estado ou com outra conta vinculada; `sector_disconnected`, quando sai de `connected`. Os estados intermediários (`connecting`) e as reconexões automáticas que não passam por `connected` não geram auditoria. Os dois registros são ações do sistema (`actor_id` vazio) e guardam em `changes` o estado da conexão e a conta vinculada.
+Conexão do número: `sector_connected` é gravado quando o setor passa a `connected` vindo de outro estado ou com outra conta vinculada; `sector_disconnected`, quando sai de `connected`. Os estados intermediários (`connecting`) e as reconexões automáticas que não passam por `connected` não geram auditoria. Os dois registros são ações do sistema (`actor_id` vazio), exceto ao desvincular pela tela de conexão, quando `sector_disconnected` guarda o autor, mesmo que a conexão já estivesse caída; repetir não gera novo registro. Guardam em `changes` o estado da conexão, a conta vinculada, o telefone e o motivo da recusa. Número recusado por já estar em outro setor não chega a `connected` e por isso não gera `sector_connected`.
 
 Registros de auditoria nunca são alterados nem excluídos.
 

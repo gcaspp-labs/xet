@@ -101,6 +101,7 @@ func run() error {
 
 	hub := realtime.NewHub()
 	sectors := sector.NewService(pool, hub)
+	defer sectors.Wait()
 	tickets := ticket.NewService(pool, storage.NewDisk(cfg.StorageDir), hub)
 	// Messages left pending by the previous run are not resent automatically.
 	failed, err := tickets.FailPending(ctx)
@@ -125,6 +126,7 @@ func run() error {
 		defer func() { _ = provider.Close() }()
 		opts.Messaging = provider
 	}
+	sectors.SetProvider(opts.Messaging)
 
 	// Reconnects the sector numbers in the background, so a slow WhatsApp
 	// does not hold the API.

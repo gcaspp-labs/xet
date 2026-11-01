@@ -100,6 +100,8 @@ type ConnectionChanged struct {
 	Status   ConnectionStatus
 	// AccountID identifies the linked account in the provider; set when connected.
 	AccountID string
+	// Phone holds the digits of the linked account with country code; set when connected.
+	Phone string
 }
 
 // MessageReceived is a message sent by a contact to the sector number.
@@ -162,7 +164,8 @@ type Provider interface {
 	// Connect starts the session of the sector. It returns once the session
 	// is connecting; the result arrives as ConnectionChanged events.
 	Connect(ctx context.Context, account Account) error
-	// Disconnect ends the session of the sector and unlinks its account.
+	// Disconnect ends the session of the sector and unlinks its account. An
+	// error means the device could not be told; the session is ended anyway.
 	Disconnect(ctx context.Context, sectorID int64) error
 	// Status reports the current connection of the sector.
 	Status(sectorID int64) ConnectionStatus

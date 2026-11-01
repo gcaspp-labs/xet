@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -53,6 +55,9 @@ var (
 // the whatsmeow_ tables.
 func New(ctx context.Context, pool *pgxpool.Pool, handler messaging.EventHandler, logger *slog.Logger) (*Adapter, error) {
 	store.SetOSInfo(deviceName, [3]uint32{1, 0, 0})
+	// With an unknown platform the phone shows "Outro dispositivo" instead of
+	// the name. It is sent only when pairing: a linked number must pair again.
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
 	container := sqlstore.NewWithDB(stdlib.OpenDBFromPool(pool), "pgx", newLogger(logger, "store"))
 	if err := container.Upgrade(ctx); err != nil {
 		_ = container.Close()
@@ -164,24 +169,20 @@ func (a *Adapter) device(ctx context.Context, accountID string) (*store.Device, 
 	return device, nil
 }
 
-// Disconnect unlinks the account of the sector from the phone and deletes its keys.
+// Disconnect unlinks the account of the sector from the phone and deletes its
+// keys. When the phone cannot be told, the session ends and the keys go anyway,
+// and the error asks for the device to be removed by the phone.
 func (a *Adapter) Disconnect(ctx context.Context, sectorID int64) error {
 	a.mu.Lock()
 	s, ok := a.sessions[sectorID]
 	delete(a.sessions, sectorID)
 	a.mu.Unlock()
 	if !ok {
-		return nil
+		return messaging.ErrNotConnected
 	}
-	if s.client.IsLoggedIn() {
-		if err := s.client.Logout(ctx); err != nil {
-			return fmt.Errorf("logout: %w", err)
-		}
-	} else {
-		s.client.Disconnect()
-	}
+	err := s.unlink(ctx)
 	s.changed(messaging.StatusLoggedOut)
-	return nil
+	return err
 }
 
 func (a *Adapter) Status(sectorID int64) messaging.ConnectionStatus {
@@ -262,6 +263,24 @@ func (s *session) active() bool {
 	return s.status == messaging.StatusConnected || s.status == messaging.StatusConnecting
 }
 
+// unlink removes the device from the phone and the store. A pairing has no
+// device yet: it only stops.
+func (s *session) unlink(ctx context.Context) error {
+	if s.client.Store.ID == nil {
+		s.client.Disconnect()
+		return nil
+	}
+	err := s.client.Logout(ctx)
+	if err == nil {
+		return nil
+	}
+	s.client.Disconnect()
+	if deleteErr := s.client.Store.Delete(ctx); deleteErr != nil {
+		return errors.Join(fmt.Errorf("logout: %w", err), fmt.Errorf("delete device: %w", deleteErr))
+	}
+	return fmt.Errorf("logout: %w", err)
+}
+
 // changed records the new status and emits it when it differs.
 func (s *session) changed(status messaging.ConnectionStatus) {
 	s.mu.Lock()
@@ -277,6 +296,7 @@ func (s *session) changed(status messaging.ConnectionStatus) {
 	ev := messaging.ConnectionChanged{SectorID: s.sectorID, Status: status}
 	if status == messaging.StatusConnected && s.client.Store.ID != nil {
 		ev.AccountID = s.client.Store.ID.ToNonAD().String()
+		ev.Phone = s.client.Store.ID.User
 	}
 	_ = s.adapter.emit(ev)
 }

@@ -37,7 +37,7 @@ func id(body map[string]any) int64 {
 func TestAdministrationRequiresAdmin(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	agent := e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
 
@@ -45,7 +45,7 @@ func TestAdministrationRequiresAdmin(t *testing.T) {
 		"supervisor": e.login("sup@exemplo.com", testPassword),
 		"agent":      e.login("agente@exemplo.com", testPassword),
 	}
-	sectorBody := map[string]string{"name": "RH", "phone": "5511999990001"}
+	sectorBody := map[string]string{"name": "RH"}
 	userBody := map[string]any{"name": "Novo", "email": "novo@exemplo.com", "role": "agent", "sectorId": contab.ID, "password": testPassword, "active": true}
 	requests := []struct {
 		method, path string
@@ -83,11 +83,11 @@ func TestAdminCreatesAndEditsSectors(t *testing.T) {
 	admin := e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	token := e.login("admin@exemplo.com", testPassword)
 
-	resp := e.do(http.MethodPost, "/api/sectors", token, map[string]string{"name": " Contabilidade ", "phone": "+55 (11) 99999-0000"})
+	resp := e.do(http.MethodPost, "/api/sectors", token, map[string]string{"name": " Contabilidade "})
 	if resp.status != http.StatusCreated {
 		t.Fatalf("create: status %d, body %v", resp.status, resp.body)
 	}
-	if resp.body["name"] != "Contabilidade" || resp.body["phone"] != "5511999990000" || resp.body["provider"] != "whatsmeow" || resp.body["connectionStatus"] != "disconnected" {
+	if resp.body["name"] != "Contabilidade" || resp.body["phone"] != nil || resp.body["provider"] != "whatsmeow" || resp.body["connectionStatus"] != "disconnected" {
 		t.Fatalf("create body: %v", resp.body)
 	}
 	contabID := id(resp.body)
@@ -97,12 +97,8 @@ func TestAdminCreatesAndEditsSectors(t *testing.T) {
 		body map[string]string
 		want int
 	}{
-		{"duplicate name", map[string]string{"name": "Contabilidade", "phone": "5511999990001"}, http.StatusConflict},
-		{"duplicate phone", map[string]string{"name": "RH", "phone": "5511999990000"}, http.StatusConflict},
-		{"short phone", map[string]string{"name": "RH", "phone": "119999"}, http.StatusUnprocessableEntity},
-		{"phone with letters", map[string]string{"name": "RH", "phone": "55119999A0000"}, http.StatusUnprocessableEntity},
-		{"blank name", map[string]string{"name": "   ", "phone": "5511999990001"}, http.StatusUnprocessableEntity},
-		{"missing phone", map[string]string{"name": "RH"}, http.StatusUnprocessableEntity},
+		{"duplicate name", map[string]string{"name": "Contabilidade"}, http.StatusConflict},
+		{"blank name", map[string]string{"name": "   "}, http.StatusUnprocessableEntity},
 	}
 	for _, tc := range cases {
 		resp := e.do(http.MethodPost, "/api/sectors", token, tc.body)
@@ -111,24 +107,24 @@ func TestAdminCreatesAndEditsSectors(t *testing.T) {
 		}
 	}
 
-	rh := e.do(http.MethodPost, "/api/sectors", token, map[string]string{"name": "RH", "phone": "5511999990001"})
+	rh := e.do(http.MethodPost, "/api/sectors", token, map[string]string{"name": "RH"})
 	if rh.status != http.StatusCreated {
 		t.Fatalf("create RH: status %d", rh.status)
 	}
 
 	path := fmt.Sprintf("/api/sectors/%d", contabID)
-	resp = e.do(http.MethodPut, path, token, map[string]string{"name": "Contabilidade Pública", "phone": "5511999990000"})
+	resp = e.do(http.MethodPut, path, token, map[string]string{"name": "Contabilidade Pública"})
 	if resp.status != http.StatusOK || resp.body["name"] != "Contabilidade Pública" {
 		t.Fatalf("update: status %d, body %v", resp.status, resp.body)
 	}
-	if resp := e.do(http.MethodPut, path, token, map[string]string{"name": "RH", "phone": "5511999990000"}); resp.status != http.StatusConflict {
+	if resp := e.do(http.MethodPut, path, token, map[string]string{"name": "RH"}); resp.status != http.StatusConflict {
 		t.Fatalf("update to existing name: status %d", resp.status)
 	}
-	if resp := e.do(http.MethodPut, "/api/sectors/999999", token, map[string]string{"name": "X", "phone": "5511999990009"}); resp.status != http.StatusNotFound {
+	if resp := e.do(http.MethodPut, "/api/sectors/999999", token, map[string]string{"name": "X"}); resp.status != http.StatusNotFound {
 		t.Fatalf("update unknown sector: status %d", resp.status)
 	}
 	// Saving without changes does not record an audit log.
-	if resp := e.do(http.MethodPut, path, token, map[string]string{"name": "Contabilidade Pública", "phone": "5511999990000"}); resp.status != http.StatusOK {
+	if resp := e.do(http.MethodPut, path, token, map[string]string{"name": "Contabilidade Pública"}); resp.status != http.StatusOK {
 		t.Fatalf("update without changes: status %d", resp.status)
 	}
 
@@ -141,7 +137,7 @@ func TestAdminCreatesAndEditsSectors(t *testing.T) {
 	if len(actions) != 2 || actions[0] != "sector_created" || actions[1] != "sector_updated" {
 		t.Fatalf("audit actions: %v", actions)
 	}
-	if changes[0]["name"]["to"] != "Contabilidade" || changes[0]["phone"]["to"] != "5511999990000" {
+	if changes[0]["name"]["to"] != "Contabilidade" || changes[0]["phone"] != nil {
 		t.Fatalf("created changes: %v", changes[0])
 	}
 	if len(changes[1]) != 1 || changes[1]["name"]["from"] != "Contabilidade" || changes[1]["name"]["to"] != "Contabilidade Pública" {
@@ -156,8 +152,8 @@ func TestAdminCreatesAndEditsSectors(t *testing.T) {
 func TestSectorListIsLimitedToOwnSector(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	e.sector("RH")
 	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 
@@ -180,7 +176,7 @@ func TestConcurrentSectorCreationKeepsNameUnique(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range n {
 		wg.Go(func() {
-			body := map[string]string{"name": "Contabilidade", "phone": fmt.Sprintf("551199999000%d", i)}
+			body := map[string]string{"name": "Contabilidade"}
 			statuses[i] = e.do(http.MethodPost, "/api/sectors", token, body).status
 		})
 	}
@@ -204,7 +200,7 @@ func TestConcurrentSectorCreationKeepsNameUnique(t *testing.T) {
 func TestAdminCreatesUsers(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	admin := e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	token := e.login("admin@exemplo.com", testPassword)
 
@@ -280,8 +276,8 @@ func TestAdminCreatesUsers(t *testing.T) {
 func TestAdminEditsAndDeactivatesUsers(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	ana := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	token := e.login("admin@exemplo.com", testPassword)
@@ -358,7 +354,7 @@ func TestUserWithTicketsInProgressKeepsSectorAndStaysActive(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e := c.e
-	rh := e.sector("Recursos", "5511999990002")
+	rh := e.sector("Recursos")
 	path := fmt.Sprintf("/api/users/%d", c.ana.ID)
 	body := func(name, email, role string, sectorID *int64, active bool) map[string]any {
 		return map[string]any{"name": name, "email": email, "role": role, "sectorId": sectorID, "active": active}
@@ -494,7 +490,7 @@ func TestDeactivationAndConcurrentTransferDoNotLeaveInactiveAssignee(t *testing.
 func TestAdminCannotLockThemselvesOut(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	admin := e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	other := e.user("admin2@exemplo.com", db.UserRoleAdmin, nil)
 	token := e.login("admin@exemplo.com", testPassword)
@@ -530,8 +526,8 @@ func TestAdminCannotLockThemselvesOut(t *testing.T) {
 func TestModulePermissions(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
@@ -583,8 +579,8 @@ func TestModulePermissions(t *testing.T) {
 func TestSupervisorManagesModules(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	sup := e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	token := e.login("sup@exemplo.com", testPassword)

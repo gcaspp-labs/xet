@@ -144,8 +144,8 @@ type conversation struct {
 func newConversation(t *testing.T) conversation {
 	t.Helper()
 	e := newTestEnv(t, nil)
-	c := conversation{e: e, sector: e.sector("Contabilidade", "5511999990000")}
-	rh := e.sector("RH", "5511999990001")
+	c := conversation{e: e, sector: e.sector("Contabilidade")}
+	rh := e.sector("RH")
 	c.ana = e.user("ana@exemplo.com", db.UserRoleAgent, &c.sector.ID)
 	e.user("bia@exemplo.com", db.UserRoleAgent, &c.sector.ID)
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &c.sector.ID)
@@ -507,7 +507,7 @@ func TestDeliveryStatusOnlyMovesForward(t *testing.T) {
 	}
 
 	// Status de outro setor com o mesmo identificador não afeta a mensagem.
-	other := e.sector("Tributos", "5511999990002")
+	other := e.sector("Tributos")
 	if err := e.whatsapp.UpdateStatus(t.Context(), other.ID, messaging.DeliveryFailed, external); err != nil {
 		t.Fatal(err)
 	}
@@ -661,8 +661,8 @@ func TestInternalNotesAndSpokeWith(t *testing.T) {
 func TestHistoryByContactAndOrganization(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	ana := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	e.user("rh@exemplo.com", db.UserRoleAgent, &rh.ID)

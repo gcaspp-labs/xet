@@ -72,6 +72,8 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 		}
 		return nil
 	})
+	sectors.SetProvider(whatsapp)
+	t.Cleanup(sectors.Wait)
 	handler := NewRouter(logger, auth.NewService(pool), sectors, directory.NewService(pool), tickets, hub, Options{
 		SecureCookie: true, Messaging: whatsapp, SessionCheckInterval: 200 * time.Millisecond,
 	})
@@ -87,9 +89,9 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(s *server, r chi.R
 	return &testEnv{t: t, pool: pool, q: db.New(pool), url: srv.URL, sectors: sectors, ticketService: tickets, whatsapp: whatsapp, files: files}
 }
 
-func (e *testEnv) sector(name, phone string) db.Sector {
+func (e *testEnv) sector(name string) db.Sector {
 	e.t.Helper()
-	s, err := e.q.CreateSector(e.t.Context(), db.CreateSectorParams{Name: name, Phone: phone, Provider: "whatsmeow"})
+	s, err := e.q.CreateSector(e.t.Context(), db.CreateSectorParams{Name: name, Provider: "whatsmeow"})
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -166,7 +168,7 @@ func (e *testEnv) login(email, password string) string {
 func TestLoginAndLogout(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sector := e.sector("Contabilidade", "5511999990000")
+	sector := e.sector("Contabilidade")
 	agent := e.user("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
 
 	resp := e.do(http.MethodPost, "/api/auth/login", "", map[string]string{"email": "ana@exemplo.com", "password": "Errada@123"})
@@ -220,7 +222,7 @@ func TestLoginAndLogout(t *testing.T) {
 func TestLoginCreatesNewTokenEachTime(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sector := e.sector("Contabilidade", "5511999990000")
+	sector := e.sector("Contabilidade")
 	e.user("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
 
 	first := e.login("ana@exemplo.com", testPassword)
@@ -238,7 +240,7 @@ func TestLoginCreatesNewTokenEachTime(t *testing.T) {
 func TestInactiveUserCannotLogin(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sector := e.sector("Contabilidade", "5511999990000")
+	sector := e.sector("Contabilidade")
 	agent := e.user("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
 	token := e.login("ana@exemplo.com", testPassword)
 
@@ -258,7 +260,7 @@ func TestInactiveUserCannotLogin(t *testing.T) {
 func TestProtectedRouteRequiresValidSession(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sector := e.sector("Contabilidade", "5511999990000")
+	sector := e.sector("Contabilidade")
 	agent := e.user("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
 	token := e.login("ana@exemplo.com", testPassword)
 
@@ -279,7 +281,7 @@ func TestProtectedRouteRequiresValidSession(t *testing.T) {
 func TestSessionExpirationSlides(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sector := e.sector("Contabilidade", "5511999990000")
+	sector := e.sector("Contabilidade")
 	agent := e.user("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
 	token := e.login("ana@exemplo.com", testPassword)
 
@@ -302,8 +304,8 @@ func TestSessionExpirationSlides(t *testing.T) {
 func TestResetPasswordPermissions(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	e.user("sup.contab@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	e.user("sup.rh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
@@ -345,7 +347,7 @@ func TestResetPasswordPermissions(t *testing.T) {
 func TestResetPasswordEndsSessionsAndAudits(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sector := e.sector("Contabilidade", "5511999990000")
+	sector := e.sector("Contabilidade")
 	sup := e.user("sup@exemplo.com", db.UserRoleSupervisor, &sector.ID)
 	target := e.user("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
 
@@ -381,7 +383,7 @@ func TestResetPasswordEndsSessionsAndAudits(t *testing.T) {
 func TestResetPasswordPolicy(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	sector := e.sector("Contabilidade", "5511999990000")
+	sector := e.sector("Contabilidade")
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	target := e.user("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
 	token := e.login("admin@exemplo.com", testPassword)
@@ -420,8 +422,8 @@ func TestRequireRoleAndSector(t *testing.T) {
 		r.With(requireSector("sectorID")).Get("/sectors/{sectorID}", ok)
 		r.With(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin)).Get("/supervision", ok)
 	})
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	e.user("agente@exemplo.com", db.UserRoleAgent, &contab.ID)

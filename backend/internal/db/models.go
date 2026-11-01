@@ -605,7 +605,7 @@ type ProtocolCounter struct {
 type Sector struct {
 	ID                int64
 	Name              string
-	Phone             string
+	Phone             *string
 	Provider          string
 	ExternalAccountID *string
 	ConnectionStatus  ConnectionStatus
@@ -613,6 +613,7 @@ type Sector struct {
 	Active            bool
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+	ConnectionError   *string
 }
 
 type Session struct {

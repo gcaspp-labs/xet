@@ -17,7 +17,6 @@ func TestCreateAndGetSector(t *testing.T) {
 
 	created, err := q.CreateSector(ctx, db.CreateSectorParams{
 		Name:     "Contabilidade",
-		Phone:    "5511999990000",
 		Provider: "whatsmeow",
 	})
 	if err != nil {
@@ -28,7 +27,7 @@ func TestCreateAndGetSector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "Contabilidade" || got.Phone != "5511999990000" || got.Provider != "whatsmeow" {
+	if got.Name != "Contabilidade" || got.Phone != nil || got.Provider != "whatsmeow" {
 		t.Fatalf("unexpected sector: %+v", got)
 	}
 	if got.ConnectionStatus != db.ConnectionStatusDisconnected {
@@ -44,9 +43,10 @@ func TestSectorConstraints(t *testing.T) {
 	q := db.New(testdb.New(t))
 	ctx := t.Context()
 
-	if _, err := q.CreateSector(ctx, db.CreateSectorParams{
-		Name: "Contabilidade", Phone: "5511999990000", Provider: "whatsmeow",
-	}); err != nil {
+	contab, err := q.CreateSector(ctx, db.CreateSectorParams{
+		Name: "Contabilidade", Provider: "whatsmeow",
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,11 +55,9 @@ func TestSectorConstraints(t *testing.T) {
 		params db.CreateSectorParams
 		code   string
 	}{
-		{"duplicate name", db.CreateSectorParams{Name: "Contabilidade", Phone: "5511999990001", Provider: "whatsmeow"}, "23505"},
-		{"duplicate phone", db.CreateSectorParams{Name: "RH", Phone: "5511999990000", Provider: "whatsmeow"}, "23505"},
-		{"invalid phone", db.CreateSectorParams{Name: "RH", Phone: "(11) 99999-0002", Provider: "whatsmeow"}, "23514"},
-		{"unknown provider", db.CreateSectorParams{Name: "RH", Phone: "5511999990002", Provider: "telegram"}, "23514"},
-		{"blank name", db.CreateSectorParams{Name: "  ", Phone: "5511999990003", Provider: "whatsmeow"}, "23514"},
+		{"duplicate name", db.CreateSectorParams{Name: "Contabilidade", Provider: "whatsmeow"}, "23505"},
+		{"unknown provider", db.CreateSectorParams{Name: "RH", Provider: "telegram"}, "23514"},
+		{"blank name", db.CreateSectorParams{Name: "  ", Provider: "whatsmeow"}, "23514"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,6 +68,27 @@ func TestSectorConstraints(t *testing.T) {
 			}
 		})
 	}
+
+	// O telefone é opcional, único quando preenchido e somente dígitos.
+	rh, err := q.CreateSector(ctx, db.CreateSectorParams{Name: "RH", Provider: "whatsmeow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setPhone := func(id int64, phone string) error {
+		_, err := q.UpdateSectorConnection(ctx, db.UpdateSectorConnectionParams{
+			ID: id, ConnectionStatus: db.ConnectionStatusConnected, Phone: &phone,
+		})
+		return err
+	}
+	if err := setPhone(contab.ID, "5511999990000"); err != nil {
+		t.Fatal(err)
+	}
+	for phone, code := range map[string]string{"5511999990000": "23505", "(11) 99999-0002": "23514"} {
+		var pgErr *pgconn.PgError
+		if err := setPhone(rh.ID, phone); !errors.As(err, &pgErr) || pgErr.Code != code {
+			t.Fatalf("phone %q: err = %v, want SQLSTATE %s", phone, err, code)
+		}
+	}
 }
 
 func TestUserAdminSectorConstraint(t *testing.T) {
@@ -79,7 +98,7 @@ func TestUserAdminSectorConstraint(t *testing.T) {
 	ctx := t.Context()
 
 	sector, err := q.CreateSector(ctx, db.CreateSectorParams{
-		Name: "Contabilidade", Phone: "5511999990000", Provider: "whatsmeow",
+		Name: "Contabilidade", Provider: "whatsmeow",
 	})
 	if err != nil {
 		t.Fatal(err)

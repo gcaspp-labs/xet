@@ -12,7 +12,7 @@ import (
 type sectorResponse struct {
 	ID               int64               `json:"id"`
 	Name             string              `json:"name"`
-	Phone            string              `json:"phone"`
+	Phone            *string             `json:"phone"`
 	Provider         string              `json:"provider"`
 	ConnectionStatus db.ConnectionStatus `json:"connectionStatus"`
 	LastConnectedAt  *time.Time          `json:"lastConnectedAt"`
@@ -73,8 +73,7 @@ func (s *server) listSectors(w http.ResponseWriter, r *http.Request) {
 }
 
 type sectorRequest struct {
-	Name  string `json:"name" validate:"required"`
-	Phone string `json:"phone" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }
 
 func (s *server) createSector(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +81,7 @@ func (s *server) createSector(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := s.sectors.Create(r.Context(), currentUser(r.Context()).ID, sector.SectorInput{Name: req.Name, Phone: req.Phone})
+	sec, err := s.sectors.Create(r.Context(), currentUser(r.Context()).ID, sector.SectorInput{Name: req.Name})
 	if err != nil {
 		s.sectorError(w, r, err)
 		return
@@ -99,7 +98,7 @@ func (s *server) updateSector(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := s.sectors.Update(r.Context(), currentUser(r.Context()).ID, id, sector.SectorInput{Name: req.Name, Phone: req.Phone})
+	sec, err := s.sectors.Update(r.Context(), currentUser(r.Context()).ID, id, sector.SectorInput{Name: req.Name})
 	if err != nil {
 		s.sectorError(w, r, err)
 		return
@@ -176,12 +175,8 @@ func (s *server) sectorError(w http.ResponseWriter, r *http.Request, err error) 
 	switch {
 	case errors.Is(err, sector.ErrInvalidName):
 		writeError(w, http.StatusUnprocessableEntity, "Informe o nome.")
-	case errors.Is(err, sector.ErrInvalidPhone):
-		writeError(w, http.StatusUnprocessableEntity, "Informe o número com DDI e DDD, somente dígitos (ex.: 5511999990000).")
 	case errors.Is(err, sector.ErrNameTaken):
 		writeError(w, http.StatusConflict, "Já existe um setor com este nome.")
-	case errors.Is(err, sector.ErrPhoneTaken):
-		writeError(w, http.StatusConflict, "Já existe um setor com este número.")
 	case errors.Is(err, sector.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Setor não encontrado.")
 	case errors.Is(err, sector.ErrModuleNameTaken):

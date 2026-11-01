@@ -102,7 +102,7 @@ func (e *testEnv) nextEvent(conn *websocket.Conn) realtime.Event {
 func TestOnlyOneAgentAssignsConcurrently(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	tk := e.queuedTicket(contab.ID, "MSG-1", "5511988887777")
 
 	const agents = 10
@@ -168,8 +168,8 @@ func TestOnlyOneAgentAssignsConcurrently(t *testing.T) {
 func TestAssignTicketRules(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	ana := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	e.user("bia@exemplo.com", db.UserRoleAgent, &contab.ID)
 	sup := e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
@@ -241,8 +241,8 @@ func TestAssignTicketRules(t *testing.T) {
 func TestPanelListsQueueAssigneesAndWorkload(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	ana := e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	bia := e.user("bia@exemplo.com", db.UserRoleAgent, &contab.ID)
 	sup := e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
@@ -316,8 +316,8 @@ func TestPanelListsQueueAssigneesAndWorkload(t *testing.T) {
 func TestEventsReachOnlyTheSectorUsers(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
-	rh := e.sector("RH", "5511999990001")
+	contab := e.sector("Contabilidade")
+	rh := e.sector("RH")
 	e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	e.user("rh@exemplo.com", db.UserRoleAgent, &rh.ID)
 	e.user("admin@exemplo.com", db.UserRoleAdmin, nil)
@@ -360,7 +360,7 @@ func TestEventsReachOnlyTheSectorUsers(t *testing.T) {
 func TestEventsRequireAValidSession(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 
 	if _, status, err := e.dial(""); err == nil || status != http.StatusUnauthorized {
@@ -397,7 +397,7 @@ func TestEventsRequireAValidSession(t *testing.T) {
 func TestNewQRCodeReachesTheConnectionScreen(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	contab := e.sector("Contabilidade", "5511999990000")
+	contab := e.sector("Contabilidade")
 	e.user("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
 	token := e.login("sup@exemplo.com", testPassword)
 	events := e.subscribe(token)

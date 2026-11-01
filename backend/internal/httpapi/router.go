@@ -101,6 +101,7 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 				r.Use(requireRole(db.UserRoleSupervisor, db.UserRoleAdmin), requireSector("sectorID"))
 				r.Get("/", s.getConnection)
 				r.Post("/", s.connect)
+				r.Delete("/", s.disconnect)
 				r.Get("/qr.png", s.connectionQR)
 			})
 
