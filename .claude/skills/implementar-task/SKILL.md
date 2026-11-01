@@ -68,8 +68,12 @@ Leia só o que a task precisa, antes de escrever qualquer código. Ler menos nã
 4. Deixe o ambiente de desenvolvimento pronto para o teste manual:
    - Mantenha a branch da task em checkout.
    - Rode `make dev-restart` (exatamente assim, sem variações, porque é o comando liberado nas permissões). Ele para o ambiente que estiver rodando e sobe de novo em segundo plano: o backend roda com `go run` e não recarrega sozinho, então ficaria sem as mudanças da task.
+   - Se ele falhar com `snap-confine is packaged without necessary permissions`, rode esta variação, a única permitida, que chama o `docker` sem passar pelo snap:
+     ```bash
+     export PATH=/snap/docker/current/bin:$PATH DOCKER_HOST=unix:///var/run/docker.sock && make dev-restart
+     ```
    - Confirme que `http://gc-11.tail9dcef6.ts.net:5173` responde e que a API tem as rotas novas.
-   - Se não for possível reiniciar (por exemplo, permissão negada), não contorne: avise o usuário que o `make dev` precisa ser reiniciado.
+   - Se não for possível reiniciar por outro motivo (por exemplo, permissão negada), não contorne: avise o usuário que o `make dev` precisa ser reiniciado.
 5. Envie uma notificação push curta com o link do PR e o link de teste `http://gc-11.tail9dcef6.ts.net:5173`, dizendo se os checks do CI ainda vão rodar. Inclua o e-mail do administrador de teste e diga que a senha está em `.dev-credentials`, na raiz do repositório (arquivo local, ignorado pelo git). Nunca coloque a senha na notificação nem na resposta, e nunca exiba o arquivo na saída de um comando (`cat`, `sed`, `Read`), porque ela ficaria no histórico da sessão. O e-mail sai de `grep '^E-mail:' .dev-credentials`, e o login se confere com o comando abaixo, que mostra só o código HTTP. Se o arquivo não existir ou o login falhar (por exemplo, banco de desenvolvimento recriado), crie o administrador de novo com `make dev-create-admin`, gerando a senha sem exibi-la, grave-a no arquivo com permissão 600 e confirme o login da mesma forma.
 
    ```bash
