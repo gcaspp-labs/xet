@@ -238,7 +238,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** conectar preenche o telefone; número de outro setor é recusado com o motivo na tela, sem erro 500; uma queda temporária mantém o telefone e desvincular o apaga; há verificação manual com o número real, em que o celular deixa de mostrar "Outro dispositivo"; supervisor e administrador desvinculam, atendente e supervisor de outro setor não; desvincular grava a auditoria com o autor, repetir não gera novo registro e o setor volta a conectar pelo QR code.
 
-### [~] T27 — Setores e módulos do contato
+### [x] T27 — Setores e módulos do contato
 
 - Migração das tabelas `contact_sectors` e `contact_modules`, preenchendo os setores a partir dos chamados existentes.
 - Setores (ao menos um) e módulos opcionais no cadastro do contato (`ContactSheet`). Rota de leitura dos módulos ativos para todos os papéis, porque a atual é restrita à supervisão.
