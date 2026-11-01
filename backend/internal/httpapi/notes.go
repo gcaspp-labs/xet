@@ -28,10 +28,10 @@ func (s *server) setSpokeWith(w http.ResponseWriter, r *http.Request) {
 }
 
 type noteResponse struct {
-	ID        int64              `json:"id"`
-	Body      string             `json:"body"`
-	CreatedAt time.Time          `json:"createdAt"`
-	Author    ticketUserResponse `json:"author"`
+	ID        int64       `json:"id"`
+	Body      string      `json:"body"`
+	CreatedAt time.Time   `json:"createdAt"`
+	Author    refResponse `json:"author"`
 }
 
 func (s *server) listNotes(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +46,7 @@ func (s *server) listNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]noteResponse, len(rows))
 	for i, n := range rows {
-		out[i] = noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: ticketUserResponse{ID: n.AuthorID, Name: n.AuthorName}}
+		out[i] = noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: refResponse{ID: n.AuthorID, Name: n.AuthorName}}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -75,5 +75,5 @@ func (s *server) createNote(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: ticketUserResponse{ID: user.ID, Name: user.Name}})
+	writeJSON(w, http.StatusCreated, noteResponse{ID: n.ID, Body: n.Body, CreatedAt: n.CreatedAt, Author: refResponse{ID: user.ID, Name: user.Name}})
 }

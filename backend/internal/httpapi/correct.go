@@ -58,7 +58,7 @@ type fieldChangeResponse struct {
 type correctionResponse struct {
 	ID        int64                 `json:"id"`
 	CreatedAt time.Time             `json:"createdAt"`
-	Actor     *ticketUserResponse   `json:"actor"`
+	Actor     *refResponse          `json:"actor"`
 	Reason    string                `json:"reason"`
 	Changes   []fieldChangeResponse `json:"changes"`
 }
@@ -78,7 +78,7 @@ func (s *server) listCorrections(w http.ResponseWriter, r *http.Request) {
 	for i, l := range logs {
 		out[i] = correctionResponse{ID: l.ID, CreatedAt: l.CreatedAt, Reason: l.Reason, Changes: make([]fieldChangeResponse, len(l.Changes))}
 		if l.ActorID != nil && l.ActorName != nil {
-			out[i].Actor = &ticketUserResponse{ID: *l.ActorID, Name: *l.ActorName}
+			out[i].Actor = &refResponse{ID: *l.ActorID, Name: *l.ActorName}
 		}
 		for j, c := range l.Changes {
 			out[i].Changes[j] = fieldChangeResponse{Field: c.Field, From: c.From, To: c.To}

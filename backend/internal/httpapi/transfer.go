@@ -38,12 +38,12 @@ func (s *server) transferTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 type assignmentLogResponse struct {
-	ID        int64               `json:"id"`
-	Action    string              `json:"action"`
-	CreatedAt time.Time           `json:"createdAt"`
-	Actor     *ticketUserResponse `json:"actor"`
-	FromName  *string             `json:"fromName"`
-	ToName    *string             `json:"toName"`
+	ID        int64        `json:"id"`
+	Action    string       `json:"action"`
+	CreatedAt time.Time    `json:"createdAt"`
+	Actor     *refResponse `json:"actor"`
+	FromName  *string      `json:"fromName"`
+	ToName    *string      `json:"toName"`
 	// ToSectorName is the target of a transfer between sectors.
 	ToSectorName *string `json:"toSectorName"`
 }
@@ -64,7 +64,7 @@ func (s *server) listAssignments(w http.ResponseWriter, r *http.Request) {
 	for i, l := range rows {
 		out[i] = assignmentLogResponse{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt, FromName: l.FromName, ToName: l.ToName, ToSectorName: l.ToSectorName}
 		if l.ActorID != nil && l.ActorName != nil {
-			out[i].Actor = &ticketUserResponse{ID: *l.ActorID, Name: *l.ActorName}
+			out[i].Actor = &refResponse{ID: *l.ActorID, Name: *l.ActorName}
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

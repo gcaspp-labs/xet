@@ -12,7 +12,9 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
-type ticketUserResponse struct {
+// refResponse points to a record by ID and name: a user, a module, an
+// organization or a sector.
+type refResponse struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 }

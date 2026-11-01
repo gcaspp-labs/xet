@@ -9,9 +9,9 @@ import (
 )
 
 type closingFormResponse struct {
-	Modules      []ticketUserResponse `json:"modules"`
-	Organization *ticketUserResponse  `json:"organization"`
-	StartedAt    time.Time            `json:"startedAt"`
+	Modules      []refResponse `json:"modules"`
+	Organization *refResponse  `json:"organization"`
+	StartedAt    time.Time     `json:"startedAt"`
 }
 
 // closingForm returns what the closing form starts with: the active modules
@@ -26,12 +26,12 @@ func (s *server) closingForm(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	out := closingFormResponse{Modules: make([]ticketUserResponse, len(form.Modules)), StartedAt: form.StartedAt}
+	out := closingFormResponse{Modules: make([]refResponse, len(form.Modules)), StartedAt: form.StartedAt}
 	for i, m := range form.Modules {
-		out.Modules[i] = ticketUserResponse{ID: m.ID, Name: m.Name}
+		out.Modules[i] = refResponse{ID: m.ID, Name: m.Name}
 	}
 	if o := form.Organization; o != nil {
-		out.Organization = &ticketUserResponse{ID: o.ID, Name: o.Name}
+		out.Organization = &refResponse{ID: o.ID, Name: o.Name}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -96,9 +96,9 @@ func (s *server) listTicketModules(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	out := make([]ticketUserResponse, len(rows))
+	out := make([]refResponse, len(rows))
 	for i, m := range rows {
-		out[i] = ticketUserResponse{ID: m.ID, Name: m.Name}
+		out[i] = refResponse{ID: m.ID, Name: m.Name}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

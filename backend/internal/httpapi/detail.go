@@ -11,7 +11,7 @@ type ticketDetailResponse struct {
 	ID           int64                   `json:"id"`
 	Protocol     string                  `json:"protocol"`
 	Status       db.TicketStatus         `json:"status"`
-	Sector       ticketUserResponse      `json:"sector"`
+	Sector       refResponse             `json:"sector"`
 	SpokeWith    *string                 `json:"spokeWith"`
 	ArrivedAt    time.Time               `json:"arrivedAt"`
 	AssignedAt   *time.Time              `json:"assignedAt"`
@@ -21,9 +21,9 @@ type ticketDetailResponse struct {
 	Subject      *string                 `json:"subject"`
 	Resolution   *string                 `json:"resolution"`
 	Contact      ticketContactResponse   `json:"contact"`
-	Organization *ticketUserResponse     `json:"organization"`
-	Assignee     *ticketUserResponse     `json:"assignee"`
-	ClosedBy     *ticketUserResponse     `json:"closedBy"`
+	Organization *refResponse            `json:"organization"`
+	Assignee     *refResponse            `json:"assignee"`
+	ClosedBy     *refResponse            `json:"closedBy"`
 	ClosureType  *db.ClosureType         `json:"closureType"`
 	Previous     *previousTicketResponse `json:"previous"`
 	Next         *nextTicketResponse     `json:"next"`
@@ -59,20 +59,20 @@ func (s *server) getTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	out := ticketDetailResponse{
 		ID: t.ID, Protocol: t.Protocol, Status: t.Status,
-		Sector:    ticketUserResponse{ID: t.SectorID, Name: t.SectorName},
+		Sector:    refResponse{ID: t.SectorID, Name: t.SectorName},
 		SpokeWith: t.SpokeWith, ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt,
 		StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt,
 		Subject: t.Subject, Resolution: t.Resolution,
 		Contact: ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},
 	}
 	if t.OrganizationID != nil && t.OrganizationName != nil {
-		out.Organization = &ticketUserResponse{ID: *t.OrganizationID, Name: *t.OrganizationName}
+		out.Organization = &refResponse{ID: *t.OrganizationID, Name: *t.OrganizationName}
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {
-		out.Assignee = &ticketUserResponse{ID: *t.AssigneeID, Name: *t.AssigneeName}
+		out.Assignee = &refResponse{ID: *t.AssigneeID, Name: *t.AssigneeName}
 	}
 	if t.ClosedByID != nil && t.ClosedByName != nil {
-		out.ClosedBy = &ticketUserResponse{ID: *t.ClosedByID, Name: *t.ClosedByName}
+		out.ClosedBy = &refResponse{ID: *t.ClosedByID, Name: *t.ClosedByName}
 	}
 	if t.ClosureType.Valid {
 		out.ClosureType = &t.ClosureType.ClosureType

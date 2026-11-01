@@ -30,7 +30,7 @@ type messageResponse struct {
 	Status        *db.MessageStatus   `json:"status"`
 	FailureReason *string             `json:"failureReason"`
 	SentAt        time.Time           `json:"sentAt"`
-	Author        *ticketUserResponse `json:"author"`
+	Author        *refResponse        `json:"author"`
 	Media         *mediaResponse      `json:"media"`
 }
 
@@ -43,7 +43,7 @@ func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
 		out.Status = &m.Status.MessageStatus
 	}
 	if m.AuthorID != nil && m.AuthorName != nil {
-		out.Author = &ticketUserResponse{ID: *m.AuthorID, Name: *m.AuthorName}
+		out.Author = &refResponse{ID: *m.AuthorID, Name: *m.AuthorName}
 	}
 	if m.MediaID != nil && m.MediaMimeType != nil && m.MediaSizeBytes != nil {
 		out.Media = &mediaResponse{ID: *m.MediaID, MimeType: *m.MediaMimeType, FileName: m.MediaFileName, SizeBytes: *m.MediaSizeBytes, DurationSeconds: m.MediaDurationSeconds}

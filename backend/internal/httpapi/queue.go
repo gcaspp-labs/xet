@@ -24,7 +24,7 @@ type ticketSummaryResponse struct {
 	AssignedAt       *time.Time            `json:"assignedAt"`
 	Contact          ticketContactResponse `json:"contact"`
 	OrganizationName *string               `json:"organizationName"`
-	Assignee         *ticketUserResponse   `json:"assignee"`
+	Assignee         *refResponse          `json:"assignee"`
 	LastMessage      *lastMessageResponse  `json:"lastMessage"`
 }
 
@@ -41,7 +41,7 @@ func toTicketSummaryResponse(t ticket.Summary) ticketSummaryResponse {
 		OrganizationName: t.OrganizationName,
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {
-		out.Assignee = &ticketUserResponse{ID: *t.AssigneeID, Name: *t.AssigneeName}
+		out.Assignee = &refResponse{ID: *t.AssigneeID, Name: *t.AssigneeName}
 	}
 	if m := t.LastMessage; m != nil {
 		out.LastMessage = &lastMessageResponse{Type: m.Type, Body: m.Body, Origin: m.Origin, SentAt: m.SentAt}

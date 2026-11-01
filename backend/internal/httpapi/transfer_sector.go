@@ -58,9 +58,9 @@ func (s *server) listTransferSectors(w http.ResponseWriter, r *http.Request) {
 		s.ticketError(w, r, err)
 		return
 	}
-	out := make([]ticketUserResponse, len(sectors))
+	out := make([]refResponse, len(sectors))
 	for i, sec := range sectors {
-		out[i] = ticketUserResponse{ID: sec.ID, Name: sec.Name}
+		out[i] = refResponse{ID: sec.ID, Name: sec.Name}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
