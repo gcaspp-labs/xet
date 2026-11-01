@@ -8,7 +8,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 - Uma task só é considerada pronta quando todos os itens de "Pronto quando" estiverem atendidos, os testes passarem e a revisão for aprovada.
 - Status: `[ ]` pendente, `[~]` em andamento, `[x]` concluída.
 - Se durante uma task surgir uma decisão não prevista na spec, ela é registrada na spec antes de seguir.
-- O número identifica a task. As tasks pendentes são numeradas na ordem de execução, então basta chamar a próxima. Task nova entra com o próximo número; se precisar vir antes de outras pendentes, as seguintes são renumeradas. As concluídas mantêm o número, porque commits e PRs o citam.
+- O número identifica a task. As tasks pendentes são numeradas na ordem de execução, então basta chamar a próxima. Task nova entra com o próximo número; se precisar vir antes de outras pendentes, as seguintes são renumeradas. As concluídas mantêm o número, porque commits e PRs o citam. Um ajuste pequeno de processo pode entrar com sufixo (T20.1), sem renumerar as seguintes.
 
 ## Fase 1 — Fundação
 
@@ -166,6 +166,16 @@ Só reorganiza, para facilitar a leitura e reduzir conflitos nas tasks seguintes
 - **Nomes e repetição:** `ticketUserResponse` passa a `refResponse`, porque também serve a módulos, órgãos e setores; um auxiliar substitui as 16 repetições da leitura do ID do chamado nas rotas.
 
 **Pronto quando:** os arquivos de teste não mudam e `go test -race`, `make lint` e `make test-e2e` passam; o diff só mostra código movido e os renomes previstos; `modelo-dados.md` descreve os pacotes reais; cada assunto de `ticket` tem o arquivo correspondente em `httpapi`, quando houver rota.
+
+### [~] T20.1 — Leitura por camadas
+
+Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia seis documentos inteiros a cada task e passa a ler só o que a task precisa, sem esquecer regra de negócio.
+
+- **Skill:** leitura por camadas, com gatilhos que obrigam a ler mais e registro, no PR, do que foi lido e do que ficou de fora.
+- **Mapa:** cada task pendente ganha a linha `**Ler:**`, com as seções dos documentos e os arquivos de partida. "Permissões", em `modelo-dados.md`, passa a ser um título, para os gatilhos e os mapas poderem citá-la.
+- **Piloto na T21:** comparar o uso de tokens com o de uma task parecida (T15) e conferir se a revisão ou os testes encontram regra esquecida por falta de leitura. Se acontecer, acrescentar um gatilho; se repetir, voltar a ler a `spec.md` inteira nas tasks com regra de negócio.
+
+**Pronto quando:** a skill descreve as camadas, os gatilhos e o registro do que foi lido; toda task pendente tem a linha `**Ler:**`, com títulos que existem nos documentos e arquivos que existem no repositório.
 
 ### [ ] T21 — Fluxo do painel e realizados hoje
 
