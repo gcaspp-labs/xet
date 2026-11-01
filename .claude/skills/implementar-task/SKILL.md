@@ -10,7 +10,7 @@ Você está começando com o contexto zerado. Tudo o que precisa saber está nos
 
 ## 1. Preparar o repositório
 
-1. Normalize o número para dois dígitos (`2` → `02`). Se nenhum número foi informado, pergunte qual task implementar e pare.
+1. Normalize o número para dois dígitos (`2` → `02`), mantendo o sufixo, se houver (`20.1`). Se nenhum número foi informado, pergunte qual task implementar e pare.
 2. Confira que a árvore de trabalho está limpa (`git status --short`). Se houver alterações não commitadas, pare e pergunte ao usuário o que fazer com elas.
 3. Atualize a main: `git checkout main && git pull --ff-only origin main`.
 4. Em `tasks.md` (já atualizado da main), verifique:
@@ -21,22 +21,28 @@ Você está começando com o contexto zerado. Tudo o que precisa saber está nos
 
 ## 2. Carregar o contexto
 
-Leia por completo, nesta ordem, antes de escrever qualquer código:
+Leia só o que a task precisa, antes de escrever qualquer código. Ler menos não dispensa nenhuma regra: na dúvida, leia mais ou pergunte.
 
-1. `CLAUDE.md`: regras de implementação, testes, idempotência, concorrência, adaptadores e commits. Elas são obrigatórias.
-2. `tasks.md`: a seção inteira da task `T$ARGUMENTS`, incluindo "Pronto quando". Leia também a task seguinte, só para saber o que **não** faz parte desta.
-3. `spec.md`: as regras de negócio envolvidas na task.
-4. `arquitetura.md`: componentes, adaptadores, bibliotecas permitidas e estrutura do repositório.
-5. `modelo-dados.md`: tabelas, restrições, permissões e ciclo do chamado envolvidos na task.
-6. `design.md`: obrigatório quando a task tiver interface (telas, componentes ou textos ao usuário).
-
-Depois, explore o código existente que a task vai tocar e siga os padrões já estabelecidos (nomes, organização de pacotes, estilo de testes, tratamento de erros).
+1. **Sempre:** `CLAUDE.md`, com as regras obrigatórias de implementação, testes, idempotência, concorrência, adaptadores e commits. Em `tasks.md`, a seção inteira da task `T$ARGUMENTS`, incluindo "Ler" e "Pronto quando", e a task seguinte, só para saber o que **não** faz parte desta. Localize as duas com `grep -n '^### ' tasks.md` e leia só esse trecho.
+2. **Documentos:** liste os títulos com `grep -n '^##' <documento>` e leia as seções da linha `**Ler:**` da task. Ela é o ponto de partida, não o limite. Sem essa linha, escolha as seções pelos títulos.
+3. **Gatilhos:** leia também, mesmo que a linha `**Ler:**` não cite:
+   - Regra de negócio nova ou alterada: a seção do assunto em `spec.md`.
+   - Permissão ou papel: "Permissões", em `modelo-dados.md`.
+   - Situação do chamado: "Ciclo de vida do chamado", em `modelo-dados.md`.
+   - Esquema: as tabelas envolvidas e "Tipos enumerados", em `modelo-dados.md`.
+   - Auditoria: "`audit_logs`", em `modelo-dados.md`.
+   - Interface (telas, componentes ou textos ao usuário): `design.md` inteiro.
+   - Adaptador de mensageria, armazenamento ou tempo real: a seção correspondente de `arquitetura.md`.
+   - Biblioteca que o projeto ainda não usa: "Bibliotecas padrão", em `arquitetura.md`.
+4. **Código:** siga o caminho do assunto, descrito em "Um arquivo por assunto" (`arquitetura.md`): `httpapi/router.go`, `httpapi/<assunto>.go`, `ticket/<assunto>.go` (ou o pacote do domínio), `db/queries/<tabela>.sql` e o teste. Havendo funcionalidade parecida, leia uma como modelo e siga os padrões dela (nomes, organização de pacotes, estilo de testes, tratamento de erros). Veja as assinaturas antes dos corpos (`grep -n '^func'`) e leia por inteiro só o que vai mudar ou servir de modelo.
+5. **Antes de mudar** uma função ou uma query, procure quem a usa (`grep -rn <nome> backend frontend`).
 
 ## 3. Planejar
 
 1. Monte a lista de passos da task com base nos itens e no "Pronto quando".
-2. Se a spec ou o modelo não cobrirem alguma situação necessária, ou se houver contradição entre os documentos, **pare e pergunte** antes de implementar. Registre a decisão no documento correspondente (spec, arquitetura ou modelo) como parte da task.
-3. Marque a task como `[~]` em `tasks.md`.
+2. Se a spec ou o modelo não cobrirem alguma situação necessária, ou se houver contradição entre os documentos, **pare e pergunte** antes de implementar. Registre a decisão no documento correspondente (spec, arquitetura ou modelo) como parte da task. Como você não leu os documentos inteiros, antes de concluir que eles não cobrem o assunto, procure-o neles (`grep -n '<termo>' spec.md modelo-dados.md arquitetura.md`).
+3. Anote, para o corpo do PR, o que foi lido e o que ficou de fora, e por quê.
+4. Marque a task como `[~]` em `tasks.md`.
 
 ## 4. Implementar
 
@@ -58,7 +64,7 @@ Depois, explore o código existente que a task vai tocar e siga os padrões já 
 2. Envie a branch: `git push -u origin <branch>`.
 3. Abra o PR para a `main` com `gh pr create`:
    - Título: `T$ARGUMENTS — <título da task>`.
-   - Corpo em português com: resumo do que foi feito; checklist do "Pronto quando" com cada item marcado e como foi verificado; decisões tomadas e documentos alterados; o que não pôde ser verificado; sugestões fora do escopo.
+   - Corpo em português com: resumo do que foi feito; checklist do "Pronto quando" com cada item marcado e como foi verificado; decisões tomadas e documentos alterados; o que foi lido e o que ficou de fora; o que não pôde ser verificado; sugestões fora do escopo.
 4. Deixe o ambiente de desenvolvimento pronto para o teste manual:
    - Mantenha a branch da task em checkout.
    - Rode `make dev-restart` (exatamente assim, sem variações, porque é o comando liberado nas permissões). Ele para o ambiente que estiver rodando e sobe de novo em segundo plano: o backend roda com `go run` e não recarrega sozinho, então ficaria sem as mudanças da task.
