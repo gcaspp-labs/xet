@@ -34,15 +34,6 @@ const (
 	reasonRestarted       = "O serviço foi reiniciado durante o envio."
 )
 
-var (
-	ErrNotAssignee     = errors.New("user is not the assignee of the ticket")
-	ErrRequestReused   = errors.New("client request id used by another message")
-	ErrMessageNotFound = errors.New("message not found")
-	ErrNotFailed       = errors.New("message has not failed")
-	ErrMediaNotFound   = errors.New("media file not found")
-	ErrInvalidAudio    = errors.New("recorded audio could not be converted")
-)
-
 // Outgoing is a message an agent sends from the panel: a text, a file with
 // an optional caption, or audio recorded in the browser to go as a voice
 // message (Voice), without caption.

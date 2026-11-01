@@ -13,12 +13,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
-var (
-	ErrCannotTransfer = errors.New("user may not transfer the ticket")
-	ErrNotInProgress  = errors.New("ticket not in progress")
-	ErrInvalidTarget  = errors.New("transfer target is not an active user of the sector")
-)
-
 // AssignmentLog is an assignment or a transfer shown in the conversation.
 type AssignmentLog = db.ListTicketAssignmentLogsRow
 

@@ -1,5 +1,3 @@
-// Package ticket manages the life cycle of the tickets: the queue of each
-// sector, the assignee, transfers, closing and corrections.
 package ticket
 
 import (
@@ -12,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/messaging"
@@ -27,20 +24,6 @@ const unnamedContact = "Contato sem telefone"
 var protocolZone = mustLoadLocation("America/Sao_Paulo")
 
 var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
-
-// errDuplicate rolls back a message that a concurrent delivery recorded first.
-var errDuplicate = errors.New("message already recorded")
-
-type Service struct {
-	pool    *pgxpool.Pool
-	q       *db.Queries
-	storage storage.Storage
-	hub     *realtime.Hub
-}
-
-func NewService(pool *pgxpool.Pool, files storage.Storage, hub *realtime.Hub) *Service {
-	return &Service{pool: pool, q: db.New(pool), storage: files, hub: hub}
-}
 
 func mustLoadLocation(name string) *time.Location {
 	loc, err := time.LoadLocation(name)
@@ -322,11 +305,4 @@ func nextProtocol(ctx context.Context, q *db.Queries) (string, error) {
 		return "", fmt.Errorf("next protocol: %w", err)
 	}
 	return fmt.Sprintf("%04d-%06d", year, n), nil
-}
-
-func optional(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
 }

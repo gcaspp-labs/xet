@@ -13,11 +13,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
-var (
-	ErrInvalidSector = errors.New("transfer target is not another active sector")
-	ErrOpenInSector  = errors.New("contact already has an open ticket in the target sector")
-)
-
 // TransferSector closes the ticket with the closing form as transferred and
 // opens a ticket linked to it in the queue of another sector (spec.md,
 // Transferências entre setores). Only the assignee transfers, as in the

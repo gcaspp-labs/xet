@@ -15,15 +15,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
 )
 
-var (
-	ErrSectorNotFound      = errors.New("sector not found")
-	ErrUnknownContact      = errors.New("contact not found")
-	ErrContactWithoutPhone = errors.New("contact without phone")
-)
-
-// errOpenTicket rolls back a conversation start that found an open ticket.
-var errOpenTicket = errors.New("contact has an open ticket in the sector")
-
 // Started is the result of starting a conversation: the new ticket with the
 // first message, or, when the contact already had an open ticket in the
 // sector, that ticket (Existing) and no message.

@@ -9,20 +9,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/gcaspp-labs/xet/backend/internal/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/realtime"
-)
-
-var (
-	ErrContactNotRegistered = errors.New("contact of the ticket is not registered")
-	ErrInvalidOrganization  = errors.New("organization not found")
-	ErrInvalidModules       = errors.New("modules are not active modules of the sector")
-	ErrInvalidPeriod        = errors.New("end before start or in the future")
-	ErrIncompleteClosing    = errors.New("subject, resolution or modules missing")
 )
 
 // Closing is the closing form filled by the assignee. A nil StartedAt keeps
@@ -208,9 +199,4 @@ func (s *Service) Modules(ctx context.Context, actor auth.User, ticketID int64) 
 		return nil, fmt.Errorf("list ticket modules: %w", err)
 	}
 	return rows, nil
-}
-
-func isConstraint(err error, name string) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.ConstraintName == name
 }
