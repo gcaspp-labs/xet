@@ -80,7 +80,7 @@ export type HistoryEntry = {
 }
 
 // Como o chamado ganhou o primeiro responsável (conversa iniciada ou assumido),
-// cada transferência, o encerramento, o cancelamento com o motivo e as correções,
+// cada transferência, a devolução à fila, o encerramento, o cancelamento com o motivo e as correções,
 // com quem fez e de quem para quem.
 export type AssignmentLog = {
   id: number
@@ -88,6 +88,7 @@ export type AssignmentLog = {
     | 'ticket_started'
     | 'ticket_assigned'
     | 'ticket_transferred_user'
+    | 'ticket_returned'
     | 'ticket_closed'
     | 'ticket_transferred_sector'
     | 'ticket_cancelled'
@@ -253,6 +254,21 @@ export function useTransferTicket(ticketId: number, sectorId: number) {
   return useMutation({
     mutationFn: (assigneeId: number) =>
       api<void>(`/tickets/${ticketId}/transfer`, { method: 'POST', body: { assigneeId } }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
+        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+      ]),
+  })
+}
+
+// Devolve à fila o chamado em atendimento; o backend confere quem pode devolver.
+export function useReturnTicket(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<void>(`/tickets/${ticketId}/return`, { method: 'POST' }),
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),

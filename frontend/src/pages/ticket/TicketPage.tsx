@@ -13,6 +13,7 @@ import {
   SendHorizontal,
   StickyNote,
   Trash2,
+  Undo2,
   UserCheck,
   UserRoundCog,
   X,
@@ -31,6 +32,7 @@ import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { ConversationList } from '@/components/ConversationList'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
+import { ReturnSheet } from '@/components/ReturnSheet'
 import { TicketHistoryList } from '@/components/TicketHistory'
 import { Topbar } from '@/components/Topbar'
 import { TransferSheet } from '@/components/TransferSheet'
@@ -192,6 +194,16 @@ function canCancel(ticket: TicketDetail, user: User) {
   )
 }
 
+// Devolvem à fila o chamado em atendimento o responsável e a supervisão do
+// setor (spec.md, Devolver à fila).
+function canReturn(ticket: TicketDetail, user: User) {
+  return (
+    worksIn(ticket, user) &&
+    ticket.status === 'in_progress' &&
+    (conducts(ticket, user) || user.role !== 'agent')
+  )
+}
+
 // Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
 // cancelado não é corrigido (spec.md, Encerramento, retorno e correções).
 function canCorrect(ticket: TicketDetail, user: User) {
@@ -209,6 +221,11 @@ function assignmentText(log: AssignmentLog) {
   }
   if (log.action === 'ticket_assigned') {
     return `${log.toName} assumiu o chamado`
+  }
+  if (log.action === 'ticket_returned') {
+    return log.actor?.name === log.fromName
+      ? `${log.fromName} devolveu o chamado à fila`
+      : `${log.actor?.name ?? 'Sistema'} devolveu à fila o chamado de ${log.fromName}`
   }
   if (log.action === 'ticket_closed') {
     return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
@@ -243,6 +260,8 @@ function AssignmentEntry({ log }: { log: AssignmentLog }) {
         <ArrowRightLeft strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : log.action === 'ticket_corrected' ? (
         <PencilLine strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : log.action === 'ticket_returned' ? (
+        <Undo2 strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : (
         <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       )}
@@ -921,6 +940,7 @@ export default function TicketPage() {
   const [transferring, setTransferring] = useState(false)
   const [closing, setClosing] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [returning, setReturning] = useState(false)
   const [transferringSector, setTransferringSector] = useState(false)
   // Nova chave a cada abertura: o formulário começa limpo, com o fim sugerido no momento.
   const [closingKey, setClosingKey] = useState(0)
@@ -955,6 +975,12 @@ export default function TicketPage() {
               <Button variant="destructive" onClick={() => setCancelling(true)}>
                 <Ban strokeWidth={1.7} aria-hidden />
                 Cancelar chamado
+              </Button>
+            )}
+            {canReturn(ticket, user) && (
+              <Button variant="outline" onClick={() => setReturning(true)}>
+                <Undo2 strokeWidth={1.7} aria-hidden />
+                Devolver à fila
               </Button>
             )}
             {ticket.status === 'queued' && (
@@ -1011,6 +1037,7 @@ export default function TicketPage() {
       />
       {/* Sempre montado: o botão some quando o chamado é cancelado ou encerrado. */}
       <CancelSheet ticket={ticket} open={cancelling} onOpenChange={setCancelling} />
+      <ReturnSheet ticket={ticket} open={returning} onOpenChange={setReturning} />
       <ClosingSheet key={closingKey} ticket={ticket} open={closing} onOpenChange={setClosing} />
       <ClosingSheet
         key={`transfer-${closingKey}`}
