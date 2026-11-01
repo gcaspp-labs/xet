@@ -7,7 +7,7 @@ async function chooseOption(page: Page, label: string, option: string) {
 }
 
 test('administrador cadastra a Contabilidade e seus usuários', async ({ page, browser }) => {
-  const { id, phone } = unique()
+  const { id } = unique()
   const sectorName = `Contabilidade ${id}`
 
   await signIn(page, admin.email, admin.password)
@@ -17,14 +17,12 @@ test('administrador cadastra a Contabilidade e seus usuários', async ({ page, b
   await page.getByRole('button', { name: 'Novo setor' }).click()
   const drawer = page.getByRole('dialog', { name: 'Novo setor' })
   await drawer.getByLabel('Nome').fill(sectorName)
-  await drawer
-    .getByLabel('Número do WhatsApp')
-    .fill(`+55 (11) ${phone.slice(4, 9)}-${phone.slice(9)}`)
+  await expect(drawer.getByLabel('Número do WhatsApp')).toBeHidden()
   await drawer.getByRole('button', { name: 'Cadastrar setor' }).click()
   await expect(page.getByText('Setor salvo')).toBeVisible()
   await expect(drawer).toBeHidden()
   const row = page.getByRole('row', { name: new RegExp(sectorName) })
-  await expect(row).toContainText(`+55 (11) ${phone.slice(4, 9)}-${phone.slice(9)}`)
+  await expect(row).toContainText('Não conectado')
   await expect(row).toContainText('Desconectado')
 
   await page.getByRole('link', { name: 'Usuários' }).click()
@@ -58,7 +56,7 @@ test('administrador cadastra a Contabilidade e seus usuários', async ({ page, b
   }
 })
 
-test('cadastro de setor valida o número e recusa nome repetido', async ({ page, baseURL }) => {
+test('cadastro de setor exige o nome e recusa nome repetido', async ({ page, baseURL }) => {
   const { sector } = await seedSector(baseURL!)
   await signIn(page, admin.email, admin.password)
   await page.goto('/admin/setores')
@@ -67,10 +65,8 @@ test('cadastro de setor valida o número e recusa nome repetido', async ({ page,
   const drawer = page.getByRole('dialog', { name: 'Novo setor' })
   await drawer.getByRole('button', { name: 'Cadastrar setor' }).click()
   await expect(drawer.getByText('Informe o nome do setor.')).toBeVisible()
-  await expect(drawer.getByText('Informe o número com DDI e DDD.')).toBeVisible()
 
   await drawer.getByLabel('Nome').fill(sector.name)
-  await drawer.getByLabel('Número do WhatsApp').fill(unique().phone)
   await drawer.getByRole('button', { name: 'Cadastrar setor' }).click()
   await expect(drawer.getByRole('alert')).toHaveText('Já existe um setor com este nome.')
 })
@@ -296,11 +292,7 @@ test('atendente não acessa a administração', async ({ page, baseURL }) => {
 
   // O backend recusa mesmo chamando a API diretamente.
   expect((await page.request.get('/api/users')).status()).toBe(403)
-  expect(
-    (
-      await page.request.post('/api/sectors', { data: { name: 'X', phone: unique().phone } })
-    ).status(),
-  ).toBe(403)
+  expect((await page.request.post('/api/sectors', { data: { name: 'X' } })).status()).toBe(403)
 })
 
 for (const theme of [

@@ -90,6 +90,13 @@ func (a *Adapter) Handler() http.Handler {
 			return a.UpdateStatus(r.Context(), sectorID, body.Status, body.ExternalMessageIDs...)
 		})
 	})
+	// The next unlink of the sector cannot reach the device.
+	r.Post("/messaging/sectors/{sectorID}/unreachable", func(w http.ResponseWriter, r *http.Request) {
+		a.control(w, r, func(sectorID int64) error {
+			a.FailNextDisconnect(sectorID)
+			return nil
+		})
+	})
 	r.Post("/messaging/sectors/{sectorID}/logout", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.LogOut(r.Context(), sectorID) })
 	})

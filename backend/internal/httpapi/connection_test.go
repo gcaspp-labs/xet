@@ -431,7 +431,7 @@ func TestDisconnectFromTheScreen(t *testing.T) {
 		t.Fatalf("account must be cleared, got %q", *acc)
 	}
 
-	// Auditoria com o autor; o evento do adaptador e a repetição não geram outro registro.
+	// Auditoria com quem desvinculou; o evento do adaptador e a repetição não geram outro registro.
 	check := func() {
 		t.Helper()
 		logs := e.connectionLogs(contab.ID)

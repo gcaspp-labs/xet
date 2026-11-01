@@ -5,8 +5,16 @@ import { api } from '@/lib/api'
 export type Connection = {
   status: Sector['connectionStatus']
   lastConnectedAt: string | null
+  // Número lido do QR code.
+  phone: string | null
+  // Há conta a desvincular, mesmo durante uma queda temporária.
+  linked: boolean
+  // Motivo da recusa da última conexão.
+  connectionError: string | null
   // Há um QR code aguardando leitura, servido por qrCodeUrl.
   pairing: boolean
+  // Desvinculado no sistema, mas o aparelho não pôde ser avisado.
+  warning?: string
 }
 
 export const connectionKey = (sectorId: number) => ['sectors', sectorId, 'connection']
@@ -25,6 +33,17 @@ export function useConnect(sectorId: number) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api<Connection>(`/sectors/${sectorId}/connection`, { method: 'POST' }),
+    onSuccess: (connection) => {
+      queryClient.setQueryData(connectionKey(sectorId), connection)
+      return queryClient.invalidateQueries({ queryKey: ['sectors'], exact: true })
+    },
+  })
+}
+
+export function useDisconnect(sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<Connection>(`/sectors/${sectorId}/connection`, { method: 'DELETE' }),
     onSuccess: (connection) => {
       queryClient.setQueryData(connectionKey(sectorId), connection)
       return queryClient.invalidateQueries({ queryKey: ['sectors'], exact: true })

@@ -1,13 +1,14 @@
-import { expect, test, type APIRequestContext } from '@playwright/test'
+import { expect, request as apiRequest, test, type APIRequestContext } from '@playwright/test'
 import { seedSector, signIn, userPassword } from './fixtures'
 
 // Simula o celular do setor pelo adaptador falso do backend (MESSAGING_PROVIDER=fake).
 async function phone(
   request: APIRequestContext,
   sectorId: number,
-  action: 'pair' | 'qr' | 'drop' | 'logout',
+  action: 'pair' | 'qr' | 'drop' | 'logout' | 'unreachable',
+  data?: object,
 ) {
-  const response = await request.post(`/api/test/messaging/sectors/${sectorId}/${action}`)
+  const response = await request.post(`/api/test/messaging/sectors/${sectorId}/${action}`, { data })
   expect(response.ok()).toBeTruthy()
 }
 
@@ -28,6 +29,8 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   await expect(page.getByRole('heading', { name: 'Conexão do WhatsApp' })).toBeVisible()
   await expect(page.getByText('Desconectado', { exact: true })).toBeVisible()
   await expect(page.getByText('O número ainda não foi conectado.')).toBeVisible()
+  await expect(page.getByText('Não conectado', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Desvincular número' })).toBeHidden()
 
   await page.getByRole('button', { name: 'Conectar' }).click()
   const qr = page.getByRole('img', { name: 'QR code para conectar o número' })
@@ -43,8 +46,11 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   await expect(qr).not.toHaveAttribute('src', firstCode!)
 
   // O celular lê o QR code; a tela mostra o novo estado sem recarregar.
+  const account = String(5511900000000 + sector.id)
+  const formatted = `+55 (11) ${account.slice(4, 9)}-${account.slice(9)}`
   await phone(request, sector.id, 'pair')
   await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
+  await expect(page.getByText(formatted)).toBeVisible()
   await expect(
     page.getByText(/^Última conexão em \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}\.$/),
   ).toBeVisible()
@@ -57,16 +63,116 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   // Queda da conexão: o aviso aparece no painel sem recarregar.
   await phone(request, sector.id, 'drop')
   await expect(note).toBeVisible()
+  await note.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
+  await expect(page.getByText(formatted)).toBeVisible()
+  await page.getByRole('link', { name: 'Atendimento' }).click()
 
   // Desvinculado pelo celular: a tela pede um novo QR code.
   await phone(request, sector.id, 'logout')
   await note.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
   await expect(page.getByText('Requer QR code', { exact: true })).toBeVisible()
   await expect(
-    page.getByText('O número foi desvinculado pelo celular. Conecte de novo pelo QR code.'),
+    page.getByText('O número foi desvinculado. Conecte de novo pelo QR code.'),
   ).toBeVisible()
+  await expect(page.getByText('Não conectado', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Reconectar' }).click()
   await expect(qr).toBeVisible()
+})
+
+test('supervisor desvincula o número com confirmação e conecta de novo', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/conexao')
+  await page.getByRole('button', { name: 'Conectar' }).click()
+  await phone(request, sector.id, 'pair')
+  await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
+
+  // Cancelar a confirmação não muda nada.
+  await page.getByRole('button', { name: 'Desvincular número' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Desvincular número' })
+  await expect(drawer).toContainText(`deixa de atender o setor ${sector.name}`)
+  await drawer.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(drawer).toBeHidden()
+  await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Desvincular número' }).click()
+  await drawer.getByRole('button', { name: 'Desvincular número' }).click()
+  await expect(page.getByText('Número desvinculado')).toBeVisible()
+  await expect(drawer).toBeHidden()
+  await expect(page.getByText('Requer QR code', { exact: true })).toBeVisible()
+  await expect(page.getByText('Não conectado', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Desvincular número' })).toBeHidden()
+
+  await page.getByRole('button', { name: 'Reconectar' }).click()
+  await expect(page.getByRole('img', { name: 'QR code para conectar o número' })).toBeVisible()
+  await phone(request, sector.id, 'pair')
+  await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Desvincular número' })).toBeVisible()
+})
+
+test('aparelho que não pôde ser avisado é removido também pelo celular', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/conexao')
+  await page.getByRole('button', { name: 'Conectar' }).click()
+  await phone(request, sector.id, 'pair')
+  await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
+
+  await phone(request, sector.id, 'unreachable')
+  await page.getByRole('button', { name: 'Desvincular número' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Desvincular número' })
+  await drawer.getByRole('button', { name: 'Desvincular número' }).click()
+  await expect(page.getByText('Requer QR code', { exact: true })).toBeVisible()
+  await expect(page.getByText('Remova-o também pelo celular', { exact: false })).toBeVisible()
+})
+
+test('número ligado a outro setor é recusado com o motivo na tela', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const owner = await seedSector(baseURL!)
+  const { sector, supervisor } = await seedSector(baseURL!)
+  const accountId = `${5511900000000 + owner.sector.id}@s.whatsapp.net`
+  const connect = async (sectorId: number) => {
+    const response = await page.request.post(`/api/sectors/${sectorId}/connection`)
+    expect(response.ok()).toBeTruthy()
+  }
+
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/conexao')
+  await page.getByRole('button', { name: 'Conectar' }).click()
+  await expect(page.getByRole('img', { name: 'QR code para conectar o número' })).toBeVisible()
+
+  const ownerApi = await apiRequest.newContext({ baseURL })
+  const login = await ownerApi.post('/api/auth/login', {
+    data: { email: owner.supervisor, password: userPassword },
+  })
+  expect(login.ok()).toBeTruthy()
+  expect((await ownerApi.post(`/api/sectors/${owner.sector.id}/connection`)).ok()).toBeTruthy()
+  await ownerApi.dispose()
+  await phone(request, owner.sector.id, 'pair', { accountId })
+
+  await phone(request, sector.id, 'pair', { accountId })
+  await expect(
+    page.getByText('Este número já está ligado a outro setor.', { exact: false }),
+  ).toBeVisible()
+  await expect(page.getByText('Requer QR code', { exact: true })).toBeVisible()
+  await expect(page.getByText('Não conectado', { exact: true })).toBeVisible()
+
+  // Nova tentativa limpa o motivo.
+  await connect(sector.id)
+  await expect(
+    page.getByText('Este número já está ligado a outro setor.', { exact: false }),
+  ).toBeHidden()
 })
 
 test('atendente não vê a conexão nem o aviso de desconexão', async ({ page, baseURL }) => {

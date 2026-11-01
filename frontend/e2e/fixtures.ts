@@ -29,7 +29,7 @@ export function unique() {
   return { id, phone: `5511${id}` }
 }
 
-type SectorData = { id: number; name: string; phone: string }
+type SectorData = { id: number; name: string; phone: string | null }
 
 // Prepara dados pela API como administrador, para testes que não são da tela de cadastro.
 export async function seedSector(baseURL: string) {
@@ -38,8 +38,8 @@ export async function seedSector(baseURL: string) {
     data: { email: admin.email, password: admin.password },
   })
   expect(login.ok()).toBeTruthy()
-  const { id, phone } = unique()
-  const sector = await api.post('/api/sectors', { data: { name: `Setor ${id}`, phone } })
+  const { id } = unique()
+  const sector = await api.post('/api/sectors', { data: { name: `Setor ${id}` } })
   expect(sector.ok()).toBeTruthy()
   const data = (await sector.json()) as SectorData
 

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -21,14 +21,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Sector, useSaveSector, useSectors } from '@/lib/admin'
-import { connectionLabels, formatPhone, normalizePhone } from '@/lib/format'
+import { connectionLabels, formatPhone } from '@/lib/format'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do setor.'),
-  phone: z
-    .string()
-    .transform(normalizePhone)
-    .refine((value) => /^\d{10,15}$/.test(value), 'Informe o número com DDI e DDD.'),
 })
 
 type FormValues = z.input<typeof schema>
@@ -49,7 +45,7 @@ function SectorSheet({
     formState: { errors },
   } = useForm<FormValues, unknown, z.output<typeof schema>>({
     resolver: zodResolver(schema),
-    defaultValues: { name: sector?.name ?? '', phone: sector?.phone ?? '' },
+    defaultValues: { name: sector?.name ?? '' },
   })
 
   const onSubmit = handleSubmit((values) =>
@@ -78,18 +74,6 @@ function SectorSheet({
         <FieldLabel htmlFor="sector-name">Nome</FieldLabel>
         <Input id="sector-name" aria-invalid={!!errors.name} {...register('name')} />
         <FieldError errors={[errors.name]} />
-      </Field>
-      <Field data-invalid={!!errors.phone}>
-        <FieldLabel htmlFor="sector-phone">Número do WhatsApp</FieldLabel>
-        <Input
-          id="sector-phone"
-          inputMode="tel"
-          className="mono-num"
-          aria-invalid={!!errors.phone}
-          {...register('phone')}
-        />
-        <FieldDescription>Com DDI e DDD, por exemplo 55 11 99999-0000.</FieldDescription>
-        <FieldError errors={[errors.phone]} />
       </Field>
     </FormSheet>
   )
@@ -140,7 +124,9 @@ export default function SectorsPage() {
                   return (
                     <TableRow key={sector.id}>
                       <TableCell className="body-strong">{sector.name}</TableCell>
-                      <TableCell className="mono-num">{formatPhone(sector.phone)}</TableCell>
+                      <TableCell className={sector.phone ? 'mono-num' : 'text-muted-foreground'}>
+                        {sector.phone ? formatPhone(sector.phone) : 'Não conectado'}
+                      </TableCell>
                       <TableCell>
                         <Badge tone={connection.tone}>{connection.label}</Badge>
                       </TableCell>
