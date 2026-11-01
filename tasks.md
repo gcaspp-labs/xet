@@ -269,7 +269,27 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** importa selecionados e todos, com e sem órgão; repetir a importação e a variante do nono dígito não duplicam nem sobrescrevem, só vinculam o setor; atendente não importa de outro setor; há verificação manual com o número real.
 
-### [ ] T30 — Menu de configurações e tema
+### [ ] T30 — Reorganizar o backend por módulos
+
+Só muda onde o código fica, para ler o backend por funcionalidade. Comportamento, API, banco e frontend não mudam.
+
+- Estrutura em `backend/internal/`:
+  - `core/`, o que serve a todos os módulos: `auth` (login, sessão, permissões e middlewares), `users` (cadastro de usuários e senhas), `sectors` (setores e módulos), `directory` (órgãos e contatos), `audit`, `realtime`, `storage` e `httpx` (hoje `httpapi/respond.go`).
+  - `helpdesk/`, a central de atendimento: o conteúdo de `ticket/` e as rotas dele, a conexão do número (hoje em `sector/`), a importação da agenda (hoje em `directory/`), `messaging/` e `audio/`.
+  - `server/` só monta o roteador; `testapi/` sobe o servidor para os testes. `db/`, `config/` e `testdb/` ficam onde estão.
+- Dentro de cada módulo, um trio por assunto: `transfer.go` (regra), `transfer_http.go` (rota) e `transfer_test.go` (testes, em pacote externo). A pasta `httpapi` deixa de existir.
+- Cada módulo expõe `Routes(r chi.Router)`. Todas as URLs continuam iguais.
+- `core` não importa módulos e um módulo não importa outro; os dois garantidos por `depguard` em `backend/.golangci.yml`.
+- `sector.go` guarda um `messaging.Provider` (`SetProvider`), que precisa sair de lá para o `core` não importar `helpdesk`. Se isso exigir mudança de comportamento, parar e perguntar.
+- Ficam como estão, porque exigiriam mudar o banco ou uma regra: `core/users` consulta os chamados em andamento do usuário; `sectors` mantém as colunas do WhatsApp, gravadas por `helpdesk/connection.go`; `audit_logs` mantém a chave para `tickets`.
+- Atualizar `arquitetura.md` (Estrutura do repositório e "Um arquivo por assunto") e `modelo-dados.md` (Domínios e dependências) antes de mover o código, e depois os caminhos da skill `/implementar-task` (passo 2) e das linhas `**Ler:**` das tasks pendentes.
+- Commits pequenos, por módulo, sempre compilando e com os testes passando.
+
+**Ler:** arquitetura.md › Estrutura do repositório; modelo-dados.md › Domínios; código: `httpapi/router.go`, `httpapi/respond.go`, `auth/auth.go`, `sector/sector.go`, `sector/connection.go`, `directory/contact_import.go`, `ticket/service.go`, `cmd/server/main.go`, `httpapi/auth_test.go` (auxiliares dos testes), `backend/.golangci.yml`.
+
+**Pronto quando:** `make lint`, `make test` e `make check-generated` passam; a lista de métodos e URLs extraída com `chi.Walk` é idêntica antes e depois; o número de funções `Test*` não diminui e nenhuma asserção muda; uma importação proibida colocada de propósito faz o `make lint` falhar; `git diff main -- backend/db/migrations backend/db/queries frontend/` fica vazio; login, abrir um chamado e enviar mensagem funcionam no `make dev`.
+
+### [ ] T31 — Menu de configurações e tema
 
 - Botão "Configurações" no rodapé da barra lateral (`AppLayout`), com "Sair" e tema Claro, Escuro ou Sistema. Adicionar o `DropdownMenu` do shadcn, sem biblioteca nova.
 - Escolha guardada no `localStorage` e aplicada antes de pintar a tela; `color-scheme` no CSS e `sonner` acompanhando o tema (hoje fixo em `system`).
@@ -279,7 +299,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** o tema persiste ao recarregar e vale também na tela de login; "Sistema" segue o sistema operacional; "Sair" funciona pelo menu; o menu funciona por teclado.
 
-### [ ] T31 — Player de áudio próprio
+### [ ] T32 — Player de áudio próprio
 
 - Componente sobre `<audio>` sem controles nativos, com tocar e pausar, progresso e tempo, usado na gravação (`Composer`) e nas mensagens (`MessageMedia`, em `TicketPage`). A duração aparece uma única vez.
 
@@ -291,7 +311,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 Ajustes para fazer antes de escalar para outros setores, levantados durante o piloto.
 
-### [ ] T32 — Reforço da autenticação
+### [ ] T33 — Reforço da autenticação
 
 - Limitar tentativas de login por e-mail e por IP, com bloqueio temporário após falhas seguidas, contra força bruta.
 - Recusar senhas comuns ou vazadas (lista de senhas conhecidas), como recomenda o NIST SP 800-63B-4.
@@ -304,7 +324,7 @@ Ajustes para fazer antes de escalar para outros setores, levantados durante o pi
 
 ## Fase 6 — Validação do piloto
 
-### [ ] T33 — Implantação e validação
+### [ ] T34 — Implantação e validação
 
 Pode rodar antes das anteriores, quando houver acesso ao servidor. Como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
 
@@ -321,7 +341,7 @@ Pode rodar antes das anteriores, quando houver acesso ao servidor. Como a skill 
 
 Ajustes fora do código, feitos no GitHub por quem administra o repositório.
 
-### [ ] T34 — Proteção da branch main
+### [ ] T35 — Proteção da branch main
 
 - Exigir PR para alterar a `main` (sem push direto).
 - Exigir os checks do CI (T18) verdes e a branch atualizada antes do merge.
