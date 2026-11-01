@@ -21,7 +21,13 @@ export type TicketSummary = {
   } | null
 }
 
-export type Workload = { id: number; name: string; role: Role; activeTickets: number }
+export type Workload = {
+  id: number
+  name: string
+  role: Role
+  active: boolean
+  activeTickets: number
+}
 
 export const ticketsKey = (sectorId: number) => ['sectors', sectorId, 'tickets']
 export const workloadKey = (sectorId: number) => ['sectors', sectorId, 'workload']

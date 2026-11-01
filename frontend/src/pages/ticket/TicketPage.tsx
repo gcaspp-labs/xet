@@ -10,6 +10,7 @@ import {
   StickyNote,
   Trash2,
   UserCheck,
+  UserRoundCog,
   X,
 } from 'lucide-react'
 import {
@@ -25,6 +26,7 @@ import { toast } from 'sonner'
 import { ConversationList } from '@/components/ConversationList'
 import { TicketHistoryList } from '@/components/TicketHistory'
 import { Topbar } from '@/components/Topbar'
+import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { type User, useCurrentUser } from '@/lib/auth'
 import {
+  type AssignmentLog,
   type Message,
   type MessageStatus,
   type TicketDetail,
@@ -43,6 +46,7 @@ import {
   newRequestId,
   useAddNote,
   useAssignFromTicket,
+  useAssignments,
   useContactHistory,
   useMessages,
   useNotes,
@@ -148,6 +152,54 @@ function MessageMedia({ message }: { message: Message }) {
 // Só o responsável conduz a conversa, com o chamado aberto; o backend confere de novo.
 function conducts(ticket: TicketDetail, user: User) {
   return ticket.status !== 'closed' && ticket.assignee?.id === user.id
+}
+
+// O responsável transfere o próprio chamado em atendimento; supervisão e
+// administração transferem o de qualquer atendente (spec.md, Transferências).
+function canTransfer(ticket: TicketDetail, user: User) {
+  return ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')
+}
+
+function assignmentText(log: AssignmentLog) {
+  if (log.action === 'ticket_assigned') {
+    return `${log.toName} assumiu o chamado`
+  }
+  if (log.actor?.name === log.fromName) {
+    return `${log.fromName} transferiu o chamado para ${log.toName}`
+  }
+  return `${log.actor?.name ?? 'Sistema'} transferiu o chamado de ${log.fromName} para ${log.toName}`
+}
+
+// Registro de responsável entre as mensagens, na ordem do tempo.
+function AssignmentEntry({ log }: { log: AssignmentLog }) {
+  return (
+    <li
+      aria-label="Registro do chamado"
+      className="caption flex items-center gap-1.5 self-center rounded-(--radius-7) border border-line-soft bg-muted px-2.5 py-1 text-ink-soft"
+    >
+      <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      <span>
+        {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
+      </span>
+    </li>
+  )
+}
+
+type TimelineItem =
+  | { kind: 'message'; at: number; message: Message }
+  | { kind: 'assignment'; at: number; log: AssignmentLog }
+
+// Mensagens e registros de responsável numa única sequência pelo horário.
+function timeline(messages: Message[], logs: AssignmentLog[]): TimelineItem[] {
+  const items: TimelineItem[] = [
+    ...messages.map((message) => ({
+      kind: 'message' as const,
+      at: Date.parse(message.sentAt),
+      message,
+    })),
+    ...logs.map((log) => ({ kind: 'assignment' as const, at: Date.parse(log.createdAt), log })),
+  ]
+  return items.sort((a, b) => a.at - b.at)
 }
 
 function MessageBubble({
@@ -410,6 +462,7 @@ function Composer({ ticketId }: { ticketId: number }) {
 
 function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }) {
   const { data: messages = [] } = useMessages(ticket.id)
+  const { data: logs = [] } = useAssignments(ticket.id)
   const retry = useRetryMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
@@ -417,7 +470,7 @@ function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }
   // Mostra sempre a mensagem mais recente.
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight })
-  }, [messages.length])
+  }, [messages.length, logs.length])
 
   let notice: string | null = null
   if (ticket.status === 'closed') {
@@ -431,17 +484,21 @@ function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }
   return (
     <Card role="region" aria-label="Conversa" className="h-[70dvh] lg:h-[calc(100dvh-150px)]">
       <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
-        {messages.length > 0 ? (
+        {messages.length > 0 || logs.length > 0 ? (
           <ol className="flex flex-col gap-2">
-            {messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                canRetry={canReply}
-                retrying={retry.isPending}
-                onRetry={() => retry.mutate(message.id)}
-              />
-            ))}
+            {timeline(messages, logs).map((item) =>
+              item.kind === 'message' ? (
+                <MessageBubble
+                  key={`message-${item.message.id}`}
+                  message={item.message}
+                  canRetry={canReply}
+                  retrying={retry.isPending}
+                  onRetry={() => retry.mutate(item.message.id)}
+                />
+              ) : (
+                <AssignmentEntry key={`log-${item.log.id}`} log={item.log} />
+              ),
+            )}
           </ol>
         ) : (
           <Empty>
@@ -649,6 +706,7 @@ export default function TicketPage() {
   const { data: user } = useCurrentUser()
   const { data: ticket, error } = useTicket(ticketId)
   const assign = useAssignFromTicket(ticketId, ticket?.sector.id)
+  const [transferring, setTransferring] = useState(false)
 
   if (error) {
     return (
@@ -673,7 +731,7 @@ export default function TicketPage() {
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={
-          ticket.status === 'queued' && (
+          ticket.status === 'queued' ? (
             <Button
               disabled={assign.isPending}
               onClick={() =>
@@ -683,9 +741,18 @@ export default function TicketPage() {
               <UserCheck strokeWidth={1.7} aria-hidden />
               Assumir
             </Button>
+          ) : (
+            canTransfer(ticket, user) && (
+              <Button onClick={() => setTransferring(true)}>
+                <UserRoundCog strokeWidth={1.7} aria-hidden />
+                Transferir
+              </Button>
+            )
           )
         }
       />
+      {/* Sempre montado: quem transfere o próprio chamado perde o botão ao concluir. */}
+      <TransferSheet ticket={ticket} open={transferring} onOpenChange={setTransferring} />
       {/* A tela de conversas usa a largura toda (design.md). */}
       <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]">
         {assign.error && (

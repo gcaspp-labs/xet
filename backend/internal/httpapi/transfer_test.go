@@ -61,7 +61,7 @@ func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
 		t.Fatalf("new assignee sending: status %d, body %v", resp.status, resp.body)
 	}
 
-	// A transferência preserva mensagens e o momento em que o chamado foi assumido.
+	// A transferência preserva mensagens e o horário em que o chamado foi assumido.
 	after := e.assignment(c.ticket.ID)
 	if after.Status != "in_progress" || *after.AssigneeID != bia || !after.AssignedAt.Equal(*before.AssignedAt) {
 		t.Fatalf("assignment after transfer = %+v (before %+v)", after, before)
@@ -71,7 +71,7 @@ func TestTransferMovesTheReplyToTheNewAssignee(t *testing.T) {
 		t.Fatalf("messages = %+v", msgs)
 	}
 
-	// Auditoria com autor e responsável anterior e novo.
+	// Auditoria com quem fez e o responsável anterior e o novo.
 	actions, changes := c.ticketActions()
 	if len(actions) != 2 || actions[0] != "ticket_assigned" || actions[1] != "ticket_transferred_user" {
 		t.Fatalf("audit actions = %v", actions)
@@ -131,7 +131,7 @@ func TestTransferPermissions(t *testing.T) {
 	}
 	c.assign()
 
-	// Atendente que não é o responsável não transfere; outro setor não acessa.
+	// Atendente que não é o responsável é bloqueado; outro setor não acessa.
 	if resp := e.transfer(c.ticket.ID, bia, c.biaToken); resp.status != http.StatusForbidden {
 		t.Fatalf("agent taking a colleague's ticket: status %d", resp.status)
 	}

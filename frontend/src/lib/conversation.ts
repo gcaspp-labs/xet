@@ -63,8 +63,19 @@ export type HistoryEntry = {
   assigneeName: string | null
 }
 
+// Quando o chamado foi assumido e cada transferência, com quem fez e de quem para quem.
+export type AssignmentLog = {
+  id: number
+  action: 'ticket_assigned' | 'ticket_transferred_user'
+  createdAt: string
+  actor: { id: number; name: string } | null
+  fromName: string | null
+  toName: string | null
+}
+
 export const ticketKey = (ticketId: number) => ['tickets', ticketId]
 const messagesKey = (ticketId: number) => ['tickets', ticketId, 'messages']
+const assignmentsKey = (ticketId: number) => ['tickets', ticketId, 'assignments']
 const notesKey = (ticketId: number) => ['tickets', ticketId, 'notes']
 export const historyKey = ['history']
 
@@ -89,6 +100,13 @@ export function useMessages(ticketId: number) {
   return useQuery({
     queryKey: messagesKey(ticketId),
     queryFn: () => api<Message[]>(`/tickets/${ticketId}/messages`),
+  })
+}
+
+export function useAssignments(ticketId: number) {
+  return useQuery({
+    queryKey: assignmentsKey(ticketId),
+    queryFn: () => api<AssignmentLog[]>(`/tickets/${ticketId}/assignments`),
   })
 }
 
@@ -189,9 +207,27 @@ export function useAssignFromTicket(ticketId: number, sectorId: number | undefin
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
         sectorId !== undefined && queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         sectorId !== undefined &&
           queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+      ]),
+  })
+}
+
+// Transfere o chamado em atendimento para outra pessoa do setor; o backend
+// confere quem pode transferir e o destino.
+export function useTransferTicket(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (assigneeId: number) =>
+      api<void>(`/tickets/${ticketId}/transfer`, { method: 'POST', body: { assigneeId } }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
+        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
       ]),
   })
 }
