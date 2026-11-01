@@ -18,3 +18,8 @@ update modules
 set name = @name, active = @active
 where id = @id
 returning *;
+
+-- name: ListActiveModules :many
+select * from modules
+where sector_id = @sector_id and active
+order by lower(name), id;

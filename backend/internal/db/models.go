@@ -642,6 +642,12 @@ type Ticket struct {
 	UpdatedAt        time.Time
 }
 
+type TicketModule struct {
+	TicketID  int64
+	ModuleID  int64
+	CreatedAt time.Time
+}
+
 type User struct {
 	ID           int64
 	Name         string

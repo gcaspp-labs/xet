@@ -33,6 +33,23 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 	return i, err
 }
 
+const getOrganization = `-- name: GetOrganization :one
+select id, name, cnpj, created_at, updated_at from organizations where id = $1
+`
+
+func (q *Queries) GetOrganization(ctx context.Context, id int64) (Organization, error) {
+	row := q.db.QueryRow(ctx, getOrganization, id)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Cnpj,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOrganizationForUpdate = `-- name: GetOrganizationForUpdate :one
 select id, name, cnpj, created_at, updated_at from organizations
 where id = $1

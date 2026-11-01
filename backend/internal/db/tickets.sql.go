@@ -10,6 +10,44 @@ import (
 	"time"
 )
 
+const addTicketModules = `-- name: AddTicketModules :many
+insert into ticket_modules (ticket_id, module_id)
+select $1, m.id
+from modules m
+where m.id = any($2::bigint[]) and m.sector_id = $3 and m.active
+for share of m
+returning module_id
+`
+
+type AddTicketModulesParams struct {
+	TicketID  int64
+	ModuleIds []int64
+	SectorID  int64
+}
+
+// Records the active modules of the sector among the given ones; the caller
+// compares the result with what was asked. Modules are locked for share so
+// none is deactivated meanwhile.
+func (q *Queries) AddTicketModules(ctx context.Context, arg AddTicketModulesParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, addTicketModules, arg.TicketID, arg.ModuleIds, arg.SectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var module_id int64
+		if err := rows.Scan(&module_id); err != nil {
+			return nil, err
+		}
+		items = append(items, module_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const assignTicket = `-- name: AssignTicket :one
 update tickets
 set assignee_id = $1, status = 'in_progress', assigned_at = coalesce(assigned_at, now())
@@ -26,6 +64,61 @@ type AssignTicketParams struct {
 // attempts only one returns a row.
 func (q *Queries) AssignTicket(ctx context.Context, arg AssignTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, assignTicket, arg.AssigneeID, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const closeTicket = `-- name: CloseTicket :one
+update tickets
+set status = 'closed', closure_type = 'resolved', closed_at = now(), closed_by_id = assignee_id,
+    subject = $1, resolution = $2, organization_id = $3,
+    started_at = $4, ended_at = coalesce($5, now())
+where id = $6
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type CloseTicketParams struct {
+	Subject        *string
+	Resolution     *string
+	OrganizationID *int64
+	StartedAt      time.Time
+	EndedAt        *time.Time
+	ID             int64
+}
+
+// The caller holds the lock of the ticket and checked it may be closed.
+func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, closeTicket,
+		arg.Subject,
+		arg.Resolution,
+		arg.OrganizationID,
+		arg.StartedAt,
+		arg.EndedAt,
+		arg.ID,
+	)
 	var i Ticket
 	err := row.Scan(
 		&i.ID,
@@ -252,7 +345,7 @@ func (q *Queries) GetTicket(ctx context.Context, id int64) (Ticket, error) {
 const getTicketDetail = `-- name: GetTicketDetail :one
 select
     t.id, t.protocol, t.status, t.sector_id, s.name as sector_name, t.spoke_with,
-    t.arrived_at, t.assigned_at, t.closed_at, t.subject, t.resolution,
+    t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name,
     t.assignee_id, u.name as assignee_name
@@ -273,6 +366,8 @@ type GetTicketDetailRow struct {
 	SpokeWith         *string
 	ArrivedAt         time.Time
 	AssignedAt        *time.Time
+	StartedAt         time.Time
+	EndedAt           *time.Time
 	ClosedAt          *time.Time
 	Subject           *string
 	Resolution        *string
@@ -298,6 +393,8 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.SpokeWith,
 		&i.ArrivedAt,
 		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
 		&i.ClosedAt,
 		&i.Subject,
 		&i.Resolution,
@@ -576,6 +673,39 @@ func (q *Queries) ListSectorWorkload(ctx context.Context, sectorID int64) ([]Lis
 			&i.Active,
 			&i.ActiveTickets,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTicketModules = `-- name: ListTicketModules :many
+select m.id, m.name
+from ticket_modules tm
+join modules m on m.id = tm.module_id
+where tm.ticket_id = $1
+order by lower(m.name), m.id
+`
+
+type ListTicketModulesRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) ListTicketModules(ctx context.Context, ticketID int64) ([]ListTicketModulesRow, error) {
+	rows, err := q.db.Query(ctx, listTicketModules, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTicketModulesRow
+	for rows.Next() {
+		var i ListTicketModulesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
