@@ -1,5 +1,5 @@
-// Package sector manages sectors and the modules each sector serves.
-package sector
+// Package sectors manages sectors and the modules each sector serves.
+package sectors
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // Provider of new sectors; the official API comes later (arquitetura.md).

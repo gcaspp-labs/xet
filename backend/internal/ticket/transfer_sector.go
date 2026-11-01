@@ -9,9 +9,9 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/directory"
 )
 
 // TransferSector closes the ticket with the closing form as transferred and

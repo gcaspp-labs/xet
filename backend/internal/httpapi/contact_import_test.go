@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/directory"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // connectBook connects the sector number with this address book.

@@ -17,14 +17,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
+	"github.com/gcaspp-labs/xet/backend/internal/core/sectors"
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/directory"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
-	"github.com/gcaspp-labs/xet/backend/internal/sector"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
@@ -36,7 +36,7 @@ type testEnv struct {
 	pool          *pgxpool.Pool
 	q             *db.Queries
 	url           string
-	sectors       *sector.Service
+	sectors       *sectors.Service
 	ticketService *ticket.Service
 	// whatsapp simulates the phones of the sector numbers.
 	whatsapp *fake.Adapter
@@ -57,7 +57,7 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(a *auth.Handler, r
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	hub := realtime.NewHub()
-	sectors := sector.NewService(pool, hub)
+	sectors := sectors.NewService(pool, hub)
 	files := storage.NewDisk(t.TempDir())
 	tickets := ticket.NewService(pool, files, hub)
 	whatsapp := fake.New(func(ctx context.Context, ev messaging.Event) error {

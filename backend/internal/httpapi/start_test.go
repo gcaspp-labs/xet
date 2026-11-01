@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 const requestC = "8b3d8f50-3f2c-4b7d-9e30-2c3d4e5f6071"

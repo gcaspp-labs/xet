@@ -17,15 +17,15 @@ import (
 	"github.com/gcaspp-labs/xet/backend/db/migrations"
 	"github.com/gcaspp-labs/xet/backend/internal/config"
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
+	"github.com/gcaspp-labs/xet/backend/internal/core/sectors"
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
-	"github.com/gcaspp-labs/xet/backend/internal/directory"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/whatsmeow"
 	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging/fake"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging/whatsmeow"
-	"github.com/gcaspp-labs/xet/backend/internal/sector"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
@@ -65,7 +65,7 @@ func openDatabase(ctx context.Context, databaseURL string) (*pgxpool.Pool, error
 }
 
 // eventHandler routes the events of the messaging provider to the domains.
-func eventHandler(sectors *sector.Service, tickets *ticket.Service) messaging.EventHandler {
+func eventHandler(sectors *sectors.Service, tickets *ticket.Service) messaging.EventHandler {
 	return func(ctx context.Context, ev messaging.Event) error {
 		switch ev := ev.(type) {
 		case messaging.ConnectionChanged:
@@ -101,7 +101,7 @@ func run() error {
 	logger.Info("database migrated")
 
 	hub := realtime.NewHub()
-	sectors := sector.NewService(pool, hub)
+	sectors := sectors.NewService(pool, hub)
 	defer sectors.Wait()
 	tickets := ticket.NewService(pool, storage.NewDisk(cfg.StorageDir), hub)
 	// Messages left pending by the previous run are not resent automatically.

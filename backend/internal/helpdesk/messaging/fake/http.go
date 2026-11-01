@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // Handler exposes the test controls over HTTP, for the end-to-end tests that

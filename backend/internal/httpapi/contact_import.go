@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
-	"github.com/gcaspp-labs/xet/backend/internal/directory"
 )
 
 type savedContactResponse struct {
@@ -23,7 +23,7 @@ func (s *server) listSavedContacts(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := s.directory.ListSavedContacts(r.Context(), s.opts.Messaging, sectorID)
 	if err != nil {
-		s.directoryError(w, r, err)
+		directory.WriteError(s.logger, w, r, err)
 		return
 	}
 	out := make([]savedContactResponse, len(saved))
@@ -57,7 +57,7 @@ func (s *server) importContacts(w http.ResponseWriter, r *http.Request) {
 	result, err := s.directory.ImportContacts(r.Context(), s.opts.Messaging, auth.CurrentUser(r.Context()), sectorID,
 		directory.ImportInput{Phones: req.Phones, OrganizationID: req.OrganizationID})
 	if err != nil {
-		s.directoryError(w, r, err)
+		directory.WriteError(s.logger, w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, importContactsResponse{Created: result.Created, Existing: result.Existing, Unavailable: result.Unavailable})

@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/gcaspp-labs/xet/backend/internal/audio"
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/audio"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // MaxFileSize is the largest attachment sent through the panel (spec.md, Conversa).

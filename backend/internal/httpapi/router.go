@@ -9,13 +9,13 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
+	"github.com/gcaspp-labs/xet/backend/internal/core/sectors"
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/directory"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/sector"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
@@ -35,14 +35,14 @@ type Options struct {
 type server struct {
 	logger    *slog.Logger
 	auth      *auth.Service
-	sectors   *sector.Service
+	sectors   *sectors.Service
 	directory *directory.Service
 	tickets   *ticket.Service
 	hub       *realtime.Hub
 	opts      Options
 }
 
-func NewRouter(logger *slog.Logger, authService *auth.Service, userService *users.Service, sectorService *sector.Service, directoryService *directory.Service, ticketService *ticket.Service, hub *realtime.Hub, opts Options) http.Handler {
+func NewRouter(logger *slog.Logger, authService *auth.Service, userService *users.Service, sectorService *sectors.Service, directoryService *directory.Service, ticketService *ticket.Service, hub *realtime.Hub, opts Options) http.Handler {
 	s := &server{
 		logger:    logger,
 		auth:      authService,
@@ -72,25 +72,8 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, userService *user
 			users.NewHandler(logger, userService).Routes(r)
 			r.Get("/ws", s.events)
 
-			r.Get("/sectors", s.listSectors)
-
-			// Administração: setores só pelo administrador.
-			r.Group(func(r chi.Router) {
-				r.Use(auth.RequireRole(db.UserRoleAdmin))
-				r.Post("/sectors", s.createSector)
-				r.Put("/sectors/{sectorID}", s.updateSector)
-			})
-
-			// Módulos: supervisor do próprio setor e administrador.
-			r.Route("/sectors/{sectorID}/modules", func(r chi.Router) {
-				r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin), auth.RequireSector("sectorID"))
-				r.Get("/", s.listModules)
-				r.Post("/", s.createModule)
-				r.Put("/{moduleID}", s.updateModule)
-			})
-
-			// Módulos ativos do setor, para o cadastro de contatos e os filtros: todos os papéis do setor.
-			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/active-modules", s.listActiveModules)
+			sectors.NewHandler(logger, sectorService).Routes(r)
+			directory.NewHandler(logger, directoryService).Routes(r)
 
 			// Importar contatos da agenda do número do setor: todos os papéis do setor.
 			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/saved-contacts", s.listSavedContacts)
@@ -103,14 +86,6 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, userService *user
 				r.Post("/", s.connect)
 				r.Delete("/", s.disconnect)
 				r.Get("/qr.png", s.connectionQR)
-			})
-
-			// Órgãos: todos consultam; supervisor e administrador cadastram e editam.
-			r.Get("/organizations", s.listOrganizations)
-			r.Group(func(r chi.Router) {
-				r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
-				r.Post("/organizations", s.createOrganization)
-				r.Put("/organizations/{organizationID}", s.updateOrganization)
 			})
 
 			// Painel: chamados abertos, carga de cada atendente e realizados hoje, para todos os papéis do setor.
@@ -144,12 +119,8 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, userService *user
 			// Histórico: chamados dos setores do usuário (todos, para o administrador).
 			r.Get("/contacts/{contactID}/tickets", s.contactHistory)
 			r.Get("/organizations/{organizationID}/tickets", s.organizationHistory)
-
-			// Contatos: o cadastro é único para todos os setores e aberto a todos os papéis.
-			r.Get("/contacts", s.listContacts)
-			r.Get("/contacts/{contactID}", s.getContact)
-			r.Post("/contacts", s.createContact)
 			r.Put("/contacts/{contactID}", s.updateContact)
+
 		})
 	})
 

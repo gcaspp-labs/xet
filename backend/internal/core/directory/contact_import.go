@@ -13,7 +13,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // ImportInput holds the chosen phones and the optional organization of the

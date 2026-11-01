@@ -1,15 +1,50 @@
-package httpapi
+package sectors
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/sector"
 )
+
+// Handler serves the routes of the sectors and their modules.
+type Handler struct {
+	logger  *slog.Logger
+	service *Service
+}
+
+func NewHandler(logger *slog.Logger, service *Service) *Handler {
+	return &Handler{logger: logger, service: service}
+}
+
+// Routes registers the routes of the sectors, behind the session middleware.
+func (h *Handler) Routes(r chi.Router) {
+	r.Get("/sectors", h.listSectors)
+
+	// Administração: setores só pelo administrador.
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireRole(db.UserRoleAdmin))
+		r.Post("/sectors", h.createSector)
+		r.Put("/sectors/{sectorID}", h.updateSector)
+	})
+
+	// Módulos: supervisor do próprio setor e administrador.
+	r.Route("/sectors/{sectorID}/modules", func(r chi.Router) {
+		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin), auth.RequireSector("sectorID"))
+		r.Get("/", h.listModules)
+		r.Post("/", h.createModule)
+		r.Put("/{moduleID}", h.updateModule)
+	})
+
+	// Módulos ativos do setor, para o cadastro de contatos e os filtros: todos os papéis do setor.
+	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/active-modules", h.listActiveModules)
+}
 
 type sectorResponse struct {
 	ID               int64               `json:"id"`
@@ -46,25 +81,25 @@ func toModuleResponse(m db.Module) moduleResponse {
 
 // listSectors returns the sectors the user can see: all for admins, only
 // their own for agents and supervisors.
-func (s *server) listSectors(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) listSectors(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r.Context())
 	if user.Role != db.UserRoleAdmin {
 		if user.SectorID == nil {
 			httpx.WriteJSON(w, http.StatusOK, []sectorResponse{})
 			return
 		}
-		sec, err := s.sectors.Get(r.Context(), *user.SectorID)
+		sec, err := h.service.Get(r.Context(), *user.SectorID)
 		if err != nil {
-			httpx.InternalError(s.logger, w, r, err)
+			httpx.InternalError(h.logger, w, r, err)
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, []sectorResponse{toSectorResponse(sec)})
 		return
 	}
 
-	sectors, err := s.sectors.List(r.Context())
+	sectors, err := h.service.List(r.Context())
 	if err != nil {
-		httpx.InternalError(s.logger, w, r, err)
+		httpx.InternalError(h.logger, w, r, err)
 		return
 	}
 	out := make([]sectorResponse, len(sectors))
@@ -78,20 +113,20 @@ type sectorRequest struct {
 	Name string `json:"name" validate:"required"`
 }
 
-func (s *server) createSector(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) createSector(w http.ResponseWriter, r *http.Request) {
 	var req sectorRequest
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := s.sectors.Create(r.Context(), auth.CurrentUser(r.Context()).ID, sector.SectorInput{Name: req.Name})
+	sec, err := h.service.Create(r.Context(), auth.CurrentUser(r.Context()).ID, SectorInput{Name: req.Name})
 	if err != nil {
-		s.sectorError(w, r, err)
+		WriteError(h.logger, w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, toSectorResponse(sec))
 }
 
-func (s *server) updateSector(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) updateSector(w http.ResponseWriter, r *http.Request) {
 	id, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
@@ -100,22 +135,22 @@ func (s *server) updateSector(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	sec, err := s.sectors.Update(r.Context(), auth.CurrentUser(r.Context()).ID, id, sector.SectorInput{Name: req.Name})
+	sec, err := h.service.Update(r.Context(), auth.CurrentUser(r.Context()).ID, id, SectorInput{Name: req.Name})
 	if err != nil {
-		s.sectorError(w, r, err)
+		WriteError(h.logger, w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, toSectorResponse(sec))
 }
 
-func (s *server) listModules(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) listModules(w http.ResponseWriter, r *http.Request) {
 	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
-	modules, err := s.sectors.ListModules(r.Context(), sectorID)
+	modules, err := h.service.ListModules(r.Context(), sectorID)
 	if err != nil {
-		httpx.InternalError(s.logger, w, r, err)
+		httpx.InternalError(h.logger, w, r, err)
 		return
 	}
 	out := make([]moduleResponse, len(modules))
@@ -125,14 +160,14 @@ func (s *server) listModules(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *server) listActiveModules(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) listActiveModules(w http.ResponseWriter, r *http.Request) {
 	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
-	modules, err := s.sectors.ListActiveModules(r.Context(), sectorID)
+	modules, err := h.service.ListActiveModules(r.Context(), sectorID)
 	if err != nil {
-		httpx.InternalError(s.logger, w, r, err)
+		httpx.InternalError(h.logger, w, r, err)
 		return
 	}
 	out := make([]moduleResponse, len(modules))
@@ -146,7 +181,7 @@ type createModuleRequest struct {
 	Name string `json:"name" validate:"required"`
 }
 
-func (s *server) createModule(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) createModule(w http.ResponseWriter, r *http.Request) {
 	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
@@ -155,9 +190,9 @@ func (s *server) createModule(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	m, err := s.sectors.CreateModule(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, req.Name)
+	m, err := h.service.CreateModule(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, req.Name)
 	if err != nil {
-		s.sectorError(w, r, err)
+		WriteError(h.logger, w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, toModuleResponse(m))
@@ -168,7 +203,7 @@ type updateModuleRequest struct {
 	Active *bool  `json:"active" validate:"required"`
 }
 
-func (s *server) updateModule(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) updateModule(w http.ResponseWriter, r *http.Request) {
 	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
@@ -181,28 +216,28 @@ func (s *server) updateModule(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	m, err := s.sectors.UpdateModule(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, moduleID,
-		sector.ModuleInput{Name: req.Name, Active: *req.Active})
+	m, err := h.service.UpdateModule(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, moduleID,
+		ModuleInput{Name: req.Name, Active: *req.Active})
 	if err != nil {
-		s.sectorError(w, r, err)
+		WriteError(h.logger, w, r, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, toModuleResponse(m))
 }
 
-func (s *server) sectorError(w http.ResponseWriter, r *http.Request, err error) {
+func WriteError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, sector.ErrInvalidName):
+	case errors.Is(err, ErrInvalidName):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Informe o nome.")
-	case errors.Is(err, sector.ErrNameTaken):
+	case errors.Is(err, ErrNameTaken):
 		httpx.WriteError(w, http.StatusConflict, "Já existe um setor com este nome.")
-	case errors.Is(err, sector.ErrNotFound):
+	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Setor não encontrado.")
-	case errors.Is(err, sector.ErrModuleNameTaken):
+	case errors.Is(err, ErrModuleNameTaken):
 		httpx.WriteError(w, http.StatusConflict, "Já existe um módulo com este nome no setor.")
-	case errors.Is(err, sector.ErrModuleNotFound):
+	case errors.Is(err, ErrModuleNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Módulo não encontrado.")
 	default:
-		httpx.InternalError(s.logger, w, r, err)
+		httpx.InternalError(logger, w, r, err)
 	}
 }

@@ -207,7 +207,7 @@ deploy/                  Docker Compose, Caddyfile
 
 Cada pacote com rotas expõe um `Handler` com `Routes(r chi.Router)`; `internal/server` só os monta. As rotas de `auth` ficam fora da exigência de sessão, porque incluem o login, e as dos demais já chegam com ela.
 
-Ficam como estão, porque separá-los exigiria mudar o banco ou uma regra: `core/users` consulta os chamados em andamento do usuário antes de desativá-lo; `sectors` mantém as colunas do WhatsApp, gravadas por `helpdesk/connection.go`; `audit_logs` mantém a chave para `tickets`.
+Ficam como estão, porque separá-los exigiria mudar o banco ou uma regra: `core/users` consulta os chamados em andamento do usuário antes de desativá-lo; `sectors` mantém as colunas do WhatsApp, gravadas por `helpdesk/connection.go`; `audit_logs` mantém a chave para `tickets`. Pelo mesmo motivo, a rota de edição de contato (`PUT /api/contacts/{id}`) fica em `helpdesk/contact_http.go`: ela completa o órgão dos chamados abertos do contato, regra que é do atendimento.
 
 ### Um arquivo por assunto
 

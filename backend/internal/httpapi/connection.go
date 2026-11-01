@@ -9,9 +9,9 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
+	"github.com/gcaspp-labs/xet/backend/internal/core/sectors"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/sector"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 type connectionResponse struct {
@@ -45,7 +45,7 @@ func (s *server) writeConnection(w http.ResponseWriter, r *http.Request, sectorI
 func (s *server) writeConnectionWarning(w http.ResponseWriter, r *http.Request, sectorID int64, warning string) {
 	sec, err := s.sectors.Get(r.Context(), sectorID)
 	if err != nil {
-		s.sectorError(w, r, err)
+		sectors.WriteError(s.logger, w, r, err)
 		return
 	}
 	_, pairing := s.qrCode(sectorID)
@@ -76,8 +76,8 @@ func (s *server) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.sectors.Connect(r.Context(), s.opts.Messaging, sectorID); err != nil {
-		if errors.Is(err, sector.ErrNotFound) {
-			s.sectorError(w, r, err)
+		if errors.Is(err, sectors.ErrNotFound) {
+			sectors.WriteError(s.logger, w, r, err)
 			return
 		}
 		s.logger.Error("connect sector", "sector_id", sectorID, "error", err)
@@ -97,11 +97,11 @@ func (s *server) disconnect(w http.ResponseWriter, r *http.Request) {
 	warning := ""
 	err := s.sectors.Disconnect(r.Context(), s.opts.Messaging, auth.CurrentUser(r.Context()).ID, sectorID)
 	switch {
-	case errors.Is(err, sector.ErrDeviceNotNotified):
+	case errors.Is(err, sectors.ErrDeviceNotNotified):
 		s.logger.Warn("unlink sector device", "sector_id", sectorID, "error", err)
 		warning = "Não foi possível avisar o aparelho. Remova-o também pelo celular, em Dispositivos conectados."
 	case err != nil:
-		s.sectorError(w, r, err)
+		sectors.WriteError(s.logger, w, r, err)
 		return
 	}
 	s.writeConnectionWarning(w, r, sectorID, warning)

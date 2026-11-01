@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 var (

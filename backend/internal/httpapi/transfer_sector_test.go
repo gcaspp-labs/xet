@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
-	"github.com/gcaspp-labs/xet/backend/internal/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // sectorTransfer is a ticket in progress with Ana, with the contact
