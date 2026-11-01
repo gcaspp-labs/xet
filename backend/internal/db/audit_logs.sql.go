@@ -84,7 +84,7 @@ func (q *Queries) ListAuditLogsByEntity(ctx context.Context, arg ListAuditLogsBy
 
 const listTicketAssignmentLogs = `-- name: ListTicketAssignmentLogs :many
 select
-    a.id, a.action, a.created_at,
+    a.id, a.action, a.created_at, a.reason,
     a.actor_id, actor.name as actor_name,
     from_user.name as from_name,
     to_user.name as to_name,
@@ -94,7 +94,7 @@ left join users actor on actor.id = a.actor_id
 left join users from_user on from_user.id = (a.changes -> 'assignee_id' ->> 'from')::bigint
 left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::bigint
 left join sectors to_sector on to_sector.id = (a.changes -> 'sector_id' ->> 'to')::bigint
-where a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_closed', 'ticket_transferred_sector', 'ticket_corrected')
+where a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_closed', 'ticket_transferred_sector', 'ticket_cancelled', 'ticket_corrected')
 order by a.created_at, a.id
 `
 
@@ -102,6 +102,7 @@ type ListTicketAssignmentLogsRow struct {
 	ID           int64
 	Action       string
 	CreatedAt    time.Time
+	Reason       *string
 	ActorID      *int64
 	ActorName    *string
 	FromName     *string
@@ -109,7 +110,7 @@ type ListTicketAssignmentLogsRow struct {
 	ToSectorName *string
 }
 
-// Start, assignment, transfers, closing and corrections of the ticket, oldest first, with the names of
+// Start, assignment, transfers, closing, cancellation and corrections of the ticket, oldest first, with the names of
 // the actor, of the previous and new assignees and of the target of a transfer between sectors.
 func (q *Queries) ListTicketAssignmentLogs(ctx context.Context, ticketID *int64) ([]ListTicketAssignmentLogsRow, error) {
 	rows, err := q.db.Query(ctx, listTicketAssignmentLogs, ticketID)
@@ -124,6 +125,7 @@ func (q *Queries) ListTicketAssignmentLogs(ctx context.Context, ticketID *int64)
 			&i.ID,
 			&i.Action,
 			&i.CreatedAt,
+			&i.Reason,
 			&i.ActorID,
 			&i.ActorName,
 			&i.FromName,

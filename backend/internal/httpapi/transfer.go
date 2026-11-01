@@ -46,6 +46,8 @@ type assignmentLogResponse struct {
 	ToName    *string      `json:"toName"`
 	// ToSectorName is the target of a transfer between sectors.
 	ToSectorName *string `json:"toSectorName"`
+	// Reason is the one given for a cancellation or a correction.
+	Reason *string `json:"reason"`
 }
 
 // listAssignments returns when the ticket was assigned and each transfer,
@@ -62,7 +64,7 @@ func (s *server) listAssignments(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]assignmentLogResponse, len(rows))
 	for i, l := range rows {
-		out[i] = assignmentLogResponse{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt, FromName: l.FromName, ToName: l.ToName, ToSectorName: l.ToSectorName}
+		out[i] = assignmentLogResponse{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt, FromName: l.FromName, ToName: l.ToName, ToSectorName: l.ToSectorName, Reason: l.Reason}
 		if l.ActorID != nil && l.ActorName != nil {
 			out[i].Actor = &refResponse{ID: *l.ActorID, Name: *l.ActorName}
 		}

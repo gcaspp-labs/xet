@@ -87,9 +87,20 @@ export const ticketStatusLabels: Record<
   closed: { label: 'Encerrado', tone: 'neutral' },
 }
 
-export const closureTypeLabels: Record<'resolved' | 'transferred', string> = {
+export const closureTypeLabels: Record<'resolved' | 'transferred' | 'cancelled', string> = {
   resolved: 'Encerrado',
   transferred: 'Transferido',
+  cancelled: 'Cancelado',
+}
+
+// Situação do chamado; o cancelado é identificado como tal (spec.md, Cancelamento).
+export function ticketStatusLabel(
+  status: keyof typeof ticketStatusLabels,
+  closureType: keyof typeof closureTypeLabels | null,
+) {
+  return closureType === 'cancelled'
+    ? { label: closureTypeLabels.cancelled, tone: 'neutral' as const }
+    : ticketStatusLabels[status]
 }
 
 // Tamanho de arquivo em pt-BR: 820 KB, 1,4 MB.

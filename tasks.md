@@ -189,7 +189,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** assumir leva ao chat; ao encerrar, a pessoa volta ao painel e o atendimento aparece nos realizados, com "Você" nos próprios e os transferidos identificados; outro setor não vê; encerrados de ontem não aparecem.
 
-### [ ] T22 — Cancelar atendimento
+### [x] T22 — Cancelar atendimento
 
 - Duas migrações: novo valor `cancelled` em `closure_type` numa e, na seguinte, as restrições `tickets_closed_fields` e `audit_logs_correction_reason`. O Postgres não permite usar um valor de enum na mesma transação em que ele é criado.
 - `POST /api/tickets/{id}/cancel` com motivo, travando o chamado como `closeLocked` (`internal/ticket/close.go`). Vindo da fila, grava quem cancelou como responsável, porque `tickets_assigned` exige responsável em chamado encerrado.

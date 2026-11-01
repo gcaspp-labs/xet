@@ -17,6 +17,7 @@ type ClosureType string
 const (
 	ClosureTypeResolved    ClosureType = "resolved"
 	ClosureTypeTransferred ClosureType = "transferred"
+	ClosureTypeCancelled   ClosureType = "cancelled"
 )
 
 func (e *ClosureType) Scan(src interface{}) error {
@@ -57,7 +58,8 @@ func (ns NullClosureType) Value() (driver.Value, error) {
 func (e ClosureType) Valid() bool {
 	switch e {
 	case ClosureTypeResolved,
-		ClosureTypeTransferred:
+		ClosureTypeTransferred,
+		ClosureTypeCancelled:
 		return true
 	}
 	return false
@@ -67,6 +69,7 @@ func AllClosureTypeValues() []ClosureType {
 	return []ClosureType{
 		ClosureTypeResolved,
 		ClosureTypeTransferred,
+		ClosureTypeCancelled,
 	}
 }
 

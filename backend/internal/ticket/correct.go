@@ -66,6 +66,9 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 		if t.Status != db.TicketStatusClosed {
 			return ErrNotClosed
 		}
+		if t.ClosureType.ClosureType == db.ClosureTypeCancelled {
+			return ErrCancelled
+		}
 		if (t.ClosedByID == nil || *t.ClosedByID != actor.ID) && !actor.HasRole(db.UserRoleSupervisor, db.UserRoleAdmin) {
 			return ErrCannotCorrect
 		}

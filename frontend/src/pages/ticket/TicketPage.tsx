@@ -1,5 +1,6 @@
 import {
   ArrowRightLeft,
+  Ban,
   Check,
   CircleAlert,
   CircleCheck,
@@ -26,6 +27,7 @@ import {
 } from 'react'
 import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
+import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { ConversationList } from '@/components/ConversationList'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
@@ -71,7 +73,7 @@ import {
   formatFileSize,
   formatMessageTime,
   formatPhone,
-  ticketStatusLabels,
+  ticketStatusLabel,
 } from '@/lib/format'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 
@@ -180,11 +182,22 @@ function worksIn(ticket: TicketDetail, user: User) {
   return user.role === 'admin' || user.sectorId === ticket.sector.id
 }
 
-// Corrige o atendimento encerrado quem o encerrou e a supervisão do setor
-// (spec.md, Encerramento, retorno e correções).
+// Na fila, quem é do setor cancela; em atendimento, o responsável e a
+// supervisão do setor (spec.md, Cancelamento).
+function canCancel(ticket: TicketDetail, user: User) {
+  return (
+    worksIn(ticket, user) &&
+    (ticket.status === 'queued' ||
+      (ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')))
+  )
+}
+
+// Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
+// cancelado não é corrigido (spec.md, Encerramento, retorno e correções).
 function canCorrect(ticket: TicketDetail, user: User) {
   return (
     ticket.status === 'closed' &&
+    ticket.closureType !== 'cancelled' &&
     worksIn(ticket, user) &&
     (ticket.closedBy?.id === user.id || user.role !== 'agent')
   )
@@ -203,6 +216,9 @@ function assignmentText(log: AssignmentLog) {
   if (log.action === 'ticket_transferred_sector') {
     return `${log.actor?.name ?? 'Sistema'} transferiu o chamado para o setor ${log.toSectorName}`
   }
+  if (log.action === 'ticket_cancelled') {
+    return `${log.actor?.name ?? 'Sistema'} cancelou o chamado`
+  }
   if (log.action === 'ticket_corrected') {
     return `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`
   }
@@ -217,9 +233,11 @@ function AssignmentEntry({ log }: { log: AssignmentLog }) {
   return (
     <li
       aria-label="Registro do chamado"
-      className="caption flex items-center gap-1.5 self-center rounded-(--radius-7) border border-line-soft bg-muted px-2.5 py-1 text-ink-soft"
+      className="caption flex items-start gap-1.5 self-center rounded-(--radius-7) border border-line-soft bg-muted px-2.5 py-1 text-ink-soft"
     >
-      {log.action === 'ticket_closed' ? (
+      {log.action === 'ticket_cancelled' ? (
+        <Ban strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : log.action === 'ticket_closed' ? (
         <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : log.action === 'ticket_transferred_sector' ? (
         <ArrowRightLeft strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
@@ -228,8 +246,11 @@ function AssignmentEntry({ log }: { log: AssignmentLog }) {
       ) : (
         <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       )}
-      <span>
+      <span className="min-w-0">
         {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
+        {log.action === 'ticket_cancelled' && (
+          <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
+        )}
       </span>
     </li>
   )
@@ -528,7 +549,7 @@ function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }
 
   let notice: string | null = null
   if (ticket.status === 'closed') {
-    notice = 'Chamado encerrado.'
+    notice = ticket.closureType === 'cancelled' ? 'Chamado cancelado.' : 'Chamado encerrado.'
   } else if (!ticket.assignee) {
     notice = ticket.previous
       ? `Transferido de ${ticket.previous.sectorName}. Assuma o chamado e envie a primeira mensagem ao cliente.`
@@ -719,8 +740,10 @@ function PreviousTicket({ previous }: { previous: NonNullable<TicketDetail['prev
 }
 
 function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
-  const status = ticketStatusLabels[ticket.status]
-  const closed = ticket.status === 'closed'
+  const status = ticketStatusLabel(ticket.status, ticket.closureType)
+  const cancelled = ticket.closureType === 'cancelled'
+  // O cancelado não lança o atendimento: não tem formulário de encerramento nem correções.
+  const closed = ticket.status === 'closed' && !cancelled
   const { data: modules = [] } = useTicketModules(ticket.id, closed)
   const { data: corrections } = useCorrections(ticket.id, closed)
   const row = (label: string, value: ReactNode) => (
@@ -756,7 +779,10 @@ function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
       {ticket.assignedAt &&
         row('Assumido em', <span className="mono-num">{formatDateTime(ticket.assignedAt)}</span>)}
       {ticket.closedAt &&
-        row('Encerrado em', <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>)}
+        row(
+          cancelled ? 'Cancelado em' : 'Encerrado em',
+          <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>,
+        )}
       {closed && (
         <>
           {row('Assunto', ticket.subject)}
@@ -894,6 +920,7 @@ export default function TicketPage() {
   const assign = useAssignFromTicket(ticketId, ticket?.sector.id)
   const [transferring, setTransferring] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [transferringSector, setTransferringSector] = useState(false)
   // Nova chave a cada abertura: o formulário começa limpo, com o fim sugerido no momento.
   const [closingKey, setClosingKey] = useState(0)
@@ -923,61 +950,67 @@ export default function TicketPage() {
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={
-          ticket.status === 'queued' ? (
-            <Button
-              disabled={assign.isPending}
-              onClick={() =>
-                assign.mutate(undefined, { onSuccess: () => toast.success('Chamado assumido') })
-              }
-            >
-              <UserCheck strokeWidth={1.7} aria-hidden />
-              Assumir
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              {canTransfer(ticket, user) && (
-                <Button
-                  variant={canClose(ticket, user) ? 'outline' : 'default'}
-                  onClick={() => setTransferring(true)}
-                >
-                  <UserRoundCog strokeWidth={1.7} aria-hidden />
-                  Transferir
-                </Button>
-              )}
-              {canCorrect(ticket, user) && (
-                <Button onClick={() => setCorrecting(true)}>
-                  <PencilLine strokeWidth={1.7} aria-hidden />
-                  Corrigir
-                </Button>
-              )}
-              {canClose(ticket, user) && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setClosingKey((key) => key + 1)
-                    setTransferringSector(true)
-                  }}
-                >
-                  <ArrowRightLeft strokeWidth={1.7} aria-hidden />
-                  Outro setor
-                </Button>
-              )}
-              {canClose(ticket, user) && (
-                <Button
-                  onClick={() => {
-                    setClosingKey((key) => key + 1)
-                    setClosing(true)
-                  }}
-                >
-                  <CircleCheck strokeWidth={1.7} aria-hidden />
-                  Encerrar
-                </Button>
-              )}
-            </div>
-          )
+          <div className="flex flex-wrap justify-end gap-2">
+            {canCancel(ticket, user) && (
+              <Button variant="destructive" onClick={() => setCancelling(true)}>
+                <Ban strokeWidth={1.7} aria-hidden />
+                Cancelar chamado
+              </Button>
+            )}
+            {ticket.status === 'queued' && (
+              <Button
+                disabled={assign.isPending}
+                onClick={() =>
+                  assign.mutate(undefined, { onSuccess: () => toast.success('Chamado assumido') })
+                }
+              >
+                <UserCheck strokeWidth={1.7} aria-hidden />
+                Assumir
+              </Button>
+            )}
+            {canTransfer(ticket, user) && (
+              <Button
+                variant={canClose(ticket, user) ? 'outline' : 'default'}
+                onClick={() => setTransferring(true)}
+              >
+                <UserRoundCog strokeWidth={1.7} aria-hidden />
+                Transferir
+              </Button>
+            )}
+            {canCorrect(ticket, user) && (
+              <Button onClick={() => setCorrecting(true)}>
+                <PencilLine strokeWidth={1.7} aria-hidden />
+                Corrigir
+              </Button>
+            )}
+            {canClose(ticket, user) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setClosingKey((key) => key + 1)
+                  setTransferringSector(true)
+                }}
+              >
+                <ArrowRightLeft strokeWidth={1.7} aria-hidden />
+                Outro setor
+              </Button>
+            )}
+            {canClose(ticket, user) && (
+              <Button
+                onClick={() => {
+                  setClosingKey((key) => key + 1)
+                  setClosing(true)
+                }}
+              >
+                <CircleCheck strokeWidth={1.7} aria-hidden />
+                Encerrar
+              </Button>
+            )}
+          </div>
         }
       />
-      {/* Sempre montado: o botão some quando o chamado é encerrado. */}
+      {/* Sempre montado: o botão some quando o chamado é cancelado ou encerrado. */}
+      <CancelSheet ticket={ticket} open={cancelling} onOpenChange={setCancelling} />
       <ClosingSheet key={closingKey} ticket={ticket} open={closing} onOpenChange={setClosing} />
       <ClosingSheet
         key={`transfer-${closingKey}`}

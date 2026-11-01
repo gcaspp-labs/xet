@@ -21,6 +21,7 @@ export function FormSheet({
   title,
   description,
   submitLabel,
+  cancelLabel = 'Cancelar',
   pending,
   error,
   onSubmit,
@@ -32,6 +33,7 @@ export function FormSheet({
   title: string
   description?: string
   submitLabel: string
+  cancelLabel?: string
   pending: boolean
   error?: string
   onSubmit: FormEventHandler<HTMLFormElement>
@@ -62,7 +64,7 @@ export function FormSheet({
           {extra}
         </div>
         <SheetFooter>
-          <SheetClose render={<Button variant="ghost" />}>Cancelar</SheetClose>
+          <SheetClose render={<Button variant="ghost" />}>{cancelLabel}</SheetClose>
           <Button type="submit" form={formId} disabled={pending}>
             {submitLabel}
           </Button>

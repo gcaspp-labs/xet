@@ -107,7 +107,7 @@ returning *;
 -- name: ListContactTickets :many
 -- History of the contact, newest first. A null sector lists every sector (admin).
 select
-    t.id, t.protocol, t.status, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
@@ -122,7 +122,7 @@ limit 200;
 -- name: ListOrganizationTickets :many
 -- History of the organization, newest first. A null sector lists every sector (admin).
 select
-    t.id, t.protocol, t.status, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
@@ -171,6 +171,17 @@ update tickets
 set status = 'closed', closure_type = @closure_type::closure_type, closed_at = now(), closed_by_id = assignee_id,
     subject = @subject, resolution = @resolution, organization_id = @organization_id,
     started_at = @started_at, ended_at = coalesce(sqlc.narg(ended_at), now())
+where id = @id
+returning *;
+
+-- name: CancelTicket :one
+-- The caller holds the lock of the ticket and checked it may be cancelled. A
+-- ticket from the queue takes who cancelled as assignee, since a closed ticket
+-- needs one (tickets_assigned), and assigned_at stays empty. The start comes
+-- from the clock of the phone and may be ahead of the database.
+update tickets
+set status = 'closed', closure_type = 'cancelled', closed_at = now(), closed_by_id = @actor_id::bigint,
+    assignee_id = coalesce(assignee_id, @actor_id::bigint), ended_at = greatest(now(), started_at)
 where id = @id
 returning *;
 
