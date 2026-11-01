@@ -91,6 +91,8 @@ const messageStatusLabels: Record<
   failed: { label: 'Falhou', tone: 'danger' },
 }
 
+const backToList = { to: '/', label: 'Voltar à lista' }
+
 const fileLabels: Record<string, string> = {
   image: 'Imagem',
   video: 'Vídeo',
@@ -945,7 +947,7 @@ export default function TicketPage() {
   if (error) {
     return (
       <>
-        <Topbar breadcrumb="Atendimento" title="Chamado" />
+        <Topbar back={backToList} breadcrumb="Atendimento" title="Chamado" />
         <div className="px-4 py-4 md:px-[30px] md:py-[30px]">
           <Alert variant="warning">
             <CircleAlert strokeWidth={1.7} aria-hidden />
@@ -962,6 +964,7 @@ export default function TicketPage() {
   return (
     <>
       <Topbar
+        back={backToList}
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={

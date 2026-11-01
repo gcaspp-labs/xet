@@ -1,12 +1,17 @@
+import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Link } from 'react-router'
+import { buttonVariants } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 
-// Topbar do design system: breadcrumb, título e no máximo uma ação primária.
+// Topbar do design system: voltar, breadcrumb, título e no máximo uma ação primária.
 export function Topbar({
   breadcrumb,
   title,
+  back,
   action,
 }: {
+  back?: { to: string; label: string }
   breadcrumb?: string
   title: string
   action?: ReactNode
@@ -14,7 +19,16 @@ export function Topbar({
   return (
     <header className="sticky top-0 z-10 border-b border-line-soft bg-background">
       <div className="mx-auto flex max-w-(--content-max) flex-wrap items-center gap-3 px-4 py-3 md:px-[30px]">
-        <SidebarTrigger className="md:hidden" />
+        <SidebarTrigger />
+        {back && (
+          <Link
+            to={back.to}
+            aria-label={back.label}
+            className={buttonVariants({ variant: 'ghost', size: 'icon' })}
+          >
+            <ArrowLeft strokeWidth={1.7} aria-hidden />
+          </Link>
+        )}
         <div className="min-w-0 flex-1">
           {breadcrumb && <p className="caption text-ink-faint">{breadcrumb}</p>}
           <h1 className="title-page truncate">{title}</h1>
