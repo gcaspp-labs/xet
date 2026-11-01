@@ -20,7 +20,7 @@ Decisões técnicas do piloto. As regras de negócio estão em [spec.md](spec.md
 - **Armazenamento de arquivos substituível:** anexos são gravados por uma interface de armazenamento; no piloto, disco local. Pode passar para armazenamento de objetos (S3 ou similar) numa migração para VPS.
 - **Mensagens idempotentes:** cada mensagem é gravada com o identificador externo do provedor, evitando duplicidade em reconexões.
 - **Mídia baixada na chegada:** anexos recebidos são baixados e salvos imediatamente, pois os links do WhatsApp expiram.
-- **Disco local no piloto:** a interface de armazenamento fica em `internal/storage`, com a implementação em disco sob o diretório `STORAGE_DIR` (padrão `data/media`, relativo ao diretório do backend; no Docker Compose, o volume `media-data` em `/data/media`). Cada arquivo recebe uma chave aleatória organizada por ano e mês (`2026/10/<hex>`).
+- **Disco local no piloto:** a interface de armazenamento fica em `internal/core/storage`, com a implementação em disco sob o diretório `STORAGE_DIR` (padrão `data/media`, relativo ao diretório do backend; no Docker Compose, o volume `media-data` em `/data/media`). Cada arquivo recebe uma chave aleatória organizada por ano e mês (`2026/10/<hex>`).
 
 ## Adaptador de mensageria
 
@@ -28,7 +28,7 @@ A migração futura para a API oficial do WhatsApp (Cloud API) deve consistir em
 
 ### Contrato
 
-O pacote `internal/messaging` define a interface e os tipos neutros; cada provedor fica em um subpacote (`internal/messaging/whatsmeow`, futuramente `internal/messaging/cloudapi`).
+O pacote `internal/helpdesk/messaging` define a interface e os tipos neutros; cada provedor fica em um subpacote (`internal/helpdesk/messaging/whatsmeow`, futuramente `internal/helpdesk/messaging/cloudapi`).
 
 - **Envio:** `SendText`, `SendMedia` (imagem, vídeo, áudio, documento) com destinatário, conteúdo e identificador de idempotência; retorna o identificador externo da mensagem.
 - **Eventos recebidos:** mensagem recebida, mensagem enviada por fora do sistema, atualização de status (enviada, entregue, lida, falhou), mudança de conexão. O adaptador entrega eventos já traduzidos para os tipos neutros; o domínio nunca vê tipos do provedor.
@@ -47,12 +47,12 @@ O pacote `internal/messaging` define a interface e os tipos neutros; cada proved
 
 ### Adaptador falso
 
-- `internal/messaging/fake` implementa o contrato para os testes de integração do backend.
+- `internal/helpdesk/messaging/fake` implementa o contrato para os testes de integração do backend.
 - Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número, mensagens recebidas (texto, imagem, vídeo, áudio, documento e arquivo indisponível), confirmações de entrega e leitura das mensagens enviadas e a agenda do número. O padrão é `whatsmeow`, e em produção essas rotas não existem.
 
 ### Regras
 
-- Nada fora de `internal/messaging/<provedor>` importa bibliotecas do provedor.
+- Nada fora de `internal/helpdesk/messaging/<provedor>` importa bibliotecas do provedor.
 - Os identificadores no banco são neutros (`external_*`) e o setor registra seu provedor (`provider`), permitindo migrar um setor por vez.
 - Os testes de integração usam um adaptador falso que implementa o mesmo contrato.
 
@@ -77,7 +77,7 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 ## Tempo real
 
 - O painel recebe novas mensagens, mudanças de fila, responsáveis e status da conexão por WebSocket, filtrados pelo setor do usuário (todos, para o administrador).
-- Um único endpoint, `GET /api/ws`, autenticado pelo cookie de sessão. O servidor mantém em memória apenas as conexões abertas (pacote `internal/realtime`), protegidas por mutex; cada conexão guarda o usuário e só recebe eventos dos setores a que ele tem acesso.
+- Um único endpoint, `GET /api/ws`, autenticado pelo cookie de sessão. O servidor mantém em memória apenas as conexões abertas (pacote `internal/core/realtime`), protegidas por mutex; cada conexão guarda o usuário e só recebe eventos dos setores a que ele tem acesso.
 - Os eventos são avisos, não dados: `{"type": "ticket", "sectorId": 1, "ticketId": 10}` quando um chamado é criado, recebe ou envia mensagem, muda a situação de entrega de uma mensagem, ganha nota interna ou "falou com", ou é assumido ou transferido, e `{"type": "connection", "sectorId": 1}` quando muda a conexão do número. A interface recarrega pela API o que mudou (TanStack Query), que continua sendo a única fonte dos dados e das permissões.
 - Os eventos são publicados somente depois do commit da transação. A publicação não bloqueia: uma conexão lenta, com a fila de saída cheia, é encerrada, e a interface reconecta e recarrega tudo.
 - A interface reconecta sozinha após queda, com espera crescente, e recarrega os dados ao reconectar, para não perder eventos do intervalo. Enquanto a conexão está caída, a tela mostra um aviso de que a atualização em tempo real foi interrompida.
@@ -95,7 +95,7 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 ## Áudio e mídia
 
 - O WhatsApp usa áudio OGG/Opus e o navegador grava em WebM/Opus (MP4 no Safari); o backend converte o áudio gravado com ffmpeg antes de enviar.
-- A gravação chega na mesma rota de envio de arquivos (`POST /api/tickets/{id}/messages`, multipart), no campo `voice` em vez de `file`. O pacote `internal/audio` grava a entrada num arquivo temporário (MP4 exige leitura com saltos, que um pipe não permite), converte para OGG/Opus mono a 48 kHz (`libopus`, 32 kbit/s) e lê a duração da última página OGG. Só o arquivo convertido é guardado, com o tipo `audio/ogg; codecs=opus`, e enviado com a marcação de mensagem de voz (PTT no Whatsmeow).
+- A gravação chega na mesma rota de envio de arquivos (`POST /api/tickets/{id}/messages`, multipart), no campo `voice` em vez de `file`. O pacote `internal/helpdesk/audio` grava a entrada num arquivo temporário (MP4 exige leitura com saltos, que um pipe não permite), converte para OGG/Opus mono a 48 kHz (`libopus`, 32 kbit/s) e lê a duração da última página OGG. Só o arquivo convertido é guardado, com o tipo `audio/ogg; codecs=opus`, e enviado com a marcação de mensagem de voz (PTT no Whatsmeow).
 - A conversão acontece depois da conferência de idempotência: repetir o envio devolve a mensagem registrada sem converter de novo.
 - O `ffmpeg` (com `libopus`) precisa estar instalado onde o backend roda: na imagem Docker do backend, no CI e na máquina de desenvolvimento.
 - Imagens e vídeos são exibidos com pré-visualização no painel. Áudios, recebidos ou gravados, tocam num player próprio, feito sobre um elemento `<audio>` sem os controles nativos, para seguir o design system. A rota `GET /api/media/{id}` atende pedidos parciais (`Range`), para os players avançarem e voltarem.
@@ -178,22 +178,42 @@ O oxlint substitui o ESLint: é o padrão do template atual do Vite e o projeto 
 ## Estrutura do repositório
 
 ```
-backend/            Serviço Go
-  cmd/server/       Ponto de entrada
-  internal/         Domínio, HTTP, mensageria, armazenamento
-  internal/db/      Código gerado pelo sqlc (não editar)
-  internal/testdb/  Bancos isolados para testes de integração
-  db/migrations/    Migrações (goose), embutidas no binário
-  db/queries/       SQL para o sqlc
-frontend/           Aplicação React
-deploy/             Docker Compose, Caddyfile
+backend/                 Serviço Go
+  cmd/server/            Ponto de entrada
+  internal/core/         O que serve a todos os módulos
+    auth/                Login, sessão, permissões e middlewares
+    users/               Cadastro de usuários e senhas
+    sectors/             Setores e módulos vendidos
+    directory/           Órgãos e contatos
+    audit/               Conjuntos de alterações da auditoria
+    realtime/            Conexões WebSocket e eventos
+    storage/             Armazenamento de arquivos
+    httpx/               Leitura da requisição, respostas e erros
+  internal/helpdesk/     Central de atendimento
+    messaging/           Contrato e adaptadores do WhatsApp
+    audio/               Conversão das gravações
+  internal/server/       Monta o roteador com as rotas de cada módulo
+  internal/testapi/      Sobe o servidor para os testes de integração
+  internal/db/           Código gerado pelo sqlc (não editar)
+  internal/config/       Configuração por variáveis de ambiente
+  internal/testdb/       Bancos isolados para testes de integração
+  db/migrations/         Migrações (goose), embutidas no binário
+  db/queries/            SQL para o sqlc
+frontend/                Aplicação React
+deploy/                  Docker Compose, Caddyfile
 ```
+
+`internal/core` não importa módulos, e um módulo importa só o `core` e os pacotes de apoio (`db`, `config`, `testdb`, `testapi`), nunca outro módulo. As duas regras são garantidas pelo `depguard`, em `backend/.golangci.yml`: o `make lint` falha se forem quebradas. Módulo novo ganha pasta própria em `internal/`, uma regra no `depguard` e uma linha em `internal/server`.
+
+Cada pacote com rotas expõe um `Handler` com `Routes(r chi.Router)`; `internal/server` só os monta. As rotas de `auth` ficam fora da exigência de sessão, porque incluem o login, e as dos demais já chegam com ela.
+
+Ficam como estão, porque separá-los exigiria mudar o banco ou uma regra: `core/users` consulta os chamados em andamento do usuário antes de desativá-lo; `sectors` mantém as colunas do WhatsApp, gravadas por `helpdesk/connection.go`; `audit_logs` mantém a chave para `tickets`.
 
 ### Um arquivo por assunto
 
-Em `internal/ticket` e `internal/httpapi`, cada assunto tem um arquivo, com o mesmo nome nos dois pacotes: a regra de transferir fica em `ticket/transfer.go` e a rota, em `httpapi/transfer.go`. A consulta fica no arquivo do assunto que ela lê, como as notas em `notes.go`. Assunto novo ganha um novo par de arquivos, e um arquivo não reúne assuntos diferentes.
+Dentro de cada pacote, cada assunto tem um trio de arquivos: a regra de transferir fica em `helpdesk/transfer.go`, a rota em `helpdesk/transfer_http.go` e os testes em `helpdesk/transfer_test.go`, em pacote externo (`helpdesk_test`). A consulta fica no arquivo do assunto que ela lê, como as notas em `notes.go`. Assunto novo ganha um novo trio, e um arquivo não reúne assuntos diferentes.
 
-Ficam sem par os arquivos sem rota ou que servem a todos os assuntos: em `ticket`, `service.go` (o serviço e seus auxiliares), `errors.go` (os erros do pacote), `access.go` (quem vê e quem age no chamado) e `inbound.go` (eventos recebidos do adaptador); em `httpapi`, `router.go` (as rotas) e `respond.go` (leitura da requisição, respostas e erros compartilhados).
+Ficam sem trio os arquivos sem rota ou que servem a todos os assuntos. Em `helpdesk`: `service.go` (o serviço e seus auxiliares), `errors.go` (os erros do pacote), `errors_http.go` (as respostas de erro compartilhadas pelas rotas), `access.go` (quem vê e quem age no chamado), `inbound.go` (eventos recebidos do adaptador) e `routes.go` (o `Handler` e as rotas do módulo). Em `internal/testapi`, os auxiliares comuns dos testes; cada pacote de testes acrescenta os seus em `helpers_test.go`.
 
 ## Referências
 

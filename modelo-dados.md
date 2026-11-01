@@ -8,15 +8,16 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 
 | Domínio | Pacote Go | Entidades | Responsabilidade |
 | --- | --- | --- | --- |
-| Organização interna | `internal/sector` | Setor, Módulo | Setores com seu número de WhatsApp e a lista de módulos de cada um |
-| Acesso | `internal/auth` | Usuário, Sessão | Login, papéis e permissões |
-| Cadastro de clientes | `internal/directory` | Órgão, Contato | Pessoas atendidas e os órgãos a que pertencem |
-| Atendimento | `internal/ticket` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções |
-| Mensagens | `internal/ticket` | Mensagem, Arquivo | Histórico de mensagens e anexos |
-| Mensageria | `internal/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
-| Auditoria | `internal/audit` | Registro de auditoria | Histórico de alterações relevantes |
+| Organização interna | `internal/core/sectors` | Setor, Módulo | Setores e a lista de módulos de cada um |
+| Conexão do número | `internal/helpdesk` | — (colunas do WhatsApp em Setor) | Ligar e desligar o número de WhatsApp de cada setor |
+| Acesso | `internal/core/auth`, `internal/core/users` | Usuário, Sessão | Login, papéis e permissões; cadastro de usuários e senhas |
+| Cadastro de clientes | `internal/core/directory` | Órgão, Contato | Pessoas atendidas e os órgãos a que pertencem |
+| Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções |
+| Mensagens | `internal/helpdesk` | Mensagem, Arquivo | Histórico de mensagens e anexos |
+| Mensageria | `internal/helpdesk/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
+| Auditoria | `internal/core/audit` | Registro de auditoria | Histórico de alterações relevantes |
 
-Dependências permitidas: `ticket` usa `auth`, `directory`, `audit` e `messaging`, além dos pacotes de apoio `audio`, `realtime` e `storage`; `sector` usa `audit`, `messaging` e `realtime`; `auth` e `directory` usam `audit`; `messaging` não conhece nenhum outro domínio e só emite eventos. `ticket` não usa `sector`. `auth`, `directory`, `sector` e `ticket` gravam pelo código gerado em `db`, e `httpapi` os expõe pela API.
+Dependências permitidas: `helpdesk` usa os pacotes de `core`, além de `helpdesk/messaging` e `helpdesk/audio`; `core` não usa `helpdesk`, garantido pelo `depguard`. Dentro de `core`, `users`, `sectors`, `directory` e `realtime` usam `auth`, e todos podem usar `audit` e `httpx`. `messaging` não conhece nenhum outro domínio e só emite eventos. Os pacotes gravam pelo código gerado em `db`, e `internal/server` monta as rotas de cada um.
 
 ## Diagrama
 
