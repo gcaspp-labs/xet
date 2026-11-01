@@ -153,9 +153,21 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 ## Fase 4 — Ajustes dos primeiros testes
 
-Levantados nos primeiros testes com o número real.
+Levantados nos primeiros testes com o número real e na revisão do código.
 
-### [ ] T20 — Fluxo do painel e realizados hoje
+### [ ] T20 — Organização do backend
+
+Só reorganiza, para facilitar a leitura e reduzir conflitos nas tasks seguintes. Nenhuma regra, rota, resposta da API, consulta SQL ou migração muda. Cada passo vai em um commit próprio, para a revisão acompanhar com `git diff -M`.
+
+- **Documentos:** corrigir `modelo-dados.md`, que cita o pacote `internal/message`, inexistente, e diz que `ticket` usa `sector`. As mensagens ficam em `internal/ticket`, e a lista de dependências precisa refletir os pacotes reais. Registrar em `arquitetura.md` a regra de um arquivo por assunto, com o mesmo nome em `httpapi` e `ticket`.
+- **Dividir `ticket/conversation.go`** por assunto: `access.go` (`accessible`, `viewable`, `conducts`), `send.go` (envio, reenvio e recibos), `notes.go`, `media.go` e `history.go`.
+- **Dar lugar ao que é do pacote `ticket`:** `service.go` com `Service`, `NewService` e os auxiliares (`recordTicket`, `isConstraint`, `optional`), hoje em `inbound.go`, `queue.go` e `close.go`; `errors.go` com os erros, hoje em 8 arquivos.
+- **Parear `httpapi` com `ticket`:** por exemplo, `queue.go` (`listTickets`, `workload`, `assignTicket`), `transfer.go` e `transfer_sector.go`, que hoje estão em `tickets.go` e `close.go`, além de `send.go`, `notes.go`, `media.go` e `history.go`, que saem de `httpapi/conversation.go`. Os auxiliares de resposta saem de `router.go` para `respond.go`, junto com `ticketError` e `closingError`.
+- **Nomes e repetição:** `ticketUserResponse` passa a `refResponse`, porque também serve a módulos, órgãos e setores; um auxiliar substitui as 16 repetições da leitura do ID do chamado nas rotas.
+
+**Pronto quando:** os arquivos de teste não mudam e `go test -race`, `make lint` e `make test-e2e` passam; o diff só mostra código movido e os renomes previstos; `modelo-dados.md` descreve os pacotes reais; cada assunto de `ticket` tem o arquivo correspondente em `httpapi`, quando houver rota.
+
+### [ ] T21 — Fluxo do painel e realizados hoje
 
 - "Assumir" no painel abre a conversa; a linha inteira do chamado também abre, com link esticado sobre a linha, sem perder o teclado, e o botão "Assumir" continua clicável.
 - Encerrar e transferir para outro setor voltam ao painel. A correção continua na mesma tela.
@@ -164,7 +176,7 @@ Levantados nos primeiros testes com o número real.
 
 **Pronto quando:** assumir leva ao chat; ao encerrar, a pessoa volta ao painel e o atendimento aparece nos realizados, com "Você" nos próprios e os transferidos identificados; outro setor não vê; encerrados de ontem não aparecem.
 
-### [ ] T21 — Cancelar atendimento
+### [ ] T22 — Cancelar atendimento
 
 - Duas migrações: novo valor `cancelled` em `closure_type` numa e, na seguinte, as restrições `tickets_closed_fields` e `audit_logs_correction_reason`. O Postgres não permite usar um valor de enum na mesma transação em que ele é criado.
 - `POST /api/tickets/{id}/cancel` com motivo, travando o chamado como `closeLocked` (`internal/ticket/close.go`). Vindo da fila, grava quem cancelou como responsável, porque `tickets_assigned` exige responsável em chamado encerrado.
@@ -173,26 +185,26 @@ Levantados nos primeiros testes com o número real.
 
 **Pronto quando:** fila e atendimento seguem as permissões, com teste de atendente que não é o responsável; motivo em branco é recusado; contato não cadastrado cancela sem órgão; cancelar não cruza com assumir nem com mensagem nova, e a mensagem seguinte abre outro chamado; a correção é recusada; a auditoria grava o motivo na mesma transação.
 
-### [ ] T22 — Devolver à fila
+### [ ] T23 — Devolver à fila
 
 - Ação na tela do chamado em atendimento, com volta ao painel, travando o chamado como em `Transfer` (`internal/ticket/transfer.go`); auditoria `ticket_returned` com `recordTicket` e registro na conversa.
 
 **Pronto quando:** responsável, supervisor e administrador devolvem, e outro atendente não; chamado na fila ou encerrado é recusado; o chamado volta à fila e outra pessoa assume; `assigned_at` se mantém.
 
-### [ ] T23 — Arquivo recebido que não baixa
+### [ ] T24 — Arquivo recebido que não baixa
 
 - Novo tipo `media_unavailable` em `message_type`, com aviso na conversa e na última mensagem do painel.
 - No adaptador Whatsmeow, conferir o tamanho informado antes de baixar (limite de 100 MB) e tentar o download algumas vezes. Hoje a falha devolve erro, e a mensagem não entra no chamado enquanto o download falhar (`internal/messaging/whatsmeow/messages.go`).
 
 **Pronto quando:** pelo adaptador falso, a mensagem com arquivo indisponível vira aviso no chamado e a reentrega não duplica; há verificação manual com o número real, enviando um arquivo acima do limite.
 
-### [ ] T24 — Usuário com chamados em atendimento
+### [ ] T25 — Usuário com chamados em atendimento
 
 - `UpdateUser` (`internal/auth/auth.go`) recusa a desativação e a troca de setor, inclusive ao virar administrador, se houver chamados em atendimento, informando a quantidade. A tela de usuários mostra a mensagem.
 
 **Pronto quando:** desativar e trocar de setor são recusados com chamados e passam depois de transferir; editar o nome ou o e-mail continua livre.
 
-### [ ] T25 — Telefone do setor pelo QR code
+### [ ] T26 — Telefone do setor pelo QR code
 
 - Migração: `sectors.phone` opcional e nova coluna `connection_error`. O telefone sai do formulário e da API de setores.
 - O evento de conexão passa a informar o telefone da conta (no Whatsmeow, de `Store.ID`). `HandleConnection` (`internal/sector/connection.go`) grava o telefone e o apaga em `logged_out`.
@@ -203,7 +215,7 @@ Levantados nos primeiros testes com o número real.
 
 **Pronto quando:** conectar preenche o telefone; número de outro setor é recusado com o motivo na tela, sem erro 500; uma queda temporária mantém o telefone e desvincular o apaga; há verificação manual com o número real, em que o celular deixa de mostrar "Outro dispositivo"; supervisor e administrador desvinculam, atendente e supervisor de outro setor não; desvincular grava a auditoria com o autor, repetir não gera novo registro e o setor volta a conectar pelo QR code.
 
-### [ ] T26 — Setores e módulos do contato
+### [ ] T27 — Setores e módulos do contato
 
 - Migração das tabelas `contact_sectors` e `contact_modules`, preenchendo os setores a partir dos chamados existentes.
 - Setores (ao menos um) e módulos opcionais no cadastro do contato (`ContactSheet`). Rota de leitura dos módulos ativos para todos os papéis, porque a atual é restrita à supervisão.
@@ -213,13 +225,13 @@ Levantados nos primeiros testes com o número real.
 
 **Pronto quando:** o filtro "Meu setor" funciona e o administrador abre em todos; mensagem, nova conversa e transferência criam o vínculo sem duplicar; módulo fora dos setores do contato é recusado; os módulos vêm marcados no encerramento e podem ser alterados.
 
-### [ ] T27 — Cadastrar contato em "Nova conversa"
+### [ ] T28 — Cadastrar contato em "Nova conversa"
 
 - Botão em `NewConversationSheet` que abre o `ContactSheet` por cima, como o `ClosingSheet` já faz. O `ContactSheet` passa a devolver o contato salvo, que fica escolhido para a primeira mensagem.
 
 **Pronto quando:** dá para cadastrar um contato e enviar a primeira mensagem sem sair da tela; telefone já cadastrado mostra o aviso sem fechar a conversa.
 
-### [ ] T28 — Importar contatos do WhatsApp
+### [ ] T29 — Importar contatos do WhatsApp
 
 - Interface opcional `ContactBook`, no padrão de `QRPairing` (`internal/messaging/messaging.go`), no adaptador Whatsmeow (`Store.Contacts.GetAllContacts`, com telefone resolvido quando o contato vem por LID) e no falso. Só entram contatos com nome salvo e telefone.
 - Levar `phoneVariants` (`internal/ticket/inbound.go`) para `internal/directory`, para usar a mesma regra do nono dígito.
@@ -228,7 +240,7 @@ Levantados nos primeiros testes com o número real.
 
 **Pronto quando:** importa selecionados e todos, com e sem órgão; repetir a importação e a variante do nono dígito não duplicam nem sobrescrevem, só vinculam o setor; atendente não importa de outro setor; há verificação manual com o número real.
 
-### [ ] T29 — Menu de configurações e tema
+### [ ] T30 — Menu de configurações e tema
 
 - Botão "Configurações" no rodapé da barra lateral (`AppLayout`), com "Sair" e tema Claro, Escuro ou Sistema. Adicionar o `DropdownMenu` do shadcn, sem biblioteca nova.
 - Escolha guardada no `localStorage` e aplicada antes de pintar a tela; `color-scheme` no CSS e `sonner` acompanhando o tema (hoje fixo em `system`).
@@ -236,7 +248,7 @@ Levantados nos primeiros testes com o número real.
 
 **Pronto quando:** o tema persiste ao recarregar e vale também na tela de login; "Sistema" segue o sistema operacional; "Sair" funciona pelo menu; o menu funciona por teclado.
 
-### [ ] T30 — Player de áudio próprio
+### [ ] T31 — Player de áudio próprio
 
 - Componente sobre `<audio>` sem controles nativos, com tocar e pausar, progresso e tempo, usado na gravação (`Composer`) e nas mensagens (`MessageMedia`, em `TicketPage`). A duração aparece uma única vez.
 
@@ -246,7 +258,7 @@ Levantados nos primeiros testes com o número real.
 
 Ajustes para fazer antes de escalar para outros setores, levantados durante o piloto.
 
-### [ ] T31 — Reforço da autenticação
+### [ ] T32 — Reforço da autenticação
 
 - Limitar tentativas de login por e-mail e por IP, com bloqueio temporário após falhas seguidas, contra força bruta.
 - Recusar senhas comuns ou vazadas (lista de senhas conhecidas), como recomenda o NIST SP 800-63B-4.
@@ -257,7 +269,7 @@ Ajustes para fazer antes de escalar para outros setores, levantados durante o pi
 
 ## Fase 6 — Validação do piloto
 
-### [ ] T32 — Implantação e validação
+### [ ] T33 — Implantação e validação
 
 Pode rodar antes das anteriores, quando houver acesso ao servidor. Como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
 
@@ -272,7 +284,7 @@ Pode rodar antes das anteriores, quando houver acesso ao servidor. Como a skill 
 
 Ajustes fora do código, feitos no GitHub por quem administra o repositório.
 
-### [ ] T33 — Proteção da branch main
+### [ ] T34 — Proteção da branch main
 
 - Exigir PR para alterar a `main` (sem push direto).
 - Exigir os checks do CI (T18) verdes e a branch atualizada antes do merge.
@@ -286,4 +298,7 @@ Levantadas nos testes e na revisão do código, sem decisão por enquanto. Se ap
 - **Aviso de mensagem com falha:** hoje dá para encerrar ou transferir com a última resposta em "Falhou" ou ainda enviando, e o cliente fica sem resposta. Os formulários poderiam avisar, sem impedir.
 - **Cliente responde pelo número de origem depois da transferência entre setores:** abre um chamado novo na origem. Falta decidir se fica assim e se esse chamado deve mostrar que existe outro aberto no destino.
 - **Bloquear ou ignorar um número:** depois de um cancelamento por spam, o mesmo número abre outro chamado a cada mensagem.
+- **Funções longas do backend:** `Correct`, `Start`, `record`, `Send` e `Corrections` podem ser quebradas quando uma task já estiver mexendo nelas, com os testes de apoio, mantendo visível a ordem das travas.
+- **Glossário:** ligar os termos do código aos da spec (chamado = `ticket`, responsável = `assignee`, `accessible` = pode agir, `viewable` = pode ler).
+- **Idioma dos comentários:** os do backend estão em inglês e os do frontend em português, e o `CLAUDE.md` não define a regra.
 - **Salvar no celular o contato cadastrado no sistema:** a biblioteca não tem função pronta (existe o campo `SaveOnPrimaryAddressbook`), um envio malformado pode dessincronizar os dados do número, e não se confirmou se a API oficial tem equivalente. Só avaliar depois de um teste com número de teste.
