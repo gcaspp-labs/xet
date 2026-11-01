@@ -137,32 +137,6 @@ type historyResponse struct {
 	AssigneeName     *string         `json:"assigneeName"`
 }
 
-// ticketError answers the errors shared by the conversation routes.
-func (s *server) ticketError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, ticket.ErrNotFound):
-		writeError(w, http.StatusNotFound, "Chamado não encontrado.")
-	case errors.Is(err, ticket.ErrMessageNotFound):
-		writeError(w, http.StatusNotFound, "Mensagem não encontrada.")
-	case errors.Is(err, ticket.ErrMediaNotFound):
-		writeError(w, http.StatusNotFound, "Arquivo não encontrado.")
-	case errors.Is(err, ticket.ErrForbidden):
-		writeError(w, http.StatusForbidden, "Você não tem acesso a este setor.")
-	case errors.Is(err, ticket.ErrNotAssignee):
-		writeError(w, http.StatusForbidden, "Apenas o responsável pelo chamado pode responder. Assuma o chamado ou peça a transferência.")
-	case errors.Is(err, ticket.ErrClosed):
-		writeError(w, http.StatusConflict, "Este chamado já foi encerrado.")
-	case errors.Is(err, ticket.ErrRequestReused):
-		writeError(w, http.StatusConflict, "Este envio já foi usado em outra mensagem. Tente novamente.")
-	case errors.Is(err, ticket.ErrNotFailed):
-		writeError(w, http.StatusConflict, "Esta mensagem não está com falha.")
-	case errors.Is(err, ticket.ErrInvalidAudio):
-		writeError(w, http.StatusUnprocessableEntity, "Não foi possível ler o áudio gravado. Grave novamente.")
-	default:
-		s.internalError(w, r, err)
-	}
-}
-
 func (s *server) getTicket(w http.ResponseWriter, r *http.Request) {
 	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
 	if !ok {

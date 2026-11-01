@@ -85,23 +85,6 @@ func (s *server) closeTicket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// closingError answers the errors of the closing form, shared by the
-// closing, the transfer between sectors and the correction.
-func (s *server) closingError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, ticket.ErrIncompleteClosing):
-		writeError(w, http.StatusUnprocessableEntity, "Preencha o assunto, a resolução e ao menos um módulo.")
-	case errors.Is(err, ticket.ErrInvalidOrganization):
-		writeError(w, http.StatusUnprocessableEntity, "Escolha um órgão cadastrado.")
-	case errors.Is(err, ticket.ErrInvalidModules):
-		writeError(w, http.StatusUnprocessableEntity, "Escolha módulos ativos do setor do chamado.")
-	case errors.Is(err, ticket.ErrInvalidPeriod):
-		writeError(w, http.StatusUnprocessableEntity, "O fim precisa ser depois do início e não pode estar no futuro.")
-	default:
-		s.ticketError(w, r, err)
-	}
-}
-
 // listTicketModules returns the modules recorded when the ticket was closed.
 func (s *server) listTicketModules(w http.ResponseWriter, r *http.Request) {
 	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")

@@ -9,18 +9,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
-type ticketContactResponse struct {
-	ID         int64   `json:"id"`
-	Name       string  `json:"name"`
-	Phone      *string `json:"phone"`
-	Registered bool    `json:"registered"`
-}
-
-type ticketUserResponse struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-}
-
 type lastMessageResponse struct {
 	Type   db.MessageType   `json:"type"`
 	Body   *string          `json:"body"`

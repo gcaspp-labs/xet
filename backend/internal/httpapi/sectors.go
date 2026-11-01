@@ -3,10 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/sector"
@@ -194,14 +191,4 @@ func (s *server) sectorError(w http.ResponseWriter, r *http.Request, err error) 
 	default:
 		s.internalError(w, r, err)
 	}
-}
-
-// urlID parses a numeric URL parameter; on failure it answers 404 with the message.
-func urlID(w http.ResponseWriter, r *http.Request, param, notFound string) (int64, bool) {
-	id, err := strconv.ParseInt(chi.URLParam(r, param), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusNotFound, notFound)
-		return 0, false
-	}
-	return id, true
 }
