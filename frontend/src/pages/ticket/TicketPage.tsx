@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeft,
   Check,
   CircleAlert,
   CircleCheck,
@@ -23,7 +24,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { ConversationList } from '@/components/ConversationList'
@@ -173,10 +174,20 @@ function canClose(ticket: TicketDetail, user: User) {
   return ticket.status === 'in_progress' && conducts(ticket, user)
 }
 
+// Quem é do setor do chamado age nele; o destino de uma transferência entre
+// setores só lê os chamados anteriores (spec.md, Transferências).
+function worksIn(ticket: TicketDetail, user: User) {
+  return user.role === 'admin' || user.sectorId === ticket.sector.id
+}
+
 // Corrige o atendimento encerrado quem o encerrou e a supervisão do setor
 // (spec.md, Encerramento, retorno e correções).
 function canCorrect(ticket: TicketDetail, user: User) {
-  return ticket.status === 'closed' && (ticket.closedBy?.id === user.id || user.role !== 'agent')
+  return (
+    ticket.status === 'closed' &&
+    worksIn(ticket, user) &&
+    (ticket.closedBy?.id === user.id || user.role !== 'agent')
+  )
 }
 
 function assignmentText(log: AssignmentLog) {
@@ -188,6 +199,9 @@ function assignmentText(log: AssignmentLog) {
   }
   if (log.action === 'ticket_closed') {
     return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
+  }
+  if (log.action === 'ticket_transferred_sector') {
+    return `${log.actor?.name ?? 'Sistema'} transferiu o chamado para o setor ${log.toSectorName}`
   }
   if (log.action === 'ticket_corrected') {
     return `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`
@@ -207,6 +221,8 @@ function AssignmentEntry({ log }: { log: AssignmentLog }) {
     >
       {log.action === 'ticket_closed' ? (
         <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : log.action === 'ticket_transferred_sector' ? (
+        <ArrowRightLeft strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : log.action === 'ticket_corrected' ? (
         <PencilLine strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : (
@@ -514,7 +530,9 @@ function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }
   if (ticket.status === 'closed') {
     notice = 'Chamado encerrado.'
   } else if (!ticket.assignee) {
-    notice = 'Chamado na fila. Assuma o chamado para responder.'
+    notice = ticket.previous
+      ? `Transferido de ${ticket.previous.sectorName}. Assuma o chamado e envie a primeira mensagem ao cliente.`
+      : 'Chamado na fila. Assuma o chamado para responder.'
   } else if (!canReply) {
     notice = `Chamado com ${ticket.assignee.name}. Peça a transferência para responder.`
   }
@@ -671,6 +689,35 @@ function CorrectionHistory({ corrections }: { corrections: Correction[] }) {
   )
 }
 
+// Origem de uma transferência entre setores: resumo e acesso à conversa
+// anterior, só para leitura.
+function PreviousTicket({ previous }: { previous: NonNullable<TicketDetail['previous']> }) {
+  return (
+    <section aria-label="Chamado anterior">
+      <h3 className="overline text-ink-soft">Chamado anterior</h3>
+      <div className="mt-1 flex flex-col gap-1 rounded-(--radius-7) border border-line-soft bg-card px-3 py-2">
+        <p>
+          {previous.sectorName} · <span className="mono-num">{previous.protocol}</span>
+        </p>
+        {previous.closedByName && (
+          <p className="caption text-ink-faint">Transferido por {previous.closedByName}</p>
+        )}
+        <p>
+          <span className="label text-ink-soft">Assunto: </span>
+          {previous.subject}
+        </p>
+        <p className="whitespace-pre-wrap break-words">
+          <span className="label text-ink-soft">Resolução: </span>
+          {previous.resolution}
+        </p>
+        <Link to={`/chamados/${previous.id}`} className="text-primary hover:underline">
+          Ver conversa anterior
+        </Link>
+      </div>
+    </section>
+  )
+}
+
 function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
   const status = ticketStatusLabels[ticket.status]
   const closed = ticket.status === 'closed'
@@ -697,6 +744,13 @@ function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
         </>,
       )}
       {row('Órgão', ticket.organization?.name ?? 'Não cadastrado')}
+      {ticket.next &&
+        row(
+          'Transferido para',
+          <>
+            {ticket.next.sectorName} · <span className="mono-num">{ticket.next.protocol}</span>
+          </>,
+        )}
       {row('Responsável', ticket.assignee?.name ?? 'Sem responsável')}
       {row('Chegada', <span className="mono-num">{formatDateTime(ticket.arrivedAt)}</span>)}
       {ticket.assignedAt &&
@@ -731,11 +785,12 @@ function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
         editable={conducts(ticket, user)}
       />
       {corrections && <CorrectionHistory corrections={corrections} />}
+      {ticket.previous && <PreviousTicket previous={ticket.previous} />}
     </dl>
   )
 }
 
-function NotesTab({ ticketId }: { ticketId: number }) {
+function NotesTab({ ticketId, canWrite }: { ticketId: number; canWrite: boolean }) {
   const { data: notes = [] } = useNotes(ticketId)
   const add = useAddNote(ticketId)
   const [body, setBody] = useState('')
@@ -766,35 +821,41 @@ function NotesTab({ ticketId }: { ticketId: number }) {
           <EmptyDescription>Nenhuma nota.</EmptyDescription>
         </Empty>
       )}
-      <form
-        className="flex flex-col gap-2"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!body.trim()) {
-            return
-          }
-          add.mutate(body.trim(), {
-            onSuccess: () => {
-              setBody('')
-              toast.success('Nota adicionada')
-            },
-          })
-        }}
-      >
-        <Field>
-          <FieldLabel htmlFor="note-body">Nova nota</FieldLabel>
-          <Textarea id="note-body" value={body} onChange={(event) => setBody(event.target.value)} />
-        </Field>
-        {add.error && <p className="caption text-danger">{add.error.message}</p>}
-        <Button
-          type="submit"
-          variant="outline"
-          className="self-end"
-          disabled={add.isPending || !body.trim()}
+      {canWrite && (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!body.trim()) {
+              return
+            }
+            add.mutate(body.trim(), {
+              onSuccess: () => {
+                setBody('')
+                toast.success('Nota adicionada')
+              },
+            })
+          }}
         >
-          Adicionar nota
-        </Button>
-      </form>
+          <Field>
+            <FieldLabel htmlFor="note-body">Nova nota</FieldLabel>
+            <Textarea
+              id="note-body"
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+            />
+          </Field>
+          {add.error && <p className="caption text-danger">{add.error.message}</p>}
+          <Button
+            type="submit"
+            variant="outline"
+            className="self-end"
+            disabled={add.isPending || !body.trim()}
+          >
+            Adicionar nota
+          </Button>
+        </form>
+      )}
     </div>
   )
 }
@@ -833,6 +894,7 @@ export default function TicketPage() {
   const assign = useAssignFromTicket(ticketId, ticket?.sector.id)
   const [transferring, setTransferring] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [transferringSector, setTransferringSector] = useState(false)
   // Nova chave a cada abertura: o formulário começa limpo, com o fim sugerido no momento.
   const [closingKey, setClosingKey] = useState(0)
   const [correcting, setCorrecting] = useState(false)
@@ -890,6 +952,18 @@ export default function TicketPage() {
               )}
               {canClose(ticket, user) && (
                 <Button
+                  variant="outline"
+                  onClick={() => {
+                    setClosingKey((key) => key + 1)
+                    setTransferringSector(true)
+                  }}
+                >
+                  <ArrowRightLeft strokeWidth={1.7} aria-hidden />
+                  Outro setor
+                </Button>
+              )}
+              {canClose(ticket, user) && (
+                <Button
                   onClick={() => {
                     setClosingKey((key) => key + 1)
                     setClosing(true)
@@ -905,6 +979,13 @@ export default function TicketPage() {
       />
       {/* Sempre montado: o botão some quando o chamado é encerrado. */}
       <ClosingSheet key={closingKey} ticket={ticket} open={closing} onOpenChange={setClosing} />
+      <ClosingSheet
+        key={`transfer-${closingKey}`}
+        ticket={ticket}
+        open={transferringSector}
+        onOpenChange={setTransferringSector}
+        transfer
+      />
       {/* Montado só aberto: começa com os dados atuais do atendimento. */}
       {correcting && recordedModules && (
         <CorrectionSheet ticket={ticket} recorded={recordedModules} onOpenChange={setCorrecting} />
@@ -921,7 +1002,13 @@ export default function TicketPage() {
         )}
         {/* Abaixo de 1280px a lista some; o painel continua sendo o caminho entre conversas. */}
         <div className="hidden xl:block">
-          <ConversationList sectorId={ticket.sector.id} user={user} />
+          {/* Lendo um chamado anterior de outro setor, a lista continua sendo a do próprio setor. */}
+          <ConversationList
+            sectorId={
+              worksIn(ticket, user) ? ticket.sector.id : (user.sectorId ?? ticket.sector.id)
+            }
+            user={user}
+          />
         </div>
         <ConversationCard ticket={ticket} user={user} />
         <Card role="region" aria-labelledby="ticket-info-title">
@@ -938,7 +1025,7 @@ export default function TicketPage() {
               <DetailsTab ticket={ticket} user={user} />
             </TabsContent>
             <TabsContent value="notes">
-              <NotesTab ticketId={ticket.id} />
+              <NotesTab ticketId={ticket.id} canWrite={worksIn(ticket, user)} />
             </TabsContent>
             <TabsContent value="history">
               <HistoryTab ticket={ticket} />
