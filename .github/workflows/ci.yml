@@ -17,6 +17,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -26,11 +27,20 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
+      # Caches do Go e do golangci-lint montados no container do lint (LINT_CACHE_DIR no Makefile).
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/xet-lint
+          key: lint-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            lint-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}-
+            lint-${{ runner.os }}-
       - run: make lint
 
   generated:
     name: Código gerado
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -42,6 +52,7 @@ jobs:
   backend:
     name: Testes do backend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -49,12 +60,14 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - name: Instalar ffmpeg (conversão de áudio)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        timeout-minutes: 3
+        run: make ci-ffmpeg
       - run: make test-backend
 
   e2e:
     name: Testes ponta a ponta
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -69,7 +82,8 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - name: Instalar ffmpeg (conversão de áudio)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        timeout-minutes: 3
+        run: make ci-ffmpeg
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: make test-e2e
