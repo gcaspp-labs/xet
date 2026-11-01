@@ -1,0 +1,285 @@
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import { TriangleAlert } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Controller, useForm } from 'react-hook-form'
+import { toast } from 'sonner'
+import { z } from 'zod'
+import { ContactSheet, OrganizationPicker } from '@/components/ContactSheet'
+import { FormSheet } from '@/components/FormSheet'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { type TicketDetail, ticketKey, useCloseTicket, useClosingForm } from '@/lib/conversation'
+import type { Organization } from '@/lib/directory'
+import { formatPhone } from '@/lib/format'
+
+// Valor de <input type="datetime-local"> no horário do navegador: 2026-03-02T14:05.
+const localInput = (date: Date) => format(date, "yyyy-MM-dd'T'HH:mm")
+
+const schema = z
+  .object({
+    subject: z.string().trim().min(1, 'Informe o assunto.'),
+    resolution: z.string().trim().min(1, 'Informe a resolução.'),
+    moduleIds: z.array(z.number()).min(1, 'Selecione ao menos um módulo.'),
+    organization: z
+      .object({ id: z.number(), name: z.string(), cnpj: z.string().nullable() })
+      .nullable()
+      .refine((value) => value !== null, 'Selecione o órgão do atendimento.'),
+    startedAt: z.string().min(1, 'Informe o início.'),
+    endedAt: z.string().min(1, 'Informe o fim.'),
+  })
+  .refine((values) => new Date(values.endedAt) <= new Date(), {
+    path: ['endedAt'],
+    message: 'O fim não pode estar no futuro.',
+  })
+  .refine((values) => values.endedAt >= values.startedAt, {
+    path: ['endedAt'],
+    message: 'O fim precisa ser depois do início.',
+  })
+
+type FormValues = z.input<typeof schema>
+
+// Drawer de encerramento (spec.md, Formulário de encerramento): assunto,
+// resolução e módulos obrigatórios; contato, atendente e setor automáticos;
+// órgão, início e fim sugeridos e editáveis. O backend confere tudo de novo.
+export function ClosingSheet({
+  ticket,
+  open,
+  onOpenChange,
+}: {
+  ticket: TicketDetail
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const queryClient = useQueryClient()
+  const { data: form } = useClosingForm(ticket.id, open)
+  const close = useCloseTicket(ticket.id, ticket.sector.id)
+  const [registering, setRegistering] = useState(false)
+  // Horários sugeridos na abertura; só os alterados vão ao backend.
+  const [suggested] = useState(() => ({
+    startedAt: localInput(new Date(ticket.startedAt)),
+    endedAt: localInput(new Date()),
+  }))
+
+  const {
+    register,
+    control,
+    handleSubmit,
+    getValues,
+    setValue,
+    formState: { errors },
+  } = useForm<FormValues, unknown, z.output<typeof schema>>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      subject: '',
+      resolution: '',
+      moduleIds: [],
+      organization: null,
+      ...suggested,
+    },
+  })
+
+  // O órgão sugerido chega com o formulário ou depois do cadastro do contato.
+  useEffect(() => {
+    if (form?.organization && getValues('organization') === null) {
+      setValue('organization', { ...form.organization, cnpj: null })
+    }
+  }, [form?.organization, getValues, setValue])
+
+  const onSubmit = handleSubmit((values) => {
+    if (close.isPending) {
+      return
+    }
+    close.mutate(
+      {
+        subject: values.subject,
+        resolution: values.resolution,
+        moduleIds: values.moduleIds,
+        organizationId: values.organization!.id,
+        startedAt:
+          values.startedAt !== suggested.startedAt
+            ? new Date(values.startedAt).toISOString()
+            : undefined,
+        endedAt:
+          values.endedAt !== suggested.endedAt ? new Date(values.endedAt).toISOString() : undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Chamado encerrado')
+          onOpenChange(false)
+        },
+      },
+    )
+  })
+
+  const row = (label: string, value: string) => (
+    <div>
+      <dt className="label text-ink-soft">{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  )
+
+  return (
+    <>
+      <FormSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Encerrar chamado"
+        description="O chamado só é encerrado depois de salvar o registro do atendimento."
+        submitLabel="Encerrar"
+        pending={close.isPending}
+        error={close.error?.message}
+        onSubmit={onSubmit}
+      >
+        {!ticket.contact.registered && (
+          <Alert variant="warning">
+            <TriangleAlert strokeWidth={1.7} aria-hidden />
+            <AlertDescription className="flex flex-col items-start gap-2">
+              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de encerrar.
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRegistering(true)}
+              >
+                Cadastrar contato
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        <dl className="grid grid-cols-2 gap-3">
+          {row(
+            'Contato',
+            ticket.contact.phone
+              ? `${ticket.contact.name} · ${formatPhone(ticket.contact.phone)}`
+              : ticket.contact.name,
+          )}
+          {row('Setor', ticket.sector.name)}
+          {row('Atendente', ticket.assignee?.name ?? '')}
+        </dl>
+        <Field data-invalid={!!errors.subject}>
+          <FieldLabel htmlFor="closing-subject">Assunto</FieldLabel>
+          <Input
+            id="closing-subject"
+            maxLength={500}
+            aria-invalid={!!errors.subject}
+            {...register('subject')}
+          />
+          <FieldError errors={[errors.subject]} />
+        </Field>
+        <Field data-invalid={!!errors.resolution}>
+          <FieldLabel htmlFor="closing-resolution">Resolução</FieldLabel>
+          <Textarea
+            id="closing-resolution"
+            maxLength={10000}
+            aria-invalid={!!errors.resolution}
+            {...register('resolution')}
+          />
+          <FieldError errors={[errors.resolution]} />
+        </Field>
+        <Controller
+          control={control}
+          name="moduleIds"
+          render={({ field }) => (
+            <FieldSet data-invalid={!!errors.moduleIds}>
+              <FieldLegend variant="label">Módulos</FieldLegend>
+              {form && form.modules.length === 0 && (
+                <FieldDescription>
+                  O setor não tem módulos ativos. Peça a um supervisor para cadastrá-los.
+                </FieldDescription>
+              )}
+              <div className="flex flex-col gap-2">
+                {form?.modules.map((module) => (
+                  <label key={module.id} className="flex items-center gap-2">
+                    <Checkbox
+                      checked={field.value.includes(module.id)}
+                      onCheckedChange={(checked) =>
+                        field.onChange(
+                          checked
+                            ? [...field.value, module.id]
+                            : field.value.filter((id) => id !== module.id),
+                        )
+                      }
+                    />
+                    {module.name}
+                  </label>
+                ))}
+              </div>
+              <FieldError errors={[errors.moduleIds]} />
+            </FieldSet>
+          )}
+        />
+        <Field data-invalid={!!errors.organization}>
+          <FieldLabel htmlFor="closing-organization">Órgão</FieldLabel>
+          <Controller
+            control={control}
+            name="organization"
+            render={({ field }) => (
+              <OrganizationPicker
+                // Recria o campo quando o órgão sugerido chega, para mostrar o nome.
+                key={field.value?.id ?? 'none'}
+                id="closing-organization"
+                value={field.value as Organization | null}
+                onChange={field.onChange}
+                invalid={!!errors.organization}
+              />
+            )}
+          />
+          <FieldDescription>Trocar o órgão vale só para este chamado.</FieldDescription>
+          <FieldError errors={[errors.organization]} />
+        </Field>
+        <div className="grid gap-[15px] sm:grid-cols-2">
+          <Field data-invalid={!!errors.startedAt}>
+            <FieldLabel htmlFor="closing-started-at">Início</FieldLabel>
+            <Input
+              id="closing-started-at"
+              type="datetime-local"
+              className="mono-num"
+              aria-invalid={!!errors.startedAt}
+              {...register('startedAt')}
+            />
+            <FieldError errors={[errors.startedAt]} />
+          </Field>
+          <Field data-invalid={!!errors.endedAt}>
+            <FieldLabel htmlFor="closing-ended-at">Fim</FieldLabel>
+            <Input
+              id="closing-ended-at"
+              type="datetime-local"
+              className="mono-num"
+              aria-invalid={!!errors.endedAt}
+              {...register('endedAt')}
+            />
+            <FieldError errors={[errors.endedAt]} />
+          </Field>
+        </div>
+        <FieldDescription>
+          Alterações de horário ficam registradas no histórico de auditoria.
+        </FieldDescription>
+      </FormSheet>
+      <ContactSheet
+        key={registering ? 'open' : 'closed'}
+        contact={{
+          id: ticket.contact.id,
+          name: ticket.contact.name,
+          phone: ticket.contact.phone,
+          organization: null,
+        }}
+        open={registering}
+        onOpenChange={setRegistering}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ticketKey(ticket.id) })}
+      />
+    </>
+  )
+}

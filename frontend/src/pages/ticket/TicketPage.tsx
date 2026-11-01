@@ -1,6 +1,7 @@
 import {
   Check,
   CircleAlert,
+  CircleCheck,
   FileText,
   MessagesSquare,
   Mic,
@@ -23,6 +24,7 @@ import {
 } from 'react'
 import { useParams } from 'react-router'
 import { toast } from 'sonner'
+import { ClosingSheet } from '@/components/ClosingSheet'
 import { ConversationList } from '@/components/ConversationList'
 import { TicketHistoryList } from '@/components/TicketHistory'
 import { Topbar } from '@/components/Topbar'
@@ -55,6 +57,7 @@ import {
   useSaveSpokeWith,
   useSendMessage,
   useTicket,
+  useTicketModules,
 } from '@/lib/conversation'
 import {
   formatDateTime,
@@ -160,6 +163,11 @@ function canTransfer(ticket: TicketDetail, user: User) {
   return ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')
 }
 
+// Só o responsável encerra, como responde (spec.md, Formulário de encerramento).
+function canClose(ticket: TicketDetail, user: User) {
+  return ticket.status === 'in_progress' && conducts(ticket, user)
+}
+
 function assignmentText(log: AssignmentLog) {
   if (log.action === 'ticket_started') {
     return `${log.toName} iniciou a conversa e assumiu o chamado`
@@ -167,20 +175,27 @@ function assignmentText(log: AssignmentLog) {
   if (log.action === 'ticket_assigned') {
     return `${log.toName} assumiu o chamado`
   }
+  if (log.action === 'ticket_closed') {
+    return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
+  }
   if (log.actor?.name === log.fromName) {
     return `${log.fromName} transferiu o chamado para ${log.toName}`
   }
   return `${log.actor?.name ?? 'Sistema'} transferiu o chamado de ${log.fromName} para ${log.toName}`
 }
 
-// Registro de responsável entre as mensagens, na ordem do tempo.
+// Registro de responsável ou de encerramento entre as mensagens, na ordem do tempo.
 function AssignmentEntry({ log }: { log: AssignmentLog }) {
   return (
     <li
       aria-label="Registro do chamado"
       className="caption flex items-center gap-1.5 self-center rounded-(--radius-7) border border-line-soft bg-muted px-2.5 py-1 text-ink-soft"
     >
-      <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      {log.action === 'ticket_closed' ? (
+        <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : (
+        <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      )}
       <span>
         {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
       </span>
@@ -581,6 +596,8 @@ function SpokeWithField({ ticket, editable }: { ticket: TicketDetail; editable: 
 
 function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
   const status = ticketStatusLabels[ticket.status]
+  const closed = ticket.status === 'closed'
+  const { data: modules = [] } = useTicketModules(ticket.id, closed)
   const row = (label: string, value: ReactNode) => (
     <div>
       <dt className="label text-ink-soft">{label}</dt>
@@ -608,6 +625,28 @@ function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
         row('Assumido em', <span className="mono-num">{formatDateTime(ticket.assignedAt)}</span>)}
       {ticket.closedAt &&
         row('Encerrado em', <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>)}
+      {closed && (
+        <>
+          {row('Assunto', ticket.subject)}
+          {row(
+            'Resolução',
+            <span className="whitespace-pre-wrap break-words">{ticket.resolution}</span>,
+          )}
+          {row(
+            'Módulos',
+            <span className="flex flex-wrap gap-1">
+              {modules.map((module) => (
+                <Badge key={module.id} variant="tag">
+                  {module.name}
+                </Badge>
+              ))}
+            </span>,
+          )}
+          {row('Início', <span className="mono-num">{formatDateTime(ticket.startedAt)}</span>)}
+          {ticket.endedAt &&
+            row('Fim', <span className="mono-num">{formatDateTime(ticket.endedAt)}</span>)}
+        </>
+      )}
       <SpokeWithField
         key={ticket.spokeWith ?? ''}
         ticket={ticket}
@@ -714,6 +753,9 @@ export default function TicketPage() {
   const { data: ticket, error } = useTicket(ticketId)
   const assign = useAssignFromTicket(ticketId, ticket?.sector.id)
   const [transferring, setTransferring] = useState(false)
+  const [closing, setClosing] = useState(false)
+  // Nova chave a cada abertura: o formulário começa limpo, com o fim sugerido no momento.
+  const [closingKey, setClosingKey] = useState(0)
 
   if (error) {
     return (
@@ -749,15 +791,33 @@ export default function TicketPage() {
               Assumir
             </Button>
           ) : (
-            canTransfer(ticket, user) && (
-              <Button onClick={() => setTransferring(true)}>
-                <UserRoundCog strokeWidth={1.7} aria-hidden />
-                Transferir
-              </Button>
-            )
+            <div className="flex gap-2">
+              {canTransfer(ticket, user) && (
+                <Button
+                  variant={canClose(ticket, user) ? 'outline' : 'default'}
+                  onClick={() => setTransferring(true)}
+                >
+                  <UserRoundCog strokeWidth={1.7} aria-hidden />
+                  Transferir
+                </Button>
+              )}
+              {canClose(ticket, user) && (
+                <Button
+                  onClick={() => {
+                    setClosingKey((key) => key + 1)
+                    setClosing(true)
+                  }}
+                >
+                  <CircleCheck strokeWidth={1.7} aria-hidden />
+                  Encerrar
+                </Button>
+              )}
+            </div>
           )
         }
       />
+      {/* Sempre montado: o botão some quando o chamado é encerrado. */}
+      <ClosingSheet key={closingKey} ticket={ticket} open={closing} onOpenChange={setClosing} />
       {/* Sempre montado: quem transfere o próprio chamado perde o botão ao concluir. */}
       <TransferSheet ticket={ticket} open={transferring} onOpenChange={setTransferring} />
       {/* A tela de conversas usa a largura toda (design.md). */}

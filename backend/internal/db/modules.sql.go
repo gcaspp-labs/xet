@@ -59,6 +59,39 @@ func (q *Queries) GetModuleForUpdate(ctx context.Context, arg GetModuleForUpdate
 	return i, err
 }
 
+const listActiveModules = `-- name: ListActiveModules :many
+select id, sector_id, name, active, created_at, updated_at from modules
+where sector_id = $1 and active
+order by lower(name), id
+`
+
+func (q *Queries) ListActiveModules(ctx context.Context, sectorID int64) ([]Module, error) {
+	rows, err := q.db.Query(ctx, listActiveModules, sectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Module
+	for rows.Next() {
+		var i Module
+		if err := rows.Scan(
+			&i.ID,
+			&i.SectorID,
+			&i.Name,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listModules = `-- name: ListModules :many
 select id, sector_id, name, active, created_at, updated_at from modules
 where sector_id = $1

@@ -113,6 +113,27 @@ func (q *Queries) GetContactByPhone(ctx context.Context, phones []string) (Conta
 	return i, err
 }
 
+const getContactForShare = `-- name: GetContactForShare :one
+select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at from contacts where id = $1 for share
+`
+
+// Keeps the registration of the contact from changing until the transaction ends.
+func (q *Queries) GetContactForShare(ctx context.Context, id int64) (Contact, error) {
+	row := q.db.QueryRow(ctx, getContactForShare, id)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.ExternalContactID,
+		&i.OrganizationID,
+		&i.Registered,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getContactWithOrganization = `-- name: GetContactWithOrganization :one
 select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj
 from contacts c

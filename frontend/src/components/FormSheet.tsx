@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react'
-import type { FormEventHandler, ReactNode } from 'react'
+import { type FormEventHandler, type ReactNode, useId } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { FieldGroup } from '@/components/ui/field'
@@ -38,6 +38,8 @@ export function FormSheet({
   children: ReactNode
   extra?: ReactNode
 }) {
+  // Id próprio: dois drawers abertos (um sobre o outro) não enviam o formulário errado.
+  const formId = useId()
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="gap-0">
@@ -46,7 +48,7 @@ export function FormSheet({
           {description && <SheetDescription>{description}</SheetDescription>}
         </SheetHeader>
         <div className="flex-1 overflow-y-auto">
-          <form id="form-sheet" onSubmit={onSubmit} noValidate className="px-5 py-[18px]">
+          <form id={formId} onSubmit={onSubmit} noValidate className="px-5 py-[18px]">
             <FieldGroup className="gap-[15px]">
               {error && (
                 <Alert variant="warning">
@@ -61,7 +63,7 @@ export function FormSheet({
         </div>
         <SheetFooter>
           <SheetClose render={<Button variant="ghost" />}>Cancelar</SheetClose>
-          <Button type="submit" form="form-sheet" disabled={pending}>
+          <Button type="submit" form={formId} disabled={pending}>
             {submitLabel}
           </Button>
         </SheetFooter>

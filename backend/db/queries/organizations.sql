@@ -24,3 +24,6 @@ where @name_pattern::text = ''
    or (@cnpj_pattern::text <> '' and cnpj like @cnpj_pattern)
 order by lower(name), id
 limit @max_results;
+
+-- name: GetOrganization :one
+select * from organizations where id = @id;

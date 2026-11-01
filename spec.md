@@ -54,6 +54,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - A mensagem recebida é ligada ao contato pelo identificador do WhatsApp gravado no contato. Na primeira mensagem de um contato cadastrado manualmente, ainda sem esse identificador, vale o telefone, aceitando também a variante brasileira com ou sem o nono dígito do celular (ex.: 5511987654321 e 551187654321); o identificador passa a ser gravado no contato.
 - Número desconhecido gera um contato não cadastrado, com o nome do perfil do WhatsApp ou, sem ele, o telefone. Se o WhatsApp não informar o telefone (contato identificado apenas por LID), o contato fica sem telefone, com o nome do perfil ou "Contato sem telefone"; o atendente informa o telefone ao cadastrá-lo.
 - Antes de finalizar um chamado de número desconhecido, o atendente deverá cadastrar o contato e vinculá-lo a um órgão pré-cadastrado.
+- Ao cadastrar o contato, os chamados abertos dele que ainda estão sem órgão passam a ter o órgão do cadastro, com registro na auditoria. Chamados que já têm órgão não mudam; a troca continua sendo feita no encerramento.
 
 ## Recebimento e distribuição
 
@@ -102,7 +103,7 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 - Transfere o chamado em atendimento o próprio responsável. Supervisores do setor e administradores também transferem chamados de outros atendentes (por exemplo, na ausência do responsável); o atendente que não é o responsável não transfere.
 - O destino é um atendente ou supervisor ativo do setor do chamado, diferente do responsável atual. Administradores não são destino. Chamado na fila não é transferido: é assumido.
 - A partir da transferência, só o novo responsável responde; o anterior passa a ver a conversa apenas para leitura.
-- A conversa mostra, entre as mensagens e na ordem do tempo, quando o chamado foi assumido e cada transferência, com quem fez, de quem para quem e quando.
+- A conversa mostra, entre as mensagens e na ordem do tempo, quando o chamado foi assumido, cada transferência e o encerramento, com quem fez, de quem para quem e quando.
 
 ### Entre setores
 
@@ -128,6 +129,11 @@ Ao clicar em finalizar, o sistema abrirá o formulário de registro. O chamado s
 | Setor | Automático |
 | Início | Automático: chegada da primeira mensagem do cliente ou, em conversa iniciada pelo atendente, envio da primeira mensagem; editável |
 | Fim | Preenchido automaticamente e editável |
+
+- Encerra o chamado em atendimento somente o responsável; supervisores e administradores também precisam ser o responsável (na ausência dele, o supervisor transfere o chamado para si e encerra). Chamado na fila não é encerrado: é assumido.
+- O fim não pode ser anterior ao início nem estar no futuro. Sem edição, o fim é o momento em que o formulário é salvo.
+- O órgão sugerido é o do chamado ou, se ele ainda não tiver, o órgão principal do contato. Contato não cadastrado (número desconhecido) precisa ser cadastrado e vinculado a um órgão antes de salvar o formulário.
+- Os módulos selecionáveis são os ativos do setor do chamado.
 
 Cada setor terá sua própria lista de módulos/sistemas. Um chamado poderá tratar de vários módulos, com uma resolução geral.
 

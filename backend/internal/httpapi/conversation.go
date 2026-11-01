@@ -28,6 +28,8 @@ type ticketDetailResponse struct {
 	SpokeWith    *string               `json:"spokeWith"`
 	ArrivedAt    time.Time             `json:"arrivedAt"`
 	AssignedAt   *time.Time            `json:"assignedAt"`
+	StartedAt    time.Time             `json:"startedAt"`
+	EndedAt      *time.Time            `json:"endedAt"`
 	ClosedAt     *time.Time            `json:"closedAt"`
 	Subject      *string               `json:"subject"`
 	Resolution   *string               `json:"resolution"`
@@ -152,7 +154,8 @@ func (s *server) getTicket(w http.ResponseWriter, r *http.Request) {
 	out := ticketDetailResponse{
 		ID: t.ID, Protocol: t.Protocol, Status: t.Status,
 		Sector:    ticketUserResponse{ID: t.SectorID, Name: t.SectorName},
-		SpokeWith: t.SpokeWith, ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt, ClosedAt: t.ClosedAt,
+		SpokeWith: t.SpokeWith, ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt,
+		StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt,
 		Subject: t.Subject, Resolution: t.Resolution,
 		Contact: ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},
 	}

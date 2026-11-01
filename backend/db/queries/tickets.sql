@@ -62,7 +62,7 @@ for update;
 -- name: GetTicketDetail :one
 select
     t.id, t.protocol, t.status, t.sector_id, s.name as sector_name, t.spoke_with,
-    t.arrived_at, t.assigned_at, t.closed_at, t.subject, t.resolution,
+    t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name,
     t.assignee_id, u.name as assignee_name
@@ -126,5 +126,46 @@ returning *;
 -- The caller holds the lock of the ticket and checked it is in progress.
 update tickets
 set assignee_id = @assignee_id
+where id = @id
+returning *;
+
+-- name: AddTicketModules :many
+-- Records the active modules of the sector among the given ones; the caller
+-- compares the result with what was asked. Modules are locked for share so
+-- none is deactivated meanwhile.
+insert into ticket_modules (ticket_id, module_id)
+select @ticket_id, m.id
+from modules m
+where m.id = any(@module_ids::bigint[]) and m.sector_id = @sector_id and m.active
+for share of m
+returning module_id;
+
+-- name: CloseTicket :one
+-- The caller holds the lock of the ticket and checked it may be closed.
+update tickets
+set status = 'closed', closure_type = 'resolved', closed_at = now(), closed_by_id = assignee_id,
+    subject = @subject, resolution = @resolution, organization_id = @organization_id,
+    started_at = @started_at, ended_at = coalesce(sqlc.narg(ended_at), now())
+where id = @id
+returning *;
+
+-- name: ListTicketModules :many
+select m.id, m.name
+from ticket_modules tm
+join modules m on m.id = tm.module_id
+where tm.ticket_id = @ticket_id
+order by lower(m.name), m.id;
+
+-- name: GetOpenTicketsOfContactForUpdate :many
+-- Open tickets of the contact in every sector, locked in id order. Locking the
+-- tickets before the contact keeps the order used by the closing.
+select * from tickets
+where contact_id = @contact_id and status <> 'closed'
+order by id
+for update;
+
+-- name: SetTicketOrganization :one
+update tickets
+set organization_id = @organization_id
 where id = @id
 returning *;

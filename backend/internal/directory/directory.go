@@ -307,30 +307,22 @@ func (s *Service) CreateContact(ctx context.Context, in ContactInput) (Contact, 
 	return contact, nil
 }
 
-// UpdateContact changes the contact data and marks it as registered.
-func (s *Service) UpdateContact(ctx context.Context, id int64, in ContactInput) (Contact, error) {
+// UpdateContact changes the contact data and marks it as registered, inside
+// the caller's transaction, so the ticket domain can complete the open tickets
+// of the contact in the same commit.
+func UpdateContact(ctx context.Context, q *db.Queries, id int64, in ContactInput) (Contact, error) {
 	in, err := in.normalize()
 	if err != nil {
 		return Contact{}, err
 	}
-
-	var contact Contact
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		_, err := q.UpdateContact(ctx, db.UpdateContactParams{ID: id, Name: in.Name, Phone: &in.Phone, OrganizationID: &in.OrganizationID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrContactNotFound
-		}
-		if err != nil {
-			return constraintError("update contact", err)
-		}
-		contact, err = getContact(ctx, q, id)
-		return err
-	})
-	if err != nil {
-		return Contact{}, err
+	_, err = q.UpdateContact(ctx, db.UpdateContactParams{ID: id, Name: in.Name, Phone: &in.Phone, OrganizationID: &in.OrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Contact{}, ErrContactNotFound
 	}
-	return contact, nil
+	if err != nil {
+		return Contact{}, constraintError("update contact", err)
+	}
+	return getContact(ctx, q, id)
 }
 
 func getContact(ctx context.Context, q *db.Queries, id int64) (Contact, error) {

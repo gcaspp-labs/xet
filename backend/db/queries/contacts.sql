@@ -52,3 +52,7 @@ insert into contacts (name, phone, external_contact_id, registered)
 values (@name, @phone, @external_contact_id, false)
 on conflict do nothing
 returning *;
+
+-- name: GetContactForShare :one
+-- Keeps the registration of the contact from changing until the transaction ends.
+select * from contacts where id = @id for share;
