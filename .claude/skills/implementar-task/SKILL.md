@@ -34,7 +34,7 @@ Leia só o que a task precisa, antes de escrever qualquer código. Ler menos nã
    - Interface (telas, componentes ou textos ao usuário): `design.md` inteiro.
    - Adaptador de mensageria, armazenamento ou tempo real: a seção correspondente de `arquitetura.md`.
    - Biblioteca que o projeto ainda não usa: "Bibliotecas padrão", em `arquitetura.md`.
-4. **Código:** siga o caminho do assunto, descrito em "Um arquivo por assunto" (`arquitetura.md`): `httpapi/router.go`, `httpapi/<assunto>.go`, `ticket/<assunto>.go` (ou o pacote do domínio), `db/queries/<tabela>.sql` e o teste. Havendo funcionalidade parecida, leia uma como modelo e siga os padrões dela (nomes, organização de pacotes, estilo de testes, tratamento de erros). Veja as assinaturas antes dos corpos (`grep -n '^func'`) e leia por inteiro só o que vai mudar ou servir de modelo.
+4. **Código:** siga o caminho do assunto, descrito em "Um arquivo por assunto" (`arquitetura.md`): `server/server.go`, `routes.go` do módulo (ou `Routes` em `<assunto>_http.go`, no `core`), `helpdesk/<assunto>_http.go`, `helpdesk/<assunto>.go` (ou o pacote de `core`), `db/queries/<tabela>.sql` e `<assunto>_test.go`. Havendo funcionalidade parecida, leia uma como modelo e siga os padrões dela (nomes, organização de pacotes, estilo de testes, tratamento de erros). Veja as assinaturas antes dos corpos (`grep -n '^func'`) e leia por inteiro só o que vai mudar ou servir de modelo.
 5. **Antes de mudar** uma função ou uma query, procure quem a usa (`grep -rn <nome> backend frontend`).
 
 ## 3. Planejar

@@ -269,7 +269,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** importa selecionados e todos, com e sem órgão; repetir a importação e a variante do nono dígito não duplicam nem sobrescrevem, só vinculam o setor; atendente não importa de outro setor; há verificação manual com o número real.
 
-### [ ] T30 — Reorganizar o backend por módulos
+### [x] T30 — Reorganizar o backend por módulos
 
 Só muda onde o código fica, para ler o backend por funcionalidade. Comportamento, API, banco e frontend não mudam.
 
@@ -318,7 +318,7 @@ Ajustes para fazer antes de escalar para outros setores, levantados durante o pi
 - Limpar periodicamente as sessões expiradas, inclusive de usuários que não voltam a fazer login.
 - Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
 
-**Ler:** spec.md › Usuários e acesso; modelo-dados.md › `users`, `sessions`, `audit_logs`; arquitetura.md › Autenticação; design.md; código: `auth/auth.go`, `httpapi/auth.go`, `db/queries/sessions.sql`, `db/queries/users.sql`, `db/migrations/`, `src/pages/LoginPage.tsx`, `src/lib/auth.ts`, `httpapi/auth_test.go`, `e2e/auth.spec.ts`.
+**Ler:** spec.md › Usuários e acesso; modelo-dados.md › `users`, `sessions`, `audit_logs`; arquitetura.md › Autenticação; design.md; código: `core/auth/auth.go`, `core/auth/auth_http.go`, `core/users/users.go`, `db/queries/sessions.sql`, `db/queries/users.sql`, `db/migrations/`, `src/pages/LoginPage.tsx`, `src/lib/auth.ts`, `core/auth/auth_test.go`, `e2e/auth.spec.ts`.
 
 **Pronto quando:** login bloqueia após o limite de tentativas; senha comum é recusada; sessões expiradas são removidas sem depender de novo login; usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
 

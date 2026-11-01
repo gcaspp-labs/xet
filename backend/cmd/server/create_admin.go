@@ -10,7 +10,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gcaspp-labs/xet/backend/internal/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/users"
+
 	"github.com/gcaspp-labs/xet/backend/internal/config"
 )
 
@@ -30,10 +31,10 @@ func runCreateAdmin(args []string) error {
 	defer pool.Close()
 
 	fmt.Fprint(os.Stderr, "Senha do administrador: ")
-	return createAdmin(ctx, auth.NewService(pool), args, os.Stdin, os.Stdout)
+	return createAdmin(ctx, users.NewService(pool), args, os.Stdin, os.Stdout)
 }
 
-func createAdmin(ctx context.Context, svc *auth.Service, args []string, stdin io.Reader, stdout io.Writer) error {
+func createAdmin(ctx context.Context, svc *users.Service, args []string, stdin io.Reader, stdout io.Writer) error {
 	fs := flag.NewFlagSet("create-admin", flag.ContinueOnError)
 	name := fs.String("name", "", "nome do administrador")
 	email := fs.String("email", "", "e-mail de login")
@@ -52,11 +53,11 @@ func createAdmin(ctx context.Context, svc *auth.Service, args []string, stdin io
 
 	user, err := svc.CreateAdmin(ctx, *name, *email, password)
 	switch {
-	case errors.Is(err, auth.ErrWeakPassword):
+	case errors.Is(err, users.ErrWeakPassword):
 		return errors.New("a senha precisa ter no mínimo 8 caracteres, com letra maiúscula, letra minúscula, número e caractere especial")
-	case errors.Is(err, auth.ErrPasswordTooLong):
+	case errors.Is(err, users.ErrPasswordTooLong):
 		return errors.New("a senha pode ter no máximo 72 caracteres")
-	case errors.Is(err, auth.ErrEmailTaken):
+	case errors.Is(err, users.ErrEmailTaken):
 		return fmt.Errorf("já existe um usuário com o e-mail %s", *email)
 	case err != nil:
 		return err

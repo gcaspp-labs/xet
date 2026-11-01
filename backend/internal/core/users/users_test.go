@@ -1,0 +1,355 @@
+package users_test
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/gcaspp-labs/xet/backend/internal/db"
+)
+
+func TestAdministrationRequiresAdmin(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	agent := e.User("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
+
+	tokens := map[string]string{
+		"supervisor": e.Login("sup@exemplo.com", testPassword),
+		"agent":      e.Login("agente@exemplo.com", testPassword),
+	}
+	sectorBody := map[string]string{"name": "RH"}
+	userBody := map[string]any{"name": "Novo", "email": "novo@exemplo.com", "role": "agent", "sectorId": contab.ID, "password": testPassword, "active": true}
+	requests := []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPost, "/api/sectors", sectorBody},
+		{http.MethodPut, fmt.Sprintf("/api/sectors/%d", contab.ID), sectorBody},
+		{http.MethodGet, "/api/users", nil},
+		{http.MethodPost, "/api/users", userBody},
+		{http.MethodPut, fmt.Sprintf("/api/users/%d", agent.ID), userBody},
+	}
+	for _, req := range requests {
+		for who, token := range tokens {
+			if resp := e.Do(req.method, req.path, token, req.body); resp.Status != http.StatusForbidden {
+				t.Errorf("%s %s %s: status %d, want 403", who, req.method, req.path, resp.Status)
+			}
+		}
+		if resp := e.Do(req.method, req.path, "", req.body); resp.Status != http.StatusUnauthorized {
+			t.Errorf("no session %s %s: status %d, want 401", req.method, req.path, resp.Status)
+		}
+	}
+
+	var sectors int
+	if err := e.Pool.QueryRow(t.Context(), "select count(*) from sectors").Scan(&sectors); err != nil {
+		t.Fatal(err)
+	}
+	if sectors != 1 {
+		t.Fatalf("sectors = %d, want 1: refused requests must not write", sectors)
+	}
+}
+
+func TestAdminCreatesUsers(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	admin := e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+
+	resp := e.Do(http.MethodPost, "/api/users", token, map[string]any{
+		"name": "Ana Souza", "email": "ana@exemplo.com", "role": "agent", "sectorId": contab.ID, "password": testPassword,
+	})
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("create agent: status %d, body %v", resp.Status, resp.Body)
+	}
+	if resp.Body["role"] != "agent" || resp.Body["sectorId"] != float64(contab.ID) || resp.Body["active"] != true {
+		t.Fatalf("create body: %v", resp.Body)
+	}
+	if _, ok := resp.Body["passwordHash"]; ok {
+		t.Fatal("response must not contain the password hash")
+	}
+	anaID := id(resp.Body)
+	e.Login("ana@exemplo.com", testPassword)
+
+	// The sector sent for an admin is ignored: admins have no sector.
+	resp = e.Do(http.MethodPost, "/api/users", token, map[string]any{
+		"name": "Bruno", "email": "bruno@exemplo.com", "role": "admin", "sectorId": contab.ID, "password": testPassword,
+	})
+	if resp.Status != http.StatusCreated || resp.Body["sectorId"] != nil {
+		t.Fatalf("create admin: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	sector := contab.ID
+	unknown := int64(999999)
+	cases := []struct {
+		name string
+		body map[string]any
+		want int
+	}{
+		{"agent without sector", map[string]any{"name": "C", "email": "c@exemplo.com", "role": "agent", "password": testPassword}, http.StatusUnprocessableEntity},
+		{"supervisor without sector", map[string]any{"name": "C", "email": "c@exemplo.com", "role": "supervisor", "password": testPassword}, http.StatusUnprocessableEntity},
+		{"unknown sector", map[string]any{"name": "C", "email": "c@exemplo.com", "role": "agent", "sectorId": unknown, "password": testPassword}, http.StatusUnprocessableEntity},
+		{"unknown role", map[string]any{"name": "C", "email": "c@exemplo.com", "role": "root", "sectorId": sector, "password": testPassword}, http.StatusUnprocessableEntity},
+		{"invalid email", map[string]any{"name": "C", "email": "c-exemplo.com", "role": "agent", "sectorId": sector, "password": testPassword}, http.StatusUnprocessableEntity},
+		{"blank name", map[string]any{"name": "  ", "email": "c@exemplo.com", "role": "agent", "sectorId": sector, "password": testPassword}, http.StatusUnprocessableEntity},
+		{"weak password", map[string]any{"name": "C", "email": "c@exemplo.com", "role": "agent", "sectorId": sector, "password": "abcdefgh"}, http.StatusUnprocessableEntity},
+		{"duplicate email ignoring case", map[string]any{"name": "C", "email": "ANA@exemplo.com", "role": "agent", "sectorId": sector, "password": testPassword}, http.StatusConflict},
+	}
+	for _, tc := range cases {
+		resp := e.Do(http.MethodPost, "/api/users", token, tc.body)
+		if resp.Status != tc.want || resp.Body["error"] == "" {
+			t.Errorf("%s: status %d, want %d (body %v)", tc.name, resp.Status, tc.want, resp.Body)
+		}
+	}
+
+	list := e.DoList(http.MethodGet, "/api/users", token)
+	if len(list) != 3 {
+		t.Fatalf("list: %v", list)
+	}
+	for _, u := range list {
+		if _, ok := u["passwordHash"]; ok {
+			t.Fatal("list must not contain the password hash")
+		}
+	}
+
+	actions, changes := e.AuditChanges("user", anaID)
+	if len(actions) != 1 || actions[0] != "user_created" || changes[0]["email"]["to"] != "ana@exemplo.com" || changes[0]["role"]["to"] != "agent" {
+		t.Fatalf("audit: %v %v", actions, changes)
+	}
+	if _, ok := changes[0]["password"]; ok {
+		t.Fatal("audit must not contain the password")
+	}
+	var actor int64
+	if err := e.Pool.QueryRow(t.Context(), "select actor_id from audit_logs where entity_type = 'user' and entity_id = $1", anaID).Scan(&actor); err != nil || actor != admin.ID {
+		t.Fatalf("audit actor = %d (%v), want %d", actor, err, admin.ID)
+	}
+}
+
+func TestAdminEditsAndDeactivatesUsers(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	token := e.Login("admin@exemplo.com", testPassword)
+	anaToken := e.Login("ana@exemplo.com", testPassword)
+	path := fmt.Sprintf("/api/users/%d", ana.ID)
+
+	resp := e.Do(http.MethodPut, path, token, map[string]any{
+		"name": "Ana Souza", "email": "ana@exemplo.com", "role": "supervisor", "sectorId": rh.ID, "active": true,
+	})
+	if resp.Status != http.StatusOK || resp.Body["role"] != "supervisor" || resp.Body["sectorId"] != float64(rh.ID) {
+		t.Fatalf("update: status %d, body %v", resp.Status, resp.Body)
+	}
+	// The new role and sector apply to the open session right away.
+	me := e.Do(http.MethodGet, "/api/auth/me", anaToken, nil)
+	if me.Status != http.StatusOK || me.Body["role"] != "supervisor" || me.Body["sectorId"] != float64(rh.ID) {
+		t.Fatalf("me after update: status %d, body %v", me.Status, me.Body)
+	}
+
+	resp = e.Do(http.MethodPut, path, token, map[string]any{
+		"name": "Ana Souza", "email": "ana@exemplo.com", "role": "supervisor", "sectorId": rh.ID, "active": false,
+	})
+	if resp.Status != http.StatusOK || resp.Body["active"] != false {
+		t.Fatalf("deactivate: status %d, body %v", resp.Status, resp.Body)
+	}
+	var sessions int
+	if err := e.Pool.QueryRow(t.Context(), "select count(*) from sessions where user_id = $1", ana.ID).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 0 {
+		t.Fatalf("sessions after deactivation = %d, want 0", sessions)
+	}
+	if resp := e.Do(http.MethodPost, "/api/auth/login", "", map[string]string{"email": "ana@exemplo.com", "password": testPassword}); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("login of deactivated user: status %d", resp.Status)
+	}
+
+	resp = e.Do(http.MethodPut, path, token, map[string]any{
+		"name": "Ana Souza", "email": "ana@exemplo.com", "role": "supervisor", "sectorId": rh.ID, "active": true,
+	})
+	if resp.Status != http.StatusOK {
+		t.Fatalf("reactivate: status %d", resp.Status)
+	}
+	e.Login("ana@exemplo.com", testPassword)
+
+	if resp := e.Do(http.MethodPut, "/api/users/999999", token, map[string]any{
+		"name": "X", "email": "x@exemplo.com", "role": "agent", "sectorId": contab.ID, "active": true,
+	}); resp.Status != http.StatusNotFound {
+		t.Fatalf("update unknown user: status %d", resp.Status)
+	}
+	if resp := e.Do(http.MethodPut, path, token, map[string]any{
+		"name": "Ana", "email": "admin@exemplo.com", "role": "agent", "sectorId": contab.ID, "active": true,
+	}); resp.Status != http.StatusConflict {
+		t.Fatalf("update to existing email: status %d", resp.Status)
+	}
+
+	actions, changes := e.AuditChanges("user", ana.ID)
+	if len(actions) != 3 || actions[0] != "user_updated" || actions[1] != "user_updated" || actions[2] != "user_updated" {
+		t.Fatalf("audit actions: %v", actions)
+	}
+	first := changes[0]
+	if first["name"]["from"] != "ana@exemplo.com" || first["name"]["to"] != "Ana Souza" ||
+		first["role"]["from"] != "agent" || first["role"]["to"] != "supervisor" ||
+		first["sector_id"]["from"] != float64(contab.ID) || first["sector_id"]["to"] != float64(rh.ID) {
+		t.Fatalf("first update changes: %v", first)
+	}
+	if _, ok := first["email"]; ok {
+		t.Fatalf("unchanged email recorded: %v", first)
+	}
+	if len(changes[1]) != 1 || changes[1]["active"]["from"] != true || changes[1]["active"]["to"] != false {
+		t.Fatalf("deactivation changes: %v", changes[1])
+	}
+}
+
+func TestAdminCannotLockThemselvesOut(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	admin := e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	other := e.User("admin2@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+	path := fmt.Sprintf("/api/users/%d", admin.ID)
+
+	cases := []struct {
+		name string
+		body map[string]any
+		want int
+	}{
+		{"deactivate self", map[string]any{"name": "Admin", "email": "admin@exemplo.com", "role": "admin", "active": false}, http.StatusUnprocessableEntity},
+		{"demote self", map[string]any{"name": "Admin", "email": "admin@exemplo.com", "role": "supervisor", "sectorId": contab.ID, "active": true}, http.StatusUnprocessableEntity},
+		{"rename self", map[string]any{"name": "Admin Geral", "email": "admin@exemplo.com", "role": "admin", "active": true}, http.StatusOK},
+	}
+	for _, tc := range cases {
+		if resp := e.Do(http.MethodPut, path, token, tc.body); resp.Status != tc.want {
+			t.Errorf("%s: status %d, want %d (body %v)", tc.name, resp.Status, tc.want, resp.Body)
+		}
+	}
+	if resp := e.Do(http.MethodGet, "/api/auth/me", token, nil); resp.Status != http.StatusOK || resp.Body["role"] != "admin" {
+		t.Fatalf("admin session after refused changes: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	// Another administrator can be deactivated.
+	resp := e.Do(http.MethodPut, fmt.Sprintf("/api/users/%d", other.ID), token, map[string]any{
+		"name": "Outro", "email": "admin2@exemplo.com", "role": "admin", "active": false,
+	})
+	if resp.Status != http.StatusOK {
+		t.Fatalf("deactivate other admin: status %d, body %v", resp.Status, resp.Body)
+	}
+}
+
+func TestResetPasswordPermissions(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	e.User("sup.contab@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	e.User("sup.rh@exemplo.com", db.UserRoleSupervisor, &rh.ID)
+	e.User("agente.contab@exemplo.com", db.UserRoleAgent, &contab.ID)
+	target := e.User("alvo.contab@exemplo.com", db.UserRoleAgent, &contab.ID)
+	otherAdmin := e.User("admin2@exemplo.com", db.UserRoleAdmin, nil)
+
+	cases := []struct {
+		name   string
+		actor  string
+		target int64
+		want   int
+	}{
+		{"admin resets agent", "admin@exemplo.com", target.ID, http.StatusNoContent},
+		{"admin resets admin", "admin@exemplo.com", otherAdmin.ID, http.StatusNoContent},
+		{"supervisor resets agent of own sector", "sup.contab@exemplo.com", target.ID, http.StatusNoContent},
+		{"supervisor of other sector", "sup.rh@exemplo.com", target.ID, http.StatusForbidden},
+		{"supervisor resets admin", "sup.contab@exemplo.com", otherAdmin.ID, http.StatusForbidden},
+		{"agent", "agente.contab@exemplo.com", target.ID, http.StatusForbidden},
+		{"unknown user", "admin@exemplo.com", 999999, http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			token := e.Login(tc.actor, testPassword)
+			path := fmt.Sprintf("/api/users/%d/password", tc.target)
+			resp := e.Do(http.MethodPut, path, token, map[string]string{"password": testPassword})
+			if resp.Status != tc.want {
+				t.Fatalf("status %d, want %d (body %v)", resp.Status, tc.want, resp.Body)
+			}
+		})
+	}
+
+	path := fmt.Sprintf("/api/users/%d/password", target.ID)
+	if resp := e.Do(http.MethodPut, path, "", map[string]string{"password": testPassword}); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("without session: status %d", resp.Status)
+	}
+}
+
+func TestResetPasswordEndsSessionsAndAudits(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	sup := e.User("sup@exemplo.com", db.UserRoleSupervisor, &sector.ID)
+	target := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+
+	targetToken := e.Login("ana@exemplo.com", testPassword)
+	supToken := e.Login("sup@exemplo.com", testPassword)
+
+	const newPassword = "Nova#Senha9"
+	resp := e.Do(http.MethodPut, fmt.Sprintf("/api/users/%d/password", target.ID), supToken, map[string]string{"password": newPassword})
+	if resp.Status != http.StatusNoContent {
+		t.Fatalf("reset: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	if resp := e.Do(http.MethodGet, "/api/auth/me", targetToken, nil); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("old session after reset: status %d", resp.Status)
+	}
+	if resp := e.Do(http.MethodPost, "/api/auth/login", "", map[string]string{"email": "ana@exemplo.com", "password": testPassword}); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("old password after reset: status %d", resp.Status)
+	}
+	e.Login("ana@exemplo.com", newPassword)
+
+	logs, err := e.Q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "user", EntityID: target.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 || logs[0].Action != "user_password_reset" || logs[0].ActorID == nil || *logs[0].ActorID != sup.ID {
+		t.Fatalf("audit logs: %+v", logs)
+	}
+	if logs[0].Changes != nil && strings.Contains(string(logs[0].Changes), newPassword) {
+		t.Fatal("audit must not contain the password")
+	}
+}
+
+func TestResetPasswordPolicy(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	target := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	token := e.Login("admin@exemplo.com", testPassword)
+	path := fmt.Sprintf("/api/users/%d/password", target.ID)
+
+	cases := []struct {
+		password string
+		want     int
+	}{
+		{"Ab1!xyz", http.StatusUnprocessableEntity},                        // 7 characters
+		{"abcdef1!", http.StatusUnprocessableEntity},                       // no uppercase
+		{"ABCDEF1!", http.StatusUnprocessableEntity},                       // no lowercase
+		{"Abcdefg!", http.StatusUnprocessableEntity},                       // no digit
+		{"Abcdefg1", http.StatusUnprocessableEntity},                       // no special character
+		{"Aa1!" + strings.Repeat("x", 69), http.StatusUnprocessableEntity}, // 73 bytes, over the bcrypt limit
+		{"", http.StatusUnprocessableEntity},
+		{"Abcdef1!", http.StatusNoContent},
+		{"Ação 2026 válida", http.StatusNoContent}, // accented letters and space as special character
+	}
+	for _, tc := range cases {
+		resp := e.Do(http.MethodPut, path, token, map[string]string{"password": tc.password})
+		if resp.Status != tc.want {
+			t.Fatalf("password %q: status %d, want %d", tc.password, resp.Status, tc.want)
+		}
+		if tc.want == http.StatusUnprocessableEntity && resp.Body["error"] == "" {
+			t.Fatalf("password %q: missing error message", tc.password)
+		}
+	}
+}
