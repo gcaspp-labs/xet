@@ -11,7 +11,7 @@ type spokeWithRequest struct {
 }
 
 func (s *server) setSpokeWith(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -35,7 +35,7 @@ type noteResponse struct {
 }
 
 func (s *server) listNotes(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -56,7 +56,7 @@ type noteRequest struct {
 }
 
 func (s *server) createNote(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}

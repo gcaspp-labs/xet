@@ -69,7 +69,7 @@ func toSentMessageResponse(m db.Message) sentMessageResponse {
 }
 
 func (s *server) listMessages(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -93,7 +93,7 @@ type textMessageRequest struct {
 // sendMessage sends a text (JSON) or a file (multipart, fields
 // clientRequestId, file and an optional caption) to the contact.
 func (s *server) sendMessage(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}

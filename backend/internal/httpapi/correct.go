@@ -21,7 +21,7 @@ type correctRequest struct {
 
 // correctTicket corrects the closing data of a closed ticket, with a reason.
 func (s *server) correctTicket(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -65,7 +65,7 @@ type correctionResponse struct {
 
 // listCorrections returns the history of changes of a closed ticket.
 func (s *server) listCorrections(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}

@@ -36,6 +36,11 @@ func urlID(w http.ResponseWriter, r *http.Request, param, notFound string) (int6
 	return id, true
 }
 
+// urlTicketID parses the ticket ID of the route; on failure it answers 404.
+func urlTicketID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	return urlID(w, r, "ticketID", "Chamado não encontrado.")
+}
+
 // decodeJSON reads and validates the request body; on failure it writes the
 // response and returns false.
 func (s *server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

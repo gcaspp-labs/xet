@@ -14,7 +14,7 @@ type transferRequest struct {
 
 // transferTicket hands a ticket in progress to another user of its sector.
 func (s *server) transferTicket(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -51,7 +51,7 @@ type assignmentLogResponse struct {
 // listAssignments returns when the ticket was assigned and each transfer,
 // shown among the messages of the conversation.
 func (s *server) listAssignments(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}

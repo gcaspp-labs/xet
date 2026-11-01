@@ -17,7 +17,7 @@ type closingFormResponse struct {
 // closingForm returns what the closing form starts with: the active modules
 // of the sector, the suggested organization and the automatic start.
 func (s *server) closingForm(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -62,7 +62,7 @@ type closeResponse struct {
 
 // closeTicket saves the closing form and closes the ticket.
 func (s *server) closeTicket(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -87,7 +87,7 @@ func (s *server) closeTicket(w http.ResponseWriter, r *http.Request) {
 
 // listTicketModules returns the modules recorded when the ticket was closed.
 func (s *server) listTicketModules(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}

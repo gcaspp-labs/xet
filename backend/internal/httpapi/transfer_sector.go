@@ -20,7 +20,7 @@ type transferSectorResponse struct {
 // transferSector saves the closing form, closes the ticket as transferred
 // and opens the linked ticket in the queue of the target sector.
 func (s *server) transferSector(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
@@ -49,7 +49,7 @@ func (s *server) transferSector(w http.ResponseWriter, r *http.Request) {
 
 // listTransferSectors returns the sectors the ticket may be transferred to.
 func (s *server) listTransferSectors(w http.ResponseWriter, r *http.Request) {
-	ticketID, ok := urlID(w, r, "ticketID", "Chamado não encontrado.")
+	ticketID, ok := urlTicketID(w, r)
 	if !ok {
 		return
 	}
