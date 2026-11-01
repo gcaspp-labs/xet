@@ -46,9 +46,13 @@ var (
 var (
 	ErrNotClosed      = errors.New("ticket not closed")
 	ErrCannotCorrect  = errors.New("user may not correct the ticket")
-	ErrReasonRequired = errors.New("correction without reason")
+	ErrReasonRequired = errors.New("reason missing")
 	ErrNoChanges      = errors.New("correction changes nothing")
+	ErrCancelled      = errors.New("ticket cancelled")
 )
+
+// ErrCannotCancel refuses an agent who is not the assignee of a ticket in progress.
+var ErrCannotCancel = errors.New("user may not cancel the ticket")
 
 // errNotQueued rolls back an assignment that found the ticket taken.
 var errNotQueued = errors.New("ticket not queued")

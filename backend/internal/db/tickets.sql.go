@@ -91,6 +91,52 @@ func (q *Queries) AssignTicket(ctx context.Context, arg AssignTicketParams) (Tic
 	return i, err
 }
 
+const cancelTicket = `-- name: CancelTicket :one
+update tickets
+set status = 'closed', closure_type = 'cancelled', closed_at = now(), closed_by_id = $1::bigint,
+    assignee_id = coalesce(assignee_id, $1::bigint), ended_at = greatest(now(), started_at)
+where id = $2
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type CancelTicketParams struct {
+	ActorID int64
+	ID      int64
+}
+
+// The caller holds the lock of the ticket and checked it may be cancelled. A
+// ticket from the queue takes who cancelled as assignee, since a closed ticket
+// needs one (tickets_assigned), and assigned_at stays empty. The start comes
+// from the clock of the phone and may be ahead of the database.
+func (q *Queries) CancelTicket(ctx context.Context, arg CancelTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, cancelTicket, arg.ActorID, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const closeTicket = `-- name: CloseTicket :one
 update tickets
 set status = 'closed', closure_type = $1::closure_type, closed_at = now(), closed_by_id = assignee_id,
@@ -712,7 +758,7 @@ func (q *Queries) ListClosedTickets(ctx context.Context, arg ListClosedTicketsPa
 
 const listContactTickets = `-- name: ListContactTickets :many
 select
-    t.id, t.protocol, t.status, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
@@ -734,6 +780,7 @@ type ListContactTicketsRow struct {
 	ID               int64
 	Protocol         string
 	Status           TicketStatus
+	ClosureType      NullClosureType
 	SectorName       string
 	ArrivedAt        time.Time
 	ClosedAt         *time.Time
@@ -757,6 +804,7 @@ func (q *Queries) ListContactTickets(ctx context.Context, arg ListContactTickets
 			&i.ID,
 			&i.Protocol,
 			&i.Status,
+			&i.ClosureType,
 			&i.SectorName,
 			&i.ArrivedAt,
 			&i.ClosedAt,
@@ -871,7 +919,7 @@ func (q *Queries) ListOpenTickets(ctx context.Context, sectorID int64) ([]ListOp
 
 const listOrganizationTickets = `-- name: ListOrganizationTickets :many
 select
-    t.id, t.protocol, t.status, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
@@ -893,6 +941,7 @@ type ListOrganizationTicketsRow struct {
 	ID               int64
 	Protocol         string
 	Status           TicketStatus
+	ClosureType      NullClosureType
 	SectorName       string
 	ArrivedAt        time.Time
 	ClosedAt         *time.Time
@@ -916,6 +965,7 @@ func (q *Queries) ListOrganizationTickets(ctx context.Context, arg ListOrganizat
 			&i.ID,
 			&i.Protocol,
 			&i.Status,
+			&i.ClosureType,
 			&i.SectorName,
 			&i.ArrivedAt,
 			&i.ClosedAt,

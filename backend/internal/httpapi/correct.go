@@ -40,6 +40,8 @@ func (s *server) correctTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "Apenas quem encerrou o atendimento e a supervisão do setor podem corrigi-lo.")
 	case errors.Is(err, ticket.ErrNotClosed):
 		writeError(w, http.StatusConflict, "Só atendimentos encerrados são corrigidos.")
+	case errors.Is(err, ticket.ErrCancelled):
+		writeError(w, http.StatusConflict, "Chamado cancelado não é corrigido.")
 	case errors.Is(err, ticket.ErrReasonRequired):
 		writeError(w, http.StatusUnprocessableEntity, "Informe o motivo da correção.")
 	case errors.Is(err, ticket.ErrNoChanges):
