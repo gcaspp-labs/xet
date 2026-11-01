@@ -1,8 +1,9 @@
-import { BookUser } from 'lucide-react'
+import { BookUser, Plus } from 'lucide-react'
 import { type FormEvent, useDeferredValue, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { ContactFilters } from '@/components/ContactFilters'
+import { ContactSheet } from '@/components/ContactSheet'
 import { FormSheet } from '@/components/FormSheet'
 import { SearchBox } from '@/components/SearchBox'
 import { Button } from '@/components/ui/button'
@@ -37,9 +38,11 @@ function ContactSummary({ contact }: { contact: Contact }) {
 function ContactSearch({
   checking,
   onChoose,
+  onRegister,
 }: {
   checking: boolean
   onChoose: (contact: Contact) => void
+  onRegister: () => void
 }) {
   const [query, setQuery] = useState('')
   const contactFilter = useContactFilter()
@@ -54,6 +57,10 @@ function ContactSearch({
         placeholder="Nome, órgão, telefone ou CNPJ"
       />
       <ContactFilters {...contactFilter} />
+      <Button type="button" variant="outline" size="sm" className="self-start" onClick={onRegister}>
+        <Plus strokeWidth={1.7} aria-hidden />
+        Novo contato
+      </Button>
       {contacts.length > 0 ? (
         <ul aria-label="Contatos" className="flex flex-col divide-y divide-line-soft">
           {contacts.map((contact) => (
@@ -98,6 +105,7 @@ export function NewConversationSheet({
   const [body, setBody] = useState('')
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState<string>()
+  const [registering, setRegistering] = useState(false)
   // O mesmo identificador numa nova tentativa evita chamado e mensagem duplicados.
   const requestId = useRef<string | null>(null)
 
@@ -154,53 +162,67 @@ export function NewConversationSheet({
   }
 
   return (
-    <FormSheet
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Nova conversa"
-      description="A mensagem sai pelo número do setor e o chamado fica com você."
-      submitLabel="Enviar"
-      pending={!contact || start.isPending}
-      error={error}
-      onSubmit={submit}
-    >
-      {contact ? (
-        <>
-          <Field>
-            <FieldLabel>Contato</FieldLabel>
-            <div className="flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <ContactSummary contact={contact} />
+    <>
+      <FormSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Nova conversa"
+        description="A mensagem sai pelo número do setor e o chamado fica com você."
+        submitLabel="Enviar"
+        pending={!contact || start.isPending}
+        error={error}
+        onSubmit={submit}
+      >
+        {contact ? (
+          <>
+            <Field>
+              <FieldLabel>Contato</FieldLabel>
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <ContactSummary contact={contact} />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setContact(null)
+                    setError(undefined)
+                  }}
+                >
+                  Trocar
+                </Button>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setContact(null)
-                  setError(undefined)
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-conversation-body">Mensagem</FieldLabel>
+              <Textarea
+                id="new-conversation-body"
+                value={body}
+                autoFocus
+                onChange={(event) => {
+                  requestId.current = null
+                  setBody(event.target.value)
                 }}
-              >
-                Trocar
-              </Button>
-            </div>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="new-conversation-body">Mensagem</FieldLabel>
-            <Textarea
-              id="new-conversation-body"
-              value={body}
-              autoFocus
-              onChange={(event) => {
-                requestId.current = null
-                setBody(event.target.value)
-              }}
-            />
-          </Field>
-        </>
-      ) : (
-        <ContactSearch checking={checking} onChoose={(chosen) => void choose(chosen)} />
+              />
+            </Field>
+          </>
+        ) : (
+          <ContactSearch
+            checking={checking}
+            onChoose={(chosen) => void choose(chosen)}
+            onRegister={() => setRegistering(true)}
+          />
+        )}
+      </FormSheet>
+      {registering && (
+        <ContactSheet
+          contact={null}
+          open={registering}
+          onOpenChange={setRegistering}
+          onSaved={(saved) => void choose(saved)}
+        />
       )}
-    </FormSheet>
+    </>
   )
 }

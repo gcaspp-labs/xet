@@ -122,7 +122,7 @@ export function ContactSheet({
   contact: Contact | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSaved?: () => void
+  onSaved?: (saved: Contact) => void
 }) {
   const save = useSaveContact()
   const { data: user } = useCurrentUser()
@@ -195,9 +195,9 @@ export function ContactSheet({
         moduleIds: values.modules.map((module) => module.id),
       },
       {
-        onSuccess: () => {
+        onSuccess: (saved) => {
           toast.success('Contato salvo')
-          onSaved?.()
+          onSaved?.(saved)
           onOpenChange(false)
         },
       },

@@ -109,6 +109,81 @@ test('contato com chamado na fila leva ao chamado existente', async ({
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
 })
 
+test('atendente cadastra o contato em "Nova conversa" e envia a primeira mensagem', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, request, sector.id)
+  const { id, phone } = unique()
+  const taken = `Lia ${id}`
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: taken, phone, organization: 0, sector: sector.id }],
+  )
+
+  await signIn(page, agent, userPassword)
+  await page.getByRole('button', { name: 'Nova conversa' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(`Marta ${id}`)
+  await expect(sheet.getByText('Nenhum contato encontrado.')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Novo contato' }).click()
+
+  // Telefone já cadastrado mostra o aviso, sem fechar o cadastro nem a conversa.
+  const drawer = page.getByRole('dialog', { name: 'Novo contato' })
+  await expect(drawer.getByRole('checkbox', { name: sector.name })).toBeChecked()
+  await drawer.getByLabel('Nome').fill(`Marta ${id}`)
+  await drawer.getByLabel('Telefone (WhatsApp)').fill(phone)
+  await drawer.getByLabel('Órgão').fill(`Prefeitura ${id}`)
+  await page.getByRole('option', { name: new RegExp(`Prefeitura ${id}`) }).click()
+  await drawer.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(drawer.getByRole('alert')).toHaveText('Já existe um contato com este telefone.')
+
+  // Desistir do cadastro volta para a conversa, com a busca como estava.
+  await drawer.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(drawer).toBeHidden()
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByRole('searchbox', { name: 'Buscar contato' })).toHaveValue(`Marta ${id}`)
+
+  await sheet.getByRole('button', { name: 'Novo contato' }).click()
+  await page.keyboard.press('Escape')
+  await expect(drawer).toBeHidden()
+  await expect(sheet).toBeVisible()
+
+  await sheet.getByRole('button', { name: 'Novo contato' }).click()
+  await expect(drawer).toBeVisible()
+  await page.mouse.click(10, 300)
+  await expect(drawer).toBeHidden()
+  await expect(sheet).toBeVisible()
+
+  // Ao salvar, o novo contato fica escolhido para a primeira mensagem.
+  const newPhone = `5531${id}`
+  await sheet.getByRole('button', { name: 'Novo contato' }).click()
+  await drawer.getByLabel('Nome').fill(`Marta ${id}`)
+  await drawer.getByLabel('Telefone (WhatsApp)').fill(newPhone)
+  await drawer.getByLabel('Órgão').fill(`Prefeitura ${id}`)
+  await page.getByRole('option', { name: new RegExp(`Prefeitura ${id}`) }).click()
+  await drawer.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(drawer).toBeHidden()
+  await expect(page.getByText('Contato salvo')).toBeVisible()
+  await expect(sheet).toContainText(`Marta ${id}`)
+  await expect(sheet.getByRole('button', { name: 'Trocar' })).toBeVisible()
+  await sheet.getByRole('textbox', { name: 'Mensagem' }).fill('Bom dia, seu cadastro foi feito.')
+  await sheet.getByRole('button', { name: 'Enviar' }).click()
+
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  await expect(page.getByText('Conversa iniciada')).toBeVisible()
+  await expect(page.getByRole('heading', { name: `Marta ${id}` })).toBeVisible()
+  await expect(
+    page
+      .getByRole('region', { name: 'Conversa', exact: true })
+      .getByRole('listitem', { name: 'Mensagem enviada' })
+      .filter({ hasText: 'Bom dia, seu cadastro foi feito.' }),
+  ).toContainText('Enviada')
+})
+
 test('a busca de nova conversa abre em "Meu setor", com opção de ver todos', async ({
   page,
   baseURL,
