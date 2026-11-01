@@ -44,16 +44,8 @@ func (s *server) correctTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "Informe o motivo da correção.")
 	case errors.Is(err, ticket.ErrNoChanges):
 		writeError(w, http.StatusUnprocessableEntity, "Nenhum dado foi alterado.")
-	case errors.Is(err, ticket.ErrIncompleteClosing):
-		writeError(w, http.StatusUnprocessableEntity, "Preencha o assunto, a resolução e ao menos um módulo.")
-	case errors.Is(err, ticket.ErrInvalidOrganization):
-		writeError(w, http.StatusUnprocessableEntity, "Escolha um órgão cadastrado.")
-	case errors.Is(err, ticket.ErrInvalidModules):
-		writeError(w, http.StatusUnprocessableEntity, "Escolha módulos ativos do setor do chamado.")
-	case errors.Is(err, ticket.ErrInvalidPeriod):
-		writeError(w, http.StatusUnprocessableEntity, "O fim precisa ser depois do início e não pode estar no futuro.")
 	default:
-		s.ticketError(w, r, err)
+		s.closingError(w, r, err)
 	}
 }
 

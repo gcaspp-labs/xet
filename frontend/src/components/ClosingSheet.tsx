@@ -1,71 +1,62 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
 import { TriangleAlert } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { type FormEvent, useEffect, useState } from 'react'
+import { FormProvider, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { ContactSheet, OrganizationPicker } from '@/components/ContactSheet'
+import { ClosingFields } from '@/components/ClosingFields'
+import { ContactSheet } from '@/components/ContactSheet'
 import { FormSheet } from '@/components/FormSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { type TicketDetail, ticketKey, useCloseTicket, useClosingForm } from '@/lib/conversation'
-import type { Organization } from '@/lib/directory'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { checkPeriod, closingShape, localInput } from '@/lib/closing'
+import {
+  type TicketDetail,
+  ticketKey,
+  useCloseTicket,
+  useClosingForm,
+  useTransferSector,
+  useTransferSectors,
+} from '@/lib/conversation'
 import { formatPhone } from '@/lib/format'
 
-// Valor de <input type="datetime-local"> no horário do navegador: 2026-03-02T14:05.
-const localInput = (date: Date) => format(date, "yyyy-MM-dd'T'HH:mm")
-
-const schema = z
-  .object({
-    subject: z.string().trim().min(1, 'Informe o assunto.'),
-    resolution: z.string().trim().min(1, 'Informe a resolução.'),
-    moduleIds: z.array(z.number()).min(1, 'Selecione ao menos um módulo.'),
-    organization: z
-      .object({ id: z.number(), name: z.string(), cnpj: z.string().nullable() })
-      .nullable()
-      .refine((value) => value !== null, 'Selecione o órgão do atendimento.'),
-    startedAt: z.string().min(1, 'Informe o início.'),
-    endedAt: z.string().min(1, 'Informe o fim.'),
-  })
-  .refine((values) => new Date(values.endedAt) <= new Date(), {
-    path: ['endedAt'],
-    message: 'O fim não pode estar no futuro.',
-  })
-  .refine((values) => values.endedAt >= values.startedAt, {
-    path: ['endedAt'],
-    message: 'O fim precisa ser depois do início.',
-  })
+const schema = z.object(closingShape).superRefine(checkPeriod)
 
 type FormValues = z.input<typeof schema>
 
 // Drawer de encerramento (spec.md, Formulário de encerramento): assunto,
 // resolução e módulos obrigatórios; contato, atendente e setor automáticos;
-// órgão, início e fim sugeridos e editáveis. O backend confere tudo de novo.
+// órgão, início e fim sugeridos e editáveis. Com `transfer`, o mesmo
+// formulário encerra a etapa e transfere o chamado para outro setor
+// (spec.md, Transferências entre setores). O backend confere tudo de novo.
 export function ClosingSheet({
   ticket,
   open,
   onOpenChange,
+  transfer = false,
 }: {
   ticket: TicketDetail
   open: boolean
   onOpenChange: (open: boolean) => void
+  transfer?: boolean
 }) {
   const queryClient = useQueryClient()
   const { data: form } = useClosingForm(ticket.id, open)
   const close = useCloseTicket(ticket.id, ticket.sector.id)
+  const transferSector = useTransferSector(ticket.id, ticket.sector.id)
+  const save = transfer ? transferSector : close
+  const { data: sectors } = useTransferSectors(ticket.id, open && transfer)
+  const [sectorId, setSectorId] = useState<string | null>(null)
+  const [sectorError, setSectorError] = useState<string>()
   const [registering, setRegistering] = useState(false)
   // Horários sugeridos na abertura; só os alterados vão ao backend.
   const [suggested] = useState(() => ({
@@ -73,14 +64,7 @@ export function ClosingSheet({
     endedAt: localInput(new Date()),
   }))
 
-  const {
-    register,
-    control,
-    handleSubmit,
-    getValues,
-    setValue,
-    formState: { errors },
-  } = useForm<FormValues, unknown, z.output<typeof schema>>({
+  const methods = useForm<FormValues, unknown, z.output<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
       subject: '',
@@ -90,6 +74,7 @@ export function ClosingSheet({
       ...suggested,
     },
   })
+  const { handleSubmit, getValues, setValue } = methods
 
   // O órgão sugerido chega com o formulário ou depois do cadastro do contato.
   useEffect(() => {
@@ -98,12 +83,12 @@ export function ClosingSheet({
     }
   }, [form?.organization, getValues, setValue])
 
-  const onSubmit = handleSubmit((values) => {
-    if (close.isPending) {
-      return
-    }
-    close.mutate(
-      {
+  const onSubmit = handleSubmit(
+    (values) => {
+      if (save.isPending || (transfer && !sectorId)) {
+        return
+      }
+      const body = {
         subject: values.subject,
         resolution: values.resolution,
         moduleIds: values.moduleIds,
@@ -114,15 +99,30 @@ export function ClosingSheet({
             : undefined,
         endedAt:
           values.endedAt !== suggested.endedAt ? new Date(values.endedAt).toISOString() : undefined,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Chamado encerrado')
-          onOpenChange(false)
-        },
-      },
-    )
-  })
+      }
+      const onSuccess = () => {
+        toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
+        onOpenChange(false)
+      }
+      if (transfer) {
+        transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess })
+      } else {
+        close.mutate(body, { onSuccess })
+      }
+    },
+    () => undefined,
+  )
+
+  // O destino é conferido junto com os campos do formulário.
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    setSectorError(transfer && !sectorId ? 'Escolha o setor de destino.' : undefined)
+    void onSubmit(event)
+  }
+
+  const sectorItems = (sectors ?? []).map((sector) => ({
+    value: String(sector.id),
+    label: sector.name,
+  }))
 
   const row = (label: string, value: string) => (
     <div>
@@ -136,18 +136,23 @@ export function ClosingSheet({
       <FormSheet
         open={open}
         onOpenChange={onOpenChange}
-        title="Encerrar chamado"
-        description="O chamado só é encerrado depois de salvar o registro do atendimento."
-        submitLabel="Encerrar"
-        pending={close.isPending}
-        error={close.error?.message}
-        onSubmit={onSubmit}
+        title={transfer ? 'Transferir para outro setor' : 'Encerrar chamado'}
+        description={
+          transfer
+            ? 'A etapa deste setor é encerrada com o registro do atendimento, e um novo chamado entra na fila do destino.'
+            : 'O chamado só é encerrado depois de salvar o registro do atendimento.'
+        }
+        submitLabel={transfer ? 'Transferir' : 'Encerrar'}
+        pending={save.isPending}
+        error={save.error?.message}
+        onSubmit={submit}
       >
         {!ticket.contact.registered && (
           <Alert variant="warning">
             <TriangleAlert strokeWidth={1.7} aria-hidden />
             <AlertDescription className="flex flex-col items-start gap-2">
-              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de encerrar.
+              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de{' '}
+              {transfer ? 'transferir' : 'encerrar'}.
               <Button
                 type="button"
                 variant="outline"
@@ -169,101 +174,42 @@ export function ClosingSheet({
           {row('Setor', ticket.sector.name)}
           {row('Atendente', ticket.assignee?.name ?? '')}
         </dl>
-        <Field data-invalid={!!errors.subject}>
-          <FieldLabel htmlFor="closing-subject">Assunto</FieldLabel>
-          <Input
-            id="closing-subject"
-            maxLength={500}
-            aria-invalid={!!errors.subject}
-            {...register('subject')}
-          />
-          <FieldError errors={[errors.subject]} />
-        </Field>
-        <Field data-invalid={!!errors.resolution}>
-          <FieldLabel htmlFor="closing-resolution">Resolução</FieldLabel>
-          <Textarea
-            id="closing-resolution"
-            maxLength={10000}
-            aria-invalid={!!errors.resolution}
-            {...register('resolution')}
-          />
-          <FieldError errors={[errors.resolution]} />
-        </Field>
-        <Controller
-          control={control}
-          name="moduleIds"
-          render={({ field }) => (
-            <FieldSet data-invalid={!!errors.moduleIds}>
-              <FieldLegend variant="label">Módulos</FieldLegend>
-              {form && form.modules.length === 0 && (
-                <FieldDescription>
-                  O setor não tem módulos ativos. Peça a um supervisor para cadastrá-los.
-                </FieldDescription>
-              )}
-              <div className="flex flex-col gap-2">
-                {form?.modules.map((module) => (
-                  <label key={module.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={field.value.includes(module.id)}
-                      onCheckedChange={(checked) =>
-                        field.onChange(
-                          checked
-                            ? [...field.value, module.id]
-                            : field.value.filter((id) => id !== module.id),
-                        )
-                      }
-                    />
-                    {module.name}
-                  </label>
+        {transfer && (
+          <Field data-invalid={!!sectorError}>
+            <FieldLabel htmlFor="transfer-sector">Setor de destino</FieldLabel>
+            <Select
+              items={sectorItems}
+              value={sectorId}
+              onValueChange={(value) => setSectorId(value)}
+            >
+              <SelectTrigger id="transfer-sector" aria-invalid={!!sectorError}>
+                <SelectValue placeholder="Escolha o setor" />
+              </SelectTrigger>
+              <SelectContent>
+                {sectorItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
                 ))}
-              </div>
-              <FieldError errors={[errors.moduleIds]} />
-            </FieldSet>
-          )}
-        />
-        <Field data-invalid={!!errors.organization}>
-          <FieldLabel htmlFor="closing-organization">Órgão</FieldLabel>
-          <Controller
-            control={control}
-            name="organization"
-            render={({ field }) => (
-              <OrganizationPicker
-                // Recria o campo quando o órgão sugerido chega, para mostrar o nome.
-                key={field.value?.id ?? 'none'}
-                id="closing-organization"
-                value={field.value as Organization | null}
-                onChange={field.onChange}
-                invalid={!!errors.organization}
-              />
+              </SelectContent>
+            </Select>
+            {sectors && sectors.length === 0 && (
+              <FieldDescription>Não há outro setor ativo.</FieldDescription>
             )}
+            <FieldError errors={sectorError ? [{ message: sectorError }] : []} />
+          </Field>
+        )}
+        <FormProvider {...methods}>
+          <ClosingFields
+            idPrefix="closing"
+            modules={form?.modules ?? []}
+            emptyModules={
+              form
+                ? 'O setor não tem módulos ativos. Peça a um supervisor para cadastrá-los.'
+                : undefined
+            }
           />
-          <FieldDescription>Trocar o órgão vale só para este chamado.</FieldDescription>
-          <FieldError errors={[errors.organization]} />
-        </Field>
-        <div className="grid gap-[15px] sm:grid-cols-2">
-          <Field data-invalid={!!errors.startedAt}>
-            <FieldLabel htmlFor="closing-started-at">Início</FieldLabel>
-            <Input
-              id="closing-started-at"
-              type="datetime-local"
-              className="mono-num"
-              aria-invalid={!!errors.startedAt}
-              {...register('startedAt')}
-            />
-            <FieldError errors={[errors.startedAt]} />
-          </Field>
-          <Field data-invalid={!!errors.endedAt}>
-            <FieldLabel htmlFor="closing-ended-at">Fim</FieldLabel>
-            <Input
-              id="closing-ended-at"
-              type="datetime-local"
-              className="mono-num"
-              aria-invalid={!!errors.endedAt}
-              {...register('endedAt')}
-            />
-            <FieldError errors={[errors.endedAt]} />
-          </Field>
-        </div>
+        </FormProvider>
         <FieldDescription>
           Alterações de horário ficam registradas no histórico de auditoria.
         </FieldDescription>

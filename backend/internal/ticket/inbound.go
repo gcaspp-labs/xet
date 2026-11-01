@@ -97,7 +97,7 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 	var ticketID int64
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		contact, err := findOrCreateContact(ctx, q, msg)
+		contact, link, err := findOrCreateContact(ctx, q, msg)
 		if err != nil {
 			return err
 		}
@@ -106,6 +106,14 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 			return err
 		}
 		ticketID = ticket.ID
+		// The contact is written only after the ticket is locked, in the
+		// order of the closing (ticket, then contact), so the two never wait
+		// on each other.
+		if link {
+			if err := q.SetContactExternalID(ctx, db.SetContactExternalIDParams{ID: contact.ID, ExternalContactID: &msg.ExternalContactID}); err != nil {
+				return fmt.Errorf("set contact external id: %w", err)
+			}
+		}
 
 		var mediaID *int64
 		if media != nil {
@@ -196,11 +204,12 @@ func (s *Service) storeMedia(ctx context.Context, media messaging.Media, now tim
 
 // findOrCreateContact matches the message to a contact by the provider
 // contact ID, then by phone, with or without the Brazilian ninth digit; a
-// contact registered before its first message keeps the ID from then on.
-// Otherwise an unregistered contact is created.
-func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Message) (db.Contact, error) {
+// contact registered before its first message keeps the ID from then on, and
+// link tells the caller to record it. Otherwise an unregistered contact is
+// created.
+func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Message) (contact db.Contact, link bool, err error) {
 	if msg.ExternalContactID == "" {
-		return db.Contact{}, errors.New("message without external contact id")
+		return db.Contact{}, false, errors.New("message without external contact id")
 	}
 	phone := ""
 	if phonePattern.MatchString(msg.Phone) {
@@ -208,29 +217,22 @@ func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Messa
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		contact, err := q.GetContactByExternalID(ctx, &msg.ExternalContactID)
+		contact, err = q.GetContactByExternalID(ctx, &msg.ExternalContactID)
 		if err == nil {
-			return contact, nil
+			return contact, false, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return db.Contact{}, fmt.Errorf("get contact by external id: %w", err)
+			return db.Contact{}, false, fmt.Errorf("get contact by external id: %w", err)
 		}
 
 		if phone != "" {
 			contact, err = q.GetContactByPhone(ctx, phoneVariants(phone))
-			if err == nil && contact.ExternalContactID != nil {
-				// Known by another provider ID (such as its LID): keep it.
-				return contact, nil
-			}
 			if err == nil {
-				if err := q.SetContactExternalID(ctx, db.SetContactExternalIDParams{ID: contact.ID, ExternalContactID: &msg.ExternalContactID}); err != nil {
-					return db.Contact{}, fmt.Errorf("set contact external id: %w", err)
-				}
-				contact.ExternalContactID = &msg.ExternalContactID
-				return contact, nil
+				// A contact known by another provider ID (such as its LID) keeps it.
+				return contact, contact.ExternalContactID == nil, nil
 			}
 			if !errors.Is(err, pgx.ErrNoRows) {
-				return db.Contact{}, fmt.Errorf("get contact by phone: %w", err)
+				return db.Contact{}, false, fmt.Errorf("get contact by phone: %w", err)
 			}
 		}
 
@@ -248,14 +250,14 @@ func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Messa
 			ExternalContactID: &msg.ExternalContactID,
 		})
 		if err == nil {
-			return contact, nil
+			return contact, false, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return db.Contact{}, fmt.Errorf("create contact: %w", err)
+			return db.Contact{}, false, fmt.Errorf("create contact: %w", err)
 		}
 		// A concurrent message created the contact first; look it up again.
 	}
-	return db.Contact{}, fmt.Errorf("contact %s could not be matched", msg.ExternalContactID)
+	return db.Contact{}, false, fmt.Errorf("contact %s could not be matched", msg.ExternalContactID)
 }
 
 // phoneVariants returns the phone and, for a Brazilian mobile number, the

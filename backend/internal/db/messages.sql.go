@@ -274,20 +274,19 @@ func (q *Queries) GetMediaFile(ctx context.Context, id int64) (MediaFile, error)
 	return i, err
 }
 
-const getMediaFileSector = `-- name: GetMediaFileSector :one
-select t.sector_id
+const getMediaFileTicket = `-- name: GetMediaFileTicket :one
+select m.ticket_id
 from messages m
-join tickets t on t.id = m.ticket_id
 where m.media_id = $1
 limit 1
 `
 
-// Sector of the ticket whose message holds the file, to check the access.
-func (q *Queries) GetMediaFileSector(ctx context.Context, mediaID *int64) (int64, error) {
-	row := q.db.QueryRow(ctx, getMediaFileSector, mediaID)
-	var sector_id int64
-	err := row.Scan(&sector_id)
-	return sector_id, err
+// Ticket whose message holds the file, to check the access.
+func (q *Queries) GetMediaFileTicket(ctx context.Context, mediaID *int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getMediaFileTicket, mediaID)
+	var ticket_id int64
+	err := row.Scan(&ticket_id)
+	return ticket_id, err
 }
 
 const getMessage = `-- name: GetMessage :one
