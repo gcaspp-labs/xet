@@ -174,7 +174,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 - **Skill:** leitura por camadas, com gatilhos que obrigam a ler mais e registro, no PR, do que foi lido e do que ficou de fora.
 - **Mapa:** cada task pendente ganha a linha `**Ler:**`, com as seções dos documentos e os arquivos de partida. "Permissões", em `modelo-dados.md`, passa a ser um título, para os gatilhos e os mapas poderem citá-la.
-- **Piloto na T21:** comparar o uso de tokens com o de uma task parecida (T15) e conferir se a revisão ou os testes encontram regra esquecida por falta de leitura. Se acontecer, acrescentar um gatilho; se repetir, voltar a ler a `spec.md` inteira nas tasks com regra de negócio.
+- **Piloto na T21:** comparar com a T13, task parecida, o quanto o contexto cresce até a primeira edição de código, e conferir se a revisão ou os testes encontram regra esquecida por falta de leitura. Se acontecer, acrescentar um gatilho; se repetir, voltar a ler a `spec.md` inteira nas tasks com regra de negócio.
 
 **Pronto quando:** a skill descreve as camadas, os gatilhos e o registro do que foi lido; toda task pendente tem a linha `**Ler:**`, com títulos que existem nos documentos e arquivos que existem no repositório.
 
