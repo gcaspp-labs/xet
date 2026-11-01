@@ -642,6 +642,74 @@ func (q *Queries) GetTicketForUpdate(ctx context.Context, id int64) (Ticket, err
 	return i, err
 }
 
+const listClosedTickets = `-- name: ListClosedTickets :many
+select
+    t.id, t.protocol, t.closure_type, t.closed_at,
+    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    o.name as organization_name,
+    t.closed_by_id, u.name as closed_by_name
+from tickets t
+join contacts c on c.id = t.contact_id
+left join organizations o on o.id = t.organization_id
+join users u on u.id = t.closed_by_id
+where t.sector_id = $1 and t.status = 'closed' and t.closed_at >= $2 and t.closed_at < $3
+order by t.closed_at desc, t.id desc
+`
+
+type ListClosedTicketsParams struct {
+	SectorID    int64
+	ClosedFrom  *time.Time
+	ClosedUntil *time.Time
+}
+
+type ListClosedTicketsRow struct {
+	ID                int64
+	Protocol          string
+	ClosureType       NullClosureType
+	ClosedAt          *time.Time
+	ContactID         int64
+	ContactName       string
+	ContactPhone      *string
+	ContactRegistered bool
+	OrganizationName  *string
+	ClosedByID        *int64
+	ClosedByName      string
+}
+
+// Tickets of the sector closed in the period, by the real closing moment,
+// with the contact and who closed them, latest first.
+func (q *Queries) ListClosedTickets(ctx context.Context, arg ListClosedTicketsParams) ([]ListClosedTicketsRow, error) {
+	rows, err := q.db.Query(ctx, listClosedTickets, arg.SectorID, arg.ClosedFrom, arg.ClosedUntil)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClosedTicketsRow
+	for rows.Next() {
+		var i ListClosedTicketsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.ClosureType,
+			&i.ClosedAt,
+			&i.ContactID,
+			&i.ContactName,
+			&i.ContactPhone,
+			&i.ContactRegistered,
+			&i.OrganizationName,
+			&i.ClosedByID,
+			&i.ClosedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listContactTickets = `-- name: ListContactTickets :many
 select
     t.id, t.protocol, t.status, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,

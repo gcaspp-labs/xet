@@ -112,9 +112,10 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, sectorService *se
 				r.Put("/organizations/{organizationID}", s.updateOrganization)
 			})
 
-			// Painel: chamados abertos e carga de cada atendente, para todos os papéis do setor.
+			// Painel: chamados abertos, carga de cada atendente e realizados hoje, para todos os papéis do setor.
 			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/tickets", s.listTickets)
 			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/workload", s.workload)
+			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/closed-today", s.listClosedToday)
 			// Iniciar conversa pelo número do setor, ou ir ao chamado aberto do contato.
 			r.With(requireSector("sectorID")).Post("/sectors/{sectorID}/conversations", s.startConversation)
 			r.With(requireSector("sectorID")).Get("/sectors/{sectorID}/contacts/{contactID}/open-ticket", s.openTicket)

@@ -65,7 +65,16 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await sheet.getByRole('button', { name: 'Transferir' }).click()
   await expect(page.getByText('Chamado transferido para outro setor')).toBeVisible()
 
+  // Volta ao painel, com o atendimento identificado nos realizados.
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  const doneRow = page
+    .getByRole('region', { name: 'Realizados hoje' })
+    .getByRole('row', { name: new RegExp(contact) })
+  await expect(doneRow).toContainText('Transferido')
+  await expect(doneRow).toContainText('Você')
+
   // A origem fica encerrada e mostra para onde foi.
+  await doneRow.getByRole('link', { name: contact }).click()
   const details = page.getByRole('region', { name: 'Chamado' })
   await expect(details).toContainText('Encerrado')
   await expect(details).toContainText('Transferido para')

@@ -87,6 +87,11 @@ export const ticketStatusLabels: Record<
   closed: { label: 'Encerrado', tone: 'neutral' },
 }
 
+export const closureTypeLabels: Record<'resolved' | 'transferred', string> = {
+  resolved: 'Encerrado',
+  transferred: 'Transferido',
+}
+
 // Tamanho de arquivo em pt-BR: 820 KB, 1,4 MB.
 export function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) {

@@ -20,7 +20,7 @@ import (
 // Name of a contact known only by LID, without phone nor profile name.
 const unnamedContact = "Contato sem telefone"
 
-// Protocol years follow the office clock, not UTC.
+// Protocol years and the day of the closed tickets follow the office clock, not UTC.
 var protocolZone = mustLoadLocation("America/Sao_Paulo")
 
 var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
