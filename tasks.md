@@ -144,7 +144,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 
 **Pronto quando:** correção sem motivo é recusada; atendente que não encerrou é bloqueado; a auditoria mostra a alteração.
 
-### [~] T15 — Transferência entre setores
+### [x] T15 — Transferência entre setores
 
 - Preencher o formulário de encerramento completo na origem, encerrar a etapa e criar chamado vinculado na fila do destino.
 - Destino vê o histórico relacionado e envia a primeira mensagem (texto livre) ao assumir.
