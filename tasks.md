@@ -250,7 +250,7 @@ Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia sei
 
 **Pronto quando:** o filtro "Meu setor" funciona e o administrador abre em todos; mensagem, nova conversa e transferência criam o vínculo sem duplicar; módulo fora dos setores do contato é recusado; os módulos vêm marcados no encerramento e podem ser alterados.
 
-### [ ] T28 — Cadastrar contato em "Nova conversa"
+### [x] T28 — Cadastrar contato em "Nova conversa"
 
 - Botão em `NewConversationSheet` que abre o `ContactSheet` por cima, como o `ClosingSheet` já faz. O `ContactSheet` passa a devolver o contato salvo, que fica escolhido para a primeira mensagem.
 
