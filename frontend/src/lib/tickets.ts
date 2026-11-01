@@ -33,7 +33,7 @@ export type ClosedTicket = Pick<
   TicketSummary,
   'id' | 'protocol' | 'contact' | 'organizationName'
 > & {
-  closureType: 'resolved' | 'transferred'
+  closureType: 'resolved' | 'transferred' | 'cancelled'
   closedAt: string
   closedBy: { id: number; name: string }
 }

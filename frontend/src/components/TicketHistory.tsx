@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { type HistoryEntry, useContactHistory, useOrganizationHistory } from '@/lib/conversation'
-import { formatDateTime, ticketStatusLabels } from '@/lib/format'
+import { formatDateTime, ticketStatusLabel } from '@/lib/format'
 
 // Chamados do contato ou do órgão, do mais recente ao mais antigo, só dos
 // setores do usuário (o backend filtra). Cada um abre a conversa completa.
@@ -41,7 +41,7 @@ export function TicketHistoryList({
   return (
     <ul aria-label={label} className="flex flex-col divide-y divide-line-soft">
       {entries.map((entry) => {
-        const status = ticketStatusLabels[entry.status]
+        const status = ticketStatusLabel(entry.status, entry.closureType)
         return (
           <li key={entry.id} className="flex flex-col gap-1 py-2.5">
             <div className="flex items-center gap-2">

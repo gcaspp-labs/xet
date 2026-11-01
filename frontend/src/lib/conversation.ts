@@ -24,7 +24,7 @@ export type TicketDetail = {
   organization: { id: number; name: string } | null
   assignee: { id: number; name: string } | null
   closedBy: { id: number; name: string } | null
-  closureType: 'resolved' | 'transferred' | null
+  closureType: 'resolved' | 'transferred' | 'cancelled' | null
   // Chamado do setor de origem, quando este veio de uma transferência entre setores.
   previous: {
     id: number
@@ -69,6 +69,7 @@ export type HistoryEntry = {
   id: number
   protocol: string
   status: 'queued' | 'in_progress' | 'closed'
+  closureType: 'resolved' | 'transferred' | 'cancelled' | null
   sectorName: string
   arrivedAt: string
   closedAt: string | null
@@ -79,7 +80,8 @@ export type HistoryEntry = {
 }
 
 // Como o chamado ganhou o primeiro responsável (conversa iniciada ou assumido),
-// cada transferência, o encerramento e as correções, com quem fez e de quem para quem.
+// cada transferência, o encerramento, o cancelamento com o motivo e as correções,
+// com quem fez e de quem para quem.
 export type AssignmentLog = {
   id: number
   action:
@@ -88,12 +90,14 @@ export type AssignmentLog = {
     | 'ticket_transferred_user'
     | 'ticket_closed'
     | 'ticket_transferred_sector'
+    | 'ticket_cancelled'
     | 'ticket_corrected'
   createdAt: string
   actor: { id: number; name: string } | null
   fromName: string | null
   toName: string | null
   toSectorName: string | null
+  reason: string | null
 }
 
 export const ticketKey = (ticketId: number) => ['tickets', ticketId]
@@ -301,6 +305,23 @@ export function useCloseTicket(ticketId: number, sectorId: number) {
   return useMutation({
     mutationFn: (body: ClosingInput) =>
       api<void>(`/tickets/${ticketId}/close`, { method: 'POST', body }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
+        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: closedTodayKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: historyKey }),
+      ]),
+  })
+}
+
+// Cancela o chamado aberto; o backend confere quem pode cancelar e o motivo.
+export function useCancelTicket(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (reason: string) =>
+      api<void>(`/tickets/${ticketId}/cancel`, { method: 'POST', body: { reason } }),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
