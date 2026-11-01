@@ -22,6 +22,13 @@ import {
   FieldSet,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
 import {
@@ -104,6 +111,8 @@ export function OrganizationPicker({
   )
 }
 
+const noModule = 'none'
+
 export function ContactSheet({
   contact,
   open,
@@ -142,6 +151,7 @@ export function ContactSheet({
     },
   })
   const sectorIds = useWatch({ control, name: 'sectorIds' })
+  const chosenModules = useWatch({ control, name: 'modules' })
   const editable = sectors.filter(
     (sector) => sector.active || contact?.sectors.some((linked) => linked.id === sector.id),
   )
@@ -150,7 +160,16 @@ export function ContactSheet({
   const otherSectors = contact?.sectors.filter((sector) => !isEditable(sector.id)) ?? []
   const otherModules = contact?.modules.filter((module) => !isEditable(module.sectorId)) ?? []
 
-  // Tirar um setor tira também os módulos dele.
+  // Um módulo por setor: escolher outro substitui o do setor.
+  const chooseModule = (sectorId: number, moduleId: string) => {
+    const others = chosenModules.filter((module) => module.sectorId !== sectorId)
+    setValue(
+      'modules',
+      moduleId === noModule ? others : [...others, { id: Number(moduleId), sectorId }],
+    )
+  }
+
+  // Tirar um setor tira também o módulo dele.
   const toggleSector = (sectorId: number, checked: boolean) => {
     setValue(
       'sectorIds',
@@ -251,39 +270,50 @@ export function ContactSheet({
         )}
         <FieldError errors={[errors.sectorIds]} />
       </FieldSet>
-      {(activeModules.length > 0 || otherModules.length > 0) && (
-        <Controller
-          control={control}
-          name="modules"
-          render={({ field }) => (
-            <FieldSet>
-              <FieldLegend variant="label">Módulos</FieldLegend>
-              <div className="flex flex-col gap-2">
-                {activeModules.map((module) => (
-                  <label key={module.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={field.value.some((chosen) => chosen.id === module.id)}
-                      onCheckedChange={(checked) =>
-                        field.onChange(
-                          checked
-                            ? [...field.value, { id: module.id, sectorId: module.sectorId }]
-                            : field.value.filter((chosen) => chosen.id !== module.id),
-                        )
-                      }
-                    />
-                    {module.name}
-                  </label>
-                ))}
-              </div>
-              {otherModules.length > 0 && (
-                <FieldDescription>
-                  De outros setores: {otherModules.map((module) => module.name).join(', ')}.
-                </FieldDescription>
-              )}
-              <FieldDescription>Opcional. Vêm marcados no encerramento.</FieldDescription>
-            </FieldSet>
-          )}
-        />
+      {editable
+        .filter((sector) => sectorIds.includes(sector.id))
+        .map((sector) => {
+          // O módulo já vinculado continua na lista depois de desativado.
+          const linked = contact?.modules.find((module) => module.sectorId === sector.id)
+          const options = activeModules.filter((module) => module.sectorId === sector.id)
+          const items = [
+            { value: noModule, label: 'Sem módulo' },
+            ...(linked && !options.some((module) => module.id === linked.id) ? [linked] : [])
+              .concat(options)
+              .map((module) => ({ value: String(module.id), label: module.name })),
+          ]
+          const chosen = chosenModules.find((module) => module.sectorId === sector.id)
+          return (
+            items.length > 1 && (
+              <Field key={sector.id}>
+                <FieldLabel htmlFor={`contact-module-${sector.id}`}>
+                  Módulo em {sector.name}
+                </FieldLabel>
+                <Select
+                  items={items}
+                  value={chosen ? String(chosen.id) : noModule}
+                  onValueChange={(value) => value && chooseModule(sector.id, value)}
+                >
+                  <SelectTrigger id={`contact-module-${sector.id}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>Opcional. Vem marcado no encerramento.</FieldDescription>
+              </Field>
+            )
+          )
+        })}
+      {otherModules.length > 0 && (
+        <FieldDescription>
+          Módulos de outros setores: {otherModules.map((module) => module.name).join(', ')}.
+        </FieldDescription>
       )}
     </FormSheet>
   )

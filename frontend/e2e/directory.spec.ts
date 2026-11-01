@@ -238,9 +238,14 @@ test('filtra contatos por setor e módulo, e o atendente altera só o próprio s
   await drawer.getByRole('button', { name: 'Cadastrar contato' }).click()
   await expect(drawer.getByText('Selecione ao menos um setor.')).toBeVisible()
   await ownCheckbox.click()
-  await drawer.getByRole('checkbox', { name: `Folha ${id}` }).click()
+  // Um módulo por setor, e a lista mostra o setor com o módulo.
+  await drawer.getByRole('combobox', { name: `Módulo em ${own.sector.name}` }).click()
+  await page.getByRole('option', { name: `Folha ${id}` }).click()
   await drawer.getByRole('button', { name: 'Cadastrar contato' }).click()
   await expect(drawer).toBeHidden()
+  const flora = page.getByRole('row', { name: new RegExp(`Flora ${id}`) })
+  await expect(flora).toContainText(own.sector.name)
+  await expect(flora).toContainText(`Folha ${id}`)
 
   // O módulo filtra a lista.
   await page.getByRole('combobox', { name: 'Filtrar por módulo' }).click()

@@ -5,6 +5,7 @@ import { ContactSheet } from '@/components/ContactSheet'
 import { SearchBox } from '@/components/SearchBox'
 import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
@@ -63,6 +64,7 @@ export default function ContactsPage() {
                 <TableRow>
                   <TableHead>Contato</TableHead>
                   <TableHead>Órgão</TableHead>
+                  <TableHead>Setores e módulos</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -89,6 +91,23 @@ export default function ContactsPage() {
                         </>
                       ) : (
                         <span className="text-ink-faint">Sem órgão</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {contact.sectors.length > 0 ? (
+                        <ul className="flex flex-col gap-1">
+                          {contact.sectors.map((sector) => {
+                            const module = contact.modules.find((m) => m.sectorId === sector.id)
+                            return (
+                              <li key={sector.id} className="flex flex-wrap items-center gap-2">
+                                {sector.name}
+                                {module && <Badge variant="tag">{module.name}</Badge>}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : (
+                        <span className="text-ink-faint">Sem setor</span>
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
