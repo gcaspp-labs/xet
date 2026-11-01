@@ -242,6 +242,7 @@ stateDiagram-v2
 | Transferência entre atendentes | Com o chamado travado (`for update`) e `in_progress`, troca `assignee_id`; auditoria `ticket_transferred_user` com `assignee_id` de/para na mesma transação. Repetir a transferência para quem já é o responsável não grava de novo |
 | Encerramento | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável, e o contato travado para leitura (`for share`) e cadastrado: preenche os campos de encerramento com `closure_type = 'resolved'`, `closed_at = now()`, `closed_by_id` = responsável e `ended_at` informado ou `now()`; grava `ticket_modules` (módulos ativos do setor) e a auditoria `ticket_closed` na mesma transação |
 | Transferência entre setores | Encerra com o formulário completo e `closure_type = 'transferred'`; cria chamado `queued` no destino com `previous_ticket_id`, mesmo contato e órgão, e `arrived_at` = momento da transferência |
+| Cadastro do contato | Na mesma transação do cadastro, os chamados abertos do contato com `organization_id` vazio recebem o órgão do contato (travados com `for update`), com auditoria `ticket_organization_linked` em cada um |
 | Mensagem após encerramento | Cria novo chamado (não reabre) |
 
 Chamados não são reabertos. O destino de uma transferência entre setores vê o histórico seguindo a cadeia de `previous_ticket_id`.
@@ -319,6 +320,7 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `ticket_started` | Atendente inicia conversa; o chamado nasce assumido por ele |
 | `ticket_transferred_user` | Transferência entre atendentes |
 | `ticket_transferred_sector` | Transferência entre setores (no chamado de origem) |
+| `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |
 | `ticket_closed` | Encerramento: `changes` com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados no formulário, `started_at` (de `arrived_at` para o informado) e `organization_id` |
 | `ticket_corrected` | Correção de chamado encerrado (exige `reason`) |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
