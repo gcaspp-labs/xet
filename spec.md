@@ -38,6 +38,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - O supervisor gerencia a lista de módulos/sistemas do próprio setor. As listas serão cadastradas no sistema, sem necessidade de defini-las antes da implementação.
 - Setores são cadastrados e editados pelo nome. Nesta etapa não há desativação de setor.
 - O telefone do setor não é digitado: vem do número lido no QR code ao conectar. Número já ligado a outro setor é recusado: o aparelho é desvinculado e a tela de conexão mostra o motivo. O telefone é apagado quando o número é desvinculado e continua na tela durante quedas temporárias da conexão.
+- Os supervisores do setor e os administradores desvinculam o número pela tela de conexão, com confirmação, além de poder desvincular pelo celular. Os chamados abertos continuam no sistema, e as respostas falham até um número ser conectado de novo.
 - Ao cadastrar um usuário, o administrador digita a senha inicial, que segue a mesma regra de complexidade da redefinição, e a repassa ao usuário.
 - Usuários não são excluídos, apenas desativados; desativar encerra as sessões abertas. O administrador não pode desativar a própria conta nem alterar o próprio papel, para não perder o acesso à administração.
 - A desativação ou a troca de setor de um usuário é recusada enquanto ele tiver chamados em atendimento, informando quantos são; os chamados precisam ser transferidos antes.
@@ -237,6 +238,7 @@ Fora do piloto: etiquetas, importação por planilha, grupos, exibição de rea�
 - Devolver um chamado em atendimento à fila.
 - Receber arquivo acima do limite como aviso, sem perder a mensagem.
 - Preencher o telefone do setor pelo QR code e recusar número já ligado a outro setor.
+- Desvincular o número pela tela de conexão e conectar de novo pelo QR code.
 - Importar contatos do número do setor sem duplicar os já cadastrados.
 
 ## Arquitetura técnica

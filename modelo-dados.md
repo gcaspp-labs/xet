@@ -112,7 +112,7 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | Corrigir chamado encerrado | Só os que encerrou | Próprio setor | Todos os setores |
 | Gerenciar módulos | — | Próprio setor | Todos os setores |
 | Redefinir senha | — | Usuários do próprio setor | Todos |
-| Conectar número (QR code) e ver status | — | Próprio setor | Todos os setores |
+| Conectar e desvincular número (QR code) e ver status | — | Próprio setor | Todos os setores |
 | Cadastrar setores e usuários | — | — | Sim |
 | Cadastrar contatos e vinculá-los a um órgão | Sim | Sim | Sim |
 | Importar contatos do WhatsApp do setor | Próprio setor | Próprio setor | Todos os setores |

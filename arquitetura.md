@@ -42,6 +42,7 @@ O pacote `internal/messaging` define a interface e os tipos neutros; cada proved
 - Ao iniciar, o serviço reconecta cada setor ativo que tem conta vinculada (`external_account_id`); as chaves ficam nas tabelas do `sqlstore` do Whatsmeow.
 - Conectar um setor sem conta vinculada inicia o pareamento: a API devolve o QR code como imagem PNG, gerada no backend, e a tela mostra a imagem. O código do QR muda a cada 20 segundos (o primeiro dura 60); depois de cerca de 2 minutos sem leitura, o pareamento expira e o setor volta a desconectado.
 - O adaptador traduz os estados de conexão em eventos `ConnectionChanged`; o domínio grava o estado no setor. Desvinculado pelo celular (`logged_out`), o setor perde a conta vinculada e só volta por novo QR code.
+- Desvincular pela tela de conexão chama `Disconnect` do adaptador, fora de qualquer transação, e só então grava o setor como `logged_out`, sem conta e sem telefone, com auditoria `sector_disconnected` e o autor da ação.
 - A tela de conexão e o alerta de desconexão acompanham o estado pelo WebSocket (ver Tempo real). Cada novo código do QR é informado pelo adaptador como um novo `ConnectionChanged` com `connecting`, sem mudança de estado nem auditoria, para a tela trocar a imagem sozinha; o botão de atualizar fica só como recurso extra.
 
 ### Adaptador falso
