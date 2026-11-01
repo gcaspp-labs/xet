@@ -23,6 +23,7 @@ export type TicketDetail = {
   contact: { id: number; name: string; phone: string | null; registered: boolean }
   organization: { id: number; name: string } | null
   assignee: { id: number; name: string } | null
+  closedBy: { id: number; name: string } | null
 }
 
 export type Message = {
@@ -66,10 +67,15 @@ export type HistoryEntry = {
 }
 
 // Como o chamado ganhou o primeiro responsável (conversa iniciada ou assumido),
-// cada transferência e o encerramento, com quem fez e de quem para quem.
+// cada transferência, o encerramento e as correções, com quem fez e de quem para quem.
 export type AssignmentLog = {
   id: number
-  action: 'ticket_started' | 'ticket_assigned' | 'ticket_transferred_user' | 'ticket_closed'
+  action:
+    | 'ticket_started'
+    | 'ticket_assigned'
+    | 'ticket_transferred_user'
+    | 'ticket_closed'
+    | 'ticket_corrected'
   createdAt: string
   actor: { id: number; name: string } | null
   fromName: string | null
@@ -82,6 +88,7 @@ const assignmentsKey = (ticketId: number) => ['tickets', ticketId, 'assignments'
 const notesKey = (ticketId: number) => ['tickets', ticketId, 'notes']
 const closingFormKey = (ticketId: number) => ['tickets', ticketId, 'closing-form']
 const modulesKey = (ticketId: number) => ['tickets', ticketId, 'modules']
+const correctionsKey = (ticketId: number) => ['tickets', ticketId, 'corrections']
 export const historyKey = ['history']
 
 // Identificador de envio (UUID v4). crypto.randomUUID só existe em HTTPS ou
@@ -284,6 +291,59 @@ export function useCloseTicket(ticketId: number, sectorId: number) {
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: historyKey }),
+      ]),
+  })
+}
+
+// Dados completos do atendimento encerrado depois da correção, com o motivo.
+export type CorrectionInput = {
+  subject: string
+  resolution: string
+  moduleIds: number[]
+  organizationId: number
+  startedAt: string
+  endedAt: string
+  spokeWith: string
+  reason: string
+}
+
+// Campo corrigido com o valor anterior e o novo: órgão pelo nome, módulos
+// pela lista de nomes e horários em ISO 8601.
+export type CorrectionChange = {
+  field:
+    'subject' | 'resolution' | 'organization' | 'modules' | 'started_at' | 'ended_at' | 'spoke_with'
+  from: string | string[] | null
+  to: string | string[] | null
+}
+
+export type Correction = {
+  id: number
+  createdAt: string
+  actor: { id: number; name: string } | null
+  reason: string
+  changes: CorrectionChange[]
+}
+
+// Histórico de alterações do atendimento encerrado, da mais antiga à mais recente.
+export function useCorrections(ticketId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: correctionsKey(ticketId),
+    queryFn: () => api<Correction[]>(`/tickets/${ticketId}/corrections`),
+    enabled,
+  })
+}
+
+// Corrige o atendimento encerrado; o backend confere quem pode corrigir, o
+// motivo e as mesmas regras do encerramento.
+export function useCorrectTicket(ticketId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CorrectionInput) =>
+      api<void>(`/tickets/${ticketId}/correct`, { method: 'POST', body }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),
   })

@@ -91,7 +91,7 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 		t.Fatalf("modules = %v", modules)
 	}
 
-	// A auditoria guarda autor, motivo e os valores anteriores e novos só dos campos alterados.
+	// A auditoria guarda quem corrigiu, o motivo e os valores anteriores e novos só dos campos alterados.
 	var (
 		actor  int64
 		reason string
