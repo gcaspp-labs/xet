@@ -101,7 +101,7 @@ Restrição: `(role = 'admin') = (sector_id is null)`.
 
 Usuários não são excluídos, apenas desativados, porque continuam como autores de mensagens, chamados e auditoria. Com o usuário travado, a desativação e a troca de setor (inclusive ao virar administrador, que não tem setor) são recusadas se houver chamados `in_progress` com ele como responsável.
 
-**Permissões:**
+#### Permissões
 
 | Ação | Atendente | Supervisor | Administrador |
 | --- | --- | --- | --- |
