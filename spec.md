@@ -145,9 +145,11 @@ Alterações nos horários deverão ficar registradas no histórico de auditoria
 
 - Uma mensagem recebida após o encerramento criará um novo chamado, preservando os anteriores no histórico.
 - Chamados encerrados não poderão ser reabertos nesta etapa.
-- Os dados de um atendimento encerrado poderão ser corrigidos pelo atendente que o encerrou e pelos supervisores e administradores do setor.
-- Correções exigirão um motivo.
-- O sistema registrará autor, data, motivo e alterações realizadas.
+- Os dados de um atendimento encerrado poderão ser corrigidos pelo atendente que o encerrou e pelos supervisores e administradores do setor. Os demais atendentes do setor não corrigem.
+- A correção altera os dados do formulário de encerramento (assunto, resolução, módulos, órgão, início e fim) e o "falou com". Valem as mesmas regras do encerramento: assunto, resolução e ao menos um módulo obrigatórios, órgão cadastrado, fim depois do início e não no futuro.
+- Módulos que já estavam no chamado podem continuar nele mesmo que tenham sido desativados depois do encerramento; módulos acrescentados na correção precisam estar ativos no setor.
+- Correções exigirão um motivo. Uma correção que não altera nenhum dado é recusada, sem registro.
+- O sistema registrará autor, data, motivo e alterações realizadas (valores anteriores e novos). O chamado mostra o histórico de alterações nos detalhes, e a conversa mostra, na ordem do tempo, quem corrigiu o atendimento e quando.
 
 ## Armazenamento
 
