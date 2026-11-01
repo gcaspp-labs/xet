@@ -37,13 +37,16 @@ var (
 	ErrSectorNotAllowed     = errors.New("sector not allowed")
 	ErrInvalidModules       = errors.New("invalid modules")
 	ErrOneModulePerSector   = errors.New("one module per sector")
-	ErrNoContactsChosen     = errors.New("no contacts chosen")
-	ErrNoContactBook        = errors.New("provider has no address book")
 )
 
 var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
 
 // phoneFormatting is stripped so "+55 (11) 99999-0000" is stored as digits.
+// ValidPhone reports whether the phone has only digits, with country and area codes.
+func ValidPhone(phone string) bool {
+	return phonePattern.MatchString(phone)
+}
+
 var phoneFormatting = strings.NewReplacer(" ", "", "(", "", ")", "", "-", "", "+", "", ".", "")
 
 // PhoneVariants returns the phone and, for a Brazilian mobile number, the
@@ -66,14 +69,14 @@ func PhoneVariants(phone string) []string {
 // this phone, or of its variant with or without the ninth digit, wait for each
 // other until the commit, so they cannot create one contact for each variant.
 func LockPhone(ctx context.Context, q *db.Queries, phone string) error {
-	if err := q.LockContactPhone(ctx, phoneKey(phone)); err != nil {
+	if err := q.LockContactPhone(ctx, PhoneKey(phone)); err != nil {
 		return fmt.Errorf("lock phone: %w", err)
 	}
 	return nil
 }
 
-// phoneKey is the same for both variants of a phone: the shortest one.
-func phoneKey(phone string) string {
+// PhoneKey is the same for both variants of a phone: the shortest one.
+func PhoneKey(phone string) string {
 	return slices.MinFunc(PhoneVariants(phone), func(a, b string) int { return cmp.Compare(len(a), len(b)) })
 }
 
@@ -226,7 +229,7 @@ func (s *Service) CreateOrganization(ctx context.Context, actorID int64, in Orga
 		q := s.q.WithTx(tx)
 		org, err = q.CreateOrganization(ctx, db.CreateOrganizationParams{Name: name, Cnpj: cnpj})
 		if err != nil {
-			return constraintError("create organization", err)
+			return ConstraintError("create organization", err)
 		}
 		changes := audit.Changes{}
 		changes.Set("name", nil, org.Name)
@@ -266,7 +269,7 @@ func (s *Service) UpdateOrganization(ctx context.Context, actorID, id int64, in 
 		}
 		org, err = q.UpdateOrganization(ctx, db.UpdateOrganizationParams{ID: id, Name: name, Cnpj: cnpj})
 		if err != nil {
-			return constraintError("update organization", err)
+			return ConstraintError("update organization", err)
 		}
 		return record(ctx, q, id, "organization_updated", actorID, changes)
 	})
@@ -368,7 +371,7 @@ func (s *Service) CreateContact(ctx context.Context, actor auth.User, in Contact
 		q := s.q.WithTx(tx)
 		c, err := q.CreateContact(ctx, db.CreateContactParams{Name: in.Name, Phone: &in.Phone, OrganizationID: &in.OrganizationID})
 		if err != nil {
-			return constraintError("create contact", err)
+			return ConstraintError("create contact", err)
 		}
 		if err := saveLinks(ctx, q, actor, c.ID, in); err != nil {
 			return err
@@ -395,7 +398,7 @@ func UpdateContact(ctx context.Context, q *db.Queries, actor auth.User, id int64
 		return Contact{}, ErrContactNotFound
 	}
 	if err != nil {
-		return Contact{}, constraintError("update contact", err)
+		return Contact{}, ConstraintError("update contact", err)
 	}
 	if err := saveLinks(ctx, q, actor, id, in); err != nil {
 		return Contact{}, err
@@ -523,7 +526,7 @@ func saveModules(ctx context.Context, q *db.Queries, actor auth.User, contactID 
 		return nil, fmt.Errorf("remove contact modules: %w", err)
 	}
 	if err := q.AddContactModules(ctx, db.AddContactModulesParams{ContactID: contactID, ModuleIds: added}); err != nil {
-		return nil, constraintError("add contact modules", err)
+		return nil, ConstraintError("add contact modules", err)
 	}
 	return after, nil
 }
@@ -627,8 +630,8 @@ func record(ctx context.Context, q *db.Queries, orgID int64, action string, acto
 	return nil
 }
 
-// constraintError converts constraint violations into domain errors.
-func constraintError(op string, err error) error {
+// ConstraintError converts constraint violations into domain errors.
+func ConstraintError(op string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.ConstraintName {

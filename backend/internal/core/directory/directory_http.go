@@ -11,7 +11,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // Handler serves the routes of the organizations and contacts.
@@ -130,12 +129,6 @@ func WriteError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha no máximo um módulo por setor.")
 	case errors.Is(err, ErrInvalidModules):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha módulos ativos dos setores do contato.")
-	case errors.Is(err, ErrNoContactsChosen):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "Selecione ao menos um contato.")
-	case errors.Is(err, ErrNoContactBook):
-		httpx.WriteError(w, http.StatusConflict, "Este número não oferece a agenda de contatos. Cadastre os contatos manualmente.")
-	case errors.Is(err, messaging.ErrNotConnected):
-		httpx.WriteError(w, http.StatusConflict, "Número desconectado. Reconecte pelo QR code.")
 	default:
 		httpx.InternalError(logger, w, r, err)
 	}

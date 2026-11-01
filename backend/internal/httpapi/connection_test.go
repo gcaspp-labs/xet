@@ -166,7 +166,7 @@ func TestConnectionSurvivesRestart(t *testing.T) {
 
 	// Reinício: novo serviço no mesmo banco, sem nada em memória.
 	restarted := startServer(t, e.pool, nil)
-	if err := restarted.sectors.Reconnect(t.Context(), restarted.whatsapp); err != nil {
+	if err := restarted.ticketService.Reconnect(t.Context(), restarted.whatsapp); err != nil {
 		t.Fatal(err)
 	}
 	token = restarted.login("admin@exemplo.com", testPassword)
@@ -324,7 +324,7 @@ func TestNumberOfAnotherSectorIsRefused(t *testing.T) {
 
 	e.pair(contab.ID, token, account)
 	e.pair(rh.ID, token, account)
-	e.sectors.Wait()
+	e.ticketService.Wait()
 
 	// O aparelho é desvinculado e a tela mostra o motivo, sem erro 500.
 	c := e.connection(rh.ID, token)
@@ -385,7 +385,7 @@ func TestSameNumberOnTwoSectorsAtOnce(t *testing.T) {
 		wg.Go(func() { errs[i] = e.whatsapp.Pair(t.Context(), sec.ID, "5511999990000@s.whatsapp.net") })
 	}
 	wg.Wait()
-	e.sectors.Wait()
+	e.ticketService.Wait()
 	for _, err := range errs {
 		if err != nil {
 			t.Fatalf("pair: %v", err)

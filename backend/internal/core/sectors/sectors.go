@@ -6,57 +6,33 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
-	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
 // Provider of new sectors; the official API comes later (arquitetura.md).
-const defaultProvider = "whatsmeow"
+const DefaultProvider = "whatsmeow"
 
 var (
-	ErrNotFound    = errors.New("sector not found")
-	ErrInvalidName = errors.New("invalid name")
-	ErrNameTaken   = errors.New("sector name already in use")
-	ErrPhoneTaken  = errors.New("sector phone already in use")
-	// ErrDeviceNotNotified means the number was unlinked in the system but the
-	// provider could not remove the device.
-	ErrDeviceNotNotified = errors.New("device not notified")
-	ErrModuleNotFound    = errors.New("module not found")
-	ErrModuleNameTaken   = errors.New("module name already in use in the sector")
+	ErrNotFound        = errors.New("sector not found")
+	ErrInvalidName     = errors.New("invalid name")
+	ErrNameTaken       = errors.New("sector name already in use")
+	ErrModuleNotFound  = errors.New("module not found")
+	ErrModuleNameTaken = errors.New("module name already in use in the sector")
 )
 
 type Service struct {
 	pool *pgxpool.Pool
 	q    *db.Queries
-	hub  *realtime.Hub
-
-	// provider unlinks the device of a refused number, out of the event that
-	// reported it; background tracks that work.
-	provider   messaging.Provider
-	background sync.WaitGroup
 }
 
-func NewService(pool *pgxpool.Pool, hub *realtime.Hub) *Service {
-	return &Service{pool: pool, q: db.New(pool), hub: hub}
-}
-
-// SetProvider gives the service the provider that delivers its events; it is
-// created after the service because it needs the event handler.
-func (s *Service) SetProvider(p messaging.Provider) {
-	s.provider = p
-}
-
-// Wait blocks until the background work ends.
-func (s *Service) Wait() {
-	s.background.Wait()
+func NewService(pool *pgxpool.Pool) *Service {
+	return &Service{pool: pool, q: db.New(pool)}
 }
 
 // SectorInput holds the editable fields of a sector.
@@ -103,7 +79,7 @@ func (s *Service) Create(ctx context.Context, actorID int64, in SectorInput) (db
 	var sector db.Sector
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		sector, err = q.CreateSector(ctx, db.CreateSectorParams{Name: in.Name, Provider: defaultProvider})
+		sector, err = q.CreateSector(ctx, db.CreateSectorParams{Name: in.Name, Provider: DefaultProvider})
 		if err != nil {
 			return sectorError("create sector", err)
 		}
@@ -263,11 +239,8 @@ func record(ctx context.Context, q *db.Queries, entityType string, entityID int6
 func sectorError(op string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		switch pgErr.ConstraintName {
-		case "sectors_name_key":
+		if pgErr.ConstraintName == "sectors_name_key" {
 			return ErrNameTaken
-		case "sectors_phone_key":
-			return ErrPhoneTaken
 		}
 	}
 	return fmt.Errorf("%s: %w", op, err)

@@ -14,9 +14,8 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/core/sectors"
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
-	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
-	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
 type Options struct {
@@ -33,24 +32,18 @@ type Options struct {
 }
 
 type server struct {
-	logger    *slog.Logger
-	auth      *auth.Service
-	sectors   *sectors.Service
-	directory *directory.Service
-	tickets   *ticket.Service
-	hub       *realtime.Hub
-	opts      Options
+	logger *slog.Logger
+	auth   *auth.Service
+	hub    *realtime.Hub
+	opts   Options
 }
 
-func NewRouter(logger *slog.Logger, authService *auth.Service, userService *users.Service, sectorService *sectors.Service, directoryService *directory.Service, ticketService *ticket.Service, hub *realtime.Hub, opts Options) http.Handler {
+func NewRouter(logger *slog.Logger, authService *auth.Service, userService *users.Service, sectorService *sectors.Service, directoryService *directory.Service, ticketService *helpdesk.Service, hub *realtime.Hub, opts Options) http.Handler {
 	s := &server{
-		logger:    logger,
-		auth:      authService,
-		sectors:   sectorService,
-		directory: directoryService,
-		tickets:   ticketService,
-		hub:       hub,
-		opts:      opts,
+		logger: logger,
+		auth:   authService,
+		hub:    hub,
+		opts:   opts,
 	}
 
 	r := chi.NewRouter()
@@ -75,52 +68,7 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, userService *user
 			sectors.NewHandler(logger, sectorService).Routes(r)
 			directory.NewHandler(logger, directoryService).Routes(r)
 
-			// Importar contatos da agenda do número do setor: todos os papéis do setor.
-			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/saved-contacts", s.listSavedContacts)
-			r.With(auth.RequireSector("sectorID")).Post("/sectors/{sectorID}/saved-contacts/import", s.importContacts)
-
-			// Conexão do número: supervisor do próprio setor e administrador.
-			r.Route("/sectors/{sectorID}/connection", func(r chi.Router) {
-				r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin), auth.RequireSector("sectorID"))
-				r.Get("/", s.getConnection)
-				r.Post("/", s.connect)
-				r.Delete("/", s.disconnect)
-				r.Get("/qr.png", s.connectionQR)
-			})
-
-			// Painel: chamados abertos, carga de cada atendente e realizados hoje, para todos os papéis do setor.
-			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/tickets", s.listTickets)
-			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/workload", s.workload)
-			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/closed-today", s.listClosedToday)
-			// Iniciar conversa pelo número do setor, ou ir ao chamado aberto do contato.
-			r.With(auth.RequireSector("sectorID")).Post("/sectors/{sectorID}/conversations", s.startConversation)
-			r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/contacts/{contactID}/open-ticket", s.openTicket)
-			// O serviço confere o setor do chamado e, para responder, o responsável.
-			r.Post("/tickets/{ticketID}/assign", s.assignTicket)
-			r.Post("/tickets/{ticketID}/transfer", s.transferTicket)
-			r.Post("/tickets/{ticketID}/return", s.returnTicket)
-			r.Get("/tickets/{ticketID}/assignments", s.listAssignments)
-			r.Get("/tickets/{ticketID}/closing-form", s.closingForm)
-			r.Post("/tickets/{ticketID}/close", s.closeTicket)
-			r.Post("/tickets/{ticketID}/cancel", s.cancelTicket)
-			r.Get("/tickets/{ticketID}/transfer-sectors", s.listTransferSectors)
-			r.Post("/tickets/{ticketID}/transfer-sector", s.transferSector)
-			r.Get("/tickets/{ticketID}/modules", s.listTicketModules)
-			r.Post("/tickets/{ticketID}/correct", s.correctTicket)
-			r.Get("/tickets/{ticketID}/corrections", s.listCorrections)
-			r.Get("/tickets/{ticketID}", s.getTicket)
-			r.Get("/tickets/{ticketID}/messages", s.listMessages)
-			r.Post("/tickets/{ticketID}/messages", s.sendMessage)
-			r.Put("/tickets/{ticketID}/spoke-with", s.setSpokeWith)
-			r.Get("/tickets/{ticketID}/notes", s.listNotes)
-			r.Post("/tickets/{ticketID}/notes", s.createNote)
-			r.Post("/messages/{messageID}/retry", s.retryMessage)
-			r.Get("/media/{mediaID}", s.getMedia)
-			// Histórico: chamados dos setores do usuário (todos, para o administrador).
-			r.Get("/contacts/{contactID}/tickets", s.contactHistory)
-			r.Get("/organizations/{organizationID}/tickets", s.organizationHistory)
-			r.Put("/contacts/{contactID}", s.updateContact)
-
+			helpdesk.NewHandler(logger, ticketService, sectorService, opts.Messaging).Routes(r)
 		})
 	})
 

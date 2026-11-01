@@ -424,7 +424,11 @@ func TestRecordedAudioGoesAsVoiceMessage(t *testing.T) {
 
 	// A conversa informa a duração do áudio, para o painel mostrar ao lado do player.
 	status, _, raw := e.get(fmt.Sprintf("/api/tickets/%d/messages", c.ticket.ID), c.biaToken)
-	var listed []messageResponse
+	var listed []struct {
+		Media *struct {
+			DurationSeconds *int32 `json:"durationSeconds"`
+		} `json:"media"`
+	}
 	if err := json.Unmarshal(raw, &listed); status != http.StatusOK || err != nil {
 		t.Fatalf("list messages: status %d, error %v", status, err)
 	}

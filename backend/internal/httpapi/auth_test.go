@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,10 +22,9 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
-	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
 const testPassword = "Senha@123"
@@ -37,7 +35,7 @@ type testEnv struct {
 	q             *db.Queries
 	url           string
 	sectors       *sectors.Service
-	ticketService *ticket.Service
+	ticketService *helpdesk.Service
 	// whatsapp simulates the phones of the sector numbers.
 	whatsapp *fake.Adapter
 	// files holds the attachments of the messages.
@@ -57,24 +55,12 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(a *auth.Handler, r
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	hub := realtime.NewHub()
-	sectors := sectors.NewService(pool, hub)
+	sectors := sectors.NewService(pool)
 	files := storage.NewDisk(t.TempDir())
-	tickets := ticket.NewService(pool, files, hub)
-	whatsapp := fake.New(func(ctx context.Context, ev messaging.Event) error {
-		switch ev := ev.(type) {
-		case messaging.ConnectionChanged:
-			return sectors.HandleConnection(ctx, ev)
-		case messaging.MessageReceived:
-			return tickets.HandleReceived(ctx, ev)
-		case messaging.MessageSentOutside:
-			return tickets.HandleSentOutside(ctx, ev)
-		case messaging.StatusUpdated:
-			return tickets.HandleStatus(ctx, ev)
-		}
-		return nil
-	})
-	sectors.SetProvider(whatsapp)
-	t.Cleanup(sectors.Wait)
+	tickets := helpdesk.NewService(pool, files, hub)
+	whatsapp := fake.New(tickets.HandleEvent)
+	tickets.SetProvider(whatsapp)
+	t.Cleanup(tickets.Wait)
 	handler := NewRouter(logger, auth.NewService(pool), users.NewService(pool), sectors, directory.NewService(pool), tickets, hub, Options{
 		SecureCookie: true, Messaging: whatsapp, SessionCheckInterval: 200 * time.Millisecond,
 	})

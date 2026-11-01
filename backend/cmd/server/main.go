@@ -22,11 +22,10 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/sectors"
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/core/users"
-	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/whatsmeow"
 	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
-	"github.com/gcaspp-labs/xet/backend/internal/ticket"
 )
 
 func main() {
@@ -64,23 +63,6 @@ func openDatabase(ctx context.Context, databaseURL string) (*pgxpool.Pool, error
 	return pool, nil
 }
 
-// eventHandler routes the events of the messaging provider to the domains.
-func eventHandler(sectors *sectors.Service, tickets *ticket.Service) messaging.EventHandler {
-	return func(ctx context.Context, ev messaging.Event) error {
-		switch ev := ev.(type) {
-		case messaging.ConnectionChanged:
-			return sectors.HandleConnection(ctx, ev)
-		case messaging.MessageReceived:
-			return tickets.HandleReceived(ctx, ev)
-		case messaging.MessageSentOutside:
-			return tickets.HandleSentOutside(ctx, ev)
-		case messaging.StatusUpdated:
-			return tickets.HandleStatus(ctx, ev)
-		}
-		return nil
-	}
-}
-
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -101,9 +83,8 @@ func run() error {
 	logger.Info("database migrated")
 
 	hub := realtime.NewHub()
-	sectors := sectors.NewService(pool, hub)
-	defer sectors.Wait()
-	tickets := ticket.NewService(pool, storage.NewDisk(cfg.StorageDir), hub)
+	tickets := helpdesk.NewService(pool, storage.NewDisk(cfg.StorageDir), hub)
+	defer tickets.Wait()
 	// Messages left pending by the previous run are not resent automatically.
 	failed, err := tickets.FailPending(ctx)
 	if err != nil {
@@ -113,33 +94,32 @@ func run() error {
 		logger.Warn("pending messages marked as failed", "count", failed)
 	}
 	opts := httpapi.Options{SecureCookie: cfg.CookieSecure}
-	handler := eventHandler(sectors, tickets)
 	switch cfg.MessagingProvider {
 	case "fake":
-		provider := fake.New(handler)
+		provider := fake.New(tickets.HandleEvent)
 		opts.Messaging, opts.TestRoutes = provider, provider.Handler()
 		logger.Warn("using the fake messaging provider: for end-to-end tests only")
 	default:
-		provider, err := whatsmeow.New(ctx, pool, handler, logger)
+		provider, err := whatsmeow.New(ctx, pool, tickets.HandleEvent, logger)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = provider.Close() }()
 		opts.Messaging = provider
 	}
-	sectors.SetProvider(opts.Messaging)
+	tickets.SetProvider(opts.Messaging)
 
 	// Reconnects the sector numbers in the background, so a slow WhatsApp
 	// does not hold the API.
 	go func() {
-		if err := sectors.Reconnect(ctx, opts.Messaging); err != nil {
+		if err := tickets.Reconnect(ctx, opts.Messaging); err != nil {
 			logger.Error("reconnect sectors", "error", err)
 		}
 	}()
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), users.NewService(pool), sectors, directory.NewService(pool), tickets, hub, opts),
+		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), users.NewService(pool), sectors.NewService(pool), directory.NewService(pool), tickets, hub, opts),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
