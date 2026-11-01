@@ -105,6 +105,59 @@ func (q *Queries) CreateQueuedTicket(ctx context.Context, arg CreateQueuedTicket
 	return i, err
 }
 
+const createStartedTicket = `-- name: CreateStartedTicket :one
+insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, created_by_id, arrived_at, assigned_at, started_at)
+values ($1, $2, $3, $4, 'in_progress', $5, $5, now(), now(), now())
+on conflict (sector_id, contact_id) where status <> 'closed' do nothing
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type CreateStartedTicketParams struct {
+	Protocol       string
+	SectorID       int64
+	ContactID      int64
+	OrganizationID *int64
+	AssigneeID     *int64
+}
+
+// Conversation started by an agent: the ticket is born assigned to them. A
+// ticket opened meanwhile for the contact in the sector wins; then no row is
+// returned and the caller directs the agent to it.
+func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, createStartedTicket,
+		arg.Protocol,
+		arg.SectorID,
+		arg.ContactID,
+		arg.OrganizationID,
+		arg.AssigneeID,
+	)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOpenTicketForUpdate = `-- name: GetOpenTicketForUpdate :one
 select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at from tickets
 where sector_id = $1 and contact_id = $2 and status <> 'closed'
@@ -143,6 +196,23 @@ func (q *Queries) GetOpenTicketForUpdate(ctx context.Context, arg GetOpenTicketF
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getOpenTicketID = `-- name: GetOpenTicketID :one
+select id from tickets
+where sector_id = $1 and contact_id = $2 and status <> 'closed'
+`
+
+type GetOpenTicketIDParams struct {
+	SectorID  int64
+	ContactID int64
+}
+
+func (q *Queries) GetOpenTicketID(ctx context.Context, arg GetOpenTicketIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getOpenTicketID, arg.SectorID, arg.ContactID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getTicket = `-- name: GetTicket :one

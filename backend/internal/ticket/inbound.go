@@ -286,13 +286,12 @@ func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.C
 		return db.Ticket{}, fmt.Errorf("get open ticket: %w", err)
 	}
 
-	year := time.Now().In(protocolZone).Year()
-	n, err := q.NextProtocolNumber(ctx, int32(year))
+	protocol, err := nextProtocol(ctx, q)
 	if err != nil {
-		return db.Ticket{}, fmt.Errorf("next protocol: %w", err)
+		return db.Ticket{}, err
 	}
 	ticket, err = q.CreateQueuedTicket(ctx, db.CreateQueuedTicketParams{
-		Protocol:       fmt.Sprintf("%04d-%06d", year, n),
+		Protocol:       protocol,
 		SectorID:       sectorID,
 		ContactID:      contact.ID,
 		OrganizationID: contact.OrganizationID,
@@ -310,6 +309,17 @@ func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.C
 		return db.Ticket{}, fmt.Errorf("get open ticket: %w", err)
 	}
 	return ticket, nil
+}
+
+// nextProtocol takes the next protocol of the year, locking the counter
+// until the transaction that creates the ticket ends.
+func nextProtocol(ctx context.Context, q *db.Queries) (string, error) {
+	year := time.Now().In(protocolZone).Year()
+	n, err := q.NextProtocolNumber(ctx, int32(year))
+	if err != nil {
+		return "", fmt.Errorf("next protocol: %w", err)
+	}
+	return fmt.Sprintf("%04d-%06d", year, n), nil
 }
 
 func optional(s string) *string {

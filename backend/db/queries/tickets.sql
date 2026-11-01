@@ -108,3 +108,16 @@ where t.organization_id = @organization_id
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
 order by t.arrived_at desc, t.id desc
 limit 200;
+
+-- name: GetOpenTicketID :one
+select id from tickets
+where sector_id = @sector_id and contact_id = @contact_id and status <> 'closed';
+
+-- name: CreateStartedTicket :one
+-- Conversation started by an agent: the ticket is born assigned to them. A
+-- ticket opened meanwhile for the contact in the sector wins; then no row is
+-- returned and the caller directs the agent to it.
+insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, created_by_id, arrived_at, assigned_at, started_at)
+values (@protocol, @sector_id, @contact_id, @organization_id, 'in_progress', @assignee_id, @assignee_id, now(), now(), now())
+on conflict (sector_id, contact_id) where status <> 'closed' do nothing
+returning *;

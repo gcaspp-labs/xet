@@ -88,6 +88,9 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 - Ao enviar a primeira mensagem, será criado um chamado atribuído ao atendente.
 - Se já existir um chamado aberto para aquele contato no mesmo setor, o sistema direcionará para o chamado existente.
 - A existência de um chamado aberto não autoriza outro atendente a responder: permanece necessária a transferência de responsabilidade.
+- A primeira mensagem é um texto; arquivos e áudios seguem pela conversa depois de criado o chamado. Ela segue as mesmas regras de envio da conversa: se o número estiver desconectado, o chamado é criado e a mensagem fica com falha, para o responsável reenviar.
+- O chamado aberto é verificado ao escolher o contato, antes de escrever a mensagem; se ele surgir enquanto a mensagem é escrita (por exemplo, o cliente mandou mensagem ou outro atendente iniciou ao mesmo tempo), a mensagem não é enviada e o atendente é direcionado ao chamado existente.
+- O contato precisa ter telefone. O administrador escolhe por qual setor iniciar a conversa, como no painel.
 
 ## Transferências
 
