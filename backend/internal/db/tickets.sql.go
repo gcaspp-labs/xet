@@ -93,14 +93,15 @@ func (q *Queries) AssignTicket(ctx context.Context, arg AssignTicketParams) (Tic
 
 const closeTicket = `-- name: CloseTicket :one
 update tickets
-set status = 'closed', closure_type = 'resolved', closed_at = now(), closed_by_id = assignee_id,
-    subject = $1, resolution = $2, organization_id = $3,
-    started_at = $4, ended_at = coalesce($5, now())
-where id = $6
+set status = 'closed', closure_type = $1::closure_type, closed_at = now(), closed_by_id = assignee_id,
+    subject = $2, resolution = $3, organization_id = $4,
+    started_at = $5, ended_at = coalesce($6, now())
+where id = $7
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
 `
 
 type CloseTicketParams struct {
+	ClosureType    ClosureType
 	Subject        *string
 	Resolution     *string
 	OrganizationID *int64
@@ -112,6 +113,7 @@ type CloseTicketParams struct {
 // The caller holds the lock of the ticket and checked it may be closed.
 func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, closeTicket,
+		arg.ClosureType,
 		arg.Subject,
 		arg.Resolution,
 		arg.OrganizationID,
@@ -308,6 +310,59 @@ func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTick
 	return i, err
 }
 
+const createTransferredTicket = `-- name: CreateTransferredTicket :one
+insert into tickets (protocol, sector_id, contact_id, organization_id, status, previous_ticket_id, arrived_at, started_at)
+values ($1, $2, $3, $4, 'queued', $5, now(), now())
+on conflict (sector_id, contact_id) where status <> 'closed' do nothing
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
+`
+
+type CreateTransferredTicketParams struct {
+	Protocol         string
+	SectorID         int64
+	ContactID        int64
+	OrganizationID   *int64
+	PreviousTicketID *int64
+}
+
+// Ticket of the destination of a transfer between sectors. An open ticket of
+// the contact in the destination wins; then no row is returned and the
+// caller refuses the transfer.
+func (q *Queries) CreateTransferredTicket(ctx context.Context, arg CreateTransferredTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, createTransferredTicket,
+		arg.Protocol,
+		arg.SectorID,
+		arg.ContactID,
+		arg.OrganizationID,
+		arg.PreviousTicketID,
+	)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.SpokeWith,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOpenTicketForUpdate = `-- name: GetOpenTicketForUpdate :one
 select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at from tickets
 where sector_id = $1 and contact_id = $2 and status <> 'closed'
@@ -457,40 +512,58 @@ select
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name,
     t.assignee_id, u.name as assignee_name,
-    t.closed_by_id, cb.name as closed_by_name
+    t.closed_by_id, cb.name as closed_by_name, t.closure_type,
+    p.id as previous_id, p.protocol as previous_protocol, ps.name as previous_sector_name,
+    p.subject as previous_subject, p.resolution as previous_resolution, pb.name as previous_closed_by_name,
+    n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
 left join users u on u.id = t.assignee_id
 left join users cb on cb.id = t.closed_by_id
+left join tickets p on p.id = t.previous_ticket_id
+left join sectors ps on ps.id = p.sector_id
+left join users pb on pb.id = p.closed_by_id
+left join tickets n on n.previous_ticket_id = t.id
+left join sectors ns on ns.id = n.sector_id
 where t.id = $1
 `
 
 type GetTicketDetailRow struct {
-	ID                int64
-	Protocol          string
-	Status            TicketStatus
-	SectorID          int64
-	SectorName        string
-	SpokeWith         *string
-	ArrivedAt         time.Time
-	AssignedAt        *time.Time
-	StartedAt         time.Time
-	EndedAt           *time.Time
-	ClosedAt          *time.Time
-	Subject           *string
-	Resolution        *string
-	ContactID         int64
-	ContactName       string
-	ContactPhone      *string
-	ContactRegistered bool
-	OrganizationID    *int64
-	OrganizationName  *string
-	AssigneeID        *int64
-	AssigneeName      *string
-	ClosedByID        *int64
-	ClosedByName      *string
+	ID                   int64
+	Protocol             string
+	Status               TicketStatus
+	SectorID             int64
+	SectorName           string
+	SpokeWith            *string
+	ArrivedAt            time.Time
+	AssignedAt           *time.Time
+	StartedAt            time.Time
+	EndedAt              *time.Time
+	ClosedAt             *time.Time
+	Subject              *string
+	Resolution           *string
+	ContactID            int64
+	ContactName          string
+	ContactPhone         *string
+	ContactRegistered    bool
+	OrganizationID       *int64
+	OrganizationName     *string
+	AssigneeID           *int64
+	AssigneeName         *string
+	ClosedByID           *int64
+	ClosedByName         *string
+	ClosureType          NullClosureType
+	PreviousID           *int64
+	PreviousProtocol     *string
+	PreviousSectorName   *string
+	PreviousSubject      *string
+	PreviousResolution   *string
+	PreviousClosedByName *string
+	NextID               *int64
+	NextProtocol         *string
+	NextSectorName       *string
 }
 
 func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetailRow, error) {
@@ -520,6 +593,16 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.AssigneeName,
 		&i.ClosedByID,
 		&i.ClosedByName,
+		&i.ClosureType,
+		&i.PreviousID,
+		&i.PreviousProtocol,
+		&i.PreviousSectorName,
+		&i.PreviousSubject,
+		&i.PreviousResolution,
+		&i.PreviousClosedByName,
+		&i.NextID,
+		&i.NextProtocol,
+		&i.NextSectorName,
 	)
 	return i, err
 }
@@ -617,6 +700,37 @@ func (q *Queries) ListContactTickets(ctx context.Context, arg ListContactTickets
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLaterTicketSectors = `-- name: ListLaterTicketSectors :many
+with recursive later as (
+    select f.id, f.sector_id from tickets f where f.previous_ticket_id = $1::bigint
+    union all
+    select t.id, t.sector_id from tickets t join later l on t.previous_ticket_id = l.id
+)
+select distinct sector_id from later
+`
+
+// Sectors of the tickets that continue the given one through transfers
+// between sectors; their users read the whole chain before them.
+func (q *Queries) ListLaterTicketSectors(ctx context.Context, id int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listLaterTicketSectors, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var sector_id int64
+		if err := rows.Scan(&sector_id); err != nil {
+			return nil, err
+		}
+		items = append(items, sector_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

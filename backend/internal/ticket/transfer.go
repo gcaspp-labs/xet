@@ -87,7 +87,7 @@ func (s *Service) Transfer(ctx context.Context, actor auth.User, ticketID, targe
 // AssignmentLogs returns how the ticket got its first assignee (started or
 // assigned) and each transfer.
 func (s *Service) AssignmentLogs(ctx context.Context, actor auth.User, ticketID int64) ([]AssignmentLog, error) {
-	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+	if _, err := s.viewable(ctx, actor, ticketID); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListTicketAssignmentLogs(ctx, &ticketID)

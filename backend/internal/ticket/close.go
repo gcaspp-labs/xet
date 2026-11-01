@@ -78,95 +78,25 @@ func (s *Service) ClosingForm(ctx context.Context, actor auth.User, ticketID int
 }
 
 // Close ends a ticket in progress with the closing form. Only the assignee
-// closes, even supervisors and admins (spec.md). The ticket is locked, so no
-// message or transfer crosses the closing, and the contact is locked for
-// share, so its registration does not change meanwhile. The fields, the
-// modules and the audit go in one transaction.
+// closes, even supervisors and admins (spec.md). The fields, the modules and
+// the audit go in one transaction.
 func (s *Service) Close(ctx context.Context, actor auth.User, ticketID int64, in Closing) (db.Ticket, error) {
 	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
 		return db.Ticket{}, err
 	}
-	in.Subject, in.Resolution = strings.TrimSpace(in.Subject), strings.TrimSpace(in.Resolution)
-	slices.Sort(in.ModuleIDs)
-	in.ModuleIDs = slices.Compact(in.ModuleIDs)
-	if in.Subject == "" || in.Resolution == "" || len(in.ModuleIDs) == 0 {
-		return db.Ticket{}, ErrIncompleteClosing
+	in, err := normalizeClosing(in)
+	if err != nil {
+		return db.Ticket{}, err
 	}
 
 	var ticket db.Ticket
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := q.GetTicketForUpdate(ctx, ticketID)
+		var changes audit.Changes
+		ticket, changes, err = closeLocked(ctx, q, actor, ticketID, in, db.ClosureTypeResolved)
 		if err != nil {
-			return fmt.Errorf("lock ticket: %w", err)
-		}
-		if t.Status == db.TicketStatusQueued {
-			return ErrNotInProgress
-		}
-		if err := conducts(t, actor); err != nil {
 			return err
 		}
-		contact, err := q.GetContactForShare(ctx, t.ContactID)
-		if err != nil {
-			return fmt.Errorf("lock contact: %w", err)
-		}
-		if !contact.Registered {
-			return ErrContactNotRegistered
-		}
-		if _, err := q.GetOrganization(ctx, in.OrganizationID); errors.Is(err, pgx.ErrNoRows) {
-			return ErrInvalidOrganization
-		} else if err != nil {
-			return fmt.Errorf("get organization: %w", err)
-		}
-
-		startedAt := t.StartedAt
-		if in.StartedAt != nil {
-			startedAt = *in.StartedAt
-		}
-		// The database clock decides the automatic end; an informed end is
-		// checked here and again by the tickets_ended_after_started constraint.
-		end := time.Now()
-		if in.EndedAt != nil {
-			if in.EndedAt.After(end) {
-				return ErrInvalidPeriod
-			}
-			end = *in.EndedAt
-		}
-		if startedAt.After(end) {
-			return ErrInvalidPeriod
-		}
-
-		ticket, err = q.CloseTicket(ctx, db.CloseTicketParams{
-			ID:             t.ID,
-			Subject:        &in.Subject,
-			Resolution:     &in.Resolution,
-			OrganizationID: &in.OrganizationID,
-			StartedAt:      startedAt,
-			EndedAt:        in.EndedAt,
-		})
-		if isConstraint(err, "tickets_ended_after_started") {
-			// The database clock ran behind the start checked above.
-			return ErrInvalidPeriod
-		}
-		if err != nil {
-			return fmt.Errorf("close ticket: %w", err)
-		}
-		added, err := q.AddTicketModules(ctx, db.AddTicketModulesParams{TicketID: t.ID, ModuleIds: in.ModuleIDs, SectorID: t.SectorID})
-		if err != nil {
-			return fmt.Errorf("add ticket modules: %w", err)
-		}
-		if len(added) != len(in.ModuleIDs) {
-			return ErrInvalidModules
-		}
-
-		changes := audit.Changes{}
-		changes.Set("status", string(t.Status), string(ticket.Status))
-		changes.Set("subject", t.Subject, ticket.Subject)
-		changes.Set("resolution", t.Resolution, ticket.Resolution)
-		changes.Set("organization_id", t.OrganizationID, ticket.OrganizationID)
-		changes["module_ids"] = audit.Change{From: []int64{}, To: in.ModuleIDs}
-		changes.Set("started_at", t.StartedAt.UTC(), ticket.StartedAt.UTC())
-		changes["ended_at"] = audit.Change{From: nil, To: ticket.EndedAt.UTC()}
 		return recordTicket(ctx, q, ticket.ID, "ticket_closed", actor.ID, changes)
 	})
 	if err != nil {
@@ -176,9 +106,101 @@ func (s *Service) Close(ctx context.Context, actor auth.User, ticketID int64, in
 	return ticket, nil
 }
 
+// normalizeClosing trims the form and checks the required fields.
+func normalizeClosing(in Closing) (Closing, error) {
+	in.Subject, in.Resolution = strings.TrimSpace(in.Subject), strings.TrimSpace(in.Resolution)
+	in.ModuleIDs = slices.Clone(in.ModuleIDs)
+	slices.Sort(in.ModuleIDs)
+	in.ModuleIDs = slices.Compact(in.ModuleIDs)
+	if in.Subject == "" || in.Resolution == "" || len(in.ModuleIDs) == 0 {
+		return in, ErrIncompleteClosing
+	}
+	return in, nil
+}
+
+// closeLocked closes the ticket inside the caller's transaction and returns
+// the changes for the audit. The ticket is locked, so no message or transfer
+// crosses the closing, and the contact is locked for share, so its
+// registration does not change meanwhile.
+func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID int64, in Closing, closure db.ClosureType) (db.Ticket, audit.Changes, error) {
+	t, err := q.GetTicketForUpdate(ctx, ticketID)
+	if err != nil {
+		return db.Ticket{}, nil, fmt.Errorf("lock ticket: %w", err)
+	}
+	if t.Status == db.TicketStatusQueued {
+		return db.Ticket{}, nil, ErrNotInProgress
+	}
+	if err := conducts(t, actor); err != nil {
+		return db.Ticket{}, nil, err
+	}
+	contact, err := q.GetContactForShare(ctx, t.ContactID)
+	if err != nil {
+		return db.Ticket{}, nil, fmt.Errorf("lock contact: %w", err)
+	}
+	if !contact.Registered {
+		return db.Ticket{}, nil, ErrContactNotRegistered
+	}
+	if _, err := q.GetOrganization(ctx, in.OrganizationID); errors.Is(err, pgx.ErrNoRows) {
+		return db.Ticket{}, nil, ErrInvalidOrganization
+	} else if err != nil {
+		return db.Ticket{}, nil, fmt.Errorf("get organization: %w", err)
+	}
+
+	startedAt := t.StartedAt
+	if in.StartedAt != nil {
+		startedAt = *in.StartedAt
+	}
+	// The database clock decides the automatic end; an informed end is
+	// checked here and again by the tickets_ended_after_started constraint.
+	end := time.Now()
+	if in.EndedAt != nil {
+		if in.EndedAt.After(end) {
+			return db.Ticket{}, nil, ErrInvalidPeriod
+		}
+		end = *in.EndedAt
+	}
+	if startedAt.After(end) {
+		return db.Ticket{}, nil, ErrInvalidPeriod
+	}
+
+	ticket, err := q.CloseTicket(ctx, db.CloseTicketParams{
+		ID:             t.ID,
+		ClosureType:    closure,
+		Subject:        &in.Subject,
+		Resolution:     &in.Resolution,
+		OrganizationID: &in.OrganizationID,
+		StartedAt:      startedAt,
+		EndedAt:        in.EndedAt,
+	})
+	if isConstraint(err, "tickets_ended_after_started") {
+		// The database clock ran behind the start checked above.
+		return db.Ticket{}, nil, ErrInvalidPeriod
+	}
+	if err != nil {
+		return db.Ticket{}, nil, fmt.Errorf("close ticket: %w", err)
+	}
+	added, err := q.AddTicketModules(ctx, db.AddTicketModulesParams{TicketID: t.ID, ModuleIds: in.ModuleIDs, SectorID: t.SectorID})
+	if err != nil {
+		return db.Ticket{}, nil, fmt.Errorf("add ticket modules: %w", err)
+	}
+	if len(added) != len(in.ModuleIDs) {
+		return db.Ticket{}, nil, ErrInvalidModules
+	}
+
+	changes := audit.Changes{}
+	changes.Set("status", string(t.Status), string(ticket.Status))
+	changes.Set("subject", t.Subject, ticket.Subject)
+	changes.Set("resolution", t.Resolution, ticket.Resolution)
+	changes.Set("organization_id", t.OrganizationID, ticket.OrganizationID)
+	changes["module_ids"] = audit.Change{From: []int64{}, To: in.ModuleIDs}
+	changes.Set("started_at", t.StartedAt.UTC(), ticket.StartedAt.UTC())
+	changes["ended_at"] = audit.Change{From: nil, To: ticket.EndedAt.UTC()}
+	return ticket, changes, nil
+}
+
 // Modules returns the modules recorded when the ticket was closed.
 func (s *Service) Modules(ctx context.Context, actor auth.User, ticketID int64) ([]db.ListTicketModulesRow, error) {
-	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+	if _, err := s.viewable(ctx, actor, ticketID); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListTicketModules(ctx, ticketID)

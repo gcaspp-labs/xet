@@ -24,6 +24,18 @@ export type TicketDetail = {
   organization: { id: number; name: string } | null
   assignee: { id: number; name: string } | null
   closedBy: { id: number; name: string } | null
+  closureType: 'resolved' | 'transferred' | null
+  // Chamado do setor de origem, quando este veio de uma transferência entre setores.
+  previous: {
+    id: number
+    protocol: string
+    sectorName: string
+    subject: string | null
+    resolution: string | null
+    closedByName: string | null
+  } | null
+  // Setor e protocolo para onde este chamado foi transferido, sem acesso a ele.
+  next: { protocol: string; sectorName: string } | null
 }
 
 export type Message = {
@@ -75,11 +87,13 @@ export type AssignmentLog = {
     | 'ticket_assigned'
     | 'ticket_transferred_user'
     | 'ticket_closed'
+    | 'ticket_transferred_sector'
     | 'ticket_corrected'
   createdAt: string
   actor: { id: number; name: string } | null
   fromName: string | null
   toName: string | null
+  toSectorName: string | null
 }
 
 export const ticketKey = (ticketId: number) => ['tickets', ticketId]
@@ -89,6 +103,7 @@ const notesKey = (ticketId: number) => ['tickets', ticketId, 'notes']
 const closingFormKey = (ticketId: number) => ['tickets', ticketId, 'closing-form']
 const modulesKey = (ticketId: number) => ['tickets', ticketId, 'modules']
 const correctionsKey = (ticketId: number) => ['tickets', ticketId, 'corrections']
+const transferSectorsKey = (ticketId: number) => ['tickets', ticketId, 'transfer-sectors']
 export const historyKey = ['history']
 
 // Identificador de envio (UUID v4). crypto.randomUUID só existe em HTTPS ou
@@ -344,6 +359,35 @@ export function useCorrectTicket(ticketId: number) {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
+        queryClient.invalidateQueries({ queryKey: historyKey }),
+      ]),
+  })
+}
+
+// Setores para onde o chamado pode ser transferido: os outros setores ativos.
+export function useTransferSectors(ticketId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: transferSectorsKey(ticketId),
+    queryFn: () => api<{ id: number; name: string }[]>(`/tickets/${ticketId}/transfer-sectors`),
+    enabled,
+  })
+}
+
+// Salva o formulário, encerra a etapa como transferida e abre o chamado
+// vinculado na fila do destino; o backend confere tudo como no encerramento.
+export function useTransferSector(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: ClosingInput & { sectorId: number }) =>
+      api<{ id: number; protocol: string }>(`/tickets/${ticketId}/transfer-sector`, {
+        method: 'POST',
+        body,
+      }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
+        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),
   })

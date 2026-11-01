@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { TriangleAlert } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -20,8 +20,22 @@ import {
   FieldSet,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { type TicketDetail, ticketKey, useCloseTicket, useClosingForm } from '@/lib/conversation'
+import {
+  type TicketDetail,
+  ticketKey,
+  useCloseTicket,
+  useClosingForm,
+  useTransferSector,
+  useTransferSectors,
+} from '@/lib/conversation'
 import type { Organization } from '@/lib/directory'
 import { formatPhone } from '@/lib/format'
 
@@ -53,19 +67,28 @@ type FormValues = z.input<typeof schema>
 
 // Drawer de encerramento (spec.md, Formulário de encerramento): assunto,
 // resolução e módulos obrigatórios; contato, atendente e setor automáticos;
-// órgão, início e fim sugeridos e editáveis. O backend confere tudo de novo.
+// órgão, início e fim sugeridos e editáveis. Com `transfer`, o mesmo
+// formulário encerra a etapa e transfere o chamado para outro setor
+// (spec.md, Transferências entre setores). O backend confere tudo de novo.
 export function ClosingSheet({
   ticket,
   open,
   onOpenChange,
+  transfer = false,
 }: {
   ticket: TicketDetail
   open: boolean
   onOpenChange: (open: boolean) => void
+  transfer?: boolean
 }) {
   const queryClient = useQueryClient()
   const { data: form } = useClosingForm(ticket.id, open)
   const close = useCloseTicket(ticket.id, ticket.sector.id)
+  const transferSector = useTransferSector(ticket.id, ticket.sector.id)
+  const save = transfer ? transferSector : close
+  const { data: sectors } = useTransferSectors(ticket.id, open && transfer)
+  const [sectorId, setSectorId] = useState<string | null>(null)
+  const [sectorError, setSectorError] = useState<string>()
   const [registering, setRegistering] = useState(false)
   // Horários sugeridos na abertura; só os alterados vão ao backend.
   const [suggested] = useState(() => ({
@@ -98,12 +121,12 @@ export function ClosingSheet({
     }
   }, [form?.organization, getValues, setValue])
 
-  const onSubmit = handleSubmit((values) => {
-    if (close.isPending) {
-      return
-    }
-    close.mutate(
-      {
+  const onSubmit = handleSubmit(
+    (values) => {
+      if (save.isPending || (transfer && !sectorId)) {
+        return
+      }
+      const body = {
         subject: values.subject,
         resolution: values.resolution,
         moduleIds: values.moduleIds,
@@ -114,15 +137,30 @@ export function ClosingSheet({
             : undefined,
         endedAt:
           values.endedAt !== suggested.endedAt ? new Date(values.endedAt).toISOString() : undefined,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Chamado encerrado')
-          onOpenChange(false)
-        },
-      },
-    )
-  })
+      }
+      const onSuccess = () => {
+        toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
+        onOpenChange(false)
+      }
+      if (transfer) {
+        transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess })
+      } else {
+        close.mutate(body, { onSuccess })
+      }
+    },
+    () => undefined,
+  )
+
+  // O destino é conferido junto com os campos do formulário.
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    setSectorError(transfer && !sectorId ? 'Escolha o setor de destino.' : undefined)
+    void onSubmit(event)
+  }
+
+  const sectorItems = (sectors ?? []).map((sector) => ({
+    value: String(sector.id),
+    label: sector.name,
+  }))
 
   const row = (label: string, value: string) => (
     <div>
@@ -136,18 +174,23 @@ export function ClosingSheet({
       <FormSheet
         open={open}
         onOpenChange={onOpenChange}
-        title="Encerrar chamado"
-        description="O chamado só é encerrado depois de salvar o registro do atendimento."
-        submitLabel="Encerrar"
-        pending={close.isPending}
-        error={close.error?.message}
-        onSubmit={onSubmit}
+        title={transfer ? 'Transferir para outro setor' : 'Encerrar chamado'}
+        description={
+          transfer
+            ? 'A etapa deste setor é encerrada com o registro do atendimento, e um novo chamado entra na fila do destino.'
+            : 'O chamado só é encerrado depois de salvar o registro do atendimento.'
+        }
+        submitLabel={transfer ? 'Transferir' : 'Encerrar'}
+        pending={save.isPending}
+        error={save.error?.message}
+        onSubmit={submit}
       >
         {!ticket.contact.registered && (
           <Alert variant="warning">
             <TriangleAlert strokeWidth={1.7} aria-hidden />
             <AlertDescription className="flex flex-col items-start gap-2">
-              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de encerrar.
+              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de{' '}
+              {transfer ? 'transferir' : 'encerrar'}.
               <Button
                 type="button"
                 variant="outline"
@@ -169,6 +212,31 @@ export function ClosingSheet({
           {row('Setor', ticket.sector.name)}
           {row('Atendente', ticket.assignee?.name ?? '')}
         </dl>
+        {transfer && (
+          <Field data-invalid={!!sectorError}>
+            <FieldLabel htmlFor="transfer-sector">Setor de destino</FieldLabel>
+            <Select
+              items={sectorItems}
+              value={sectorId}
+              onValueChange={(value) => setSectorId(value)}
+            >
+              <SelectTrigger id="transfer-sector" aria-invalid={!!sectorError}>
+                <SelectValue placeholder="Escolha o setor" />
+              </SelectTrigger>
+              <SelectContent>
+                {sectorItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {sectors && sectors.length === 0 && (
+              <FieldDescription>Não há outro setor ativo.</FieldDescription>
+            )}
+            <FieldError errors={sectorError ? [{ message: sectorError }] : []} />
+          </Field>
+        )}
         <Field data-invalid={!!errors.subject}>
           <FieldLabel htmlFor="closing-subject">Assunto</FieldLabel>
           <Input
