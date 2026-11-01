@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/server"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -61,7 +63,9 @@ func startServer(t *testing.T, pool *pgxpool.Pool, extra func(a *auth.Handler, r
 	whatsapp := fake.New(tickets.HandleEvent)
 	tickets.SetProvider(whatsapp)
 	t.Cleanup(tickets.Wait)
-	handler := NewRouter(logger, auth.NewService(pool), users.NewService(pool), sectors, directory.NewService(pool), tickets, hub, Options{
+	handler := server.NewRouter(logger, server.Services{
+		Auth: auth.NewService(pool), Users: users.NewService(pool), Sectors: sectors, Directory: directory.NewService(pool), Helpdesk: tickets, Hub: hub,
+	}, server.Options{
 		SecureCookie: true, Messaging: whatsapp, SessionCheckInterval: 200 * time.Millisecond,
 	})
 	if extra != nil {

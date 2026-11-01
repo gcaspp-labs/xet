@@ -1,4 +1,5 @@
-package httpapi
+// Package server assembles the router with the routes of each module.
+package server
 
 import (
 	"log/slog"
@@ -18,8 +19,20 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
+// Services holds the service of each module, created by the caller because
+// the messaging provider needs the service desk before the routes exist.
+type Services struct {
+	Auth      *auth.Service
+	Users     *users.Service
+	Sectors   *sectors.Service
+	Directory *directory.Service
+	Helpdesk  *helpdesk.Service
+	Hub       *realtime.Hub
+}
+
 type Options struct {
-	// SecureCookie sets the Secure flag on the session cookie.
+	// SecureCookie sets the Secure flag on the session cookie. Disabled only
+	// in development over plain HTTP.
 	SecureCookie bool
 	// Messaging is the provider of the sector numbers.
 	Messaging messaging.Provider
@@ -31,21 +44,7 @@ type Options struct {
 	TestRoutes http.Handler
 }
 
-type server struct {
-	logger *slog.Logger
-	auth   *auth.Service
-	hub    *realtime.Hub
-	opts   Options
-}
-
-func NewRouter(logger *slog.Logger, authService *auth.Service, userService *users.Service, sectorService *sectors.Service, directoryService *directory.Service, ticketService *helpdesk.Service, hub *realtime.Hub, opts Options) http.Handler {
-	s := &server{
-		logger: logger,
-		auth:   authService,
-		hub:    hub,
-		opts:   opts,
-	}
-
+func NewRouter(logger *slog.Logger, s Services, opts Options) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(requestLogger(logger))
@@ -53,22 +52,20 @@ func NewRouter(logger *slog.Logger, authService *auth.Service, userService *user
 
 	r.Get("/health", health)
 
+	authHandler := auth.NewHandler(logger, s.Auth, opts.SecureCookie)
 	r.Route("/api", func(r chi.Router) {
 		if opts.TestRoutes != nil {
 			r.Mount("/test", opts.TestRoutes)
 		}
-		authHandler := auth.NewHandler(logger, authService, opts.SecureCookie)
 		authHandler.Routes(r)
 
 		r.Group(func(r chi.Router) {
 			r.Use(authHandler.RequireUser)
-			users.NewHandler(logger, userService).Routes(r)
-			r.Get("/ws", s.events)
-
-			sectors.NewHandler(logger, sectorService).Routes(r)
-			directory.NewHandler(logger, directoryService).Routes(r)
-
-			helpdesk.NewHandler(logger, ticketService, sectorService, opts.Messaging).Routes(r)
+			realtime.NewHandler(logger, s.Auth, s.Hub, opts.SessionCheckInterval).Routes(r)
+			users.NewHandler(logger, s.Users).Routes(r)
+			sectors.NewHandler(logger, s.Sectors).Routes(r)
+			directory.NewHandler(logger, s.Directory).Routes(r)
+			helpdesk.NewHandler(logger, s.Helpdesk, s.Sectors, opts.Messaging).Routes(r)
 		})
 	})
 

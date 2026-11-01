@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/server"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -25,7 +27,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/whatsmeow"
-	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
 )
 
 func main() {
@@ -93,7 +94,7 @@ func run() error {
 	if failed > 0 {
 		logger.Warn("pending messages marked as failed", "count", failed)
 	}
-	opts := httpapi.Options{SecureCookie: cfg.CookieSecure}
+	opts := server.Options{SecureCookie: cfg.CookieSecure}
 	switch cfg.MessagingProvider {
 	case "fake":
 		provider := fake.New(tickets.HandleEvent)
@@ -118,8 +119,15 @@ func run() error {
 	}()
 
 	srv := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, auth.NewService(pool), users.NewService(pool), sectors.NewService(pool), directory.NewService(pool), tickets, hub, opts),
+		Addr: cfg.HTTPAddr,
+		Handler: server.NewRouter(logger, server.Services{
+			Auth:      auth.NewService(pool),
+			Users:     users.NewService(pool),
+			Sectors:   sectors.NewService(pool),
+			Directory: directory.NewService(pool),
+			Helpdesk:  tickets,
+			Hub:       hub,
+		}, opts),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

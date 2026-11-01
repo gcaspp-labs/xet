@@ -1,4 +1,4 @@
-package httpapi_test
+package server_test
 
 import (
 	"encoding/json"
@@ -8,12 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gcaspp-labs/xet/backend/internal/httpapi"
+	"github.com/gcaspp-labs/xet/backend/internal/server"
 )
 
 func TestHealth(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := httptest.NewServer(httpapi.NewRouter(logger, nil, nil, nil, nil, nil, nil, httpapi.Options{}))
+	srv := httptest.NewServer(server.NewRouter(logger, server.Services{}, server.Options{}))
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/health", nil)

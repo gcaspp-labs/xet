@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gcaspp-labs/xet/backend/internal/server"
+
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
@@ -329,7 +331,9 @@ func TestImportContactsWithoutContactBook(t *testing.T) {
 	contab := e.sector("Contabilidade")
 	e.user("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	e.connectBook(contab.ID, messaging.SavedContact{Name: "Maria", Phone: "5511988880001"})
-	handler := NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), auth.NewService(e.pool), users.NewService(e.pool), e.sectors, directory.NewService(e.pool), e.ticketService, realtime.NewHub(), Options{
+	handler := server.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), server.Services{
+		Auth: auth.NewService(e.pool), Users: users.NewService(e.pool), Sectors: e.sectors, Directory: directory.NewService(e.pool), Helpdesk: e.ticketService, Hub: realtime.NewHub(),
+	}, server.Options{
 		SecureCookie: true, Messaging: providerWithoutBook{e.whatsapp},
 	})
 	srv := httptest.NewServer(handler)
