@@ -1,6 +1,13 @@
-import { CircleAlert, Inbox, MessageSquarePlus, MessagesSquare, UserCheck } from 'lucide-react'
+import {
+  CheckCheck,
+  CircleAlert,
+  Inbox,
+  MessageSquarePlus,
+  MessagesSquare,
+  UserCheck,
+} from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { PageContent, Topbar } from '@/components/Topbar'
@@ -27,22 +34,26 @@ import {
 } from '@/components/ui/table'
 import { useSectors } from '@/lib/admin'
 import { type User, useCurrentUser } from '@/lib/auth'
-import { formatMessageTime, formatPhone, roleLabels } from '@/lib/format'
+import { closureTypeLabels, formatMessageTime, formatPhone, roleLabels } from '@/lib/format'
 import {
+  type ClosedTicket,
   lastMessagePreview,
   type TicketSummary,
   useAssignTicket,
+  useClosedToday,
   useTickets,
   useWorkload,
 } from '@/lib/tickets'
 
-function ContactCell({ ticket }: { ticket: TicketSummary }) {
+// O link se estica sobre a linha, que precisa ser `relative`: a linha inteira abre
+// o chamado, e o teclado e o leitor de tela continuam num link de verdade.
+function ContactCell({ ticket }: { ticket: TicketSummary | ClosedTicket }) {
   const { contact } = ticket
   return (
     <TableCell>
       <Link
         to={`/chamados/${ticket.id}`}
-        className="body-strong underline-offset-2 hover:text-accent-strong hover:underline"
+        className="body-strong underline-offset-2 after:absolute after:inset-0 hover:text-accent-strong hover:underline"
       >
         {contact.name}
       </Link>
@@ -76,6 +87,7 @@ function MessageCell({ ticket }: { ticket: TicketSummary }) {
 
 function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSummary[] }) {
   const assign = useAssignTicket(sectorId)
+  const navigate = useNavigate()
 
   return (
     <Card role="region" aria-labelledby="queue-title">
@@ -103,18 +115,22 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
           </TableHeader>
           <TableBody>
             {tickets.map((ticket) => (
-              <TableRow key={ticket.id}>
+              <TableRow key={ticket.id} className="relative">
                 <ContactCell ticket={ticket} />
                 <MessageCell ticket={ticket} />
                 <TableCell>
                   <Button
                     size="sm"
                     variant="outline"
+                    className="relative z-10"
                     disabled={assign.isPending}
                     aria-label={`Assumir chamado de ${ticket.contact.name}`}
                     onClick={() =>
                       assign.mutate(ticket.id, {
-                        onSuccess: () => toast.success('Chamado assumido'),
+                        onSuccess: () => {
+                          toast.success('Chamado assumido')
+                          void navigate(`/chamados/${ticket.id}`)
+                        },
                       })
                     }
                   >
@@ -161,7 +177,7 @@ function InProgressCard({ tickets, user }: { tickets: TicketSummary[]; user: Use
           </TableHeader>
           <TableBody>
             {sorted.map((ticket) => (
-              <TableRow key={ticket.id}>
+              <TableRow key={ticket.id} className="relative">
                 <ContactCell ticket={ticket} />
                 <TableCell className="whitespace-nowrap">
                   {ticket.assignee?.id === user.id ? (
@@ -181,6 +197,57 @@ function InProgressCard({ tickets, user }: { tickets: TicketSummary[]; user: Use
             <MessagesSquare strokeWidth={1.7} aria-hidden />
           </EmptyMedia>
           <EmptyDescription>Nenhum chamado em atendimento.</EmptyDescription>
+        </Empty>
+      )}
+    </Card>
+  )
+}
+
+function ClosedTodayCard({ sectorId, user }: { sectorId: number; user: User }) {
+  const { data: tickets = [] } = useClosedToday(sectorId)
+
+  return (
+    <Card role="region" aria-labelledby="closed-today-title">
+      <CardHeader>
+        <CardTitle id="closed-today-title">Realizados hoje</CardTitle>
+      </CardHeader>
+      {tickets.length > 0 ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-full">Contato</TableHead>
+              <TableHead>Responsável</TableHead>
+              <TableHead>Situação</TableHead>
+              <TableHead className="text-right">Hora</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tickets.map((ticket) => (
+              <TableRow key={ticket.id} className="relative">
+                <ContactCell ticket={ticket} />
+                <TableCell className="whitespace-nowrap">
+                  {ticket.closedBy.id === user.id ? (
+                    <Badge tone="success">Você</Badge>
+                  ) : (
+                    ticket.closedBy.name
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge>{closureTypeLabels[ticket.closureType]}</Badge>
+                </TableCell>
+                <TableCell className="mono-num text-right">
+                  {formatMessageTime(ticket.closedAt)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <Empty>
+          <EmptyMedia>
+            <CheckCheck strokeWidth={1.7} aria-hidden />
+          </EmptyMedia>
+          <EmptyDescription>Nenhum atendimento realizado hoje.</EmptyDescription>
         </Empty>
       )}
     </Card>
@@ -228,6 +295,7 @@ function SectorPanel({ sectorId, user }: { sectorId: number; user: User }) {
       <div className="flex min-w-0 flex-col gap-4">
         <QueueCard sectorId={sectorId} tickets={queued} />
         <InProgressCard tickets={inProgress} user={user} />
+        <ClosedTodayCard sectorId={sectorId} user={user} />
       </div>
       <WorkloadCard sectorId={sectorId} />
     </div>

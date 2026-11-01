@@ -25,7 +25,7 @@ func TestClosedTodayListsWhatTheSectorClosed(t *testing.T) {
 		t.Fatalf("before closing = %v", list)
 	}
 
-	// O atendimento entra pelo momento real do encerramento, mesmo com o fim informado em outro dia.
+	// O atendimento entra pela hora real do encerramento, mesmo com o fim informado em outro dia.
 	past := time.Now().Add(-72 * time.Hour).Truncate(time.Minute)
 	form := with(with(c.form(c.org), "startedAt", past), "endedAt", past.Add(time.Hour))
 	if resp := e.closeForm(c.ticket.ID, c.anaToken, form); resp.status != http.StatusOK {

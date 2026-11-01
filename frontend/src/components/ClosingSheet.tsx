@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { ClosingFields } from '@/components/ClosingFields'
@@ -50,6 +51,7 @@ export function ClosingSheet({
   transfer?: boolean
 }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { data: form } = useClosingForm(ticket.id, open)
   const close = useCloseTicket(ticket.id, ticket.sector.id)
   const transferSector = useTransferSector(ticket.id, ticket.sector.id)
@@ -103,6 +105,8 @@ export function ClosingSheet({
       const onSuccess = () => {
         toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
         onOpenChange(false)
+        // A próxima ação depois de encerrar ou transferir está no painel.
+        void navigate('/')
       }
       if (transfer) {
         transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess })

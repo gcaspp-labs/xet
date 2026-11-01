@@ -26,10 +26,11 @@ async function prepare(baseURL: string, sectorId: number) {
 
 test('encerramento exige o formulário completo e o cadastro do contato', async ({
   page,
+  browser,
   request,
   baseURL,
 }) => {
-  const { sector, agent } = await seedSector(baseURL!)
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
   const { organization } = await prepare(baseURL!, sector.id)
   const { phone } = unique()
   const receive = (body: string) =>
@@ -37,6 +38,13 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
       data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: 'Paulo Cliente', body },
     })
   expect((await receive('Preciso do contracheque')).ok()).toBeTruthy()
+
+  // O supervisor acompanha os realizados do setor em outra janela.
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await signIn(other, supervisor, userPassword)
+  const otherDone = other.getByRole('region', { name: 'Realizados hoje' })
+  await expect(otherDone).toContainText('Nenhum atendimento realizado hoje.')
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Paulo Cliente' }).click()
@@ -90,10 +98,24 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await sheet.getByRole('button', { name: 'Encerrar' }).click()
   await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
 
-  // O registro aparece nos detalhes e ninguém mais responde.
+  // Volta ao painel, com o atendimento nos realizados, marcado como próprio.
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  const done = page.getByRole('region', { name: 'Realizados hoje' })
+  const doneRow = done.getByRole('row', { name: /Paulo Cliente/ })
+  await expect(doneRow).toContainText('Você')
+  await expect(doneRow).toContainText('Encerrado')
+
+  // Quem já estava no painel vê o atendimento sem recarregar, com o nome do atendente.
+  const agentName = agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
+  const otherRow = otherDone.getByRole('row', { name: /Paulo Cliente/ })
+  await expect(otherRow).toContainText(agentName)
+  await expect(otherRow).not.toContainText('Você')
+  await otherContext.close()
+
+  // A linha reabre o chamado: o registro aparece nos detalhes e ninguém mais responde.
+  await doneRow.getByRole('cell', { name: 'Encerrado' }).click({ force: true })
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Chamado encerrado.')
-  const agentName = agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
   await expect(
     conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
       hasText: `${agentName} encerrou o chamado`,
