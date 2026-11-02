@@ -1,4 +1,4 @@
-import { expect, request, type Page } from '@playwright/test'
+import { type APIRequestContext, expect, request, type Page } from '@playwright/test'
 
 // Administrador de teste criado no banco próprio dos testes ponta a ponta.
 export const admin = {
@@ -94,12 +94,28 @@ export function formatCnpj(cnpj: string) {
   return `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
 }
 
-type OrganizationData = { id: number; name: string; cnpj: string | null }
+type OrganizationData = {
+  id: number
+  name: string
+  cnpj: string | null
+  municipality: { id: number; name: string }
+}
+
+// Município usado pelos testes que não tratam da cidade do órgão.
+export const defaultMunicipality = 'Itu'
+
+// Id de um município carregado pela migração; o contexto precisa estar logado.
+export async function municipalityId(api: APIRequestContext, name = defaultMunicipality) {
+  const response = await api.get('/api/municipalities')
+  expect(response.ok()).toBeTruthy()
+  const municipalities = (await response.json()) as { id: number; name: string }[]
+  return municipalities.find((municipality) => municipality.name === name)!.id
+}
 
 // Cadastra órgãos e contatos pela API como administrador.
 export async function seedDirectory(
   baseURL: string,
-  organizations: { name: string; cnpj?: string }[],
+  organizations: { name: string; cnpj?: string; municipality?: string }[],
   contacts: { name: string; phone: string; organization: number; sector: number }[],
 ) {
   const api = await request.newContext({ baseURL })
@@ -108,8 +124,10 @@ export async function seedDirectory(
   })
   expect(login.ok()).toBeTruthy()
   const created: OrganizationData[] = []
-  for (const org of organizations) {
-    const response = await api.post('/api/organizations', { data: org })
+  for (const { municipality, ...org } of organizations) {
+    const response = await api.post('/api/organizations', {
+      data: { ...org, municipalityId: await municipalityId(api, municipality) },
+    })
     expect(response.ok()).toBeTruthy()
     created.push((await response.json()) as OrganizationData)
   }

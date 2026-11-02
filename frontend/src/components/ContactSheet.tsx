@@ -38,12 +38,13 @@ import {
   useOrganizations,
   useSaveContact,
 } from '@/lib/directory'
-import { formatCnpj, normalizePhone } from '@/lib/format'
+import { formatCnpj, normalizePhone, organizationLabel } from '@/lib/format'
 
 const organizationSchema = z.object({
   id: z.number(),
   name: z.string(),
   cnpj: z.string().nullable(),
+  municipality: z.object({ id: z.number(), name: z.string() }),
 })
 
 const schema = z.object({
@@ -73,11 +74,13 @@ export function OrganizationPicker({
   onChange: (value: Organization | null) => void
   invalid: boolean
 }) {
-  const [input, setInput] = useState(value?.name ?? '')
+  const label = (organization: Organization) =>
+    organizationLabel(organization.name, organization.municipality.name)
+  const [input, setInput] = useState(value ? label(value) : '')
   const deferredInput = useDeferredValue(input)
   // Com um órgão escolhido, o campo mostra o nome dele; a lista volta a ter todos.
   const { data: organizations = [] } = useOrganizations(
-    value && deferredInput === value.name ? '' : deferredInput,
+    value && deferredInput === label(value) ? '' : deferredInput,
   )
 
   return (
@@ -87,17 +90,21 @@ export function OrganizationPicker({
       onValueChange={onChange}
       inputValue={input}
       onInputValueChange={setInput}
-      itemToStringLabel={(organization: Organization) => organization.name}
+      itemToStringLabel={label}
       isItemEqualToValue={(a: Organization, b: Organization) => a.id === b.id}
       filter={null}
     >
-      <ComboboxInput id={id} placeholder="Busque por nome ou CNPJ" aria-invalid={invalid} />
+      <ComboboxInput
+        id={id}
+        placeholder="Busque por nome, município ou CNPJ"
+        aria-invalid={invalid}
+      />
       <ComboboxContent>
         <ComboboxEmpty>Nenhum órgão encontrado.</ComboboxEmpty>
         <ComboboxList>
           {(organization: Organization) => (
             <ComboboxItem key={organization.id} value={organization}>
-              <span className="min-w-0 flex-1 truncate">{organization.name}</span>
+              <span className="min-w-0 flex-1 truncate">{label(organization)}</span>
               {organization.cnpj && (
                 <span className="mono-num caption text-ink-faint">
                   {formatCnpj(organization.cnpj)}

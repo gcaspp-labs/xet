@@ -1,6 +1,7 @@
-import { expect, request as apiRequest, test } from '@playwright/test'
+import { expect, type Locator, type Page, request as apiRequest, test } from '@playwright/test'
 import {
   admin,
+  defaultMunicipality,
   formatCnpj,
   seedDirectory,
   seedSector,
@@ -9,6 +10,12 @@ import {
   uniqueCnpj,
   userPassword,
 } from './fixtures'
+
+// Escolhe o município no seletor com busca do formulário de órgão.
+async function chooseMunicipality(page: Page, drawer: Locator, query: string, name: string) {
+  await drawer.getByLabel('Município').fill(query)
+  await page.getByRole('option', { name, exact: true }).click()
+}
 
 test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL }) => {
   const { supervisor } = await seedSector(baseURL!)
@@ -24,8 +31,10 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   const drawer = page.getByRole('dialog', { name: 'Novo órgão' })
   await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
   await expect(drawer.getByText('Informe o nome do órgão.')).toBeVisible()
+  await expect(drawer.getByText('Selecione o município do órgão.')).toBeVisible()
 
   await drawer.getByLabel('Nome').fill(`Prefeitura ${id}`)
+  await chooseMunicipality(page, drawer, 'peruibe', 'Peruíbe')
   // Dígito verificador trocado.
   await drawer.getByLabel('CNPJ').fill(numeric.slice(0, 13) + ((Number(numeric[13]) + 1) % 10))
   await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
@@ -35,14 +44,15 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
   await expect(page.getByText('Órgão salvo')).toBeVisible()
   await expect(drawer).toBeHidden()
-  await expect(page.getByRole('row', { name: new RegExp(`Prefeitura ${id}`) })).toContainText(
-    formatCnpj(numeric),
-  )
+  const row = page.getByRole('row', { name: new RegExp(`Prefeitura ${id}`) })
+  await expect(row).toContainText(formatCnpj(numeric))
+  await expect(row).toContainText('Peruíbe')
 
   // CNPJ alfanumérico, digitado em minúsculas.
   await page.getByRole('button', { name: 'Novo órgão' }).click()
   const second = page.getByRole('dialog', { name: 'Novo órgão' })
   await second.getByLabel('Nome').fill(`Câmara ${id}`)
+  await chooseMunicipality(page, second, 'Itu', 'Itu')
   await second.getByLabel('CNPJ').fill(alphanumeric.toLowerCase())
   await second.getByRole('button', { name: 'Cadastrar órgão' }).click()
   await expect(second).toBeHidden()
@@ -54,19 +64,41 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await page.getByRole('button', { name: 'Novo órgão' }).click()
   const duplicate = page.getByRole('dialog', { name: 'Novo órgão' })
   await duplicate.getByLabel('Nome').fill(`Outro ${id}`)
+  await chooseMunicipality(page, duplicate, 'Itu', 'Itu')
   await duplicate.getByLabel('CNPJ').fill(numeric)
   await duplicate.getByRole('button', { name: 'Cadastrar órgão' }).click()
   await expect(duplicate.getByRole('alert')).toHaveText('Já existe um órgão com este CNPJ.')
-  await duplicate.getByRole('button', { name: 'Cancelar' }).click()
+
+  // O nome não se repete no município, sem diferenciar maiúsculas e acentos; em outra cidade, sim.
+  await duplicate.getByLabel('CNPJ').fill('')
+  await duplicate.getByLabel('Nome').fill(`CAMARA ${id}`)
+  await duplicate.getByRole('button', { name: 'Cadastrar órgão' }).click()
+  await expect(duplicate.getByRole('alert')).toHaveText(
+    'Já existe um órgão com este nome neste município.',
+  )
+  await chooseMunicipality(page, duplicate, 'Salto', 'Salto')
+  await duplicate.getByRole('button', { name: 'Cadastrar órgão' }).click()
+  await expect(duplicate).toBeHidden()
+  await expect(page.getByRole('row', { name: new RegExp(`CAMARA ${id}`) })).toContainText('Salto')
+
+  // A busca encontra o órgão pelo município, sem acento.
+  const search = page.getByLabel('Buscar órgãos')
+  const found = page.getByRole('row').filter({ hasText: id })
+  await search.fill('peruibe')
+  await expect(found).toHaveCount(1)
+  await expect(found.first()).toContainText(`Prefeitura ${id}`)
+  await search.fill('')
 
   await page.getByRole('button', { name: `Editar Prefeitura ${id}` }).click()
   const edit = page.getByRole('dialog', { name: 'Editar órgão' })
   await expect(edit.getByLabel('CNPJ')).toHaveValue(formatCnpj(numeric))
+  await expect(edit.getByLabel('Município')).toHaveValue('Peruíbe')
   await edit.getByLabel('Nome').fill(`Prefeitura Municipal ${id}`)
+  await chooseMunicipality(page, edit, 'Salto', 'Salto')
   await edit.getByRole('button', { name: 'Salvar' }).click()
   await expect(
     page.getByRole('row', { name: new RegExp(`Prefeitura Municipal ${id}`) }),
-  ).toBeVisible()
+  ).toContainText('Salto')
 })
 
 test('atendente cadastra contato vinculado a um órgão e não cadastra órgãos', async ({
@@ -86,6 +118,11 @@ test('atendente cadastra contato vinculado a um órgão e não cadastra órgãos
   await expect(page.getByRole('heading', { name: 'Órgãos' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Novo órgão' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^Editar/ })).toHaveCount(0)
+  // O atendente vê o município ao lado do órgão, mesmo sem cadastrar.
+  await page.getByLabel('Buscar órgãos').fill(org.name)
+  await expect(page.getByRole('row', { name: new RegExp(org.name) })).toContainText(
+    defaultMunicipality,
+  )
 
   await page.getByRole('link', { name: 'Contatos' }).click()
   await page.getByRole('button', { name: 'Novo contato' }).click()
@@ -105,7 +142,7 @@ test('atendente cadastra contato vinculado a um órgão e não cadastra órgãos
   await expect(drawer).toBeHidden()
   const row = page.getByRole('row', { name: new RegExp(`Maria ${id}`) })
   await expect(row).toContainText(formatted)
-  await expect(row).toContainText(org.name)
+  await expect(row).toContainText(`${org.name} — ${defaultMunicipality}`)
 
   // Telefone repetido é recusado.
   await page.getByRole('button', { name: 'Novo contato' }).click()
@@ -121,7 +158,7 @@ test('atendente cadastra contato vinculado a um órgão e não cadastra órgãos
   // Troca o órgão principal do contato.
   await page.getByRole('button', { name: `Editar Maria ${id}` }).click()
   const edit = page.getByRole('dialog', { name: 'Editar contato' })
-  await expect(edit.getByLabel('Órgão')).toHaveValue(org.name)
+  await expect(edit.getByLabel('Órgão')).toHaveValue(`${org.name} — ${defaultMunicipality}`)
   await edit.getByLabel('Órgão').fill(`Autarquia ${id}`)
   await page.getByRole('option', { name: new RegExp(`Autarquia ${id}`) }).click()
   await edit.getByRole('button', { name: 'Salvar' }).click()

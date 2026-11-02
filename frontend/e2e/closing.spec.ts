@@ -1,6 +1,14 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
 import { format } from 'date-fns'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  defaultMunicipality,
+  municipalityId,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 // Liga o número do setor pelo adaptador falso e cadastra um órgão e os módulos do setor.
 async function prepare(baseURL: string, sectorId: number) {
@@ -14,7 +22,13 @@ async function prepare(baseURL: string, sectorId: number) {
   expect((await api.post(`/api/test/messaging/sectors/${sectorId}/pair`)).ok()).toBeTruthy()
   const { id } = unique()
   const organization = `Prefeitura ${id}`
-  expect((await api.post('/api/organizations', { data: { name: organization } })).ok()).toBeTruthy()
+  expect(
+    (
+      await api.post('/api/organizations', {
+        data: { name: organization, municipalityId: await municipalityId(api) },
+      })
+    ).ok(),
+  ).toBeTruthy()
   for (const name of ['Folha', 'Patrimônio']) {
     expect(
       (await api.post(`/api/sectors/${sectorId}/modules`, { data: { name } })).ok(),
@@ -129,7 +143,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await expect(details).toContainText('Enviada a segunda via.')
   await expect(details).toContainText('Folha')
   await expect(details).toContainText('Patrimônio')
-  await expect(details).toContainText(organization)
+  await expect(details).toContainText(`${organization} — ${defaultMunicipality}`)
 
   // Nova mensagem do cliente abre outro chamado, na fila.
   expect((await receive('Agora é sobre férias')).ok()).toBeTruthy()
@@ -272,7 +286,9 @@ test('os módulos do contato vêm marcados no encerramento e podem ser alterados
   await api.post(`/api/sectors/${sector.id}/connection`)
   await api.post(`/api/test/messaging/sectors/${sector.id}/pair`)
   const org = (await (
-    await api.post('/api/organizations', { data: { name: organization } })
+    await api.post('/api/organizations', {
+      data: { name: organization, municipalityId: await municipalityId(api) },
+    })
   ).json()) as { id: number }
   const moduleIds: number[] = []
   for (const name of ['Folha', 'Patrimônio']) {
