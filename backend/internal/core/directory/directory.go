@@ -221,14 +221,25 @@ func (s *Service) ListMunicipalities(ctx context.Context) ([]db.ListMunicipaliti
 	return rows, nil
 }
 
-// SearchOrganizations finds organizations by name, municipality or CNPJ; an
-// empty query lists them by name.
-func (s *Service) SearchOrganizations(ctx context.Context, query string) ([]Organization, error) {
+// ListMunicipalitiesWithOrganizations returns the municipalities that have an
+// organization, for the contact filter.
+func (s *Service) ListMunicipalitiesWithOrganizations(ctx context.Context) ([]db.ListMunicipalitiesWithOrganizationsRow, error) {
+	rows, err := s.q.ListMunicipalitiesWithOrganizations(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list municipalities with organizations: %w", err)
+	}
+	return rows, nil
+}
+
+// SearchOrganizations finds organizations by name, municipality or CNPJ, in the
+// given municipality (zero means all); an empty query lists them by name.
+func (s *Service) SearchOrganizations(ctx context.Context, query string, municipalityID int64) ([]Organization, error) {
 	p := newSearchPatterns(query)
 	rows, err := s.q.SearchOrganizations(ctx, db.SearchOrganizationsParams{
-		NamePattern: p.name,
-		CnpjPattern: p.cnpj,
-		MaxResults:  MaxResults,
+		NamePattern:    p.name,
+		CnpjPattern:    p.cnpj,
+		MunicipalityID: municipalityID,
+		MaxResults:     MaxResults,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search organizations: %w", err)
@@ -362,25 +373,30 @@ func sortedIDs(ids []int64) []int64 {
 	return slices.Compact(ids)
 }
 
-// ContactFilter narrows the contact search; a zero sector or module means all.
+// ContactFilter narrows the contact search; a zero sector, module, municipality
+// or organization means all.
 type ContactFilter struct {
-	Query    string
-	SectorID int64
-	ModuleID int64
+	Query          string
+	SectorID       int64
+	ModuleID       int64
+	MunicipalityID int64
+	OrganizationID int64
 }
 
-// SearchContacts finds contacts by contact or organization name, phone or
-// organization CNPJ, in the sector and module of the filter; an empty query
+// SearchContacts finds contacts by the name of the contact, organization or
+// municipality, phone or organization CNPJ, within the filter; an empty query
 // lists them by name.
 func (s *Service) SearchContacts(ctx context.Context, filter ContactFilter) ([]Contact, error) {
 	p := newSearchPatterns(filter.Query)
 	rows, err := s.q.SearchContacts(ctx, db.SearchContactsParams{
-		NamePattern:  p.name,
-		PhonePattern: p.phone,
-		CnpjPattern:  p.cnpj,
-		SectorID:     filter.SectorID,
-		ModuleID:     filter.ModuleID,
-		MaxResults:   MaxResults,
+		NamePattern:    p.name,
+		PhonePattern:   p.phone,
+		CnpjPattern:    p.cnpj,
+		SectorID:       filter.SectorID,
+		ModuleID:       filter.ModuleID,
+		MunicipalityID: filter.MunicipalityID,
+		OrganizationID: filter.OrganizationID,
+		MaxResults:     MaxResults,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search contacts: %w", err)

@@ -26,8 +26,10 @@ func NewHandler(logger *slog.Logger, service *Service) *Handler {
 // Routes registers the routes of the directory, behind the session middleware.
 func (h *Handler) Routes(r chi.Router) {
 	// Órgãos: todos consultam; supervisor e administrador cadastram e editam.
-	// Os municípios servem só ao formulário de órgão e não têm cadastro.
+	// A lista completa de municípios serve só ao formulário de órgão; os que têm
+	// órgão servem ao filtro de contatos, aberto a todos os papéis.
 	r.Get("/organizations", h.listOrganizations)
+	r.Get("/organizations/municipalities", h.listOrganizationMunicipalities)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
 		r.Get("/municipalities", h.listMunicipalities)
@@ -76,9 +78,30 @@ func (h *Handler) listMunicipalities(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-// listOrganizations searches organizations by name, municipality or CNPJ (?q=).
+// listOrganizationMunicipalities returns the municipalities that have an
+// organization, for the contact filter.
+func (h *Handler) listOrganizationMunicipalities(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.service.ListMunicipalitiesWithOrganizations(r.Context())
+	if err != nil {
+		httpx.InternalError(h.logger, w, r, err)
+		return
+	}
+	out := make([]httpx.Ref, len(rows))
+	for i, m := range rows {
+		out[i] = httpx.Ref(m)
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// listOrganizations searches organizations by name, municipality or CNPJ (?q=),
+// in a municipality (?municipalityId=).
 func (h *Handler) listOrganizations(w http.ResponseWriter, r *http.Request) {
-	orgs, err := h.service.SearchOrganizations(r.Context(), r.URL.Query().Get("q"))
+	municipalityID, ok := filterID(r, "municipalityId")
+	if !ok {
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Filtro inválido.")
+		return
+	}
+	orgs, err := h.service.SearchOrganizations(r.Context(), r.URL.Query().Get("q"), municipalityID)
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return
@@ -214,17 +237,22 @@ func filterID(r *http.Request, name string) (int64, bool) {
 	return id, err == nil && id > 0
 }
 
-// listContacts searches contacts by contact or organization name, phone or
-// CNPJ (?q=), in a sector (?sectorId=) and module (?moduleId=).
+// listContacts searches contacts by the name of the contact, organization or
+// municipality, phone or CNPJ (?q=), in a sector (?sectorId=), module
+// (?moduleId=), municipality (?municipalityId=) and organization (?organizationId=).
 func (h *Handler) listContacts(w http.ResponseWriter, r *http.Request) {
 	sectorID, okSector := filterID(r, "sectorId")
 	moduleID, okModule := filterID(r, "moduleId")
-	if !okSector || !okModule {
+	municipalityID, okMunicipality := filterID(r, "municipalityId")
+	organizationID, okOrganization := filterID(r, "organizationId")
+	if !okSector || !okModule || !okMunicipality || !okOrganization {
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Filtro inválido.")
 		return
 	}
-	contacts, err := h.service.SearchContacts(r.Context(),
-		ContactFilter{Query: r.URL.Query().Get("q"), SectorID: sectorID, ModuleID: moduleID})
+	contacts, err := h.service.SearchContacts(r.Context(), ContactFilter{
+		Query: r.URL.Query().Get("q"), SectorID: sectorID, ModuleID: moduleID,
+		MunicipalityID: municipalityID, OrganizationID: organizationID,
+	})
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return

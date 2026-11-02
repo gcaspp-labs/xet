@@ -409,23 +409,28 @@ left join municipalities m on m.id = o.municipality_id
 where ($1::text = ''
        or immutable_unaccent(c.name) ilike immutable_unaccent($1)
        or immutable_unaccent(o.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(m.name) ilike immutable_unaccent($1)
        or ($2::text <> '' and c.phone like $2)
        or ($3::text <> '' and o.cnpj like $3))
   and ($4::bigint = 0 or exists (
        select 1 from contact_sectors cs where cs.contact_id = c.id and cs.sector_id = $4))
   and ($5::bigint = 0 or exists (
        select 1 from contact_modules cm where cm.contact_id = c.id and cm.module_id = $5))
+  and ($6::bigint = 0 or o.municipality_id = $6)
+  and ($7::bigint = 0 or c.organization_id = $7)
 order by lower(c.name), c.id
-limit $6
+limit $8
 `
 
 type SearchContactsParams struct {
-	NamePattern  string
-	PhonePattern string
-	CnpjPattern  string
-	SectorID     int64
-	ModuleID     int64
-	MaxResults   int32
+	NamePattern    string
+	PhonePattern   string
+	CnpjPattern    string
+	SectorID       int64
+	ModuleID       int64
+	MunicipalityID int64
+	OrganizationID int64
+	MaxResults     int32
 }
 
 type SearchContactsRow struct {
@@ -436,9 +441,10 @@ type SearchContactsRow struct {
 	MunicipalityName *string
 }
 
-// Matches the contact or organization name (ignoring case and accents), the
-// phone digits or the organization CNPJ. Empty patterns disable the phone and
-// CNPJ keys; a zero sector or module disables that filter.
+// Matches the name of the contact, organization or municipality (ignoring case
+// and accents), the phone digits or the organization CNPJ. Empty patterns disable
+// the phone and CNPJ keys; a zero sector, module, municipality or organization
+// disables that filter.
 func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) ([]SearchContactsRow, error) {
 	rows, err := q.db.Query(ctx, searchContacts,
 		arg.NamePattern,
@@ -446,6 +452,8 @@ func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) 
 		arg.CnpjPattern,
 		arg.SectorID,
 		arg.ModuleID,
+		arg.MunicipalityID,
+		arg.OrganizationID,
 		arg.MaxResults,
 	)
 	if err != nil {

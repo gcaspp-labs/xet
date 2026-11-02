@@ -39,3 +39,34 @@ func (q *Queries) ListMunicipalities(ctx context.Context) ([]ListMunicipalitiesR
 	}
 	return items, nil
 }
+
+const listMunicipalitiesWithOrganizations = `-- name: ListMunicipalitiesWithOrganizations :many
+select m.id, m.name from municipalities m
+where exists (select 1 from organizations o where o.municipality_id = m.id)
+order by lower(immutable_unaccent(m.name))
+`
+
+type ListMunicipalitiesWithOrganizationsRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) ListMunicipalitiesWithOrganizations(ctx context.Context) ([]ListMunicipalitiesWithOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, listMunicipalitiesWithOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMunicipalitiesWithOrganizationsRow
+	for rows.Next() {
+		var i ListMunicipalitiesWithOrganizationsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
