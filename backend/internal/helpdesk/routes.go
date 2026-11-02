@@ -71,4 +71,5 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/organizations/{organizationID}/tickets", h.organizationHistory)
 	// Edição de contato: pelo serviço de chamados, porque o cadastro completa o órgão dos chamados abertos.
 	r.Put("/contacts/{contactID}", h.updateContact)
+	r.Put("/contacts/{contactID}/name", h.setContactName)
 }

@@ -10,6 +10,14 @@ set name = @name, phone = @phone, organization_id = @organization_id, registered
 where id = @id
 returning *;
 
+-- name: SetUnregisteredContactName :one
+-- Keeps the contact unregistered; a registered contact is edited through the
+-- registration form and returns no row.
+update contacts
+set name = @name
+where id = @id and not registered
+returning *;
+
 -- name: GetContactWithOrganization :one
 select sqlc.embed(c), o.name as organization_name, o.cnpj as organization_cnpj,
     o.municipality_id, m.name as municipality_name

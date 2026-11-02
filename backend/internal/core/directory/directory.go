@@ -35,6 +35,7 @@ var (
 	ErrOrganizationNotFound  = errors.New("organization not found")
 	ErrOrganizationRequired  = errors.New("organization required")
 	ErrContactNotFound       = errors.New("contact not found")
+	ErrContactRegistered     = errors.New("contact already registered")
 	ErrSectorRequired        = errors.New("sector required")
 	ErrInvalidSector         = errors.New("invalid sector")
 	ErrSectorNotAllowed      = errors.New("sector not allowed")
@@ -463,6 +464,27 @@ func UpdateContact(ctx context.Context, q *db.Queries, actor auth.User, id int64
 	}
 	if err := saveLinks(ctx, q, actor, id, in); err != nil {
 		return Contact{}, err
+	}
+	return getContact(ctx, q, id)
+}
+
+// SetContactName saves only the name of an unregistered contact, which stays
+// unregistered, inside the caller's transaction (spec.md, Órgãos e contatos). A
+// registered contact is refused: it is edited through the registration form.
+func SetContactName(ctx context.Context, q *db.Queries, id int64, name string) (Contact, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Contact{}, ErrInvalidName
+	}
+	_, err := q.SetUnregisteredContactName(ctx, db.SetUnregisteredContactNameParams{ID: id, Name: name})
+	if errors.Is(err, pgx.ErrNoRows) {
+		if _, err := getContact(ctx, q, id); err != nil {
+			return Contact{}, err
+		}
+		return Contact{}, ErrContactRegistered
+	}
+	if err != nil {
+		return Contact{}, fmt.Errorf("set contact name: %w", err)
 	}
 	return getContact(ctx, q, id)
 }

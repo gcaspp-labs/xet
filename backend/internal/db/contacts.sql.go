@@ -501,6 +501,36 @@ func (q *Queries) SetContactExternalID(ctx context.Context, arg SetContactExtern
 	return err
 }
 
+const setUnregisteredContactName = `-- name: SetUnregisteredContactName :one
+update contacts
+set name = $1
+where id = $2 and not registered
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+`
+
+type SetUnregisteredContactNameParams struct {
+	Name string
+	ID   int64
+}
+
+// Keeps the contact unregistered; a registered contact is edited through the
+// registration form and returns no row.
+func (q *Queries) SetUnregisteredContactName(ctx context.Context, arg SetUnregisteredContactNameParams) (Contact, error) {
+	row := q.db.QueryRow(ctx, setUnregisteredContactName, arg.Name, arg.ID)
+	var i Contact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Phone,
+		&i.ExternalContactID,
+		&i.OrganizationID,
+		&i.Registered,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateContact = `-- name: UpdateContact :one
 update contacts
 set name = $1, phone = $2, organization_id = $3, registered = true
