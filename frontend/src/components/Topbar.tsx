@@ -19,7 +19,7 @@ export function Topbar({
   return (
     <header className="sticky top-0 z-10 border-b border-line-soft bg-background">
       <div className="mx-auto flex max-w-(--content-max) flex-wrap items-center gap-3 px-4 py-3 md:px-[30px]">
-        <SidebarTrigger />
+        <SidebarTrigger className="md:hidden" />
         {back && (
           <Link
             to={back.to}

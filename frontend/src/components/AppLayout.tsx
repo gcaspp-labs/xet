@@ -42,6 +42,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
 import { type Role, useCurrentUser, useLogout } from '@/lib/auth'
@@ -161,13 +162,14 @@ export default function AppLayout() {
     <SidebarProvider defaultOpen={!document.cookie.includes('sidebar_state=false')}>
       <Sidebar collapsible="icon">
         <SidebarHeader className="px-4 py-4 group-data-[collapsible=icon]:px-2">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 group-data-[collapsible=icon]:flex-col">
             <img src={symbol} alt="" className="size-8 shrink-0 dark:hidden" />
             <img src={symbolDark} alt="" className="hidden size-8 shrink-0 dark:block" />
-            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
               <p className="body-strong text-sidebar-text-active">GCASPP LAB</p>
               <p className="caption">Central de Atendimento</p>
             </div>
+            <SidebarTrigger className="hidden md:inline-flex" />
           </div>
         </SidebarHeader>
         <SidebarContent>

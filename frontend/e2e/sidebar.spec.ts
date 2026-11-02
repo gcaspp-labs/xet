@@ -27,8 +27,8 @@ test('barra lateral recolhe para os ícones, dá mais espaço e lembra a escolha
   const openWidth = (await content.boundingBox())!.width
   await expect(inner.getByText('Central de Atendimento')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Recolher menu' }).click()
-  await expect(page.getByRole('button', { name: 'Abrir menu' })).toBeVisible()
+  await inner.getByRole('button', { name: 'Recolher menu' }).click()
+  await expect(inner.getByRole('button', { name: 'Abrir menu' })).toBeVisible()
   await expect(inner.getByText('Central de Atendimento')).toBeHidden()
   await expect.poll(async () => (await inner.boundingBox())!.width).toBeLessThanOrEqual(49)
   await expect
@@ -43,10 +43,10 @@ test('barra lateral recolhe para os ícones, dá mais espaço e lembra a escolha
   await page.keyboard.press('Escape')
 
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Abrir menu' })).toBeVisible()
+  await expect(inner.getByRole('button', { name: 'Abrir menu' })).toBeVisible()
   await expect(inner.getByText('Central de Atendimento')).toBeHidden()
 
-  await page.getByRole('button', { name: 'Abrir menu' }).click()
+  await inner.getByRole('button', { name: 'Abrir menu' }).click()
   await expect(inner.getByText('Central de Atendimento')).toBeVisible()
 })
 

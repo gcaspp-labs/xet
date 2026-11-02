@@ -64,9 +64,9 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | Toast | `sonner` | Rodapé central, ~2,5s, ícone de confirmação em `success`, frase no particípio ("Chamado encerrado"). Erros que exigem ação usam Note, não toast |
 | Note | `Alert` (variante `warning`) | Ícone de aviso + uma frase em `warning-ink` sobre `warning-soft`, sem título |
 | EmptyState | `Empty` | Ícone de 30px a 50% e uma frase em `ink-faint` |
-| Sidebar | `Sidebar` | Acompanha o tema, sobre `surface`, em vez de ficar escura nos dois temas como no brand book (decisão do projeto); marca no topo; recolhe para só os ícones, com o botão da Topbar, e a escolha fica no navegador; abaixo de 760px vira gaveta |
+| Sidebar | `Sidebar` | Acompanha o tema, sobre `surface`, em vez de ficar escura nos dois temas como no brand book (decisão do projeto); marca no topo; recolhe para só os ícones, com o botão no topo da própria barra, e a escolha fica no navegador; abaixo de 760px vira gaveta, aberta pelo botão da Topbar |
 | Menu de configurações | `DropdownMenu` | No rodapé da barra lateral, abaixo do nome do usuário: botão "Configurações" com a escolha de tema e "Sair". Ícones de 15px |
-| Topbar | Componente próprio | Fixa sobre `paper`: botão da barra lateral, voltar nas telas internas (ex.: "Voltar à lista", da conversa para a lista de atendimentos), breadcrumb, título `title-page` e no máximo uma ação primária |
+| Topbar | Componente próprio | Fixa sobre `paper`: botão da gaveta no celular, voltar nas telas internas (ex.: "Voltar à lista", da conversa para a lista de atendimentos), breadcrumb, título `title-page` e no máximo uma ação primária |
 | KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption` |
 
 Componentes sem equivalente no design system (ex.: balões de conversa, player de áudio, indicador de conexão) são compostos com os mesmos tokens e regras: `surface` e `line` para contêineres, raios pequenos, sem sombra fora de camadas flutuantes, estados com palavra além da cor.
