@@ -368,9 +368,70 @@ Separada da T33 porque o envio de e-mail depende do local de implantação, aind
 
 **Pronto quando:** usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
 
+## Fase 7 — Órgãos, municípios e contatos
+
+Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
+
+### [ ] T37 — Municípios no cadastro de órgãos
+
+- Nova tabela `municipalities`, com nome e código AUDESP, e `organizations.municipality_id` obrigatório, em migração única. A carga dos municípios fica na própria migração.
+- Índice único do nome do órgão por município; a violação vira resposta clara, nunca erro 500.
+- Rota de leitura dos municípios para os papéis que usam o formulário de órgão, sem cadastro. Tela de órgãos com o campo de município, em seletor com busca (são 645).
+- Mostrar o município ao lado do órgão nas listas, buscas e detalhes, como o seletor de órgão, a lista de contatos, o painel, o chamado e o encerramento.
+- Ajustar `testapi` e as fixtures do `e2e`, que hoje criam órgãos só com nome e CNPJ.
+
+**Carga dos municípios:** baixar as duas planilhas da [página do TCE-SP](https://www.tce.sp.gov.br/audesp/documentacao/cadastro-institucional), pedindo permissão antes. Elas servem só para gerar o SQL e não entram no repositório.
+
+- [Códigos Audesp dos Municípios](https://www.tce.sp.gov.br/sites/default/files/audesp-documentacao/audesp_codigos_dos_municipios_2.xls) dá o código: 645 linhas, 4 dígitos, nomes em maiúsculas e sem acento.
+- [Códigos Audesp das Entidades](https://www.tce.sp.gov.br/sites/default/files/audesp-documentacao/orgaos-audesp-codigo-2018-09-04.xlsx) dá o nome com acento. Nela, 20 códigos perderam o zero à esquerda (`790` é `0790`).
+- Não carregar `9996` (AUDeSP-04) e `9999` (OUTROS), que só aparecem nas entidades e não são municípios.
+- Sete nomes divergem; confirmar a grafia oficial e usar a atual: Embu / Embu das Artes, Florinea / Florínia, Luiz Antonio / Luís Antônio, São João do Iracema / São João de Iracema, São João do Pau Dalho / São João do Pau d'Alho, São Luiz do Paraitinga / São Luís do Paraitinga, Sud Menucci / Sud Mennucci.
+- Os órgãos continuam cadastrados à mão: a planilha de entidades é de 2018, não tem CNPJ e inclui 929 secretarias e diretorias do Estado.
+
+**Dados existentes:** só há órgãos de teste. A migração falha em banco com órgãos, então o banco de desenvolvimento precisa ser recriado, depois de confirmar com o usuário, porque apaga os dados de teste dele. O `Makefile` não tem comando para isso: é `docker rm -f xet-dev-db` seguido de `docker volume rm xet-dev-db`; o `make dev-restart` cria o banco de novo. Se já houver órgãos reais quando a task começar, parar e perguntar.
+
+**Ler:** spec.md › Órgãos e contatos; modelo-dados.md › `municipalities`, `organizations`, Permissões, `audit_logs`; design.md; código: `core/directory/directory.go`, `core/directory/directory_http.go`, `db/queries/organizations.sql`, `db/queries/contacts.sql`, `db/migrations/`, `testapi/testapi.go`, `core/directory/directory_test.go`, `src/pages/directory/OrganizationsPage.tsx`, `src/components/ContactSheet.tsx` (`OrganizationPicker`), `src/lib/directory.ts`, `e2e/fixtures.ts`, `e2e/directory.spec.ts`.
+
+**Pronto quando:** os 645 municípios estão carregados, com código único e zero à esquerda preservado; cadastrar e editar órgão exige município existente, com auditoria; nome repetido no município é recusado sem diferenciar maiúsculas e acentos, e aceito em outra cidade; atendente não cadastra órgão; o município aparece ao lado do órgão.
+
+### [ ] T38 — Filtro por município e órgão nos contatos
+
+- Filtros de município e de órgão em `ContactFilters`, valendo em "Nova conversa" e na lista de contatos. O de município mostra só os que têm órgão cadastrado; o de órgão acompanha o município escolhido.
+- `SearchContacts` passa a aceitar os dois filtros e a buscar pelo nome do município, com índice próprio se necessário.
+- Filtro com valor inválido responde 422, como os de setor e módulo.
+
+**Ler:** spec.md › Órgãos e contatos, Iniciar conversas; modelo-dados.md › `organizations`, `contacts`; design.md; código: `core/directory/directory.go`, `core/directory/directory_http.go`, `db/queries/contacts.sql`, `core/directory/directory_test.go`, `src/components/ContactFilters.tsx`, `src/components/NewConversationSheet.tsx`, `src/pages/directory/ContactsPage.tsx`, `src/lib/directory.ts`, `e2e/directory.spec.ts`, `e2e/start-conversation.spec.ts`.
+
+**Pronto quando:** nas duas telas, escolher município ou órgão mostra só os contatos correspondentes, combinando com setor, módulo e texto digitado; a lista de órgãos acompanha o município; buscar o município, com ou sem acento, encontra os contatos dos órgãos dele.
+
+### [ ] T39 — Cadastrar o contato durante o atendimento
+
+- Aviso no topo da conversa e botão junto do contato no painel lateral, só em chamado aberto com contato não cadastrado, abrindo o `ContactSheet`.
+- Nesse caminho, o órgão é opcional. Sem órgão, uma rota própria grava só o nome e mantém `registered = false`; o formulário deixa claro que os demais dados não são salvos. Com órgão, vale o cadastro completo que já existe.
+- A rota do nome recusa contato já cadastrado com resposta clara e, como a edição de contato hoje, não grava auditoria.
+- Conferir se o nome novo chega às outras telas abertas, com evento publicado depois do commit. O encerramento e a transferência continuam exigindo o cadastro completo.
+
+**Ler:** spec.md › Órgãos e contatos, Formulário de encerramento; modelo-dados.md › `contacts`, Permissões, `audit_logs`; design.md; código: `src/pages/ticket/TicketPage.tsx`, `src/components/ContactSheet.tsx`, `src/components/ClosingSheet.tsx` (modelo), `core/directory/directory.go`, `core/directory/directory_http.go`, `db/queries/contacts.sql`, `helpdesk/inbound.go`, `core/directory/directory_test.go`, `e2e/directory.spec.ts`, `e2e/closing.spec.ts`.
+
+**Pronto quando:** dá para salvar só o nome, sem encerrar e sem assumir, e ele aparece na conversa, no painel e na lista de contatos; nova mensagem recebida não troca o nome salvo; só com o nome, o aviso continua e o encerramento pede o órgão; o cadastro completo tira o aviso, e o chamado aberto recebe o órgão, com auditoria; contato já cadastrado e chamado encerrado não mostram o aviso.
+
+### [ ] T40 — Consulta de CNPJ no cadastro de órgão
+
+Antes de implementar, escolher a API e registrar a justificativa em `arquitetura.md`, avaliando limites, custos, dados devolvidos e suporte ao CNPJ alfanumérico. Opções a avaliar: BrasilAPI, ReceitaWS e CNPJá. Se ela devolver o código IBGE, avaliar guardá-lo em `municipalities` para achar o município sem depender da grafia.
+
+- Botão de consulta no formulário de órgão, para supervisores e administradores, com a chamada saindo do backend, fora de qualquer transação.
+- Sugere nome e município, sem salvar nada; município não encontrado fica para escolher à mão. Nenhum dado extra é guardado por enquanto.
+- Falha ou CNPJ não encontrado mostram aviso e mantêm o cadastro manual.
+
+**Ler:** spec.md › Órgãos e contatos; modelo-dados.md › `municipalities`, `organizations`, Permissões; arquitetura.md › Bibliotecas padrão; design.md; código: `core/directory/directory.go`, `core/directory/directory_http.go`, `core/directory/directory_test.go`, `src/pages/directory/OrganizationsPage.tsx`, `src/lib/directory.ts`, `e2e/directory.spec.ts`.
+
+**Pronto quando:** com um servidor falso no lugar da API, sem chamar o serviço real, a consulta sugere os dados e nada é salvo sem confirmação; CNPJ não encontrado e API fora do ar não impedem o cadastro manual; atendente não consulta; há verificação manual com a API real.
+
 ## Ideias em avaliação
 
 Levantadas nos testes e na revisão do código, sem decisão por enquanto. Se aprovadas, viram regra em `spec.md` e task nesta lista.
+
+- **Órgãos no contrato:** quando houver contratos, o contrato aponta o órgão cliente (por exemplo, a prefeitura) e os outros órgãos que fazem parte dele. A sugestão é uma tabela ligando contrato e órgãos, sem órgão pai no cadastro, porque uma autarquia também pode contratar sozinha.
 
 - **Aviso de mensagem com falha:** hoje dá para encerrar ou transferir com a última resposta em "Falhou" ou ainda enviando, e o cliente fica sem resposta. Os formulários poderiam avisar, sem impedir.
 - **Cliente responde pelo número de origem depois da transferência entre setores:** abre um chamado novo na origem. Falta decidir se fica assim e se esse chamado deve mostrar que existe outro aberto no destino.
