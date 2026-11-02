@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, request as apiRequest, test } from '@p
 import {
   admin,
   defaultMunicipality,
+  fakeCnpjResponse,
   formatCnpj,
   seedDirectory,
   seedSector,
@@ -99,6 +100,132 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await expect(
     page.getByRole('row', { name: new RegExp(`Prefeitura Municipal ${id}`) }),
   ).toContainText('Salto')
+})
+
+test('consulta de CNPJ sugere nome e município, e nada é salvo sem confirmação', async ({
+  page,
+  baseURL,
+}) => {
+  const { supervisor } = await seedSector(baseURL!)
+  const { id } = unique()
+  const cnpj = uniqueCnpj()
+  await fakeCnpjResponse(cnpj, 200, {
+    razao_social: `MUNICIPIO ${id}`,
+    municipio: 'PERUIBE',
+    codigo_municipio_ibge: 3537602,
+  })
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Órgãos' }).click()
+
+  // Consultar e cancelar não cadastra o órgão.
+  await page.getByRole('button', { name: 'Novo órgão' }).click()
+  let drawer = page.getByRole('dialog', { name: 'Novo órgão' })
+  await drawer.getByLabel('CNPJ').fill(formatCnpj(cnpj))
+  await drawer.getByRole('button', { name: 'Consultar' }).click()
+  await expect(drawer.getByLabel('Nome')).toHaveValue(`MUNICIPIO ${id}`)
+  await expect(drawer.getByLabel('Município')).toHaveValue('Peruíbe')
+  await expect(drawer.getByText('Confira os dados antes de salvar.')).toBeVisible()
+  await drawer.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(drawer).toBeHidden()
+  await page.getByLabel('Buscar órgãos').fill(id)
+  await expect(page.getByText('Nenhum órgão encontrado.')).toBeVisible()
+
+  // Quem cadastra confere, corrige o nome sugerido e só então salva.
+  await page.getByRole('button', { name: 'Novo órgão' }).click()
+  drawer = page.getByRole('dialog', { name: 'Novo órgão' })
+  await drawer.getByLabel('CNPJ').fill(cnpj)
+  await drawer.getByRole('button', { name: 'Consultar' }).click()
+  await expect(drawer.getByLabel('Nome')).toHaveValue(`MUNICIPIO ${id}`)
+  await drawer.getByLabel('Nome').fill(`Prefeitura ${id}`)
+  await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
+  await expect(drawer).toBeHidden()
+  const row = page.getByRole('row', { name: new RegExp(`Prefeitura ${id}`) })
+  await expect(row).toContainText('Peruíbe')
+  await expect(row).toContainText(formatCnpj(cnpj))
+})
+
+test('município fora da lista fica para escolher à mão', async ({ page, baseURL }) => {
+  const { supervisor } = await seedSector(baseURL!)
+  const { id } = unique()
+  const cnpj = uniqueCnpj()
+  await fakeCnpjResponse(cnpj, 200, {
+    razao_social: `ORGAO ${id}`,
+    municipio: 'BRASILIA',
+    codigo_municipio_ibge: 5300108,
+  })
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Órgãos' }).click()
+
+  await page.getByRole('button', { name: 'Novo órgão' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo órgão' })
+  await drawer.getByLabel('CNPJ').fill(cnpj)
+  await drawer.getByRole('button', { name: 'Consultar' }).click()
+  await expect(drawer.getByLabel('Nome')).toHaveValue(`ORGAO ${id}`)
+  await expect(
+    drawer.getByText('Município não encontrado na lista.', { exact: false }),
+  ).toBeVisible()
+  await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
+  await expect(drawer.getByText('Selecione o município do órgão.')).toBeVisible()
+
+  await chooseMunicipality(page, drawer, 'Itu', 'Itu')
+  await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
+  await expect(drawer).toBeHidden()
+  await expect(page.getByRole('row', { name: new RegExp(`ORGAO ${id}`) })).toContainText('Itu')
+})
+
+test('CNPJ não encontrado e API fora do ar não impedem o cadastro manual', async ({
+  page,
+  baseURL,
+}) => {
+  const { supervisor } = await seedSector(baseURL!)
+  const { id } = unique()
+  const missing = uniqueCnpj()
+  const failing = uniqueCnpj(true)
+  await fakeCnpjResponse(failing, 500)
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Órgãos' }).click()
+
+  await page.getByRole('button', { name: 'Novo órgão' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo órgão' })
+  await drawer.getByLabel('Nome').fill(`Câmara ${id}`)
+  await chooseMunicipality(page, drawer, 'Itu', 'Itu')
+
+  // CNPJ inválido nem chega à consulta.
+  await drawer.getByLabel('CNPJ').fill('123')
+  await drawer.getByRole('button', { name: 'Consultar' }).click()
+  await expect(drawer.getByText('CNPJ inválido. Confira os 14 caracteres.')).toBeVisible()
+
+  await drawer.getByLabel('CNPJ').fill(missing)
+  await drawer.getByRole('button', { name: 'Consultar' }).click()
+  await expect(
+    drawer.getByText('CNPJ não encontrado na consulta. Preencha os dados manualmente.'),
+  ).toBeVisible()
+
+  await drawer.getByLabel('CNPJ').fill(failing)
+  await expect(drawer.getByText('CNPJ não encontrado na consulta.', { exact: false })).toBeHidden()
+  await drawer.getByRole('button', { name: 'Consultar' }).click()
+  await expect(
+    drawer.getByText('Consulta de CNPJ indisponível. Preencha os dados manualmente.'),
+  ).toBeVisible()
+
+  // Os dados digitados continuam no formulário, e o cadastro segue.
+  await expect(drawer.getByLabel('Nome')).toHaveValue(`Câmara ${id}`)
+  await expect(drawer.getByLabel('Município')).toHaveValue('Itu')
+  await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
+  await expect(drawer).toBeHidden()
+  await expect(page.getByRole('row', { name: new RegExp(`Câmara ${id}`) })).toContainText(
+    formatCnpj(failing),
+  )
+})
+
+test('atendente não consulta CNPJ', async ({ page, baseURL }) => {
+  const { agent } = await seedSector(baseURL!)
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Órgãos' }).click()
+  await expect(page.getByRole('heading', { name: 'Órgãos' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Novo órgão' })).toHaveCount(0)
+  const response = await page.request.get(`/api/cnpj/${uniqueCnpj()}`)
+  expect(response.status()).toBe(403)
 })
 
 test('atendente cadastra contato vinculado a um órgão e não cadastra órgãos', async ({

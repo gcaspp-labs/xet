@@ -65,11 +65,11 @@ type cnpjCompany struct {
 func (s *Service) fetchCNPJ(ctx context.Context, cnpj string) (cnpjCompany, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cnpjAPIURL+"/"+cnpj, nil)
 	if err != nil {
-		return cnpjCompany{}, fmt.Errorf("%w: %v", ErrCNPJLookupUnavailable, err)
+		return cnpjCompany{}, fmt.Errorf("%w: %w", ErrCNPJLookupUnavailable, err)
 	}
 	resp, err := s.cnpjClient.Do(req)
 	if err != nil {
-		return cnpjCompany{}, fmt.Errorf("%w: %v", ErrCNPJLookupUnavailable, err)
+		return cnpjCompany{}, fmt.Errorf("%w: %w", ErrCNPJLookupUnavailable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -82,7 +82,7 @@ func (s *Service) fetchCNPJ(ctx context.Context, cnpj string) (cnpjCompany, erro
 	}
 	var company cnpjCompany
 	if err := json.NewDecoder(io.LimitReader(resp.Body, cnpjLookupMaxBody)).Decode(&company); err != nil {
-		return cnpjCompany{}, fmt.Errorf("%w: %v", ErrCNPJLookupUnavailable, err)
+		return cnpjCompany{}, fmt.Errorf("%w: %w", ErrCNPJLookupUnavailable, err)
 	}
 	return company, nil
 }

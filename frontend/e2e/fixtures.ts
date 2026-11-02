@@ -94,6 +94,15 @@ export function formatCnpj(cnpj: string) {
   return `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
 }
 
+// Define a resposta da API de CNPJ falsa para um CNPJ; sem resposta definida, ela devolve 404.
+export async function fakeCnpjResponse(cnpj: string, status: number, body: unknown = {}) {
+  const response = await fetch(`http://localhost:18081/responses/${cnpj}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, body }),
+  })
+  expect(response.ok).toBeTruthy()
+}
+
 type OrganizationData = {
   id: number
   name: string
