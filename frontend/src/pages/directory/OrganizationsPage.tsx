@@ -5,19 +5,12 @@ import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormSheet } from '@/components/FormSheet'
+import { MunicipalityPicker } from '@/components/MunicipalityPicker'
 import { SearchBox } from '@/components/SearchBox'
 import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@/components/ui/combobox'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -31,20 +24,13 @@ import {
 } from '@/components/ui/table'
 import { useCurrentUser } from '@/lib/auth'
 import {
-  type MunicipalityRef,
   type Organization,
   searchLimit,
   useMunicipalities,
   useOrganizations,
   useSaveOrganization,
 } from '@/lib/directory'
-import {
-  formatCnpj,
-  isValidCnpj,
-  normalizeCnpj,
-  normalizeSearch,
-  organizationLabel,
-} from '@/lib/format'
+import { formatCnpj, isValidCnpj, normalizeCnpj, organizationLabel } from '@/lib/format'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do órgão.'),
@@ -63,48 +49,6 @@ const schema = z.object({
 
 type FormValues = z.input<typeof schema>
 
-// São 645 municípios: a lista vem inteira e é filtrada na tela, sem diferenciar acentos.
-function MunicipalityPicker({
-  id,
-  enabled,
-  value,
-  onChange,
-  invalid,
-}: {
-  id: string
-  enabled: boolean
-  value: MunicipalityRef | null
-  onChange: (value: MunicipalityRef | null) => void
-  invalid: boolean
-}) {
-  const { data: municipalities = [] } = useMunicipalities(enabled)
-
-  return (
-    <Combobox
-      items={municipalities}
-      value={value}
-      onValueChange={onChange}
-      itemToStringLabel={(municipality: MunicipalityRef) => municipality.name}
-      isItemEqualToValue={(a: MunicipalityRef, b: MunicipalityRef) => a.id === b.id}
-      filter={(municipality: MunicipalityRef, query: string) =>
-        normalizeSearch(municipality.name).includes(normalizeSearch(query))
-      }
-    >
-      <ComboboxInput id={id} placeholder="Busque pelo nome" aria-invalid={invalid} />
-      <ComboboxContent>
-        <ComboboxEmpty>Nenhum município encontrado.</ComboboxEmpty>
-        <ComboboxList>
-          {(municipality: MunicipalityRef) => (
-            <ComboboxItem key={municipality.id} value={municipality}>
-              {municipality.name}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
-  )
-}
-
 function OrganizationSheet({
   organization,
   open,
@@ -115,6 +59,7 @@ function OrganizationSheet({
   onOpenChange: (open: boolean) => void
 }) {
   const save = useSaveOrganization()
+  const { data: municipalities = [] } = useMunicipalities(open)
   const {
     register,
     control,
@@ -169,7 +114,7 @@ function OrganizationSheet({
           render={({ field }) => (
             <MunicipalityPicker
               id="organization-municipality"
-              enabled={open}
+              municipalities={municipalities}
               value={field.value}
               onChange={field.onChange}
               invalid={!!errors.municipality}

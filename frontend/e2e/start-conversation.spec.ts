@@ -228,3 +228,53 @@ test('a busca de nova conversa abre em "Meu setor", com opção de ver todos', a
   await page.getByRole('option', { name: 'Todos os setores' }).click()
   await expect(sheet.getByRole('button', { name: new RegExp(`Jonas ${id}`) })).toBeVisible()
 })
+
+test('a busca de nova conversa filtra por município e órgão', async ({ page, baseURL }) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  await seedDirectory(
+    baseURL!,
+    [
+      { name: `Câmara ${id}`, municipality: 'Iacanga' },
+      { name: `Prefeitura ${id}`, municipality: 'Iacanga' },
+      { name: `Câmara ${id}`, municipality: 'Peruíbe' },
+    ],
+    [
+      { name: `Kátia ${id}`, phone: `5511${id}`, organization: 0, sector: sector.id },
+      { name: `Léo ${id}`, phone: `5521${id}`, organization: 1, sector: sector.id },
+      { name: `Nina ${id}`, phone: `5531${id}`, organization: 2, sector: sector.id },
+    ],
+  )
+  await signIn(page, agent, userPassword)
+  await page.getByRole('button', { name: 'Nova conversa' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  const contacts = sheet.getByRole('list', { name: 'Contatos' }).getByRole('button')
+  const results = contacts.filter({ hasText: id })
+  await expect(results).toHaveCount(3)
+
+  await sheet.getByRole('combobox', { name: 'Filtrar por município' }).fill('iacanga')
+  await page.getByRole('option', { name: 'Iacanga', exact: true }).click()
+  await expect(results).toHaveCount(2)
+  await expect(results.filter({ hasText: `Nina ${id}` })).toHaveCount(0)
+
+  // A lista de órgãos acompanha o município.
+  await sheet.getByRole('combobox', { name: 'Filtrar por órgão' }).fill(id)
+  await expect(page.getByRole('option')).toHaveCount(2)
+  await page.getByRole('option', { name: `Prefeitura ${id} — Iacanga` }).click()
+  await expect(results).toHaveCount(1)
+  await expect(results.first()).toContainText(`Léo ${id}`)
+
+  // Combina com o texto digitado.
+  const search = sheet.getByRole('searchbox', { name: 'Buscar contato' })
+  await search.fill(`Kátia ${id}`)
+  await expect(results).toHaveCount(0)
+  await search.fill(`Léo ${id}`)
+  await expect(results).toHaveCount(1)
+
+  // A busca pelo município, sem acento e sem filtros, encontra os contatos dos órgãos dele.
+  await search.fill('iacanga')
+  await sheet.getByRole('button', { name: 'Limpar órgão' }).click()
+  await sheet.getByRole('button', { name: 'Limpar município' }).click()
+  await expect(results).toHaveCount(2)
+  await expect(results.filter({ hasText: `Nina ${id}` })).toHaveCount(0)
+})

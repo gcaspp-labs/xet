@@ -5,24 +5,35 @@ import { cn } from "cn"
 
 // Campo de busca com lista, com a mesma aparência do Input e do Select
 // (FormField do design system). Só as partes usadas pelo sistema.
-import { CheckIcon, ChevronDownIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react"
 
 const Combobox = ComboboxPrimitive.Root
 
 function ComboboxInput({
   className,
+  clearLabel,
   ...props
-}: ComboboxPrimitive.Input.Props) {
+}: ComboboxPrimitive.Input.Props & { clearLabel?: string }) {
   return (
     <div data-slot="combobox-control" className="relative w-full">
       <ComboboxPrimitive.Input
         data-slot="combobox-input"
         className={cn(
           "w-full min-w-0 rounded-(--radius-7) border border-input bg-card py-2 pr-9 pl-[11px] text-[13px] text-foreground transition-colors outline-none placeholder:text-ink-faint focus:border-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
+          clearLabel && "pr-16",
           className
         )}
         {...props}
       />
+      {clearLabel && (
+        <ComboboxPrimitive.Clear
+          data-slot="combobox-clear"
+          aria-label={clearLabel}
+          className="absolute inset-y-0 right-8 flex w-7 items-center justify-center text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
+        >
+          <XIcon strokeWidth={1.7} className="pointer-events-none size-[15px]" />
+        </ComboboxPrimitive.Clear>
+      )}
       <ComboboxPrimitive.Trigger
         data-slot="combobox-trigger"
         aria-label="Abrir lista"

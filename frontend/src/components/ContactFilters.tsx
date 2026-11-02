@@ -1,3 +1,5 @@
+import { OrganizationPicker } from '@/components/ContactSheet'
+import { MunicipalityPicker } from '@/components/MunicipalityPicker'
 import {
   Select,
   SelectContent,
@@ -6,19 +8,29 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useSectors } from '@/lib/admin'
-import { allContacts, useActiveModules, useContactFilter } from '@/lib/directory'
+import {
+  allContacts,
+  useActiveModules,
+  useContactFilter,
+  useOrganizationMunicipalities,
+} from '@/lib/directory'
 
 export function ContactFilters({
   ownSector,
   sector,
   module,
+  municipality,
+  organization,
   filter,
   setSector,
   setModule,
+  setMunicipality,
+  setOrganization,
 }: ReturnType<typeof useContactFilter>) {
   const { data: sectors = [] } = useSectors()
   // Sem setor escolhido, atendente e supervisor filtram pelos módulos do próprio setor.
   const { data: modules = [] } = useActiveModules(filter.sectorId ?? ownSector)
+  const { data: municipalities = [] } = useOrganizationMunicipalities()
 
   const sectorItems = [
     { value: allContacts, label: 'Todos os setores' },
@@ -67,6 +79,28 @@ export function ContactFilters({
           </SelectContent>
         </Select>
       )}
+      <div className="w-[200px]">
+        <MunicipalityPicker
+          label="Filtrar por município"
+          placeholder="Todos os municípios"
+          clearLabel="Limpar município"
+          municipalities={municipalities}
+          value={municipality}
+          onChange={setMunicipality}
+        />
+      </div>
+      <div className="w-[260px] max-w-full">
+        {/* Nova chave a cada município: o texto do campo acompanha o órgão que restou. */}
+        <OrganizationPicker
+          key={filter.municipalityId ?? allContacts}
+          label="Filtrar por órgão"
+          placeholder="Todos os órgãos"
+          clearLabel="Limpar órgão"
+          municipalityId={filter.municipalityId}
+          value={organization}
+          onChange={setOrganization}
+        />
+      </div>
     </div>
   )
 }

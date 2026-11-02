@@ -65,14 +65,23 @@ type FormValues = z.input<typeof schema>
 // Busca os órgãos pré-cadastrados no servidor conforme o atendente digita.
 export function OrganizationPicker({
   id,
+  label: ariaLabel,
+  placeholder = 'Busque por nome, município ou CNPJ',
+  clearLabel,
+  municipalityId,
   value,
   onChange,
-  invalid,
+  invalid = false,
 }: {
-  id: string
+  id?: string
+  label?: string
+  placeholder?: string
+  clearLabel?: string
+  // Com município, a lista traz só os órgãos dele.
+  municipalityId?: number
   value: Organization | null
   onChange: (value: Organization | null) => void
-  invalid: boolean
+  invalid?: boolean
 }) {
   const label = (organization: Organization) =>
     organizationLabel(organization.name, organization.municipality.name)
@@ -81,6 +90,7 @@ export function OrganizationPicker({
   // Com um órgão escolhido, o campo mostra o nome dele; a lista volta a ter todos.
   const { data: organizations = [] } = useOrganizations(
     value && deferredInput === label(value) ? '' : deferredInput,
+    municipalityId,
   )
 
   return (
@@ -96,8 +106,10 @@ export function OrganizationPicker({
     >
       <ComboboxInput
         id={id}
-        placeholder="Busque por nome, município ou CNPJ"
+        aria-label={ariaLabel}
+        placeholder={placeholder}
         aria-invalid={invalid}
+        clearLabel={clearLabel}
       />
       <ComboboxContent>
         <ComboboxEmpty>Nenhum órgão encontrado.</ComboboxEmpty>
