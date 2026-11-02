@@ -797,6 +797,100 @@ func TestContactSearchFilters(t *testing.T) {
 	}
 }
 
+// Município e órgão filtram os contatos junto com setor, módulo e texto, e o
+// filtro de município lista só os que têm órgão, para todos os papéis.
+func TestContactSearchByMunicipalityAndOrganization(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab, rh := e.Sector("Contabilidade"), e.Sector("RH")
+	e.User("agent@exemplo.com", db.UserRoleAgent, &contab.ID)
+	agent := e.Login("agent@exemplo.com", testPassword)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	admin := e.Login("admin@exemplo.com", testPassword)
+	itu, peruibe := e.Municipality("Itu"), e.Municipality("Peruíbe")
+	organization := func(name string, municipality int64) int64 {
+		t.Helper()
+		resp := e.Do(http.MethodPost, "/api/organizations", admin, map[string]any{"name": name, "municipalityId": municipality})
+		if resp.Status != http.StatusCreated {
+			t.Fatalf("organization %s: status %d, body %v", name, resp.Status, resp.Body)
+		}
+		return id(resp.Body)
+	}
+	camaraItu := organization("Câmara Municipal", itu)
+	prefeituraItu := organization("Prefeitura", itu)
+	camaraPeruibe := organization("Câmara Municipal", peruibe)
+	salto := e.Municipality("Salto")
+	organization("Fundo Municipal", salto)
+	resp := e.Do(http.MethodPost, fmt.Sprintf("/api/sectors/%d/modules", contab.ID), admin, map[string]string{"name": "Folha"})
+	folha := id(resp.Body)
+
+	e.Contact(admin, "Ana", "5511988880001", camaraItu, contab.ID)
+	e.Contact(admin, "Bia", "5511988880002", prefeituraItu, rh.ID)
+	e.Contact(admin, "Dora", "5511988880004", camaraPeruibe, contab.ID)
+	resp = e.Do(http.MethodPost, "/api/contacts", admin, map[string]any{"name": "Cris", "phone": "5511988880003", "organizationId": prefeituraItu,
+		"sectorIds": []int64{contab.ID}, "moduleIds": []int64{folha}})
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("create: status %d, body %v", resp.Status, resp.Body)
+	}
+	// Contato sem órgão não entra nos filtros nem na busca pelo município.
+	if _, err := e.Pool.Exec(t.Context(), "insert into contacts (name, phone) values ('Elis', '5511988880005')"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		query string
+		want  []string
+	}{
+		{fmt.Sprintf("?municipalityId=%d", itu), []string{"Ana", "Bia", "Cris"}},
+		{fmt.Sprintf("?municipalityId=%d", peruibe), []string{"Dora"}},
+		{fmt.Sprintf("?municipalityId=%d", salto), nil},
+		{fmt.Sprintf("?organizationId=%d", prefeituraItu), []string{"Bia", "Cris"}},
+		{fmt.Sprintf("?municipalityId=%d&organizationId=%d", itu, camaraItu), []string{"Ana"}},
+		{fmt.Sprintf("?municipalityId=%d&organizationId=%d", peruibe, camaraItu), nil},
+		{fmt.Sprintf("?municipalityId=%d&sectorId=%d", itu, contab.ID), []string{"Ana", "Cris"}},
+		{fmt.Sprintf("?organizationId=%d&moduleId=%d", prefeituraItu, folha), []string{"Cris"}},
+		{fmt.Sprintf("?q=ana&municipalityId=%d", itu), []string{"Ana"}},
+		{fmt.Sprintf("?q=ana&municipalityId=%d", peruibe), nil},
+		// O filtro vale junto com todas as chaves da busca, não só com a última.
+		{fmt.Sprintf("?q=camara&municipalityId=%d", peruibe), []string{"Dora"}},
+		{fmt.Sprintf("?q=988880002&organizationId=%d", camaraItu), nil},
+		// O nome do município encontra os contatos dos órgãos dele, com ou sem acento.
+		{"?q=peruibe", []string{"Dora"}},
+		{"?q=" + url.QueryEscape("PERUÍBE"), []string{"Dora"}},
+		{"?q=itu", []string{"Ana", "Bia", "Cris"}},
+		{fmt.Sprintf("?q=itu&sectorId=%d", rh.ID), []string{"Bia"}},
+	} {
+		if got := names(e.DoList(http.MethodGet, "/api/contacts"+tc.query, agent)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("contacts%s: got %v, want %v", tc.query, got, tc.want)
+		}
+	}
+
+	// O filtro de município mostra só os que têm órgão, e o de órgão acompanha o município.
+	if got := names(e.DoList(http.MethodGet, "/api/organizations/municipalities", agent)); fmt.Sprint(got) != fmt.Sprint([]string{"Itu", "Peruíbe", "Salto"}) {
+		t.Errorf("municipalities with organizations: got %v", got)
+	}
+	for _, tc := range []struct {
+		query string
+		want  []string
+	}{
+		{fmt.Sprintf("?municipalityId=%d", itu), []string{"Câmara Municipal", "Prefeitura"}},
+		{fmt.Sprintf("?municipalityId=%d", peruibe), []string{"Câmara Municipal"}},
+		{fmt.Sprintf("?q=prefeitura&municipalityId=%d", peruibe), nil},
+		{fmt.Sprintf("?q=peruibe&municipalityId=%d", itu), nil},
+		{fmt.Sprintf("?q=prefeitura&municipalityId=%d", itu), []string{"Prefeitura"}},
+	} {
+		if got := names(e.DoList(http.MethodGet, "/api/organizations"+tc.query, agent)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("organizations%s: got %v, want %v", tc.query, got, tc.want)
+		}
+	}
+
+	for _, path := range []string{"/api/contacts?municipalityId=abc", "/api/contacts?organizationId=0", "/api/contacts?organizationId=-1", "/api/organizations?municipalityId=abc"} {
+		if resp := e.Do(http.MethodGet, path, agent, nil); resp.Status != http.StatusUnprocessableEntity {
+			t.Errorf("%s: status %d, want 422", path, resp.Status)
+		}
+	}
+}
+
 // Alterações de setores e módulos ficam na auditoria, só com o que mudou, e
 // uma recusa não deixa registro.
 func TestContactLinksAreAudited(t *testing.T) {

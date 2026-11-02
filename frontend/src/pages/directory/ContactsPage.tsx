@@ -69,7 +69,7 @@ export default function ContactsPage() {
           value={query}
           onChange={setQuery}
           label="Buscar contatos"
-          placeholder="Nome, telefone ou CNPJ"
+          placeholder="Nome, município, telefone ou CNPJ"
         />
         <ContactFilters {...contactFilter} />
         <Card>
@@ -159,9 +159,7 @@ export default function ContactsPage() {
                   <BookUser strokeWidth={1.7} aria-hidden />
                 </EmptyMedia>
                 <EmptyDescription>
-                  {deferredQuery.trim() ||
-                  contactFilter.filter.sectorId ||
-                  contactFilter.filter.moduleId
+                  {deferredQuery.trim() || Object.values(contactFilter.filter).some(Boolean)
                     ? 'Nenhum contato encontrado.'
                     : 'Nenhum contato cadastrado.'}
                 </EmptyDescription>

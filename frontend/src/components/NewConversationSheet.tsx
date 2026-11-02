@@ -56,7 +56,7 @@ function ContactSearch({
         value={query}
         onChange={setQuery}
         label="Buscar contato"
-        placeholder="Nome, órgão, telefone ou CNPJ"
+        placeholder="Nome, município, telefone ou CNPJ"
       />
       <ContactFilters {...contactFilter} />
       <Button type="button" variant="outline" size="sm" className="self-start" onClick={onRegister}>

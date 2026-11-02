@@ -119,18 +119,20 @@ const searchOrganizations = `-- name: SearchOrganizations :many
 select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, m.name as municipality_name
 from organizations o
 join municipalities m on m.id = o.municipality_id
-where $1::text = ''
-   or immutable_unaccent(o.name) ilike immutable_unaccent($1)
-   or immutable_unaccent(m.name) ilike immutable_unaccent($1)
-   or ($2::text <> '' and o.cnpj like $2)
+where ($1::text = ''
+       or immutable_unaccent(o.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(m.name) ilike immutable_unaccent($1)
+       or ($2::text <> '' and o.cnpj like $2))
+  and ($3::bigint = 0 or o.municipality_id = $3)
 order by lower(o.name), lower(m.name), o.id
-limit $3
+limit $4
 `
 
 type SearchOrganizationsParams struct {
-	NamePattern string
-	CnpjPattern string
-	MaxResults  int32
+	NamePattern    string
+	CnpjPattern    string
+	MunicipalityID int64
+	MaxResults     int32
 }
 
 type SearchOrganizationsRow struct {
@@ -141,8 +143,14 @@ type SearchOrganizationsRow struct {
 // An empty query lists by name. name_pattern is an ILIKE pattern compared
 // without accents with the names of the organization and its municipality;
 // cnpj_pattern is a LIKE pattern, empty when the query cannot be part of a CNPJ.
+// A zero municipality disables that filter.
 func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizationsParams) ([]SearchOrganizationsRow, error) {
-	rows, err := q.db.Query(ctx, searchOrganizations, arg.NamePattern, arg.CnpjPattern, arg.MaxResults)
+	rows, err := q.db.Query(ctx, searchOrganizations,
+		arg.NamePattern,
+		arg.CnpjPattern,
+		arg.MunicipalityID,
+		arg.MaxResults,
+	)
 	if err != nil {
 		return nil, err
 	}

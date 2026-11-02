@@ -44,8 +44,13 @@ export type ContactInput = {
   moduleIds: number[]
 }
 
-// Sem setor ou módulo, a busca vale para todos.
-export type ContactFilter = { sectorId?: number; moduleId?: number }
+// Sem setor, módulo, município ou órgão, a busca vale para todos.
+export type ContactFilter = {
+  sectorId?: number
+  moduleId?: number
+  municipalityId?: number
+  organizationId?: number
+}
 
 // O backend devolve no máximo este número de resultados por busca.
 export const searchLimit = 50
@@ -53,8 +58,19 @@ export const searchLimit = 50
 const organizationsKey = ['organizations']
 const contactsKey = ['contacts']
 
-const searchPath = (path: string, query: string) =>
-  query.trim() === '' ? path : `${path}?q=${encodeURIComponent(query.trim())}`
+function searchPath(path: string, query: string, filters: Record<string, number | undefined>) {
+  const params = new URLSearchParams()
+  if (query.trim() !== '') {
+    params.set('q', query.trim())
+  }
+  for (const [name, value] of Object.entries(filters)) {
+    if (value !== undefined) {
+      params.set(name, String(value))
+    }
+  }
+  const search = params.toString()
+  return search === '' ? path : `${path}?${search}`
+}
 
 // Os municípios não têm cadastro: a lista não muda enquanto a tela está aberta.
 export function useMunicipalities(enabled: boolean) {
@@ -66,11 +82,20 @@ export function useMunicipalities(enabled: boolean) {
   })
 }
 
-// Busca por nome, município ou CNPJ; sem termo, lista por nome.
-export function useOrganizations(query: string) {
+// Municípios que têm órgão, para o filtro de contatos; salvar um órgão atualiza a lista.
+export function useOrganizationMunicipalities() {
   return useQuery({
-    queryKey: [...organizationsKey, query.trim()],
-    queryFn: () => api<Organization[]>(searchPath('/organizations', query)),
+    queryKey: [...organizationsKey, 'municipalities'],
+    queryFn: () => api<MunicipalityRef[]>('/organizations/municipalities'),
+  })
+}
+
+// Busca por nome, município ou CNPJ, só nos órgãos do município, se informado;
+// sem termo, lista por nome.
+export function useOrganizations(query: string, municipalityId?: number) {
+  return useQuery({
+    queryKey: [...organizationsKey, query.trim(), municipalityId],
+    queryFn: () => api<Organization[]>(searchPath('/organizations', query, { municipalityId })),
     placeholderData: keepPreviousData,
   })
 }
@@ -91,27 +116,19 @@ export function useSaveOrganization() {
   })
 }
 
-function contactsPath(query: string, filter: ContactFilter) {
-  const params = new URLSearchParams()
-  if (query.trim() !== '') {
-    params.set('q', query.trim())
-  }
-  if (filter.sectorId !== undefined) {
-    params.set('sectorId', String(filter.sectorId))
-  }
-  if (filter.moduleId !== undefined) {
-    params.set('moduleId', String(filter.moduleId))
-  }
-  const search = params.toString()
-  return search === '' ? '/contacts' : `/contacts?${search}`
-}
-
-// Busca por nome do contato ou do órgão, telefone ou CNPJ, no setor e no módulo
-// do filtro; sem termo, lista por nome.
+// Busca por nome do contato, do órgão ou do município, telefone ou CNPJ, dentro do
+// filtro; sem termo, lista por nome.
 export function useContacts(query: string, filter: ContactFilter = {}) {
   return useQuery({
-    queryKey: [...contactsKey, query.trim(), filter.sectorId, filter.moduleId],
-    queryFn: () => api<Contact[]>(contactsPath(query, filter)),
+    queryKey: [
+      ...contactsKey,
+      query.trim(),
+      filter.sectorId,
+      filter.moduleId,
+      filter.municipalityId,
+      filter.organizationId,
+    ],
+    queryFn: () => api<Contact[]>(searchPath('/contacts', query, filter)),
     placeholderData: keepPreviousData,
   })
 }
@@ -135,21 +152,35 @@ export function useContactFilter() {
   const ownSector = user?.role === 'admin' ? undefined : (user?.sectorId ?? undefined)
   const [chosenSector, setChosenSector] = useState<string | null>(null)
   const [chosenModule, setChosenModule] = useState(allContacts)
+  const [municipality, setChosenMunicipality] = useState<MunicipalityRef | null>(null)
+  const [organization, setOrganization] = useState<Organization | null>(null)
   const sector = chosenSector ?? (ownSector !== undefined ? String(ownSector) : allContacts)
   const filter: ContactFilter = {
     sectorId: sector === allContacts ? undefined : Number(sector),
     moduleId: chosenModule === allContacts ? undefined : Number(chosenModule),
+    municipalityId: municipality?.id,
+    organizationId: organization?.id,
   }
   return {
     ownSector,
     sector,
     module: chosenModule,
+    municipality,
+    organization,
     filter,
     setSector: (value: string) => {
       setChosenSector(value)
       setChosenModule(allContacts)
     },
     setModule: setChosenModule,
+    // O órgão acompanha o município: o de outra cidade sai do filtro.
+    setMunicipality: (value: MunicipalityRef | null) => {
+      setChosenMunicipality(value)
+      if (value && organization?.municipality.id !== value.id) {
+        setOrganization(null)
+      }
+    },
+    setOrganization,
   }
 }
 

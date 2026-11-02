@@ -291,6 +291,116 @@ test('filtra contatos por setor e módulo, e o atendente altera só o próprio s
   await expect(rows.first()).toContainText(`Flora ${id}`)
 })
 
+test('filtra contatos por município e órgão, junto com setor, módulo e texto', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const other = await seedSector(baseURL!)
+  const { id } = unique()
+  const organizations = await seedDirectory(
+    baseURL!,
+    [
+      { name: `Câmara ${id}`, municipality: 'Ibiúna' },
+      { name: `Prefeitura ${id}`, municipality: 'Ibiúna' },
+      { name: `Câmara ${id}`, municipality: 'Salto' },
+    ],
+    [
+      { name: `Gina ${id}`, phone: `5511${id}`, organization: 0, sector: own.sector.id },
+      { name: `Hugo ${id}`, phone: `5521${id}`, organization: 1, sector: own.sector.id },
+      { name: `Igor ${id}`, phone: `5531${id}`, organization: 2, sector: own.sector.id },
+      { name: `Júlia ${id}`, phone: `5541${id}`, organization: 1, sector: other.sector.id },
+    ],
+  )
+  const api = await apiRequest.newContext({ baseURL })
+  await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
+  const moduleResponse = await api.post(`/api/sectors/${own.sector.id}/modules`, {
+    data: { name: `Folha ${id}` },
+  })
+  const folha = (await moduleResponse.json()) as { id: number }
+  const lia = await api.post('/api/contacts', {
+    data: {
+      name: `Lia ${id}`,
+      phone: `5551${id}`,
+      organizationId: organizations[1].id,
+      sectorIds: [own.sector.id],
+      moduleIds: [folha.id],
+    },
+  })
+  expect(lia.ok()).toBeTruthy()
+  await api.dispose()
+
+  await signIn(page, own.agent, userPassword)
+  await page.goto('/contatos')
+  const rows = page.getByRole('row').filter({ hasText: id })
+  await expect(rows).toHaveCount(4)
+  const municipalityFilter = page.getByRole('combobox', { name: 'Filtrar por município' })
+  const organizationFilter = page.getByRole('combobox', { name: 'Filtrar por órgão' })
+
+  // O filtro de município mostra só os que têm órgão.
+  await municipalityFilter.fill('Zacarias')
+  await expect(page.getByText('Nenhum município encontrado.')).toBeVisible()
+  await municipalityFilter.fill('ibiuna')
+  await page.getByRole('option', { name: 'Ibiúna', exact: true }).click()
+  await expect(rows).toHaveCount(3)
+  await expect(rows.filter({ hasText: `Igor ${id}` })).toHaveCount(0)
+
+  // A lista de órgãos acompanha o município.
+  await organizationFilter.fill(id)
+  const options = page.getByRole('option')
+  await expect(options).toHaveCount(2)
+  await expect(options.filter({ hasText: 'Salto' })).toHaveCount(0)
+  await page.getByRole('option', { name: `Prefeitura ${id} — Ibiúna` }).click()
+  await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
+  await expect(rows).toHaveCount(2)
+  await expect(rows.filter({ hasText: `Gina ${id}` })).toHaveCount(0)
+
+  // Combina com módulo, texto digitado e setor.
+  await page.getByRole('combobox', { name: 'Filtrar por módulo' }).click()
+  await page.getByRole('option', { name: `Folha ${id}` }).click()
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(`Lia ${id}`)
+  await page.getByRole('combobox', { name: 'Filtrar por módulo' }).click()
+  await page.getByRole('option', { name: 'Todos os módulos' }).click()
+  await expect(rows).toHaveCount(2)
+  const search = page.getByRole('searchbox', { name: 'Buscar contatos' })
+  await search.fill(`Hugo ${id}`)
+  await expect(rows).toHaveCount(1)
+  await search.fill(`Gina ${id}`)
+  await expect(rows).toHaveCount(0)
+  await search.fill('')
+  await page.getByRole('combobox', { name: 'Filtrar por setor' }).click()
+  await page.getByRole('option', { name: 'Todos os setores' }).click()
+  await expect(rows).toHaveCount(3)
+  await expect(rows.filter({ hasText: `Júlia ${id}` })).toHaveCount(1)
+
+  // Trocar de município tira o órgão de outra cidade do filtro.
+  await municipalityFilter.fill('Salto')
+  await page.getByRole('option', { name: 'Salto', exact: true }).click()
+  await expect(organizationFilter).toHaveValue('')
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(`Igor ${id}`)
+
+  // Limpar o município volta a mostrar todos.
+  await page.getByRole('button', { name: 'Limpar município' }).click()
+  await expect(municipalityFilter).toHaveValue('')
+  await expect(rows).toHaveCount(5)
+
+  // O órgão também filtra sem município e também pode ser limpo.
+  await organizationFilter.fill(`Câmara ${id}`)
+  await page.getByRole('option', { name: `Câmara ${id} — Salto` }).click()
+  await expect(rows).toHaveCount(1)
+  await page.getByRole('button', { name: 'Limpar órgão' }).click()
+  await expect(rows).toHaveCount(5)
+
+  // A busca pelo município encontra os contatos dos órgãos dele, com ou sem acento.
+  for (const term of ['ibiuna', 'Ibiúna']) {
+    await search.fill(term)
+    await expect(rows).toHaveCount(4)
+    await expect(rows.filter({ hasText: `Igor ${id}` })).toHaveCount(0)
+  }
+})
+
 test('o administrador abre os contatos em todos os setores e escolhe o setor', async ({
   page,
   baseURL,
