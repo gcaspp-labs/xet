@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { admin, login } from './fixtures'
+import { admin, login, unique } from './fixtures'
 
 test('sem sessão, a página inicial leva ao login', async ({ page }) => {
   await page.goto('/')
@@ -11,6 +11,18 @@ test('senha incorreta mostra aviso', async ({ page }) => {
   await login(page, admin.email, 'Errada@123')
   await expect(page.getByRole('alert')).toHaveText('E-mail ou senha incorretos.')
   await expect(page).toHaveURL(/\/login$/)
+})
+
+test('login bloqueia depois de tentativas erradas seguidas', async ({ page }) => {
+  const email = `bloqueio.${unique().id}@e2e.test`
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await login(page, email, 'Errada@123')
+    await expect(page.getByRole('alert')).toHaveText('E-mail ou senha incorretos.')
+  }
+  await login(page, email, 'Errada@123')
+  await expect(page.getByRole('alert')).toHaveText(
+    'Login bloqueado por excesso de tentativas. Aguarde até 15 minutos e tente novamente.',
+  )
 })
 
 test('campos vazios são validados antes do envio', async ({ page }) => {

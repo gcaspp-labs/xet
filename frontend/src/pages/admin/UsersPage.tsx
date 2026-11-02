@@ -298,7 +298,7 @@ function UserSheet({
           />
           <FieldDescription>
             Mínimo de 8 caracteres, com letra maiúscula, letra minúscula, número e caractere
-            especial. Repasse a senha ao usuário.
+            especial. Senhas comuns são recusadas. Repasse a senha ao usuário.
           </FieldDescription>
           <FieldError errors={[errors.password]} />
         </Field>
