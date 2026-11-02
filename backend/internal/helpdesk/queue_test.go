@@ -239,6 +239,31 @@ func TestAssignTicketRules(t *testing.T) {
 	}
 }
 
+func TestSameAgentHoldsManyTicketsWithoutLimit(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	token := e.Login("ana@exemplo.com", testPassword)
+
+	const tickets = 25
+	for i := range tickets {
+		tk := e.queuedTicket(contab.ID, fmt.Sprintf("MSG-%d", i), fmt.Sprintf("55119888%05d", i))
+		if resp := e.assign(tk.ID, token); resp.Status != http.StatusOK {
+			t.Fatalf("assign ticket %d: status %d: %s", i, resp.Status, resp.Body)
+		}
+	}
+
+	var held int
+	err := e.Pool.QueryRow(t.Context(), "select count(*) from tickets where assignee_id = $1 and status = 'in_progress'", ana.ID).Scan(&held)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held != tickets {
+		t.Fatalf("tickets held by the agent = %d, want %d", held, tickets)
+	}
+}
+
 func TestPanelListsQueueAssigneesAndWorkload(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)

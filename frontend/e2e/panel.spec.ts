@@ -82,6 +82,37 @@ test('nova mensagem aparece no painel sem recarregar e o atendente assume o cham
   await otherContext.close()
 })
 
+test('o mesmo atendente conduz vários chamados ao mesmo tempo', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await signIn(page, agent, userPassword)
+  const queue = card(page, 'Fila do setor')
+  await expect(queue.getByText('Nenhum chamado na fila.')).toBeVisible()
+
+  const names = ['Ana Cliente', 'Bia Cliente', 'Caio Cliente']
+  for (const contactName of names) {
+    await receive(request, sector.id, { phone: unique().phone, contactName, body: 'Bom dia' })
+    await queue.getByRole('button', { name: `Assumir chamado de ${contactName}` }).click()
+    await expect(page).toHaveURL(/\/chamados\/\d+$/)
+    await page.getByRole('link', { name: 'Atendimento' }).click()
+  }
+
+  await expect(queue.getByText('Nenhum chamado na fila.')).toBeVisible()
+  const mine = card(page, 'Em atendimento')
+  for (const contactName of names) {
+    await expect(mine.getByRole('row', { name: new RegExp(contactName) })).toContainText('Você')
+  }
+  await expect(
+    card(page, 'Chamados por atendente')
+      .getByRole('row', { name: /^agent / })
+      .getByRole('cell')
+      .last(),
+  ).toHaveText('3')
+})
+
 test('a linha inteira do chamado abre a conversa e o botão de assumir continua clicável', async ({
   page,
   request,

@@ -376,6 +376,28 @@ func TestGroupMessagesAreIgnored(t *testing.T) {
 	}
 }
 
+func TestMessageOutsideOfficeHoursGetsNoAutomaticReply(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+
+	// Domingo, 3h da manhã em Brasília.
+	msg := text("MSG-1", "5511988887777@s.whatsapp.net", "5511988887777", "Bom dia")
+	msg.SentAt = time.Date(2026, time.November, 1, 3, 0, 0, 0, time.FixedZone("BRT", -3*60*60))
+	e.receive(contab.ID, msg)
+
+	tickets := e.tickets(contab.ID)
+	if len(tickets) != 1 || tickets[0].Status != "queued" || !tickets[0].ArrivedAt.Equal(msg.SentAt) {
+		t.Fatalf("tickets = %+v", tickets)
+	}
+	if got := e.outbound(tickets[0].ID); len(got) != 0 {
+		t.Fatalf("outbound messages = %+v", got)
+	}
+	if sent := e.WhatsApp.SentMessages(); len(sent) != 0 {
+		t.Fatalf("sent messages = %+v", sent)
+	}
+}
+
 func TestRegisteredContactIsMatchedByPhoneVariant(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
