@@ -33,11 +33,11 @@ Regra geral: o shadcn/ui fornece o comportamento e a acessibilidade dos componen
 | `--border`, `--input` | `--line` |
 | `--ring` | `--focus` |
 | `--radius` | `--radius-8` (botões); campos usam `--radius-7` e painéis `--radius-12` diretamente |
-| `--sidebar` | `--sidebar-bg` |
-| `--sidebar-foreground` | `--sidebar-text` |
+| `--sidebar` | `--surface` |
+| `--sidebar-foreground` | `--ink-soft` |
 | `--sidebar-primary`, `--sidebar-accent` | `--accent-soft` (item ativo) |
 | `--sidebar-primary-foreground`, `--sidebar-accent-foreground` | `--accent-strong` |
-| `--sidebar-border` | `--sidebar-line` |
+| `--sidebar-border` | `--line` |
 
 Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning-ink`) são expostas ao Tailwind (`@theme inline`) com os mesmos nomes, para uso em Pill, Note e afins. Não usar cores fixas (`#fff`, `text-white`, paleta padrão do Tailwind) em telas: sempre tokens. Texto sobre `accent` usa `on-accent`.
 
@@ -64,9 +64,9 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | Toast | `sonner` | Rodapé central, ~2,5s, ícone de confirmação em `success`, frase no particípio ("Chamado encerrado"). Erros que exigem ação usam Note, não toast |
 | Note | `Alert` (variante `warning`) | Ícone de aviso + uma frase em `warning-ink` sobre `warning-soft`, sem título |
 | EmptyState | `Empty` | Ícone de 30px a 50% e uma frase em `ink-faint` |
-| Sidebar | `Sidebar` | Escura nos dois temas; marca no topo; abaixo de 760px vira gaveta |
+| Sidebar | `Sidebar` | Acompanha o tema, sobre `surface`, em vez de ficar escura nos dois temas como no brand book (decisão do projeto); marca no topo; recolhe para só os ícones, com o botão da Topbar, e a escolha fica no navegador; abaixo de 760px vira gaveta |
 | Menu de configurações | `DropdownMenu` | No rodapé da barra lateral, abaixo do nome do usuário: botão "Configurações" com a escolha de tema e "Sair". Ícones de 15px |
-| Topbar | Componente próprio | Fixa sobre `paper`: breadcrumb, título `title-page` e no máximo uma ação primária |
+| Topbar | Componente próprio | Fixa sobre `paper`: botão da barra lateral, voltar nas telas internas (ex.: "Voltar à lista", da conversa para a lista de atendimentos), breadcrumb, título `title-page` e no máximo uma ação primária |
 | KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption` |
 
 Componentes sem equivalente no design system (ex.: balões de conversa, player de áudio, indicador de conexão) são compostos com os mesmos tokens e regras: `surface` e `line` para contêineres, raios pequenos, sem sombra fora de camadas flutuantes, estados com palavra além da cor.
@@ -80,7 +80,7 @@ Player de áudio: componente próprio, usado na gravação e nas mensagens. Bot�
 
 ## Marca e layout
 
-- Barra lateral: `glab-simbolo-escuro.svg` a 32px + "GCASPP LAB" e, abaixo, o nome do produto **"Central de Atendimento"**. "g-lab" só no rodapé.
+- Barra lateral: símbolo a 32px, `glab-simbolo.svg` no tema claro e `glab-simbolo-escuro.svg` no escuro, + "GCASPP LAB" e, abaixo, o nome do produto **"Central de Atendimento"**. "g-lab" só no rodapé.
 - Favicon: símbolo do polvo (`glab-simbolo.svg`), copiado para `frontend/public/favicon.svg`.
 - Tela de login: fundo `paper`, Panel central com a assinatura `gcaspp-lab-horizontal.svg`, sem barra lateral.
 - Aplicação: barra lateral fixa (`sidebar-width`), Topbar fixa, conteúdo com padding `space-30` no desktop e `space-16` no celular, largura máxima `content-max` (exceto a tela de conversas, que usa a largura toda).

@@ -1,4 +1,5 @@
-import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
+import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
+import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
 import {
   BookUser,
   Boxes,
@@ -87,6 +88,7 @@ function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; ro
           {visible.map((item) => (
             <SidebarMenuItem key={item.to}>
               <SidebarMenuButton
+                tooltip={item.label}
                 isActive={
                   pathname === item.to || (item.to === '/' && pathname.startsWith('/chamados/'))
                 }
@@ -156,12 +158,13 @@ export default function AppLayout() {
   }
 
   return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader className="px-4 py-4">
+    <SidebarProvider defaultOpen={!document.cookie.includes('sidebar_state=false')}>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="px-4 py-4 group-data-[collapsible=icon]:px-2">
           <div className="flex items-center gap-2.5">
-            <img src={symbol} alt="" className="size-8" />
-            <div className="min-w-0">
+            <img src={symbol} alt="" className="size-8 shrink-0 dark:hidden" />
+            <img src={symbolDark} alt="" className="hidden size-8 shrink-0 dark:block" />
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
               <p className="body-strong text-sidebar-text-active">GCASPP LAB</p>
               <p className="caption">Central de Atendimento</p>
             </div>
@@ -172,8 +175,8 @@ export default function AppLayout() {
           <NavGroup label="Cadastro" items={directoryItems} role={user.role} />
           <NavGroup label="Administração" items={adminItems} role={user.role} />
         </SidebarContent>
-        <SidebarFooter className="gap-3 border-t border-sidebar-border px-4 py-3">
-          <div className="min-w-0">
+        <SidebarFooter className="gap-3 border-t border-sidebar-border px-4 py-3 group-data-[collapsible=icon]:px-2">
+          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
             <p className="body-strong truncate text-sidebar-text-active">{user.name}</p>
             <p className="caption">{roleLabels[user.role]}</p>
           </div>
@@ -182,7 +185,9 @@ export default function AppLayout() {
               <SettingsMenu />
             </SidebarMenuItem>
           </SidebarMenu>
-          <p className="caption text-sidebar-foreground/60">g-lab</p>
+          <p className="caption text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+            g-lab
+          </p>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
