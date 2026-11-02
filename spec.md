@@ -51,16 +51,22 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 ## Órgãos e contatos
 
 - Os clientes atendidos são pessoas físicas, em geral servidores públicos, vinculadas a um órgão.
-- Os órgãos são pré-cadastrados por supervisores e administradores, com nome e CNPJ opcional (único quando informado). O CNPJ é validado pelos dígitos verificadores e aceita o formato numérico e o alfanumérico emitido pela Receita Federal desde julho de 2026.
+- Os órgãos são pré-cadastrados por supervisores e administradores, com nome, município e CNPJ opcional (único quando informado). O nome é único dentro do município, sem diferenciar maiúsculas nem acentos; o mesmo nome pode existir em outra cidade. O CNPJ é validado pelos dígitos verificadores e aceita o formato numérico e o alfanumérico emitido pela Receita Federal desde julho de 2026.
+- Os municípios são os de São Paulo, com nome e código AUDESP, carregados da lista oficial do TCE-SP. Não têm tela de cadastro.
+- Nas listas, buscas e detalhes, o órgão aparece com o município ao lado, porque um nome como "Câmara Municipal" é ambíguo entre cidades.
+- Ao cadastrar um órgão, supervisores e administradores podem consultar o CNPJ para sugerir o nome e o município. Quem cadastra confere os dados antes de salvar; se a consulta falhar ou não encontrar o CNPJ, o cadastro manual continua disponível.
 - O contato é a pessoa que conversa pelo WhatsApp, com nome e telefone, vinculada a um órgão principal pré-cadastrado. É raro um contato representar mais de um órgão.
 - Cada chamado ficará vinculado ao contato e ao órgão. O órgão vem do cadastro do contato e pode ser alterado no formulário de encerramento quando o atendimento for de outro órgão; a alteração vale só para aquele chamado.
 - Órgãos são cadastrados manualmente. Contatos são cadastrados manualmente ou importados do WhatsApp do setor. A importação por planilha (CSV) fica para uma etapa posterior.
 - Cada telefone corresponde a um único contato. Quando um telefone for usado por mais de uma pessoa, o atendente poderá anotar no chamado com quem falou.
-- A busca deverá permitir localizar órgãos e contatos por nome, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
+- A busca deverá permitir localizar órgãos e contatos por nome, município, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
+- A lista de contatos e a busca de "Nova conversa" filtram também por município e por órgão. O filtro de município mostra só os que têm órgão cadastrado; escolhido o município, o filtro de órgão mostra só os dele.
 - Mensagens de números desconhecidos entrarão normalmente na fila.
 - A mensagem recebida é ligada ao contato pelo identificador do WhatsApp gravado no contato. Na primeira mensagem de um contato cadastrado manualmente, ainda sem esse identificador, vale o telefone, aceitando também a variante brasileira com ou sem o nono dígito do celular (ex.: 5511987654321 e 551187654321); o identificador passa a ser gravado no contato.
 - Número desconhecido gera um contato não cadastrado, com o nome do perfil do WhatsApp ou, sem ele, o telefone. Se o WhatsApp não informar o telefone (contato identificado apenas por LID), o contato fica sem telefone, com o nome do perfil ou "Contato sem telefone"; o atendente informa o telefone ao cadastrá-lo.
-- Antes de encerrar um chamado de número desconhecido, o atendente deverá cadastrar o contato e vinculá-lo a um órgão pré-cadastrado. O cancelamento dispensa o cadastro.
+- Na conversa de um chamado aberto com contato não cadastrado, um aviso no topo e um botão junto do contato no painel lateral permitem cadastrá-lo sem encerrar. Vale para todos os papéis que podem abrir o chamado, inclusive com ele na fila, sem assumir.
+- Nesse cadastro, o órgão é opcional: sem órgão, grava-se só o nome, e o contato continua não cadastrado, com o aviso na conversa. Mensagens recebidas não trocam o nome salvo. Com órgão, vale o cadastro completo.
+- Antes de encerrar um chamado de número desconhecido, o atendente deverá cadastrar o contato e vinculá-lo a um órgão pré-cadastrado, mesmo que o nome já tenha sido salvo. O cancelamento dispensa o cadastro.
 - Ao cadastrar o contato, os chamados abertos dele que ainda estão sem órgão passam a ter o órgão do cadastro, com registro na auditoria. Chamados que já têm órgão não mudam; a troca continua sendo feita no encerramento.
 
 ### Setores e módulos do contato

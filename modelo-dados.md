@@ -11,7 +11,7 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 | Organização interna | `internal/core/sectors` | Setor, Módulo | Setores e a lista de módulos de cada um |
 | Conexão do número | `internal/helpdesk` | — (colunas do WhatsApp em Setor) | Ligar e desligar o número de WhatsApp de cada setor |
 | Acesso | `internal/core/auth`, `internal/core/users` | Usuário, Sessão, Tentativas de login | Login, papéis e permissões; cadastro de usuários e senhas |
-| Cadastro de clientes | `internal/core/directory` | Órgão, Contato | Pessoas atendidas e os órgãos a que pertencem |
+| Cadastro de clientes | `internal/core/directory` | Município, Órgão, Contato | Pessoas atendidas, os órgãos a que pertencem e os municípios desses órgãos |
 | Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções |
 | Mensagens | `internal/helpdesk` | Mensagem, Arquivo | Histórico de mensagens e anexos |
 | Mensageria | `internal/helpdesk/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
@@ -27,6 +27,7 @@ erDiagram
     sectors ||--o{ modules : possui
     sectors ||--o{ tickets : "fila do setor"
     users ||--o{ sessions : possui
+    municipalities ||--o{ organizations : "município do órgão"
     organizations ||--o{ contacts : "órgão principal"
     contacts ||--o{ tickets : abre
     contacts ||--o{ contact_sectors : ""
@@ -151,12 +152,24 @@ Chave primária: `(scope, subject)`. Cada tentativa é contada na linha travada 
 
 ## Cadastro de clientes
 
+### `municipalities` — Município
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `name` | text | Obrigatório; único; com acentos ("Peruíbe") |
+| `audesp_code` | char(4) | Obrigatório; único; 4 dígitos, mantendo o zero à esquerda (`0790`) |
+
+Dados de referência carregados por migração, sem tela de cadastro nem auditoria. Fonte: [Cadastro Institucional do AUDESP](https://www.tce.sp.gov.br/audesp/documentacao/cadastro-institucional) (TCE-SP).
+
 ### `organizations` — Órgão
 
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `name` | text | Obrigatório |
 | `cnpj` | char(14) | Opcional; sem pontuação, com letras maiúsculas e dígitos (CNPJ numérico ou alfanumérico), validado pelos dígitos verificadores; único quando informado (índice único parcial) |
+| `municipality_id` | bigint → `municipalities` | Obrigatório |
+
+Índice único em `(municipality_id, lower(immutable_unaccent(name)))`: o nome não se repete no município, sem diferenciar maiúsculas nem acentos.
 
 ### `contacts` — Contato (pessoa física)
 
@@ -166,13 +179,13 @@ Chave primária: `(scope, subject)`. Cada tentativa é contada na linha travada 
 | `phone` | text | Único quando preenchido, somente dígitos com DDI; obrigatório para contato cadastrado (vazio só em contato criado automaticamente sem telefone conhecido, identificado apenas por LID) |
 | `external_contact_id` | text | Identificador do contato no provedor, usado para casar mensagens recebidas; único quando preenchido |
 | `organization_id` | bigint → `organizations` | Órgão principal; vazio para contato ainda não vinculado |
-| `registered` | boolean | `false` para contatos criados automaticamente a partir de número desconhecido; `true` após cadastro pelo atendente ou importação com órgão |
+| `registered` | boolean | `false` para contatos criados automaticamente a partir de número desconhecido, mesmo com o nome já salvo pelo atendente; `true` após cadastro pelo atendente com órgão ou importação com órgão |
 
 Restrições: `registered` ⇒ `organization_id` e `phone` preenchidos (contato cadastrado pelo atendente sempre tem órgão e telefone).
 
 O cadastro de contatos e órgãos é único para todos os setores. Os órgãos são pré-cadastrados por supervisores e administradores; no atendimento, o atendente apenas vincula a pessoa a um órgão existente.
 
-Busca: por nome do contato ou do órgão (índice `pg_trgm` para busca parcial, sem diferenciar maiúsculas nem acentos), por telefone e por CNPJ. Os acentos são removidos pela extensão `unaccent`, por meio da função `immutable_unaccent(text)`, que fixa o dicionário para poder ser usada nos índices de nome.
+Busca: por nome do contato, do órgão ou do município do órgão (índice `pg_trgm` para busca parcial, sem diferenciar maiúsculas nem acentos), por telefone e por CNPJ. Os acentos são removidos pela extensão `unaccent`, por meio da função `immutable_unaccent(text)`, que fixa o dicionário para poder ser usada nos índices de nome.
 
 CNPJ: desde julho de 2026 a Receita Federal emite CNPJ alfanumérico (IN RFB 2.229/2024): as 12 primeiras posições aceitam letras maiúsculas e dígitos, e os 2 dígitos verificadores continuam numéricos. A validação usa o cálculo do módulo 11 com o valor de cada caractere igual ao código ASCII menos 48, que vale também para o CNPJ numérico. CNPJ com todos os caracteres iguais é recusado.
 
