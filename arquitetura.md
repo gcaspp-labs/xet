@@ -103,6 +103,24 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 - O `ffmpeg` (com `libopus`) precisa estar instalado onde o backend roda: na imagem Docker do backend, no CI e na máquina de desenvolvimento.
 - Imagens e vídeos são exibidos com pré-visualização no painel. Áudios, recebidos ou gravados, tocam num player próprio, feito sobre um elemento `<audio>` sem os controles nativos, para seguir o design system. A rota `GET /api/media/{id}` atende pedidos parciais (`Range`), para os players avançarem e voltarem.
 
+## Consulta de CNPJ
+
+O formulário de órgão consulta o CNPJ na [BrasilAPI](https://brasilapi.com.br/docs) (`GET /api/cnpj/v1/{cnpj}`), pelo backend e fora de qualquer transação. Não há adaptador, porque não há segunda implementação prevista: o pacote `directory` chama a API com `net/http`, na URL de `CNPJ_API_URL`, que aponta para um servidor falso nos testes.
+
+Opções testadas em novembro de 2026, com CNPJ existente, inexistente e alfanumérico:
+
+| | BrasilAPI | CNPJá (API pública) | ReceitaWS |
+| --- | --- | --- | --- |
+| Custo e chave | Gratuita, sem chave | Gratuita, sem chave | Rota testada sem chave |
+| Limite | Nenhum publicado encontrado | 5 consultas por minuto por IP | Não confirmado |
+| Código IBGE do município | Sim | Sim | Não |
+| CNPJ alfanumérico de exemplo, não registrado | 404, com o formato reconhecido | 404 | HTTP 200 com `status: ERROR` |
+
+- **Escolha:** a BrasilAPI devolve o código IBGE e responde com 404 claro quando não encontra o CNPJ. O cadastro de órgãos tem pouco volume, então a falta de limite publicado pesa pouco, e um limite ou uma queda só levam ao aviso.
+- **CNPJ alfanumérico:** a chamada é aceita, mas ainda não foi testada com um CNPJ alfanumérico registrado.
+- **Dados usados:** só `razao_social` e `codigo_municipio_ibge`; nada é guardado. O município é procurado por `municipalities.ibge_code`.
+- **Falhas:** 404 vira "não encontrado"; qualquer outra resposta, resposta inválida ou demora acima de 8 segundos vira "indisponível". Em ambos os casos, o cadastro manual continua disponível.
+
 ## Monitoramento
 
 - Logs estruturados do backend.
