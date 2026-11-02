@@ -394,7 +394,7 @@ Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como 
 
 **Pronto quando:** os 645 municípios estão carregados, com código único e zero à esquerda preservado; cadastrar e editar órgão exige município existente, com auditoria; nome repetido no município é recusado sem diferenciar maiúsculas e acentos, e aceito em outra cidade; atendente não cadastra órgão; o município aparece ao lado do órgão.
 
-### [ ] T38 — Filtro por município e órgão nos contatos
+### [~] T38 — Filtro por município e órgão nos contatos
 
 - Filtros de município e de órgão em `ContactFilters`, valendo em "Nova conversa" e na lista de contatos. O de município mostra só os que têm órgão cadastrado; o de órgão acompanha o município escolhido.
 - `SearchContacts` passa a aceitar os dois filtros e a buscar pelo nome do município, com índice próprio se necessário.
