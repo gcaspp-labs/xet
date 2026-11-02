@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { ClosingFields } from '@/components/ClosingFields'
-import { ContactSheet } from '@/components/ContactSheet'
+import { RegisterContactSheet } from '@/components/ContactSheet'
 import { FormSheet } from '@/components/FormSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,6 @@ import {
   useTransferSector,
   useTransferSectors,
 } from '@/lib/conversation'
-import { useContact } from '@/lib/directory'
 import { formatPhone } from '@/lib/format'
 
 const schema = z.object(closingShape).superRefine(checkPeriod)
@@ -61,7 +60,6 @@ export function ClosingSheet({
   const [sectorId, setSectorId] = useState<string | null>(null)
   const [sectorError, setSectorError] = useState<string>()
   const [registering, setRegistering] = useState(false)
-  const { data: contact } = useContact(ticket.contact.id, registering)
   // Horários sugeridos na abertura; só os alterados vão ao backend.
   const [suggested] = useState(() => ({
     startedAt: localInput(new Date(ticket.startedAt)),
@@ -233,11 +231,9 @@ export function ClosingSheet({
           Alterações de horário ficam registradas no histórico de auditoria.
         </FieldDescription>
       </FormSheet>
-      {contact && (
-        <ContactSheet
-          key={registering ? 'open' : 'closed'}
-          contact={contact}
-          open={registering}
+      {registering && (
+        <RegisterContactSheet
+          contactId={ticket.contact.id}
           onOpenChange={setRegistering}
           onSaved={() => queryClient.invalidateQueries({ queryKey: ticketKey(ticket.id) })}
         />
