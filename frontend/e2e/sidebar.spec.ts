@@ -8,16 +8,36 @@ test('barra lateral acompanha o tema escolhido', async ({ page }) => {
   await signIn(page, admin.email, admin.password)
   const inner = page.locator(sidebar)
   await expect(inner).toHaveCSS('background-color', 'rgb(255, 255, 255)')
-  await expect(inner.locator('img:visible')).toHaveAttribute('src', /glab-simbolo(?!-escuro)/)
+  const brand = page.getByRole('banner').locator('img:visible')
+  await expect(brand).toHaveAttribute('src', /glab-simbolo(?!-escuro)/)
 
   await page.getByRole('button', { name: 'Configurações' }).click()
   await page.getByRole('menuitemradio', { name: 'Escuro' }).click()
   await page.keyboard.press('Escape')
   await expect(inner).toHaveCSS('background-color', 'rgb(24, 31, 34)')
-  await expect(inner.locator('img:visible')).toHaveAttribute('src', /glab-simbolo-escuro/)
+  await expect(brand).toHaveAttribute('src', /glab-simbolo-escuro/)
 })
 
-test('barra lateral recolhe para os ícones, dá mais espaço e lembra a escolha', async ({
+test('cabeçalho fica fixo com a marca e o lugar das notificações, acima da barra lateral', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 400 })
+  await signIn(page, admin.email, admin.password)
+  const header = page.getByRole('banner')
+  await expect(header).toContainText('GCASPP LAB')
+  await expect(header).toContainText('Central de Atendimento')
+  await expect(header.getByRole('button', { name: 'Notificações' })).toBeDisabled()
+
+  const height = (await header.boundingBox())!.height
+  expect((await page.locator(sidebar).boundingBox())!.y).toBe(height)
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  expect((await header.boundingBox())!.y).toBe(0)
+  expect((await page.locator(sidebar).boundingBox())!.y).toBe(height)
+})
+
+test('barra lateral recolhe para os ícones, sem o botão mudar de lugar, e lembra a escolha', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 })
@@ -25,15 +45,28 @@ test('barra lateral recolhe para os ícones, dá mais espaço e lembra a escolha
   const inner = page.locator(sidebar)
   const content = page.locator('[data-slot=sidebar-inset]')
   const openWidth = (await content.boundingBox())!.width
-  await expect(inner.getByText('Central de Atendimento')).toBeVisible()
+  const collapse = inner.getByRole('button', { name: 'Recolher menu' })
+  const place = await collapse.boundingBox()
+  const brand = await page.getByRole('banner').getByText('GCASPP LAB').boundingBox()
+  const settings = await inner.getByRole('button', { name: 'Configurações' }).boundingBox()
+  const contacts = await inner.getByRole('link', { name: 'Contatos' }).boundingBox()
 
-  await page.getByRole('button', { name: 'Recolher menu' }).click()
-  await expect(page.getByRole('button', { name: 'Abrir menu' })).toBeVisible()
-  await expect(inner.getByText('Central de Atendimento')).toBeHidden()
+  await collapse.click()
+  const expand = inner.getByRole('button', { name: 'Abrir menu' })
+  await expect(expand).toBeVisible()
   await expect.poll(async () => (await inner.boundingBox())!.width).toBeLessThanOrEqual(49)
   await expect
     .poll(async () => (await content.boundingBox())!.width)
     .toBeGreaterThan(openWidth + 150)
+  await expect(inner.getByText('Administrador E2E')).toBeHidden()
+
+  // O botão, a marca e a altura dos itens da barra não mudam.
+  expect((await inner.getByRole('link', { name: 'Contatos' }).boundingBox())!.y).toBe(contacts!.y)
+  expect(await expand.boundingBox()).toEqual(place)
+  expect(await page.getByRole('banner').getByText('GCASPP LAB').boundingBox()).toEqual(brand)
+  expect((await inner.getByRole('button', { name: 'Configurações' }).boundingBox())!.y).toBe(
+    settings!.y,
+  )
 
   // Os itens continuam navegáveis e o menu de configurações continua abrindo.
   await inner.getByRole('link', { name: 'Contatos' }).click()
@@ -43,11 +76,12 @@ test('barra lateral recolhe para os ícones, dá mais espaço e lembra a escolha
   await page.keyboard.press('Escape')
 
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Abrir menu' })).toBeVisible()
-  await expect(inner.getByText('Central de Atendimento')).toBeHidden()
+  await expect(expand).toBeVisible()
+  await expect(inner.getByText('Administrador E2E')).toBeHidden()
 
-  await page.getByRole('button', { name: 'Abrir menu' }).click()
-  await expect(inner.getByText('Central de Atendimento')).toBeVisible()
+  await expand.click()
+  await expect(inner.getByText('Administrador E2E')).toBeVisible()
+  expect(await inner.getByRole('button', { name: 'Recolher menu' }).boundingBox()).toEqual(place)
 })
 
 test('botão de voltar leva da conversa à lista de atendimentos', async ({

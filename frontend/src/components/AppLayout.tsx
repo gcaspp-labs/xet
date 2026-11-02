@@ -1,6 +1,7 @@
 import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
 import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
 import {
+  Bell,
   BookUser,
   Boxes,
   Building2,
@@ -15,8 +16,10 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { DisconnectionNote } from '@/components/DisconnectionNote'
+import { Button } from '@/components/ui/button'
 import { RealtimeNote } from '@/components/RealtimeNote'
 import {
   DropdownMenu,
@@ -42,6 +45,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
 import { type Role, useCurrentUser, useLogout } from '@/lib/auth'
@@ -79,7 +83,7 @@ function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; ro
   return (
     <SidebarGroup>
       {label && (
-        <SidebarGroupLabel className="overline text-sidebar-foreground/70">
+        <SidebarGroupLabel className="overline whitespace-nowrap text-sidebar-foreground/70 group-data-[collapsible=icon]:mt-0">
           {label}
         </SidebarGroupLabel>
       )}
@@ -150,6 +154,25 @@ function SettingsMenu() {
   )
 }
 
+// Cabeçalho fixo: a marca e as notificações não mudam de lugar ao recolher a barra lateral.
+function AppHeader() {
+  return (
+    <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-2.5 border-b border-line bg-card px-2 md:px-4">
+      <SidebarTrigger className="md:hidden" />
+      <img src={symbol} alt="" className="size-8 shrink-0 dark:hidden" />
+      <img src={symbolDark} alt="" className="hidden size-8 shrink-0 dark:block" />
+      <div className="min-w-0 flex-1">
+        <p className="body-strong truncate">GCASPP LAB</p>
+        <p className="caption truncate text-ink-soft">Central de Atendimento</p>
+      </div>
+      {/* Só marca o lugar: as notificações ainda não existem. */}
+      <Button variant="ghost" size="icon" aria-label="Notificações" disabled>
+        <Bell strokeWidth={1.7} aria-hidden />
+      </Button>
+    </header>
+  )
+}
+
 export default function AppLayout() {
   const { data: user } = useCurrentUser()
   const online = useRealtime()
@@ -158,43 +181,46 @@ export default function AppLayout() {
   }
 
   return (
-    <SidebarProvider defaultOpen={!document.cookie.includes('sidebar_state=false')}>
-      <Sidebar collapsible="icon">
-        <SidebarHeader className="px-4 py-4 group-data-[collapsible=icon]:px-2">
-          <div className="flex items-center gap-2.5">
-            <img src={symbol} alt="" className="size-8 shrink-0 dark:hidden" />
-            <img src={symbolDark} alt="" className="hidden size-8 shrink-0 dark:block" />
-            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-              <p className="body-strong text-sidebar-text-active">GCASPP LAB</p>
-              <p className="caption">Central de Atendimento</p>
+    <SidebarProvider
+      defaultOpen={!document.cookie.includes('sidebar_state=false')}
+      className="flex-col"
+      style={{ '--header-height': '3.5rem' } as CSSProperties}
+    >
+      <AppHeader />
+      <div className="flex flex-1">
+        <Sidebar
+          collapsible="icon"
+          className="top-(--header-height) h-[calc(100svh-var(--header-height))]"
+        >
+          <SidebarHeader className="hidden items-start md:flex">
+            <SidebarTrigger />
+          </SidebarHeader>
+          <SidebarContent>
+            <NavGroup items={mainItems} role={user.role} />
+            <NavGroup label="Cadastro" items={directoryItems} role={user.role} />
+            <NavGroup label="Administração" items={adminItems} role={user.role} />
+          </SidebarContent>
+          <SidebarFooter className="gap-3 border-t border-sidebar-border px-2 py-3">
+            <div className="min-w-0 px-2 whitespace-nowrap transition-[opacity,visibility] duration-200 group-data-[collapsible=icon]:invisible group-data-[collapsible=icon]:opacity-0">
+              <p className="body-strong truncate text-sidebar-text-active">{user.name}</p>
+              <p className="caption truncate">{roleLabels[user.role]}</p>
             </div>
-          </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <NavGroup items={mainItems} role={user.role} />
-          <NavGroup label="Cadastro" items={directoryItems} role={user.role} />
-          <NavGroup label="Administração" items={adminItems} role={user.role} />
-        </SidebarContent>
-        <SidebarFooter className="gap-3 border-t border-sidebar-border px-4 py-3 group-data-[collapsible=icon]:px-2">
-          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <p className="body-strong truncate text-sidebar-text-active">{user.name}</p>
-            <p className="caption">{roleLabels[user.role]}</p>
-          </div>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SettingsMenu />
-            </SidebarMenuItem>
-          </SidebarMenu>
-          <p className="caption text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
-            g-lab
-          </p>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset>
-        {!online && <RealtimeNote />}
-        <DisconnectionNote />
-        <Outlet />
-      </SidebarInset>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SettingsMenu />
+              </SidebarMenuItem>
+            </SidebarMenu>
+            <p className="caption px-2 whitespace-nowrap text-sidebar-foreground/60 transition-[opacity,visibility] duration-200 group-data-[collapsible=icon]:invisible group-data-[collapsible=icon]:opacity-0">
+              g-lab
+            </p>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset>
+          {!online && <RealtimeNote />}
+          <DisconnectionNote />
+          <Outlet />
+        </SidebarInset>
+      </div>
     </SidebarProvider>
   )
 }
