@@ -33,3 +33,7 @@ select u.id, u.name, u.email, u.role, u.sector_id, s.expires_at
 from sessions s
 join users u on u.id = s.user_id
 where s.token_hash = @token_hash and s.expires_at > now() and u.active;
+
+-- name: DeleteExpiredSessions :exec
+delete from sessions
+where expires_at <= now();

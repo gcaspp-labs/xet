@@ -93,7 +93,7 @@ func run() error {
 	if failed > 0 {
 		logger.Warn("pending messages marked as failed", "count", failed)
 	}
-	opts := server.Options{SecureCookie: cfg.CookieSecure}
+	opts := server.Options{SecureCookie: cfg.CookieSecure, TrustProxy: cfg.TrustProxy}
 	switch cfg.MessagingProvider {
 	case "fake":
 		provider := fake.New(tickets.HandleEvent)
@@ -117,10 +117,13 @@ func run() error {
 		}
 	}()
 
+	authService := auth.NewService(pool)
+	go authService.RunCleanup(ctx, auth.CleanupInterval, logger)
+
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: server.NewRouter(logger, server.Services{
-			Auth:      auth.NewService(pool),
+			Auth:      authService,
 			Users:     users.NewService(pool),
 			Sectors:   sectors.NewService(pool),
 			Directory: directory.NewService(pool),

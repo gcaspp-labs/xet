@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -340,7 +341,7 @@ func TestResetPasswordPolicy(t *testing.T) {
 		{"Abcdefg1", http.StatusUnprocessableEntity},                       // no special character
 		{"Aa1!" + strings.Repeat("x", 69), http.StatusUnprocessableEntity}, // 73 bytes, over the bcrypt limit
 		{"", http.StatusUnprocessableEntity},
-		{"Abcdef1!", http.StatusNoContent},
+		{"Cofre#47", http.StatusNoContent},
 		{"Ação 2026 válida", http.StatusNoContent}, // accented letters and space as special character
 	}
 	for _, tc := range cases {
@@ -351,5 +352,70 @@ func TestResetPasswordPolicy(t *testing.T) {
 		if tc.want == http.StatusUnprocessableEntity && resp.Body["error"] == "" {
 			t.Fatalf("password %q: missing error message", tc.password)
 		}
+	}
+}
+
+func TestCommonPasswordsAreRefused(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	target := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	token := e.Login("admin@exemplo.com", testPassword)
+	const message = "Senha muito comum. Escolha outra, mais difícil de adivinhar."
+
+	for _, password := range []string{
+		"Senha@123", "sENHA123!", "S3nh@2026!", "@Senha123", "P@ssw0rd1!", "Password1!", "Admin@2026", "@Dmin123", "Mudar#123",
+		"Qwerty123!", "Abc@1234", "Aa@123456", "Q1w2e3r4!", "1Q2w3e4r!", "1qaz2Wsx!", "Contabilidade@1",
+	} {
+		resp := e.Do(http.MethodPut, fmt.Sprintf("/api/users/%d/password", target.ID), token, map[string]string{"password": password})
+		if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != message {
+			t.Fatalf("reset with %q: status %d, body %v", password, resp.Status, resp.Body)
+		}
+	}
+
+	resp := e.Do(http.MethodPost, "/api/users", token, map[string]any{
+		"name": "Bia", "email": "bia@exemplo.com", "role": "agent", "sectorId": sector.ID, "password": "Senha@123",
+	})
+	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != message {
+		t.Fatalf("create with common password: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	// A common word inside a longer password is not a common password.
+	for _, password := range []string{"Minha-Senha-Azul7", "Cofre#Azul47"} {
+		resp := e.Do(http.MethodPut, fmt.Sprintf("/api/users/%d/password", target.ID), token, map[string]string{"password": password})
+		if resp.Status != http.StatusNoContent {
+			t.Fatalf("reset with %q: status %d, body %v", password, resp.Status, resp.Body)
+		}
+	}
+}
+
+func TestResetPasswordEndsLoginLock(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	target := e.User("Ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	token := e.Login("admin@exemplo.com", testPassword)
+
+	login := func(password string) int {
+		return e.Do(http.MethodPost, "/api/auth/login", "", map[string]string{"email": "ana@exemplo.com", "password": password}).Status
+	}
+	for range auth.MaxEmailFailures {
+		if status := login("Errada#Azul47"); status != http.StatusUnauthorized {
+			t.Fatalf("wrong password: status %d", status)
+		}
+	}
+	if status := login(testPassword); status != http.StatusTooManyRequests {
+		t.Fatalf("locked login: status %d", status)
+	}
+
+	const newPassword = "Nova#Azul58"
+	resp := e.Do(http.MethodPut, fmt.Sprintf("/api/users/%d/password", target.ID), token, map[string]string{"password": newPassword})
+	if resp.Status != http.StatusNoContent {
+		t.Fatalf("reset: status %d, body %v", resp.Status, resp.Body)
+	}
+	if status := login(newPassword); status != http.StatusOK {
+		t.Fatalf("login after the reset: status %d", status)
 	}
 }

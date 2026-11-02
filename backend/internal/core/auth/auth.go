@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -23,9 +24,25 @@ import (
 // pushes the expiration this far ahead.
 const SessionTTL = 12 * time.Hour
 
+// Failed login attempts allowed before the temporary lock (spec.md). The IP
+// limit is higher because an office usually shares a single address.
+const (
+	MaxEmailFailures = 5
+	MaxIPFailures    = 30
+)
+
+// CleanupInterval is how often the expired login data is removed.
+const CleanupInterval = time.Hour
+
+const (
+	scopeEmail = "email"
+	scopeIP    = "ip"
+)
+
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInvalidSession     = errors.New("invalid session")
+	ErrLoginLocked        = errors.New("login temporarily locked")
 )
 
 // User is the authenticated user attached to a request.
@@ -69,8 +86,13 @@ func NewService(pool *pgxpool.Pool) *Service {
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password"), bcrypt.DefaultCost)
 
 // Login checks the credentials and opens a new session, returning its token.
+// The attempt is counted before checking the password, so simultaneous attempts
+// cannot go over the limit; a right password takes it back.
+func (s *Service) Login(ctx context.Context, email, password, ip string) (string, User, time.Time, error) {
+	if err := s.registerAttempt(ctx, email, ip); err != nil {
+		return "", User{}, time.Time{}, err
+	}
 
-func (s *Service) Login(ctx context.Context, email, password string) (string, User, time.Time, error) {
 	u, err := s.q.GetUserByEmail(ctx, strings.TrimSpace(email))
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
@@ -91,6 +113,14 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, Us
 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
+		if err := ClearLoginAttempts(ctx, q, email); err != nil {
+			return err
+		}
+		if err := q.RefundLoginAttempt(ctx, db.RefundLoginAttemptParams{
+			Scope: scopeIP, Subject: ip, MaxFailures: MaxIPFailures,
+		}); err != nil {
+			return fmt.Errorf("refund login attempt: %w", err)
+		}
 		if err := q.DeleteExpiredUserSessions(ctx, u.ID); err != nil {
 			return fmt.Errorf("delete expired sessions: %w", err)
 		}
@@ -108,6 +138,70 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, Us
 	}
 
 	return token, User{ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role, SectorID: u.SectorID}, expiresAt, nil
+}
+
+// registerAttempt counts the attempt for the e-mail and the IP, in this order,
+// or returns ErrLoginLocked without counting it.
+func (s *Service) registerAttempt(ctx context.Context, email, ip string) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		for _, attempt := range []db.RegisterLoginAttemptParams{
+			{Scope: scopeEmail, Subject: normalizeEmail(email), MaxFailures: MaxEmailFailures},
+			{Scope: scopeIP, Subject: ip, MaxFailures: MaxIPFailures},
+		} {
+			_, err := q.RegisterLoginAttempt(ctx, attempt)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrLoginLocked
+			}
+			if err != nil {
+				return fmt.Errorf("register login attempt: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// ClearLoginAttempts forgets the failed attempts of the e-mail, ending its lock.
+func ClearLoginAttempts(ctx context.Context, q *db.Queries, email string) error {
+	if err := q.DeleteLoginAttempts(ctx, db.DeleteLoginAttemptsParams{Scope: scopeEmail, Subject: normalizeEmail(email)}); err != nil {
+		return fmt.Errorf("delete login attempts: %w", err)
+	}
+	return nil
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// RunCleanup removes the expired sessions and the stale login attempts now and
+// at each interval, until the context ends. Without it, the sessions of users
+// who never log in again would stay forever.
+func (s *Service) RunCleanup(ctx context.Context, interval time.Duration, logger *slog.Logger) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		if err := s.cleanup(ctx); err != nil && ctx.Err() == nil {
+			logger.Error("clean up login data", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *Service) cleanup(ctx context.Context) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		if err := q.DeleteExpiredSessions(ctx); err != nil {
+			return fmt.Errorf("delete expired sessions: %w", err)
+		}
+		if err := q.DeleteStaleLoginAttempts(ctx); err != nil {
+			return fmt.Errorf("delete stale login attempts: %w", err)
+		}
+		return nil
+	})
 }
 
 // Authenticate validates the session token, renews its expiration and returns its user.
