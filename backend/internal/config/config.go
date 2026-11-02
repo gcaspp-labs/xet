@@ -20,6 +20,8 @@ type Config struct {
 	MessagingProvider string
 	// StorageDir is the directory of the message attachments.
 	StorageDir string
+	// CNPJAPIURL is the base URL of the CNPJ lookup API (arquitetura.md).
+	CNPJAPIURL string
 }
 
 func Load() (Config, error) {
@@ -28,6 +30,7 @@ func Load() (Config, error) {
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		MessagingProvider: getEnv("MESSAGING_PROVIDER", "whatsmeow"),
 		StorageDir:        getEnv("STORAGE_DIR", "data/media"),
+		CNPJAPIURL:        getEnv("CNPJ_API_URL", "https://brasilapi.com.br/api/cnpj/v1"),
 	}
 
 	if cfg.DatabaseURL == "" {

@@ -613,6 +613,7 @@ type Municipality struct {
 	Name       string
 	AudespCode string
 	CreatedAt  time.Time
+	IbgeCode   string
 }
 
 type Organization struct {

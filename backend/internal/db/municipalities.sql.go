@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const getMunicipalityByIBGECode = `-- name: GetMunicipalityByIBGECode :one
+select id, name from municipalities where ibge_code = $1
+`
+
+type GetMunicipalityByIBGECodeRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) GetMunicipalityByIBGECode(ctx context.Context, ibgeCode string) (GetMunicipalityByIBGECodeRow, error) {
+	row := q.db.QueryRow(ctx, getMunicipalityByIBGECode, ibgeCode)
+	var i GetMunicipalityByIBGECodeRow
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
 const listMunicipalities = `-- name: ListMunicipalities :many
 select id, name, audesp_code from municipalities
 order by lower(immutable_unaccent(name))

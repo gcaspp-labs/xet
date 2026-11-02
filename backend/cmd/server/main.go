@@ -126,7 +126,7 @@ func run() error {
 			Auth:      authService,
 			Users:     users.NewService(pool),
 			Sectors:   sectors.NewService(pool),
-			Directory: directory.NewService(pool),
+			Directory: directory.NewService(pool, cfg.CNPJAPIURL),
 			Helpdesk:  tickets,
 			Hub:       hub,
 		}, opts),
