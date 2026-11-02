@@ -7,6 +7,7 @@ Documentos do projeto:
 - [modelo-dados.md](modelo-dados.md): domínios, entidades, ligações, restrições e permissões. Migrações seguem este documento; mudanças no modelo são registradas nele antes da migração.
 - [design.md](design.md): aplicação do design system da GCASPP LAB com shadcn/ui: tokens, tema, tipografia, componentes, ícones, marca e tom dos textos.
 - [tasks.md](tasks.md): fluxo de implementação do piloto.
+- [validacao-piloto.md](validacao-piloto.md): situação dos critérios de validação do piloto, roteiro de implantação e teste de reconexão.
 
 ## Fluxo de trabalho
 

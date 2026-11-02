@@ -325,7 +325,7 @@ A autenticação em dois fatores saiu desta task e foi para a T36.
 
 ## Fase 6 — Validação do piloto
 
-### [ ] T34 — Implantação e validação
+### [~] T34 — Implantação e validação
 
 Pode rodar antes das anteriores, quando houver acesso ao servidor. Como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
 
@@ -337,6 +337,8 @@ Pode rodar antes das anteriores, quando houver acesso ao servidor. Como a skill 
 **Ler:** spec.md › Estrutura e implantação, Critérios de validação do piloto; arquitetura.md › Componentes, Conexão do número; código: `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/web.Dockerfile`, `e2e/`.
 
 **Pronto quando:** todos os critérios de validação da spec estão marcados como atendidos.
+
+**Situação:** a parte que não depende do servidor está feita (cobertura dos critérios, teste do Compose com HTTPS local, roteiros). Falta implantar e percorrer os critérios pendentes com o número real, em `validacao-piloto.md`.
 
 ## Configurações pendentes
 
