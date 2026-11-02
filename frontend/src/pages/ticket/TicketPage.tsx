@@ -76,6 +76,7 @@ import {
   formatFileSize,
   formatMessageTime,
   formatPhone,
+  organizationLabel,
   ticketStatusLabel,
 } from '@/lib/format'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
@@ -786,7 +787,12 @@ function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
           </span>
         </>,
       )}
-      {row('Órgão', ticket.organization?.name ?? 'Não cadastrado')}
+      {row(
+        'Órgão',
+        ticket.organization
+          ? organizationLabel(ticket.organization.name, ticket.organization.municipality.name)
+          : 'Não cadastrado',
+      )}
       {ticket.next &&
         row(
           'Transferido para',

@@ -21,7 +21,7 @@ export type TicketDetail = {
   subject: string | null
   resolution: string | null
   contact: { id: number; name: string; phone: string | null; registered: boolean }
-  organization: { id: number; name: string } | null
+  organization: { id: number; name: string; municipality: { id: number; name: string } } | null
   assignee: { id: number; name: string } | null
   closedBy: { id: number; name: string } | null
   closureType: 'resolved' | 'transferred' | 'cancelled' | null
@@ -76,6 +76,7 @@ export type HistoryEntry = {
   subject: string | null
   contactName: string
   organizationName: string | null
+  municipalityName: string | null
   assigneeName: string | null
 }
 
@@ -285,7 +286,7 @@ export type ClosingForm = {
   modules: { id: number; name: string }[]
   // Módulos do contato entre os ativos do setor: já vêm marcados.
   contactModuleIds: number[]
-  organization: { id: number; name: string } | null
+  organization: { id: number; name: string; municipality: { id: number; name: string } } | null
   startedAt: string
 }
 

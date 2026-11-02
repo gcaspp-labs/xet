@@ -12,7 +12,7 @@ import { Field, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { newRequestId } from '@/lib/conversation'
 import { type Contact, useContactFilter, useContacts } from '@/lib/directory'
-import { formatPhone } from '@/lib/format'
+import { formatPhone, organizationLabel } from '@/lib/format'
 import { openTicketOf, useStartConversation } from '@/lib/tickets'
 
 const existingNotice = 'O contato já tem um chamado aberto no setor.'
@@ -28,7 +28,9 @@ function ContactSummary({ contact }: { contact: Contact }) {
           'Sem telefone'
         )}
         {' · '}
-        {contact.organization?.name ?? 'Não cadastrado'}
+        {contact.organization
+          ? organizationLabel(contact.organization.name, contact.organization.municipality.name)
+          : 'Não cadastrado'}
       </span>
     </>
   )

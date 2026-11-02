@@ -372,7 +372,7 @@ Separada da T33 porque o envio de e-mail depende do local de implantação, aind
 
 Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
 
-### [ ] T37 — Municípios no cadastro de órgãos
+### [x] T37 — Municípios no cadastro de órgãos
 
 - Nova tabela `municipalities`, com nome e código AUDESP, e `organizations.municipality_id` obrigatório, em migração única. A carga dos municípios fica na própria migração.
 - Índice único do nome do órgão por município; a violação vira resposta clara, nunca erro 500.

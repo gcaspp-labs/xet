@@ -132,7 +132,7 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 		m := ch.(map[string]any)
 		fields[m["field"].(string)] = m
 	}
-	if len(fields) != 6 || fields["organization"]["from"] != "Prefeitura de Campinas" || fields["organization"]["to"] != "Câmara de Campinas" {
+	if len(fields) != 6 || fields["organization"]["from"] != "Prefeitura de Campinas — Itu" || fields["organization"]["to"] != "Câmara de Campinas — Itu" {
 		t.Fatalf("history changes = %v", fields)
 	}
 	if from, to := fields["modules"]["from"].([]any), fields["modules"]["to"].([]any); len(from) != 2 || from[0] != "Folha" || len(to) != 1 || to[0] != "Patrimônio" {

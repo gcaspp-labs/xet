@@ -24,19 +24,22 @@ import (
 const MaxResults = 50
 
 var (
-	ErrInvalidName          = errors.New("invalid name")
-	ErrInvalidPhone         = errors.New("invalid phone")
-	ErrInvalidCNPJ          = errors.New("invalid cnpj")
-	ErrCNPJTaken            = errors.New("cnpj already in use")
-	ErrPhoneTaken           = errors.New("phone already in use")
-	ErrOrganizationNotFound = errors.New("organization not found")
-	ErrOrganizationRequired = errors.New("organization required")
-	ErrContactNotFound      = errors.New("contact not found")
-	ErrSectorRequired       = errors.New("sector required")
-	ErrInvalidSector        = errors.New("invalid sector")
-	ErrSectorNotAllowed     = errors.New("sector not allowed")
-	ErrInvalidModules       = errors.New("invalid modules")
-	ErrOneModulePerSector   = errors.New("one module per sector")
+	ErrInvalidName           = errors.New("invalid name")
+	ErrInvalidPhone          = errors.New("invalid phone")
+	ErrInvalidCNPJ           = errors.New("invalid cnpj")
+	ErrCNPJTaken             = errors.New("cnpj already in use")
+	ErrOrganizationNameTaken = errors.New("organization name already in use in the municipality")
+	ErrMunicipalityRequired  = errors.New("municipality required")
+	ErrMunicipalityNotFound  = errors.New("municipality not found")
+	ErrPhoneTaken            = errors.New("phone already in use")
+	ErrOrganizationNotFound  = errors.New("organization not found")
+	ErrOrganizationRequired  = errors.New("organization required")
+	ErrContactNotFound       = errors.New("contact not found")
+	ErrSectorRequired        = errors.New("sector required")
+	ErrInvalidSector         = errors.New("invalid sector")
+	ErrSectorNotAllowed      = errors.New("sector not allowed")
+	ErrInvalidModules        = errors.New("invalid modules")
+	ErrOneModulePerSector    = errors.New("one module per sector")
 )
 
 var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
@@ -126,17 +129,24 @@ func NewService(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool, q: db.New(pool)}
 }
 
+// Organization is an organization with the name of its municipality.
+type Organization = db.GetOrganizationRow
+
 // OrganizationInput holds the editable fields of an organization. An empty
 // CNPJ means the organization has none.
 type OrganizationInput struct {
-	Name string
-	CNPJ string
+	Name           string
+	CNPJ           string
+	MunicipalityID int64
 }
 
 func (in OrganizationInput) normalize() (string, *string, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return "", nil, ErrInvalidName
+	}
+	if in.MunicipalityID == 0 {
+		return "", nil, ErrMunicipalityRequired
 	}
 	if strings.TrimSpace(in.CNPJ) == "" {
 		return name, nil, nil
@@ -202,11 +212,20 @@ func isCNPJFragment(s string) bool {
 	return hasDigit
 }
 
-// SearchOrganizations finds organizations by name or CNPJ; an empty query
-// lists them by name.
-func (s *Service) SearchOrganizations(ctx context.Context, query string) ([]db.Organization, error) {
+// ListMunicipalities returns the municipalities by name, for the organization form.
+func (s *Service) ListMunicipalities(ctx context.Context) ([]db.ListMunicipalitiesRow, error) {
+	rows, err := s.q.ListMunicipalities(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list municipalities: %w", err)
+	}
+	return rows, nil
+}
+
+// SearchOrganizations finds organizations by name, municipality or CNPJ; an
+// empty query lists them by name.
+func (s *Service) SearchOrganizations(ctx context.Context, query string) ([]Organization, error) {
 	p := newSearchPatterns(query)
-	orgs, err := s.q.SearchOrganizations(ctx, db.SearchOrganizationsParams{
+	rows, err := s.q.SearchOrganizations(ctx, db.SearchOrganizationsParams{
 		NamePattern: p.name,
 		CnpjPattern: p.cnpj,
 		MaxResults:  MaxResults,
@@ -214,43 +233,53 @@ func (s *Service) SearchOrganizations(ctx context.Context, query string) ([]db.O
 	if err != nil {
 		return nil, fmt.Errorf("search organizations: %w", err)
 	}
+	orgs := make([]Organization, len(rows))
+	for i, r := range rows {
+		orgs[i] = Organization(r)
+	}
 	return orgs, nil
 }
 
 // CreateOrganization registers an organization and its audit log in one transaction.
-func (s *Service) CreateOrganization(ctx context.Context, actorID int64, in OrganizationInput) (db.Organization, error) {
+func (s *Service) CreateOrganization(ctx context.Context, actorID int64, in OrganizationInput) (Organization, error) {
 	name, cnpj, err := in.normalize()
 	if err != nil {
-		return db.Organization{}, err
+		return Organization{}, err
 	}
 
-	var org db.Organization
+	var org Organization
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		org, err = q.CreateOrganization(ctx, db.CreateOrganizationParams{Name: name, Cnpj: cnpj})
+		created, err := q.CreateOrganization(ctx, db.CreateOrganizationParams{Name: name, Cnpj: cnpj, MunicipalityID: in.MunicipalityID})
 		if err != nil {
 			return ConstraintError("create organization", err)
 		}
 		changes := audit.Changes{}
-		changes.Set("name", nil, org.Name)
-		changes.Set("cnpj", nil, org.Cnpj)
-		return record(ctx, q, org.ID, "organization_created", actorID, changes)
+		changes.Set("name", nil, created.Name)
+		changes.Set("cnpj", nil, created.Cnpj)
+		changes.Set("municipality_id", nil, created.MunicipalityID)
+		if err := record(ctx, q, created.ID, "organization_created", actorID, changes); err != nil {
+			return err
+		}
+		org, err = getOrganization(ctx, q, created.ID)
+		return err
 	})
 	if err != nil {
-		return db.Organization{}, err
+		return Organization{}, err
 	}
 	return org, nil
 }
 
-// UpdateOrganization changes the name and CNPJ of an organization, locking
-// its row and recording what changed in the same transaction.
-func (s *Service) UpdateOrganization(ctx context.Context, actorID, id int64, in OrganizationInput) (db.Organization, error) {
+// UpdateOrganization changes the name, CNPJ and municipality of an
+// organization, locking its row and recording what changed in the same
+// transaction.
+func (s *Service) UpdateOrganization(ctx context.Context, actorID, id int64, in OrganizationInput) (Organization, error) {
 	name, cnpj, err := in.normalize()
 	if err != nil {
-		return db.Organization{}, err
+		return Organization{}, err
 	}
 
-	var org db.Organization
+	var org Organization
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		before, err := q.GetOrganizationForUpdate(ctx, id)
@@ -263,18 +292,29 @@ func (s *Service) UpdateOrganization(ctx context.Context, actorID, id int64, in 
 		changes := audit.Changes{}
 		changes.Set("name", before.Name, name)
 		changes.Set("cnpj", before.Cnpj, cnpj)
-		if changes.Empty() {
-			org = before
-			return nil
+		changes.Set("municipality_id", before.MunicipalityID, in.MunicipalityID)
+		if !changes.Empty() {
+			_, err = q.UpdateOrganization(ctx, db.UpdateOrganizationParams{ID: id, Name: name, Cnpj: cnpj, MunicipalityID: in.MunicipalityID})
+			if err != nil {
+				return ConstraintError("update organization", err)
+			}
+			if err := record(ctx, q, id, "organization_updated", actorID, changes); err != nil {
+				return err
+			}
 		}
-		org, err = q.UpdateOrganization(ctx, db.UpdateOrganizationParams{ID: id, Name: name, Cnpj: cnpj})
-		if err != nil {
-			return ConstraintError("update organization", err)
-		}
-		return record(ctx, q, id, "organization_updated", actorID, changes)
+		org, err = getOrganization(ctx, q, id)
+		return err
 	})
 	if err != nil {
-		return db.Organization{}, err
+		return Organization{}, err
+	}
+	return org, nil
+}
+
+func getOrganization(ctx context.Context, q *db.Queries, id int64) (Organization, error) {
+	org, err := q.GetOrganization(ctx, id)
+	if err != nil {
+		return Organization{}, fmt.Errorf("get organization: %w", err)
 	}
 	return org, nil
 }
@@ -284,6 +324,8 @@ type Contact struct {
 	db.Contact
 	OrganizationName *string
 	OrganizationCNPJ *string
+	MunicipalityID   *int64
+	MunicipalityName *string
 	Sectors          []db.ListSectorsOfContactsRow
 	Modules          []db.ListModulesOfContactsRow
 }
@@ -345,7 +387,10 @@ func (s *Service) SearchContacts(ctx context.Context, filter ContactFilter) ([]C
 	}
 	out := make([]Contact, len(rows))
 	for i, r := range rows {
-		out[i] = Contact{Contact: r.Contact, OrganizationName: r.OrganizationName, OrganizationCNPJ: r.OrganizationCnpj}
+		out[i] = Contact{
+			Contact: r.Contact, OrganizationName: r.OrganizationName, OrganizationCNPJ: r.OrganizationCnpj,
+			MunicipalityID: r.MunicipalityID, MunicipalityName: r.MunicipalityName,
+		}
 	}
 	if err := loadLinks(ctx, s.q, out); err != nil {
 		return nil, err
@@ -579,7 +624,10 @@ func getContact(ctx context.Context, q *db.Queries, id int64) (Contact, error) {
 	if err != nil {
 		return Contact{}, fmt.Errorf("get contact: %w", err)
 	}
-	out := []Contact{{Contact: r.Contact, OrganizationName: r.OrganizationName, OrganizationCNPJ: r.OrganizationCnpj}}
+	out := []Contact{{
+		Contact: r.Contact, OrganizationName: r.OrganizationName, OrganizationCNPJ: r.OrganizationCnpj,
+		MunicipalityID: r.MunicipalityID, MunicipalityName: r.MunicipalityName,
+	}}
 	if err := loadLinks(ctx, q, out); err != nil {
 		return Contact{}, err
 	}
@@ -639,6 +687,10 @@ func ConstraintError(op string, err error) error {
 			return ErrCNPJTaken
 		case "organizations_cnpj_check":
 			return ErrInvalidCNPJ
+		case "organizations_municipality_name_key":
+			return ErrOrganizationNameTaken
+		case "organizations_municipality_id_fkey":
+			return ErrMunicipalityNotFound
 		case "contacts_phone_key":
 			return ErrPhoneTaken
 		case "contacts_phone_check":

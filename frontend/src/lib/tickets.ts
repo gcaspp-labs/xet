@@ -13,6 +13,7 @@ export type TicketSummary = {
   assignedAt: string | null
   contact: { id: number; name: string; phone: string | null; registered: boolean }
   organizationName: string | null
+  municipalityName: string | null
   assignee: { id: number; name: string } | null
   lastMessage: {
     type: MessageType
@@ -32,7 +33,7 @@ export type Workload = {
 
 export type ClosedTicket = Pick<
   TicketSummary,
-  'id' | 'protocol' | 'contact' | 'organizationName'
+  'id' | 'protocol' | 'contact' | 'organizationName' | 'municipalityName'
 > & {
   closureType: 'resolved' | 'transferred' | 'cancelled'
   closedAt: string

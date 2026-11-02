@@ -11,18 +11,22 @@ where id = @id
 returning *;
 
 -- name: GetContactWithOrganization :one
-select sqlc.embed(c), o.name as organization_name, o.cnpj as organization_cnpj
+select sqlc.embed(c), o.name as organization_name, o.cnpj as organization_cnpj,
+    o.municipality_id, m.name as municipality_name
 from contacts c
 left join organizations o on o.id = c.organization_id
+left join municipalities m on m.id = o.municipality_id
 where c.id = @id;
 
 -- name: SearchContacts :many
 -- Matches the contact or organization name (ignoring case and accents), the
 -- phone digits or the organization CNPJ. Empty patterns disable the phone and
 -- CNPJ keys; a zero sector or module disables that filter.
-select sqlc.embed(c), o.name as organization_name, o.cnpj as organization_cnpj
+select sqlc.embed(c), o.name as organization_name, o.cnpj as organization_cnpj,
+    o.municipality_id, m.name as municipality_name
 from contacts c
 left join organizations o on o.id = c.organization_id
+left join municipalities m on m.id = o.municipality_id
 where (@name_pattern::text = ''
        or immutable_unaccent(c.name) ilike immutable_unaccent(@name_pattern)
        or immutable_unaccent(o.name) ilike immutable_unaccent(@name_pattern)

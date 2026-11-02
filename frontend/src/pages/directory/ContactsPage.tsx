@@ -19,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { type Contact, searchLimit, useContactFilter, useContacts } from '@/lib/directory'
-import { formatCnpj, formatPhone } from '@/lib/format'
+import { formatCnpj, formatPhone, organizationLabel } from '@/lib/format'
 
 export default function ContactsPage() {
   const [query, setQuery] = useState('')
@@ -97,7 +97,12 @@ export default function ContactsPage() {
                     <TableCell>
                       {contact.organization ? (
                         <>
-                          <p>{contact.organization.name}</p>
+                          <p>
+                            {organizationLabel(
+                              contact.organization.name,
+                              contact.organization.municipality.name,
+                            )}
+                          </p>
                           {contact.organization.cnpj && (
                             <p className="mono-num caption text-ink-faint">
                               {formatCnpj(contact.organization.cnpj)}

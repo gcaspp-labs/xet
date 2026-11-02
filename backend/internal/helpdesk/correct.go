@@ -178,7 +178,7 @@ type CorrectionLog struct {
 
 // FieldChange is the previous and new value of a corrected field. Field is
 // one of subject, resolution, organization, modules, started_at, ended_at and
-// spoke_with; organization is a name, modules a list of names and the times
+// spoke_with; organization is a name with its municipality, modules a list of names and the times
 // are time.Time.
 type FieldChange struct {
 	Field string
@@ -235,7 +235,7 @@ func (s *Service) Corrections(ctx context.Context, actor auth.User, ticketID int
 			return nil, fmt.Errorf("list organization names: %w", err)
 		}
 		for _, o := range orgs {
-			orgNames[o.ID] = o.Name
+			orgNames[o.ID] = o.Name + " — " + o.MunicipalityName
 		}
 	}
 	moduleNames := map[int64]string{}

@@ -26,9 +26,11 @@ func NewHandler(logger *slog.Logger, service *Service) *Handler {
 // Routes registers the routes of the directory, behind the session middleware.
 func (h *Handler) Routes(r chi.Router) {
 	// Órgãos: todos consultam; supervisor e administrador cadastram e editam.
+	// Os municípios servem só ao formulário de órgão e não têm cadastro.
 	r.Get("/organizations", h.listOrganizations)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
+		r.Get("/municipalities", h.listMunicipalities)
 		r.Post("/organizations", h.createOrganization)
 		r.Put("/organizations/{organizationID}", h.updateOrganization)
 	})
@@ -41,16 +43,40 @@ func (h *Handler) Routes(r chi.Router) {
 }
 
 type organizationResponse struct {
-	ID   int64   `json:"id"`
-	Name string  `json:"name"`
-	CNPJ *string `json:"cnpj"`
+	ID           int64     `json:"id"`
+	Name         string    `json:"name"`
+	CNPJ         *string   `json:"cnpj"`
+	Municipality httpx.Ref `json:"municipality"`
 }
 
-func toOrganizationResponse(o db.Organization) organizationResponse {
-	return organizationResponse{ID: o.ID, Name: o.Name, CNPJ: o.Cnpj}
+func toOrganizationResponse(o Organization) organizationResponse {
+	return organizationResponse{
+		ID: o.Organization.ID, Name: o.Organization.Name, CNPJ: o.Organization.Cnpj,
+		Municipality: httpx.Ref{ID: o.Organization.MunicipalityID, Name: o.MunicipalityName},
+	}
 }
 
-// listOrganizations searches organizations by name or CNPJ (?q=).
+type municipalityResponse struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	AudespCode string `json:"audespCode"`
+}
+
+// listMunicipalities returns all the municipalities, for the organization form.
+func (h *Handler) listMunicipalities(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.service.ListMunicipalities(r.Context())
+	if err != nil {
+		httpx.InternalError(h.logger, w, r, err)
+		return
+	}
+	out := make([]municipalityResponse, len(rows))
+	for i, m := range rows {
+		out[i] = municipalityResponse(m)
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// listOrganizations searches organizations by name, municipality or CNPJ (?q=).
 func (h *Handler) listOrganizations(w http.ResponseWriter, r *http.Request) {
 	orgs, err := h.service.SearchOrganizations(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
@@ -65,8 +91,9 @@ func (h *Handler) listOrganizations(w http.ResponseWriter, r *http.Request) {
 }
 
 type organizationRequest struct {
-	Name string `json:"name" validate:"required"`
-	CNPJ string `json:"cnpj"`
+	Name           string `json:"name" validate:"required"`
+	CNPJ           string `json:"cnpj"`
+	MunicipalityID int64  `json:"municipalityId"`
 }
 
 func (h *Handler) createOrganization(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +140,12 @@ func WriteError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Selecione o órgão do contato.")
 	case errors.Is(err, ErrCNPJTaken):
 		httpx.WriteError(w, http.StatusConflict, "Já existe um órgão com este CNPJ.")
+	case errors.Is(err, ErrOrganizationNameTaken):
+		httpx.WriteError(w, http.StatusConflict, "Já existe um órgão com este nome neste município.")
+	case errors.Is(err, ErrMunicipalityRequired):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Selecione o município do órgão.")
+	case errors.Is(err, ErrMunicipalityNotFound):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Município não encontrado. Selecione um da lista.")
 	case errors.Is(err, ErrPhoneTaken):
 		httpx.WriteError(w, http.StatusConflict, "Já existe um contato com este telefone.")
 	case errors.Is(err, ErrOrganizationNotFound):
@@ -156,8 +189,11 @@ func ToContactResponse(c Contact) ContactResponse {
 		Sectors: make([]httpx.Ref, len(c.Sectors)),
 		Modules: make([]contactModuleResponse, len(c.Modules)),
 	}
-	if c.OrganizationID != nil && c.OrganizationName != nil {
-		out.Organization = &organizationResponse{ID: *c.OrganizationID, Name: *c.OrganizationName, CNPJ: c.OrganizationCNPJ}
+	if c.OrganizationID != nil && c.OrganizationName != nil && c.MunicipalityID != nil && c.MunicipalityName != nil {
+		out.Organization = &organizationResponse{
+			ID: *c.OrganizationID, Name: *c.OrganizationName, CNPJ: c.OrganizationCNPJ,
+			Municipality: httpx.Ref{ID: *c.MunicipalityID, Name: *c.MunicipalityName},
+		}
 	}
 	for i, sec := range c.Sectors {
 		out.Sectors[i] = httpx.Ref{ID: sec.ID, Name: sec.Name}

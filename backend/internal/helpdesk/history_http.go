@@ -20,6 +20,7 @@ type historyResponse struct {
 	Subject          *string         `json:"subject"`
 	ContactName      string          `json:"contactName"`
 	OrganizationName *string         `json:"organizationName"`
+	MunicipalityName *string         `json:"municipalityName"`
 	AssigneeName     *string         `json:"assigneeName"`
 }
 
@@ -29,7 +30,7 @@ func writeHistory(w http.ResponseWriter, rows []HistoryEntry) {
 		out[i] = historyResponse{
 			ID: t.ID, Protocol: t.Protocol, Status: t.Status, SectorName: t.SectorName,
 			ArrivedAt: t.ArrivedAt, ClosedAt: t.ClosedAt, Subject: t.Subject,
-			ContactName: t.ContactName, OrganizationName: t.OrganizationName, AssigneeName: t.AssigneeName,
+			ContactName: t.ContactName, OrganizationName: t.OrganizationName, MunicipalityName: t.MunicipalityName, AssigneeName: t.AssigneeName,
 		}
 		if t.ClosureType.Valid {
 			out[i].ClosureType = &t.ClosureType.ClosureType

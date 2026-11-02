@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { type HistoryEntry, useContactHistory, useOrganizationHistory } from '@/lib/conversation'
-import { formatDateTime, ticketStatusLabel } from '@/lib/format'
+import { formatDateTime, organizationLabel, ticketStatusLabel } from '@/lib/format'
 
 // Chamados do contato ou do órgão, do mais recente ao mais antigo, só dos
 // setores do usuário (o backend filtra). Cada um abre a conversa completa.
@@ -61,7 +61,8 @@ export function TicketHistoryList({
             </div>
             <p className="caption text-ink-faint">
               {entry.sectorName} · {entry.contactName}
-              {entry.organizationName && ` · ${entry.organizationName}`}
+              {entry.organizationName &&
+                ` · ${organizationLabel(entry.organizationName, entry.municipalityName)}`}
             </p>
             <p className="caption text-ink-faint">
               <span className="mono-num">{formatDateTime(entry.arrivedAt)}</span>

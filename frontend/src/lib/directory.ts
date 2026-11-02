@@ -10,10 +10,15 @@ import type { Module } from '@/lib/admin'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
 
+export type MunicipalityRef = { id: number; name: string }
+
+export type Municipality = MunicipalityRef & { audespCode: string }
+
 export type Organization = {
   id: number
   name: string
   cnpj: string | null
+  municipality: MunicipalityRef
 }
 
 export type Contact = {
@@ -29,7 +34,7 @@ export type Contact = {
 
 export type ContactModule = { id: number; sectorId: number; name: string }
 
-export type OrganizationInput = { name: string; cnpj: string }
+export type OrganizationInput = { name: string; cnpj: string; municipalityId: number }
 
 export type ContactInput = {
   name: string
@@ -51,7 +56,17 @@ const contactsKey = ['contacts']
 const searchPath = (path: string, query: string) =>
   query.trim() === '' ? path : `${path}?q=${encodeURIComponent(query.trim())}`
 
-// Busca por nome ou CNPJ; sem termo, lista por nome.
+// Os municípios não têm cadastro: a lista não muda enquanto a tela está aberta.
+export function useMunicipalities(enabled: boolean) {
+  return useQuery({
+    queryKey: ['municipalities'],
+    queryFn: () => api<Municipality[]>('/municipalities'),
+    enabled,
+    staleTime: Infinity,
+  })
+}
+
+// Busca por nome, município ou CNPJ; sem termo, lista por nome.
 export function useOrganizations(query: string) {
   return useQuery({
     queryKey: [...organizationsKey, query.trim()],
@@ -67,7 +82,7 @@ export function useSaveOrganization() {
       id === undefined
         ? api<Organization>('/organizations', { method: 'POST', body })
         : api<Organization>(`/organizations/${id}`, { method: 'PUT', body }),
-    // A busca de contatos mostra o nome e o CNPJ do órgão.
+    // A busca de contatos mostra o nome, o município e o CNPJ do órgão.
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: organizationsKey }),

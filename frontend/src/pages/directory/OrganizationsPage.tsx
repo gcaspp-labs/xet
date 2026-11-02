@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Landmark, Plus } from 'lucide-react'
 import { useDeferredValue, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormSheet } from '@/components/FormSheet'
@@ -10,6 +10,14 @@ import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -23,15 +31,27 @@ import {
 } from '@/components/ui/table'
 import { useCurrentUser } from '@/lib/auth'
 import {
+  type MunicipalityRef,
   type Organization,
   searchLimit,
+  useMunicipalities,
   useOrganizations,
   useSaveOrganization,
 } from '@/lib/directory'
-import { formatCnpj, isValidCnpj, normalizeCnpj } from '@/lib/format'
+import {
+  formatCnpj,
+  isValidCnpj,
+  normalizeCnpj,
+  normalizeSearch,
+  organizationLabel,
+} from '@/lib/format'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do órgão.'),
+  municipality: z
+    .object({ id: z.number(), name: z.string() })
+    .nullable()
+    .refine((value) => value !== null, 'Selecione o município do órgão.'),
   cnpj: z
     .string()
     .transform(normalizeCnpj)
@@ -42,6 +62,48 @@ const schema = z.object({
 })
 
 type FormValues = z.input<typeof schema>
+
+// São 645 municípios: a lista vem inteira e é filtrada na tela, sem diferenciar acentos.
+function MunicipalityPicker({
+  id,
+  enabled,
+  value,
+  onChange,
+  invalid,
+}: {
+  id: string
+  enabled: boolean
+  value: MunicipalityRef | null
+  onChange: (value: MunicipalityRef | null) => void
+  invalid: boolean
+}) {
+  const { data: municipalities = [] } = useMunicipalities(enabled)
+
+  return (
+    <Combobox
+      items={municipalities}
+      value={value}
+      onValueChange={onChange}
+      itemToStringLabel={(municipality: MunicipalityRef) => municipality.name}
+      isItemEqualToValue={(a: MunicipalityRef, b: MunicipalityRef) => a.id === b.id}
+      filter={(municipality: MunicipalityRef, query: string) =>
+        normalizeSearch(municipality.name).includes(normalizeSearch(query))
+      }
+    >
+      <ComboboxInput id={id} placeholder="Busque pelo nome" aria-invalid={invalid} />
+      <ComboboxContent>
+        <ComboboxEmpty>Nenhum município encontrado.</ComboboxEmpty>
+        <ComboboxList>
+          {(municipality: MunicipalityRef) => (
+            <ComboboxItem key={municipality.id} value={municipality}>
+              {municipality.name}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  )
+}
 
 function OrganizationSheet({
   organization,
@@ -55,19 +117,26 @@ function OrganizationSheet({
   const save = useSaveOrganization()
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<FormValues, unknown, z.output<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: organization?.name ?? '',
+      municipality: organization?.municipality ?? null,
       cnpj: organization?.cnpj ? formatCnpj(organization.cnpj) : '',
     },
   })
 
   const onSubmit = handleSubmit((values) =>
     save.mutate(
-      { id: organization?.id, ...values },
+      {
+        id: organization?.id,
+        name: values.name,
+        cnpj: values.cnpj,
+        municipalityId: values.municipality!.id,
+      },
       {
         onSuccess: () => {
           toast.success('Órgão salvo')
@@ -91,6 +160,23 @@ function OrganizationSheet({
         <FieldLabel htmlFor="organization-name">Nome</FieldLabel>
         <Input id="organization-name" aria-invalid={!!errors.name} {...register('name')} />
         <FieldError errors={[errors.name]} />
+      </Field>
+      <Field data-invalid={!!errors.municipality}>
+        <FieldLabel htmlFor="organization-municipality">Município</FieldLabel>
+        <Controller
+          control={control}
+          name="municipality"
+          render={({ field }) => (
+            <MunicipalityPicker
+              id="organization-municipality"
+              enabled={open}
+              value={field.value}
+              onChange={field.onChange}
+              invalid={!!errors.municipality}
+            />
+          )}
+        />
+        <FieldError errors={[errors.municipality]} />
       </Field>
       <Field data-invalid={!!errors.cnpj}>
         <FieldLabel htmlFor="organization-cnpj">CNPJ</FieldLabel>
@@ -145,7 +231,7 @@ export default function OrganizationsPage() {
           value={query}
           onChange={setQuery}
           label="Buscar órgãos"
-          placeholder="Nome ou CNPJ"
+          placeholder="Nome, município ou CNPJ"
         />
         <Card>
           {organizations && organizations.length > 0 ? (
@@ -153,6 +239,7 @@ export default function OrganizationsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Órgão</TableHead>
+                  <TableHead>Município</TableHead>
                   <TableHead>CNPJ</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
@@ -163,6 +250,7 @@ export default function OrganizationsPage() {
                 {organizations.map((organization) => (
                   <TableRow key={organization.id}>
                     <TableCell className="body-strong">{organization.name}</TableCell>
+                    <TableCell>{organization.municipality.name}</TableCell>
                     <TableCell className="mono-num">
                       {organization.cnpj ? formatCnpj(organization.cnpj) : '—'}
                     </TableCell>
@@ -211,7 +299,13 @@ export default function OrganizationsPage() {
       </PageContent>
       <OrganizationSheet key={sheetKey} organization={editing} open={open} onOpenChange={setOpen} />
       <HistorySheet
-        target={history && { kind: 'organization', id: history.id, name: history.name }}
+        target={
+          history && {
+            kind: 'organization',
+            id: history.id,
+            name: organizationLabel(history.name, history.municipality.name),
+          }
+        }
         onClose={() => setHistory(null)}
       />
     </>

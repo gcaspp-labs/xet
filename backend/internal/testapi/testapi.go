@@ -205,9 +205,19 @@ func (e *Env) DoList(method, path, token string) []map[string]any {
 	return out
 }
 
+// Municipality returns the ID of a municipality loaded by the migration.
+func (e *Env) Municipality(name string) int64 {
+	e.T.Helper()
+	var id int64
+	if err := e.Pool.QueryRow(e.T.Context(), "select id from municipalities where name = $1", name).Scan(&id); err != nil {
+		e.T.Fatalf("municipality %s: %v", name, err)
+	}
+	return id
+}
+
 func (e *Env) Organization(token, name, cnpj string) int64 {
 	e.T.Helper()
-	resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]string{"name": name, "cnpj": cnpj})
+	resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]any{"name": name, "cnpj": cnpj, "municipalityId": e.Municipality("Itu")})
 	if resp.Status != http.StatusCreated {
 		e.T.Fatalf("create organization %s: status %d, body %v", name, resp.Status, resp.Body)
 	}

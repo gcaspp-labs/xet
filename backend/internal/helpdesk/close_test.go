@@ -106,7 +106,7 @@ func TestCloseRecordsTheClosingForm(t *testing.T) {
 	if len(modules) != 2 || modules[0].(map[string]any)["name"] != "Folha" || modules[1].(map[string]any)["name"] != "Patrimônio" {
 		t.Fatalf("form modules = %v", form["modules"])
 	}
-	if form["organization"].(map[string]any)["id"] != float64(c.org) {
+	if org := form["organization"].(map[string]any); org["id"] != float64(c.org) || org["municipality"].(map[string]any)["name"] != "Itu" {
 		t.Fatalf("form organization = %v", form["organization"])
 	}
 	started, err := time.Parse(time.RFC3339Nano, form["startedAt"].(string))
@@ -449,8 +449,14 @@ func TestRegisteringContactLinksOpenTicketsWithoutOrganization(t *testing.T) {
 		t.Fatalf("actor = %d", actor)
 	}
 	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil).Body
-	if detail["organization"] == nil || detail["organization"].(map[string]any)["id"] != float64(c.org) {
+	if detail["organization"] == nil || detail["organization"].(map[string]any)["id"] != float64(c.org) ||
+		detail["organization"].(map[string]any)["municipality"].(map[string]any)["name"] != "Itu" {
 		t.Fatalf("detail organization = %v", detail["organization"])
+	}
+	// O painel mostra o município ao lado do órgão.
+	open := e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", c.sector.ID), c.anaToken)
+	if len(open) == 0 || open[0]["organizationName"] != "Prefeitura de Campinas" || open[0]["municipalityName"] != "Itu" {
+		t.Fatalf("panel = %v", open)
 	}
 
 	// Chamado que já tem órgão não muda quando o cadastro troca o órgão principal.

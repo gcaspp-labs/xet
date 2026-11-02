@@ -204,9 +204,11 @@ func (q *Queries) GetContactForShare(ctx context.Context, id int64) (Contact, er
 }
 
 const getContactWithOrganization = `-- name: GetContactWithOrganization :one
-select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj
+select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj,
+    o.municipality_id, m.name as municipality_name
 from contacts c
 left join organizations o on o.id = c.organization_id
+left join municipalities m on m.id = o.municipality_id
 where c.id = $1
 `
 
@@ -214,6 +216,8 @@ type GetContactWithOrganizationRow struct {
 	Contact          Contact
 	OrganizationName *string
 	OrganizationCnpj *string
+	MunicipalityID   *int64
+	MunicipalityName *string
 }
 
 func (q *Queries) GetContactWithOrganization(ctx context.Context, id int64) (GetContactWithOrganizationRow, error) {
@@ -230,6 +234,8 @@ func (q *Queries) GetContactWithOrganization(ctx context.Context, id int64) (Get
 		&i.Contact.UpdatedAt,
 		&i.OrganizationName,
 		&i.OrganizationCnpj,
+		&i.MunicipalityID,
+		&i.MunicipalityName,
 	)
 	return i, err
 }
@@ -395,9 +401,11 @@ func (q *Queries) RemoveContactSectors(ctx context.Context, arg RemoveContactSec
 }
 
 const searchContacts = `-- name: SearchContacts :many
-select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj
+select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj,
+    o.municipality_id, m.name as municipality_name
 from contacts c
 left join organizations o on o.id = c.organization_id
+left join municipalities m on m.id = o.municipality_id
 where ($1::text = ''
        or immutable_unaccent(c.name) ilike immutable_unaccent($1)
        or immutable_unaccent(o.name) ilike immutable_unaccent($1)
@@ -424,6 +432,8 @@ type SearchContactsRow struct {
 	Contact          Contact
 	OrganizationName *string
 	OrganizationCnpj *string
+	MunicipalityID   *int64
+	MunicipalityName *string
 }
 
 // Matches the contact or organization name (ignoring case and accents), the
@@ -456,6 +466,8 @@ func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) 
 			&i.Contact.UpdatedAt,
 			&i.OrganizationName,
 			&i.OrganizationCnpj,
+			&i.MunicipalityID,
+			&i.MunicipalityName,
 		); err != nil {
 			return nil, err
 		}

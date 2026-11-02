@@ -34,7 +34,13 @@ import {
 } from '@/components/ui/table'
 import { useSectors } from '@/lib/admin'
 import { type User, useCurrentUser } from '@/lib/auth'
-import { closureTypeLabels, formatMessageTime, formatPhone, roleLabels } from '@/lib/format'
+import {
+  closureTypeLabels,
+  formatMessageTime,
+  formatPhone,
+  organizationLabel,
+  roleLabels,
+} from '@/lib/format'
 import {
   type ClosedTicket,
   lastMessagePreview,
@@ -66,7 +72,9 @@ function ContactCell({ ticket }: { ticket: TicketSummary | ClosedTicket }) {
           'Sem telefone'
         )}
         {' · '}
-        {ticket.organizationName ?? 'Não cadastrado'}
+        {ticket.organizationName
+          ? organizationLabel(ticket.organizationName, ticket.municipalityName)
+          : 'Não cadastrado'}
       </p>
     </TableCell>
   )

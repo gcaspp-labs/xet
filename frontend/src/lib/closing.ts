@@ -11,7 +11,12 @@ export const closingShape = {
   resolution: z.string().trim().min(1, 'Informe a resolução.'),
   moduleIds: z.array(z.number()).min(1, 'Selecione ao menos um módulo.'),
   organization: z
-    .object({ id: z.number(), name: z.string(), cnpj: z.string().nullable() })
+    .object({
+      id: z.number(),
+      name: z.string(),
+      cnpj: z.string().nullable(),
+      municipality: z.object({ id: z.number(), name: z.string() }),
+    })
     .nullable()
     .refine((value) => value !== null, 'Selecione o órgão do atendimento.'),
   startedAt: z.string().min(1, 'Informe o início.'),

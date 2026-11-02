@@ -34,7 +34,7 @@ type Closing struct {
 type ClosingForm struct {
 	Modules          []db.Module
 	ContactModuleIDs []int64
-	Organization     *db.Organization
+	Organization     *db.GetOrganizationRow
 	StartedAt        time.Time
 }
 

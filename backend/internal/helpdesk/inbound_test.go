@@ -341,7 +341,7 @@ func TestMessageAfterClosingOpensNewTicket(t *testing.T) {
 	e := newTestEnv(t, nil)
 	contab := e.Sector("Contabilidade")
 	agent := e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
-	org, err := e.Q.CreateOrganization(t.Context(), db.CreateOrganizationParams{Name: "Prefeitura"})
+	org, err := e.Q.CreateOrganization(t.Context(), db.CreateOrganizationParams{Name: "Prefeitura", MunicipalityID: e.Municipality("Itu")})
 	if err != nil {
 		t.Fatal(err)
 	}

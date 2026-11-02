@@ -24,6 +24,19 @@ export function formatCnpj(cnpj: string) {
 }
 
 // Remove a pontuação e passa as letras para maiúsculas, como o backend grava.
+// O nome sozinho é ambíguo entre cidades (spec.md, Órgãos e contatos).
+export function organizationLabel(name: string, municipality: string | null) {
+  return municipality ? `${name} — ${municipality}` : name
+}
+
+// Para comparar textos sem diferenciar maiúsculas e acentos.
+export function normalizeSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+}
+
 export function normalizeCnpj(value: string) {
   return value.replace(/[\s./-]/g, '').toUpperCase()
 }

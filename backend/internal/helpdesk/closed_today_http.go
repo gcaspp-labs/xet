@@ -15,6 +15,7 @@ type closedTicketResponse struct {
 	ClosedAt         *time.Time            `json:"closedAt"`
 	Contact          ticketContactResponse `json:"contact"`
 	OrganizationName *string               `json:"organizationName"`
+	MunicipalityName *string               `json:"municipalityName"`
 	ClosedBy         httpx.Ref             `json:"closedBy"`
 }
 
@@ -41,6 +42,7 @@ func (h *Handler) listClosedToday(w http.ResponseWriter, r *http.Request) {
 				ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered,
 			},
 			OrganizationName: t.OrganizationName,
+			MunicipalityName: t.MunicipalityName,
 			ClosedBy:         httpx.Ref{ID: *t.ClosedByID, Name: t.ClosedByName},
 		}
 	}

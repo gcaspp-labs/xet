@@ -1,5 +1,13 @@
 import { expect, request as apiRequest, test, type APIRequestContext } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  defaultMunicipality,
+  seedDirectory,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 // Liga o número do setor pelo adaptador falso: conectar e o celular ler o QR code.
 async function connectSector(baseURL: string, request: APIRequestContext, sectorId: number) {
@@ -34,6 +42,10 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
   await page.getByRole('button', { name: 'Nova conversa' }).click()
   const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
   await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(name)
+  // O município aparece ao lado do órgão na busca, no painel e no chamado.
+  await expect(sheet.getByRole('button', { name: new RegExp(name) })).toContainText(
+    `Prefeitura ${id} — ${defaultMunicipality}`,
+  )
   await sheet.getByRole('button', { name: new RegExp(name) }).click()
   await sheet.getByRole('textbox', { name: 'Mensagem' }).fill('Bom dia, sua guia está pronta.')
   await sheet.getByRole('button', { name: 'Enviar' }).click()
@@ -55,6 +67,12 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
     `${agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')} iniciou a conversa e assumiu o chamado`,
   )
   const ticketUrl = page.url()
+  await expect(page.getByText(`Prefeitura ${id} — ${defaultMunicipality}`)).toBeVisible()
+  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText(
+    `Prefeitura ${id} — ${defaultMunicipality}`,
+  )
+  await page.goto(ticketUrl)
 
   // Outro integrante do setor que inicia conversa com o mesmo contato é levado ao
   // chamado existente, sem permissão de resposta.
