@@ -575,7 +575,11 @@ function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }
   }
 
   return (
-    <Card role="region" aria-label="Conversa" className="h-[70dvh] lg:h-[calc(100dvh-150px)]">
+    <Card
+      role="region"
+      aria-label="Conversa"
+      className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
+    >
       <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length > 0 || logs.length > 0 ? (
           <ol className="flex flex-col gap-2">

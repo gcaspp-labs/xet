@@ -64,9 +64,10 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | Toast | `sonner` | Rodapé central, ~2,5s, ícone de confirmação em `success`, frase no particípio ("Chamado encerrado"). Erros que exigem ação usam Note, não toast |
 | Note | `Alert` (variante `warning`) | Ícone de aviso + uma frase em `warning-ink` sobre `warning-soft`, sem título |
 | EmptyState | `Empty` | Ícone de 30px a 50% e uma frase em `ink-faint` |
-| Sidebar | `Sidebar` | Acompanha o tema, sobre `surface`, em vez de ficar escura nos dois temas como no brand book (decisão do projeto); marca no topo; recolhe para só os ícones, com o botão da Topbar, e a escolha fica no navegador; abaixo de 760px vira gaveta |
+| Sidebar | `Sidebar` | Acompanha o tema, sobre `surface`, em vez de ficar escura nos dois temas como no brand book (decisão do projeto); começa abaixo do Cabeçalho; recolhe para só os ícones, com o botão no topo da própria barra, que não muda de lugar, e a escolha fica no navegador; abaixo de 760px vira gaveta, aberta pelo botão do Cabeçalho |
 | Menu de configurações | `DropdownMenu` | No rodapé da barra lateral, abaixo do nome do usuário: botão "Configurações" com a escolha de tema e "Sair". Ícones de 15px |
-| Topbar | Componente próprio | Fixa sobre `paper`: botão da barra lateral, voltar nas telas internas (ex.: "Voltar à lista", da conversa para a lista de atendimentos), breadcrumb, título `title-page` e no máximo uma ação primária |
+| Cabeçalho | Componente próprio | Fixo no topo, na largura toda, sobre `surface` com borda `line` e altura `--header-height` (56px): marca à esquerda e notificações à direita. O botão de notificações só marca o lugar, desabilitado, até a funcionalidade existir |
+| Topbar | Componente próprio | Fixa abaixo do Cabeçalho, sobre `paper`: voltar nas telas internas (ex.: "Voltar à lista", da conversa para a lista de atendimentos), breadcrumb, título `title-page` e no máximo uma ação primária |
 | KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption` |
 
 Componentes sem equivalente no design system (ex.: balões de conversa, player de áudio, indicador de conexão) são compostos com os mesmos tokens e regras: `surface` e `line` para contêineres, raios pequenos, sem sombra fora de camadas flutuantes, estados com palavra além da cor.
@@ -80,10 +81,10 @@ Player de áudio: componente próprio, usado na gravação e nas mensagens. Bot�
 
 ## Marca e layout
 
-- Barra lateral: símbolo a 32px, `glab-simbolo.svg` no tema claro e `glab-simbolo-escuro.svg` no escuro, + "GCASPP LAB" e, abaixo, o nome do produto **"Central de Atendimento"**. "g-lab" só no rodapé.
+- Cabeçalho: símbolo a 32px, `glab-simbolo.svg` no tema claro e `glab-simbolo-escuro.svg` no escuro, + "GCASPP LAB" e, abaixo, o nome do produto **"Central de Atendimento"**. "g-lab" só no rodapé.
 - Favicon: símbolo do polvo (`glab-simbolo.svg`), copiado para `frontend/public/favicon.svg`.
 - Tela de login: fundo `paper`, Panel central com a assinatura `gcaspp-lab-horizontal.svg`, sem barra lateral.
-- Aplicação: barra lateral fixa (`sidebar-width`), Topbar fixa, conteúdo com padding `space-30` no desktop e `space-16` no celular, largura máxima `content-max` (exceto a tela de conversas, que usa a largura toda).
+- Aplicação: Cabeçalho fixo, barra lateral fixa abaixo dele (`sidebar-width`), Topbar fixa, conteúdo com padding `space-30` no desktop e `space-16` no celular, largura máxima `content-max` (exceto a tela de conversas, que usa a largura toda).
 - Foco de teclado: outline sólido de 2px em `focus`, afastado 2px. Transições de 150–200ms, desligadas com `prefers-reduced-motion`.
 
 ## Conteúdo e tom

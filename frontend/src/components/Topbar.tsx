@@ -2,7 +2,6 @@ import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { buttonVariants } from '@/components/ui/button'
-import { SidebarTrigger } from '@/components/ui/sidebar'
 
 // Topbar do design system: voltar, breadcrumb, título e no máximo uma ação primária.
 export function Topbar({
@@ -17,9 +16,8 @@ export function Topbar({
   action?: ReactNode
 }) {
   return (
-    <header className="sticky top-0 z-10 border-b border-line-soft bg-background">
+    <header className="sticky top-(--header-height) z-10 border-b border-line-soft bg-background">
       <div className="mx-auto flex max-w-(--content-max) flex-wrap items-center gap-3 px-4 py-3 md:px-[30px]">
-        <SidebarTrigger />
         {back && (
           <Link
             to={back.to}

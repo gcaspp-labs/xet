@@ -42,7 +42,7 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
     <Card
       role="region"
       aria-labelledby="conversation-list-title"
-      className="h-[calc(100dvh-150px)]"
+      className="h-[calc(100dvh-150px-var(--header-height))]"
     >
       <CardHeader>
         <CardTitle id="conversation-list-title">Conversas do setor</CardTitle>
