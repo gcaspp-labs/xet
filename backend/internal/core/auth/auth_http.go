@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,12 +22,15 @@ type Handler struct {
 	logger       *slog.Logger
 	service      *Service
 	secureCookie bool
+	trustProxy   bool
 }
 
 // NewHandler creates the handler. secureCookie sets the Secure flag on the
-// session cookie; it is disabled only in development over plain HTTP.
-func NewHandler(logger *slog.Logger, service *Service, secureCookie bool) *Handler {
-	return &Handler{logger: logger, service: service, secureCookie: secureCookie}
+// session cookie; it is disabled only in development over plain HTTP. trustProxy
+// takes the client IP from X-Forwarded-For; it is enabled only when the backend
+// is reachable just through the reverse proxy, or the header could be forged.
+func NewHandler(logger *slog.Logger, service *Service, secureCookie, trustProxy bool) *Handler {
+	return &Handler{logger: logger, service: service, secureCookie: secureCookie, trustProxy: trustProxy}
 }
 
 // Routes registers the login routes, the only ones open without a session.
@@ -101,9 +107,13 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	token, user, expiresAt, err := h.service.Login(r.Context(), req.Email, req.Password)
+	token, user, expiresAt, err := h.service.Login(r.Context(), req.Email, req.Password, h.clientIP(r))
 	if errors.Is(err, ErrInvalidCredentials) {
 		httpx.WriteError(w, http.StatusUnauthorized, "E-mail ou senha incorretos.")
+		return
+	}
+	if errors.Is(err, ErrLoginLocked) {
+		httpx.WriteError(w, http.StatusTooManyRequests, "Login bloqueado por excesso de tentativas. Aguarde até 15 minutos e tente novamente.")
 		return
 	}
 	if err != nil {
@@ -112,6 +122,23 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	h.setSessionCookie(w, token, expiresAt)
 	httpx.WriteJSON(w, http.StatusOK, toUserResponse(user))
+}
+
+// clientIP is the address of the connection or, behind the trusted proxy, the
+// last value of X-Forwarded-For, the only one the proxy itself writes.
+func (h *Handler) clientIP(r *http.Request) string {
+	if h.trustProxy {
+		forwarded := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
+		last := forwarded[strings.LastIndex(forwarded, ",")+1:]
+		if addr, err := netip.ParseAddr(strings.TrimSpace(last)); err == nil {
+			return addr.Unmap().String()
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {

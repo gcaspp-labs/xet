@@ -20,14 +20,14 @@ func TestCreateAdmin(t *testing.T) {
 	args := []string{"-name", "Maria Admin", "-email", "maria@exemplo.com"}
 
 	var out bytes.Buffer
-	if err := createAdmin(ctx, svc, args, strings.NewReader("Senha@123\n"), &out); err != nil {
+	if err := createAdmin(ctx, svc, args, strings.NewReader("Cofre#Azul47\n"), &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "maria@exemplo.com") {
 		t.Fatalf("output: %q", out.String())
 	}
 
-	_, user, _, err := auth.NewService(pool).Login(ctx, "maria@exemplo.com", "Senha@123")
+	_, user, _, err := auth.NewService(pool).Login(ctx, "maria@exemplo.com", "Cofre#Azul47", "192.0.2.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +48,10 @@ func TestCreateAdmin(t *testing.T) {
 		args  []string
 		stdin string
 	}{
-		{"duplicate email", []string{"-name", "Outra", "-email", "MARIA@exemplo.com"}, "Senha@123\n"},
+		{"duplicate email", []string{"-name", "Outra", "-email", "MARIA@exemplo.com"}, "Cofre#Azul47\n"},
 		{"weak password", []string{"-name", "Outra", "-email", "outra@exemplo.com"}, "fraca\n"},
-		{"missing email", []string{"-name", "Outra"}, "Senha@123\n"},
+		{"missing email", []string{"-name", "Outra"}, "Cofre#Azul47\n"},
+		{"common password", []string{"-name", "Outra", "-email", "outra@exemplo.com"}, "Senha@123\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 
 var (
 	ErrWeakPassword    = errors.New("weak password")
+	ErrCommonPassword  = errors.New("common password")
 	ErrPasswordTooLong = errors.New("password too long")
 	ErrEmailTaken      = errors.New("email already in use")
 	ErrUserNotFound    = errors.New("user not found")
@@ -89,6 +90,9 @@ func (s *Service) ResetPassword(ctx context.Context, actor auth.User, targetID i
 		}
 		if err := q.DeleteUserSessions(ctx, target.ID); err != nil {
 			return fmt.Errorf("delete sessions: %w", err)
+		}
+		if err := auth.ClearLoginAttempts(ctx, q, target.Email); err != nil {
+			return err
 		}
 		if err := q.CreateAuditLog(ctx, db.CreateAuditLogParams{
 			EntityType: "user",
@@ -321,7 +325,8 @@ func userError(op string, err error) error {
 }
 
 // ValidatePassword enforces the password policy in spec.md: at least 8
-// characters with uppercase, lowercase, digit and special character.
+// characters with uppercase, lowercase, digit and special character, and not
+// a common password.
 // bcrypt only uses the first 72 bytes, so longer passwords are refused.
 func ValidatePassword(password string) error {
 	if len(password) > 72 {
@@ -344,6 +349,9 @@ func ValidatePassword(password string) error {
 	}
 	if length < 8 || !upper || !lower || !digit || !special {
 		return ErrWeakPassword
+	}
+	if isCommonPassword(password) {
+		return ErrCommonPassword
 	}
 	return nil
 }

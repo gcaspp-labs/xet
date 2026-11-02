@@ -29,7 +29,7 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
 )
 
-const Password = "Senha@123"
+const Password = "Cofre#Azul47"
 
 type Env struct {
 	T             *testing.T
@@ -77,7 +77,7 @@ func Start(t *testing.T, pool *pgxpool.Pool, extra func(a *auth.Handler, r chi.R
 		SecureCookie: true, Messaging: whatsapp, SessionCheckInterval: 200 * time.Millisecond,
 	})
 	if extra != nil {
-		a := auth.NewHandler(logger, auth.NewService(pool), true)
+		a := auth.NewHandler(logger, auth.NewService(pool), true, false)
 		r := chi.NewRouter()
 		r.Mount("/", handler)
 		r.Route("/test", func(r chi.Router) { extra(a, r) })

@@ -13,6 +13,9 @@ type Config struct {
 	DatabaseURL  string
 	LogLevel     slog.Level
 	CookieSecure bool
+	// TrustProxy takes the client IP from X-Forwarded-For, for a backend
+	// reachable just through the reverse proxy.
+	TrustProxy bool
 	// MessagingProvider is "whatsmeow" or, for the end-to-end tests, "fake".
 	MessagingProvider string
 	// StorageDir is the directory of the message attachments.
@@ -40,6 +43,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("COOKIE_SECURE: %w", err)
 	}
 	cfg.CookieSecure = cookieSecure
+
+	trustProxy, err := strconv.ParseBool(getEnv("TRUST_PROXY", "false"))
+	if err != nil {
+		return Config{}, fmt.Errorf("TRUST_PROXY: %w", err)
+	}
+	cfg.TrustProxy = trustProxy
 
 	if err := cfg.LogLevel.UnmarshalText([]byte(getEnv("LOG_LEVEL", "info"))); err != nil {
 		return Config{}, fmt.Errorf("LOG_LEVEL: %w", err)

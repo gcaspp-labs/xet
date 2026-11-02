@@ -71,6 +71,29 @@ test('cadastro de setor exige o nome e recusa nome repetido', async ({ page, bas
   await expect(drawer.getByRole('alert')).toHaveText('Já existe um setor com este nome.')
 })
 
+test('senha comum é recusada ao cadastrar usuário', async ({ page, baseURL }) => {
+  const { sector } = await seedSector(baseURL!)
+  const { id } = unique()
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/usuarios')
+
+  await page.getByRole('button', { name: 'Novo usuário' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo usuário' })
+  await drawer.getByLabel('Nome').fill(`Atendente ${id}`)
+  await drawer.getByLabel('E-mail').fill(`comum.${id}@e2e.test`)
+  await chooseOption(page, 'Papel', 'Atendente')
+  await chooseOption(page, 'Setor', sector.name)
+  await drawer.getByLabel('Senha inicial').fill('Senha@123')
+  await drawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
+  await expect(drawer.getByRole('alert')).toHaveText(
+    'Senha muito comum. Escolha outra, mais difícil de adivinhar.',
+  )
+
+  await drawer.getByLabel('Senha inicial').fill(userPassword)
+  await drawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
+  await expect(drawer).toBeHidden()
+})
+
 test('administrador edita setor e desativa usuário', async ({ page, browser, baseURL }) => {
   const { sector, agent } = await seedSector(baseURL!)
   await signIn(page, admin.email, admin.password)

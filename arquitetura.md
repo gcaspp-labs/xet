@@ -89,6 +89,9 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 - Login com e-mail e senha (hash bcrypt), sessão gravada no PostgreSQL e cookie seguro (HttpOnly).
 - Senhas redefinidas por administradores e supervisores; sem recuperação automática.
 - Cookie `xet_session` com token aleatório de 32 bytes (somente o hash SHA-256 é gravado), `HttpOnly`, `SameSite=Lax` e `Secure` (desligável por `COOKIE_SECURE=false` no desenvolvimento sem HTTPS). Expiração deslizante de 12 horas, renovada a cada requisição autenticada.
+- Limite de tentativas na tabela `login_attempts`, sem estado em memória: a tentativa é contada em transação, antes de conferir a senha, e bloqueio responde 429. O IP é o da conexão; com `TRUST_PROXY=true`, é o último valor de `X-Forwarded-For`, o que o Caddy grava. O Compose liga essa opção porque o backend só é alcançado pelo Caddy; fora disso ela fica desligada, para o cabeçalho não ser forjado.
+- Senhas comuns: lista própria em `core/users/common_passwords.txt`, embutida no binário, sem serviço externo.
+- Limpeza: uma rotina do serviço apaga, ao iniciar e a cada hora, as sessões expiradas e as tentativas de login vencidas.
 - Rotas da API ficam sob `/api`. Sem sessão válida a resposta é 401; com sessão, mas sem permissão (papel ou setor), 403.
 - O primeiro administrador é criado pelo comando `server create-admin` (nome, e-mail e senha), executado no próprio binário do backend; a senha é lida da entrada padrão para não ficar no histórico do shell (`make create-admin` / `make dev-create-admin`).
 

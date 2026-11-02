@@ -34,6 +34,9 @@ type Options struct {
 	// SecureCookie sets the Secure flag on the session cookie. Disabled only
 	// in development over plain HTTP.
 	SecureCookie bool
+	// TrustProxy takes the client IP from X-Forwarded-For. Enabled only when
+	// the backend is reachable just through the reverse proxy.
+	TrustProxy bool
 	// Messaging is the provider of the sector numbers.
 	Messaging messaging.Provider
 	// SessionCheckInterval is how often an open WebSocket connection checks
@@ -52,7 +55,7 @@ func NewRouter(logger *slog.Logger, s Services, opts Options) http.Handler {
 
 	r.Get("/health", health)
 
-	authHandler := auth.NewHandler(logger, s.Auth, opts.SecureCookie)
+	authHandler := auth.NewHandler(logger, s.Auth, opts.SecureCookie, opts.TrustProxy)
 	r.Route("/api", func(r chi.Router) {
 		if opts.TestRoutes != nil {
 			r.Mount("/test", opts.TestRoutes)

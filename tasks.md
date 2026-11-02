@@ -311,16 +311,17 @@ Só muda onde o código fica, para ler o backend por funcionalidade. Comportamen
 
 Ajustes para fazer antes de escalar para outros setores, levantados durante o piloto.
 
-### [ ] T33 — Reforço da autenticação
+### [x] T33 — Reforço da autenticação
 
 - Limitar tentativas de login por e-mail e por IP, com bloqueio temporário após falhas seguidas, contra força bruta.
 - Recusar senhas comuns ou vazadas (lista de senhas conhecidas), como recomenda o NIST SP 800-63B-4.
 - Limpar periodicamente as sessões expiradas, inclusive de usuários que não voltam a fazer login.
-- Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
+
+A autenticação em dois fatores saiu desta task e foi para a T36.
 
 **Ler:** spec.md › Usuários e acesso; modelo-dados.md › `users`, `sessions`, `audit_logs`; arquitetura.md › Autenticação; design.md; código: `core/auth/auth.go`, `core/auth/auth_http.go`, `core/users/users.go`, `db/queries/sessions.sql`, `db/queries/users.sql`, `db/migrations/`, `src/pages/LoginPage.tsx`, `src/lib/auth.ts`, `core/auth/auth_test.go`, `e2e/auth.spec.ts`.
 
-**Pronto quando:** login bloqueia após o limite de tentativas; senha comum é recusada; sessões expiradas são removidas sem depender de novo login; usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
+**Pronto quando:** login bloqueia após o limite de tentativas; senha comum é recusada; sessões expiradas são removidas sem depender de novo login; testes cobrem cada regra.
 
 ## Fase 6 — Validação do piloto
 
@@ -349,6 +350,21 @@ Ajustes fora do código, feitos no GitHub por quem administra o repositório.
 **Ler:** arquitetura.md › Integração contínua; código: `.github/workflows/ci.yml`.
 
 **Pronto quando:** um PR com check falhando não pode ser mergeado e push direto na `main` é recusado.
+
+## Dependem da implantação
+
+Ficam para depois de escolher onde o sistema será implantado.
+
+### [ ] T36 — Autenticação em dois fatores
+
+Separada da T33 porque o envio de e-mail depende do local de implantação, ainda não escolhido. Antes de implementar, definir na spec o meio do segundo fator: código por e-mail ou aplicativo autenticador (TOTP), que não usa e-mail.
+
+- Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
+- O limite de tentativas da T33 vale também para o código do segundo fator.
+
+**Ler:** spec.md › Usuários e acesso; modelo-dados.md › `users`, `sessions`, `login_attempts`, `audit_logs`; arquitetura.md › Autenticação; design.md; código: `core/auth/auth.go`, `core/auth/auth_http.go`, `core/auth/auth_test.go`, `src/pages/LoginPage.tsx`, `src/lib/auth.ts`, `e2e/auth.spec.ts`.
+
+**Pronto quando:** usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
 
 ## Ideias em avaliação
 

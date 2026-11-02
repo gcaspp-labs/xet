@@ -560,6 +560,14 @@ type InternalNote struct {
 	CreatedAt time.Time
 }
 
+type LoginAttempt struct {
+	Scope         string
+	Subject       string
+	Failures      int32
+	LastFailureAt time.Time
+	LockedUntil   *time.Time
+}
+
 type MediaFile struct {
 	ID              int64
 	StorageKey      string

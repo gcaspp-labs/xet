@@ -128,6 +128,8 @@ func (h *Handler) userError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, http.StatusConflict, fmt.Sprintf("O usuário tem %s em atendimento. Transfira antes de desativar ou trocar de setor.", tickets))
 	case errors.Is(err, ErrWeakPassword):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, msgWeakPassword)
+	case errors.Is(err, ErrCommonPassword):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Senha muito comum. Escolha outra, mais difícil de adivinhar.")
 	case errors.Is(err, ErrPasswordTooLong):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "A senha pode ter no máximo 72 caracteres.")
 	case errors.Is(err, ErrInvalidUser):
@@ -170,6 +172,8 @@ func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, ErrWeakPassword):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, msgWeakPassword)
+	case errors.Is(err, ErrCommonPassword):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Senha muito comum. Escolha outra, mais difícil de adivinhar.")
 	case errors.Is(err, ErrPasswordTooLong):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "A senha pode ter no máximo 72 caracteres.")
 	case errors.Is(err, ErrUserNotFound):

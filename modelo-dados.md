@@ -10,7 +10,7 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 | --- | --- | --- | --- |
 | Organização interna | `internal/core/sectors` | Setor, Módulo | Setores e a lista de módulos de cada um |
 | Conexão do número | `internal/helpdesk` | — (colunas do WhatsApp em Setor) | Ligar e desligar o número de WhatsApp de cada setor |
-| Acesso | `internal/core/auth`, `internal/core/users` | Usuário, Sessão | Login, papéis e permissões; cadastro de usuários e senhas |
+| Acesso | `internal/core/auth`, `internal/core/users` | Usuário, Sessão, Tentativas de login | Login, papéis e permissões; cadastro de usuários e senhas |
 | Cadastro de clientes | `internal/core/directory` | Órgão, Contato | Pessoas atendidas e os órgãos a que pertencem |
 | Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções |
 | Mensagens | `internal/helpdesk` | Mensagem, Arquivo | Histórico de mensagens e anexos |
@@ -133,7 +133,21 @@ Encerrar: somente o responsável pelo chamado em atendimento, inclusive quando �
 | `expires_at` | timestamptz | Obrigatório |
 | `last_seen_at` | timestamptz | Atualizado no uso |
 
-Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua senha remove suas sessões. A expiração é deslizante: cada uso válido leva `expires_at` para 12 horas à frente.
+Um novo token é gerado a cada login. Desativar um usuário ou redefinir sua senha remove suas sessões. A expiração é deslizante: cada uso válido leva `expires_at` para 12 horas à frente. Sessões expiradas são apagadas periodicamente pelo serviço.
+
+### `login_attempts` — Tentativas de login
+
+Contagem de tentativas erradas por e-mail e por IP, sem ligação com `users`, porque e-mail não cadastrado também conta.
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `scope` | text | `email` ou `ip`; check |
+| `subject` | text | E-mail em minúsculas ou IP |
+| `failures` | integer | Tentativas erradas seguidas |
+| `last_failure_at` | timestamptz | Obrigatório; depois de 15 minutos a contagem recomeça |
+| `locked_until` | timestamptz | Fim do bloqueio; vazio sem bloqueio |
+
+Chave primária: `(scope, subject)`. Cada tentativa é contada na linha travada antes de conferir a senha, para tentativas simultâneas não passarem do limite. O login certo apaga a linha do e-mail e devolve a tentativa ao IP; redefinir a senha apaga a linha do e-mail. Linhas sem bloqueio ativo e com mais de 15 minutos são apagadas junto com as sessões expiradas.
 
 ## Cadastro de clientes
 

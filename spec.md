@@ -23,7 +23,11 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - Cada funcionário terá login individual com e-mail e senha. Não haverá recuperação de senha automática nesta etapa: administradores e supervisores redefinem a senha do usuário quando necessário.
 - Na redefinição, quem redefine digita a nova senha e a repassa ao usuário. As sessões abertas do usuário são encerradas.
 - A senha precisa ter no mínimo 8 caracteres, com ao menos uma letra maiúscula, uma minúscula, um número e um caractere especial. A LGPD não fixa regra de senha; o guia de segurança da ANPD para agentes de pequeno porte (item 41) recomenda que o sistema exija um nível de complexidade definido pela empresa, e esta é a regra adotada.
-- A sessão expira após 12 horas sem uso; cada acesso renova o prazo. Sair encerra a sessão imediatamente.
+- A senha também não pode ser comum ou fácil de adivinhar, como recomenda o NIST SP 800-63B-4. O sistema recusa senhas de uma lista própria de palavras e sequências conhecidas, inclusive com variações de maiúsculas, com números e símbolos no começo ou no fim, ou com letras trocadas por símbolos (`Senha@123`, `P@ssw0rd1!`). A regra vale ao cadastrar e ao redefinir a senha; senhas já gravadas continuam valendo.
+- Depois de 5 tentativas de login erradas seguidas com o mesmo e-mail, ou 30 vindas do mesmo IP, o login fica bloqueado por 15 minutos, mesmo com a senha certa. O limite por IP é maior porque um escritório costuma sair por um único IP. Tentativas erradas com mais de 15 minutos deixam de contar, e o login certo zera a contagem do e-mail. E-mail não cadastrado conta da mesma forma, para a resposta não revelar quais e-mails existem.
+- Não há botão de desbloqueio: redefinir a senha do usuário libera o e-mail dele na hora.
+- A autenticação em dois fatores fica para depois da escolha do local de implantação (T36).
+- A sessão expira após 12 horas sem uso; cada acesso renova o prazo. Sair encerra a sessão imediatamente. Sessões expiradas são apagadas periodicamente, mesmo de quem não volta a entrar.
 - Cada usuário pertence a um único setor, como atendente ou supervisor, e visualiza apenas as filas e os atendimentos do próprio setor.
 - O administrador funciona como supervisor global: acessa todos os setores, além da administração do sistema.
 - A tabela completa de permissões está em [modelo-dados.md](modelo-dados.md).
