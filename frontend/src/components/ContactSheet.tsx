@@ -35,8 +35,10 @@ import {
   type Contact,
   type Organization,
   useActiveModulesOf,
+  useContact,
   useOrganizations,
   useSaveContact,
+  useSaveContactName,
 } from '@/lib/directory'
 import { formatCnpj, normalizePhone, organizationLabel } from '@/lib/format'
 
@@ -59,6 +61,16 @@ const schema = z.object({
   sectorIds: z.array(z.number()).min(1, 'Selecione ao menos um setor.'),
   modules: z.array(z.object({ id: z.number(), sectorId: z.number() })),
 })
+
+// Cadastro durante o atendimento, sem órgão: vale só o nome.
+const nameOnlySchema = schema.extend({
+  phone: z.string().transform(normalizePhone),
+  organization: organizationSchema.nullable(),
+  sectorIds: z.array(z.number()),
+})
+
+const fullResolver = zodResolver(schema)
+const nameOnlyResolver = zodResolver(nameOnlySchema)
 
 type FormValues = z.input<typeof schema>
 
@@ -137,13 +149,17 @@ export function ContactSheet({
   open,
   onOpenChange,
   onSaved,
+  organizationOptional = false,
 }: {
   contact: Contact | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved?: (saved: Contact) => void
+  // Na conversa, o órgão é opcional: sem ele, grava-se só o nome (spec.md, Órgãos e contatos).
+  organizationOptional?: boolean
 }) {
   const save = useSaveContact()
+  const saveName = useSaveContactName()
   const { data: user } = useCurrentUser()
   // Para atendente e supervisor, a lista traz só o próprio setor: os demais do
   // contato aparecem para leitura, e o backend os preserva.
@@ -155,8 +171,11 @@ export function ContactSheet({
     setValue,
     getValues,
     formState: { errors },
-  } = useForm<FormValues, unknown, z.output<typeof schema>>({
-    resolver: zodResolver(schema),
+  } = useForm<FormValues, unknown, z.output<typeof nameOnlySchema>>({
+    resolver: (values, context, options) =>
+      organizationOptional && values.organization === null
+        ? nameOnlyResolver(values, context, options)
+        : fullResolver(values, context, options),
     defaultValues: {
       name: contact?.name ?? '',
       phone: contact?.phone ?? '',
@@ -171,6 +190,8 @@ export function ContactSheet({
   })
   const sectorIds = useWatch({ control, name: 'sectorIds' })
   const chosenModules = useWatch({ control, name: 'modules' })
+  const organization = useWatch({ control, name: 'organization' })
+  const nameOnly = organizationOptional && organization === null
   const editable = sectors.filter(
     (sector) => sector.active || contact?.sectors.some((linked) => linked.id === sector.id),
   )
@@ -203,7 +224,19 @@ export function ContactSheet({
     }
   }
 
-  const onSubmit = handleSubmit((values) =>
+  const onSubmit = handleSubmit((values) => {
+    const finish = (saved: Contact, message: string) => {
+      toast.success(message)
+      onSaved?.(saved)
+      onOpenChange(false)
+    }
+    if (contact && organizationOptional && values.organization === null) {
+      saveName.mutate(
+        { id: contact.id, name: values.name },
+        { onSuccess: (saved) => finish(saved, 'Nome salvo') },
+      )
+      return
+    }
     save.mutate(
       {
         id: contact?.id,
@@ -213,24 +246,30 @@ export function ContactSheet({
         sectorIds: values.sectorIds,
         moduleIds: values.modules.map((module) => module.id),
       },
-      {
-        onSuccess: (saved) => {
-          toast.success('Contato salvo')
-          onSaved?.(saved)
-          onOpenChange(false)
-        },
-      },
-    ),
-  )
+      { onSuccess: (saved) => finish(saved, 'Contato salvo') },
+    )
+  })
+
+  let title = contact ? 'Editar contato' : 'Novo contato'
+  let submitLabel = contact ? 'Salvar' : 'Cadastrar contato'
+  if (organizationOptional) {
+    title = 'Cadastrar contato'
+    submitLabel = nameOnly ? 'Salvar nome' : 'Cadastrar contato'
+  }
 
   return (
     <FormSheet
       open={open}
       onOpenChange={onOpenChange}
-      title={contact ? 'Editar contato' : 'Novo contato'}
-      submitLabel={contact ? 'Salvar' : 'Cadastrar contato'}
-      pending={save.isPending}
-      error={save.error?.message}
+      title={title}
+      description={
+        organizationOptional
+          ? 'Com órgão, o cadastro fica completo. Sem órgão, somente o nome é salvo: os demais dados são descartados e o contato continua não cadastrado.'
+          : undefined
+      }
+      submitLabel={submitLabel}
+      pending={save.isPending || saveName.isPending}
+      error={(nameOnly ? saveName : save).error?.message}
       onSubmit={onSubmit}
     >
       <Field data-invalid={!!errors.name}>
@@ -265,7 +304,8 @@ export function ContactSheet({
           )}
         />
         <FieldDescription>
-          Somente órgãos pré-cadastrados. Órgãos novos são cadastrados por um supervisor.
+          {organizationOptional && 'Opcional. '}Somente órgãos pré-cadastrados. Órgãos novos são
+          cadastrados por um supervisor.
         </FieldDescription>
         <FieldError errors={[errors.organization]} />
       </Field>
@@ -335,5 +375,33 @@ export function ContactSheet({
         </FieldDescription>
       )}
     </FormSheet>
+  )
+}
+
+// Cadastro de um contato já existente, montado só aberto: o formulário espera os
+// dados atuais, porque o nome pode ter mudado em outra tela depois da última consulta.
+export function RegisterContactSheet({
+  contactId,
+  onOpenChange,
+  onSaved,
+  organizationOptional,
+}: {
+  contactId: number
+  onOpenChange: (open: boolean) => void
+  onSaved?: (saved: Contact) => void
+  organizationOptional?: boolean
+}) {
+  const { data: contact, isFetchedAfterMount } = useContact(contactId, true)
+  if (!contact || !isFetchedAfterMount) {
+    return null
+  }
+  return (
+    <ContactSheet
+      contact={contact}
+      open
+      onOpenChange={onOpenChange}
+      onSaved={onSaved}
+      organizationOptional={organizationOptional}
+    />
   )
 }

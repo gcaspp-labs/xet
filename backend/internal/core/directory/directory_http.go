@@ -175,6 +175,8 @@ func WriteError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err
 		httpx.WriteError(w, http.StatusNotFound, "Órgão não encontrado.")
 	case errors.Is(err, ErrContactNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Contato não encontrado.")
+	case errors.Is(err, ErrContactRegistered):
+		httpx.WriteError(w, http.StatusConflict, "Contato já cadastrado. Altere o nome pelo cadastro do contato.")
 	case errors.Is(err, ErrSectorRequired):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Selecione ao menos um setor.")
 	case errors.Is(err, ErrInvalidSector):

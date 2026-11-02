@@ -404,7 +404,7 @@ Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como 
 
 **Pronto quando:** nas duas telas, escolher município ou órgão mostra só os contatos correspondentes, combinando com setor, módulo e texto digitado; a lista de órgãos acompanha o município; buscar o município, com ou sem acento, encontra os contatos dos órgãos dele.
 
-### [ ] T39 — Cadastrar o contato durante o atendimento
+### [x] T39 — Cadastrar o contato durante o atendimento
 
 - Aviso no topo da conversa e botão junto do contato no painel lateral, só em chamado aberto com contato não cadastrado, abrindo o `ContactSheet`.
 - Nesse caminho, o órgão é opcional. Sem órgão, uma rota própria grava só o nome e mantém `registered = false`; o formulário deixa claro que os demais dados não são salvos. Com órgão, vale o cadastro completo que já existe.

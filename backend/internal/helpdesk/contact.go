@@ -18,15 +18,17 @@ import (
 // such as the ticket of an unknown number (spec.md, Órgãos e contatos).
 // Tickets that already have an organization keep it. The open tickets are
 // locked before the contact, in the same order as the closing, so the two
-// never wait on each other.
+// never wait on each other. Every open ticket is announced, because each one
+// shows the contact.
 func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactID int64, in directory.ContactInput) (directory.Contact, error) {
 	var (
 		contact directory.Contact
-		linked  []db.Ticket
+		open    []db.Ticket
 	)
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		open, err := q.GetOpenTicketsOfContactForUpdate(ctx, contactID)
+		var err error
+		open, err = q.GetOpenTicketsOfContactForUpdate(ctx, contactID)
 		if err != nil {
 			return fmt.Errorf("lock open tickets: %w", err)
 		}
@@ -47,14 +49,40 @@ func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactI
 			if err := recordTicket(ctx, q, t.ID, "ticket_organization_linked", actor.ID, changes); err != nil {
 				return err
 			}
-			linked = append(linked, updated)
 		}
 		return nil
 	})
 	if err != nil {
 		return directory.Contact{}, err
 	}
-	for _, t := range linked {
+	for _, t := range open {
+		s.hub.Publish(realtime.TicketChanged(t.SectorID, t.ID))
+	}
+	return contact, nil
+}
+
+// SaveContactName saves only the name of an unregistered contact and announces
+// its open tickets, which show the name. The open tickets are locked before the
+// contact, as in RegisterContact.
+func (s *Service) SaveContactName(ctx context.Context, contactID int64, name string) (directory.Contact, error) {
+	var (
+		contact directory.Contact
+		open    []db.Ticket
+	)
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		var err error
+		open, err = q.GetOpenTicketsOfContactForUpdate(ctx, contactID)
+		if err != nil {
+			return fmt.Errorf("lock open tickets: %w", err)
+		}
+		contact, err = directory.SetContactName(ctx, q, contactID, name)
+		return err
+	})
+	if err != nil {
+		return directory.Contact{}, err
+	}
+	for _, t := range open {
 		s.hub.Publish(realtime.TicketChanged(t.SectorID, t.ID))
 	}
 	return contact, nil

@@ -56,7 +56,7 @@ export type ContactFilter = {
 export const searchLimit = 50
 
 const organizationsKey = ['organizations']
-const contactsKey = ['contacts']
+export const contactsKey = ['contacts']
 
 function searchPath(path: string, query: string, filters: Record<string, number | undefined>) {
   const params = new URLSearchParams()
@@ -239,6 +239,16 @@ export function useSaveContact() {
       id === undefined
         ? api<Contact>('/contacts', { method: 'POST', body })
         : api<Contact>(`/contacts/${id}`, { method: 'PUT', body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: contactsKey }),
+  })
+}
+
+// Salva só o nome de um contato não cadastrado, que continua não cadastrado.
+export function useSaveContactName() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      api<Contact>(`/contacts/${id}/name`, { method: 'PUT', body: { name } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: contactsKey }),
   })
 }

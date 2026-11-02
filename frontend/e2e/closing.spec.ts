@@ -325,3 +325,128 @@ test('os módulos do contato vêm marcados no encerramento e podem ser alterados
   await sheet.getByRole('button', { name: 'Encerrar' }).click()
   await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
 })
+
+test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  const { organization } = await prepare(baseURL!, sector.id)
+  const { id, phone } = unique()
+  const profile = `Perfil ${id}`
+  const saved = `Roberta ${id}`
+  const receive = (contactName: string, body: string) =>
+    request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+      data: { externalMessageId: `E2E-${unique().id}`, phone, contactName, body },
+    })
+  expect((await receive(profile, 'Bom dia')).ok()).toBeTruthy()
+
+  // O supervisor acompanha o painel e a lista de contatos em outras janelas.
+  const otherContext = await browser.newContext()
+  const otherPanel = await otherContext.newPage()
+  await signIn(otherPanel, supervisor, userPassword)
+  const otherQueue = otherPanel.getByRole('region', { name: 'Fila do setor' })
+  await expect(otherQueue.getByRole('link', { name: profile })).toBeVisible()
+  const otherContacts = await otherContext.newPage()
+  await otherContacts.goto('/')
+  await otherContacts.getByRole('link', { name: 'Contatos' }).click()
+  await expect(otherContacts.getByRole('row', { name: new RegExp(profile) })).toBeVisible()
+
+  // Na fila, sem assumir, o atendente vê o aviso e o botão junto do contato.
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: profile }).click()
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  const details = page.getByRole('region', { name: 'Chamado' })
+  await expect(conversation).toContainText('Contato não cadastrado')
+  await details.getByRole('button', { name: 'Cadastrar contato' }).click()
+
+  // Sem órgão, o formulário deixa claro que só o nome é salvo e dispensa os demais campos.
+  const sheet = page.getByRole('dialog', { name: 'Cadastrar contato' })
+  await expect(sheet).toContainText('somente o nome é salvo')
+  await expect(sheet.getByLabel('Nome')).toHaveValue(profile)
+  await sheet.getByLabel('Nome').fill(' ')
+  await sheet.getByRole('button', { name: 'Salvar nome' }).click()
+  await expect(sheet).toContainText('Informe o nome do contato.')
+  await sheet.getByLabel('Nome').fill(saved)
+  await sheet.getByLabel('Telefone').fill('')
+  await sheet.getByRole('button', { name: 'Salvar nome' }).click()
+  await expect(page.getByText('Nome salvo')).toBeVisible()
+  await expect(sheet).toBeHidden()
+
+  // O nome aparece na conversa e no painel lateral, e o aviso continua.
+  await expect(page.getByRole('heading', { name: saved })).toBeVisible()
+  await expect(details).toContainText(saved)
+  await expect(conversation).toContainText('Contato não cadastrado')
+  await expect(page.getByRole('button', { name: 'Assumir' })).toBeVisible()
+
+  // Quem já estava nas outras telas vê o nome sem recarregar.
+  await expect(otherQueue.getByRole('link', { name: saved })).toBeVisible()
+  await expect(otherContacts.getByRole('row', { name: new RegExp(saved) })).toBeVisible()
+  await otherContext.close()
+
+  // Nova mensagem recebida não troca o nome salvo.
+  expect((await receive(profile, 'Alguém me atende?')).ok()).toBeTruthy()
+  await expect(conversation).toContainText('Alguém me atende?')
+  await expect(page.getByRole('heading', { name: saved })).toBeVisible()
+
+  // Só com o nome, o encerramento ainda pede o órgão.
+  await page.getByRole('button', { name: 'Assumir' }).click()
+  await expect(page.getByText('Chamado assumido')).toBeVisible()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const closing = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await expect(closing).toContainText('Contato não cadastrado')
+  await expect(closing).toContainText(saved)
+  await closing.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(closing).toBeHidden()
+
+  // Com órgão, pelo aviso da conversa, vale o cadastro completo, com o telefone conferido.
+  await conversation.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(sheet.getByLabel('Nome')).toHaveValue(saved)
+  await expect(sheet.getByLabel('Telefone')).toHaveValue(phone)
+  await sheet.getByLabel('Órgão').fill(organization)
+  await page.getByRole('option', { name: organization }).click()
+  await sheet.getByLabel('Telefone').fill('')
+  await sheet.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(sheet).toContainText('Informe o telefone com DDI e DDD.')
+  await sheet.getByLabel('Telefone').fill(phone)
+  await sheet.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(page.getByText('Contato salvo')).toBeVisible()
+
+  // O aviso e o botão somem, e o chamado aberto recebe o órgão.
+  await expect(conversation).not.toContainText('Contato não cadastrado')
+  await expect(page.getByRole('button', { name: 'Cadastrar contato' })).toHaveCount(0)
+  await expect(details).toContainText(`${organization} — ${defaultMunicipality}`)
+})
+
+test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await prepare(baseURL!, sector.id)
+  const { id, phone } = unique()
+  const name = `Sem cadastro ${id}`
+  expect(
+    (
+      await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+        data: { externalMessageId: `E2E-${id}`, phone, contactName: name, body: 'Bom dia' },
+      })
+    ).ok(),
+  ).toBeTruthy()
+
+  // O cancelamento dispensa o cadastro: o contato continua sem cadastro, e o chamado sem aviso.
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name }).click()
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  await expect(conversation).toContainText('Contato não cadastrado')
+  await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
+  await sheet.getByLabel('Motivo').fill('Engano.')
+  await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+
+  const row = page.getByRole('region', { name: 'Realizados hoje' }).getByRole('row', { name })
+  await row.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
+  await expect(conversation).toContainText('Chamado cancelado.')
+  await expect(conversation).not.toContainText('Contato não cadastrado')
+  await expect(page.getByRole('button', { name: 'Cadastrar contato' })).toHaveCount(0)
+})

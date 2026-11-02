@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRightLeft,
   Ban,
@@ -31,6 +32,7 @@ import { toast } from 'sonner'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
+import { RegisterContactSheet } from '@/components/ContactSheet'
 import { ConversationList } from '@/components/ConversationList'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
@@ -56,6 +58,7 @@ import {
   type TicketDetail,
   maxFileSize,
   newRequestId,
+  ticketKey,
   useAddNote,
   useAssignFromTicket,
   useAssignments,
@@ -156,6 +159,11 @@ function MessageMedia({ message }: { message: Message }) {
       </span>
     </a>
   )
+}
+
+// O aviso de cadastro vale para quem abre o chamado, mesmo na fila (spec.md, Órgãos e contatos).
+function needsRegistration(ticket: TicketDetail) {
+  return ticket.status !== 'closed' && !ticket.contact.registered
 }
 
 // Só o responsável conduz a conversa, com o chamado aberto; o backend confere de novo.
@@ -552,7 +560,15 @@ function Composer({ ticketId }: { ticketId: number }) {
   )
 }
 
-function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }) {
+function ConversationCard({
+  ticket,
+  user,
+  onRegister,
+}: {
+  ticket: TicketDetail
+  user: User
+  onRegister: () => void
+}) {
   const { data: messages = [] } = useMessages(ticket.id)
   const { data: logs = [] } = useAssignments(ticket.id)
   const retry = useRetryMessage(ticket.id)
@@ -581,6 +597,19 @@ function ConversationCard({ ticket, user }: { ticket: TicketDetail; user: User }
       aria-label="Conversa"
       className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
     >
+      {needsRegistration(ticket) && (
+        <div className="border-b border-line-soft p-3">
+          <Alert variant="warning">
+            <CircleAlert strokeWidth={1.7} aria-hidden />
+            <AlertDescription className="flex flex-col items-start gap-2">
+              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de encerrar.
+              <Button variant="outline" size="sm" onClick={onRegister}>
+                Cadastrar contato
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length > 0 || logs.length > 0 ? (
           <ol className="flex flex-col gap-2">
@@ -760,7 +789,15 @@ function PreviousTicket({ previous }: { previous: NonNullable<TicketDetail['prev
   )
 }
 
-function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
+function DetailsTab({
+  ticket,
+  user,
+  onRegister,
+}: {
+  ticket: TicketDetail
+  user: User
+  onRegister: () => void
+}) {
   const status = ticketStatusLabel(ticket.status, ticket.closureType)
   const cancelled = ticket.closureType === 'cancelled'
   // O cancelado não lança o atendimento: não tem formulário de encerramento nem correções.
@@ -785,6 +822,11 @@ function DetailsTab({ ticket, user }: { ticket: TicketDetail; user: User }) {
           <span className="mono-num block caption text-ink-faint">
             {ticket.contact.phone ? formatPhone(ticket.contact.phone) : 'Sem telefone'}
           </span>
+          {needsRegistration(ticket) && (
+            <Button variant="outline" size="sm" className="mt-2" onClick={onRegister}>
+              Cadastrar contato
+            </Button>
+          )}
         </>,
       )}
       {row(
@@ -941,6 +983,7 @@ function HistoryTab({ ticket }: { ticket: TicketDetail }) {
 
 export default function TicketPage() {
   const ticketId = Number(useParams().ticketId)
+  const queryClient = useQueryClient()
   const { data: user } = useCurrentUser()
   const { data: ticket, error } = useTicket(ticketId)
   const assign = useAssignFromTicket(ticketId, ticket?.sector.id)
@@ -952,6 +995,8 @@ export default function TicketPage() {
   // Nova chave a cada abertura: o formulário começa limpo, com o fim sugerido no momento.
   const [closingKey, setClosingKey] = useState(0)
   const [correcting, setCorrecting] = useState(false)
+  const [registering, setRegistering] = useState(false)
+  const openRegistration = () => setRegistering(true)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
 
   if (error) {
@@ -1060,6 +1105,14 @@ export default function TicketPage() {
       )}
       {/* Sempre montado: quem transfere o próprio chamado perde o botão ao concluir. */}
       <TransferSheet ticket={ticket} open={transferring} onOpenChange={setTransferring} />
+      {registering && (
+        <RegisterContactSheet
+          contactId={ticket.contact.id}
+          organizationOptional
+          onOpenChange={setRegistering}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ticketKey(ticket.id) })}
+        />
+      )}
       {/* A tela de conversas usa a largura toda (design.md). */}
       <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]">
         {assign.error && (
@@ -1078,7 +1131,7 @@ export default function TicketPage() {
             user={user}
           />
         </div>
-        <ConversationCard ticket={ticket} user={user} />
+        <ConversationCard ticket={ticket} user={user} onRegister={openRegistration} />
         <Card role="region" aria-labelledby="ticket-info-title">
           <CardHeader>
             <CardTitle id="ticket-info-title">Chamado</CardTitle>
@@ -1090,7 +1143,7 @@ export default function TicketPage() {
               <TabsTrigger value="history">Histórico</TabsTrigger>
             </TabsList>
             <TabsContent value="details">
-              <DetailsTab ticket={ticket} user={user} />
+              <DetailsTab ticket={ticket} user={user} onRegister={openRegistration} />
             </TabsContent>
             <TabsContent value="notes">
               <NotesTab ticketId={ticket.id} canWrite={worksIn(ticket, user)} />
