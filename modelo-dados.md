@@ -159,7 +159,7 @@ Chave primária: `(scope, subject)`. Cada tentativa é contada na linha travada 
 | `name` | text | Obrigatório; único; com acentos ("Peruíbe") |
 | `audesp_code` | char(4) | Obrigatório; único; 4 dígitos, mantendo o zero à esquerda (`0790`) |
 
-Dados de referência carregados por migração, sem tela de cadastro nem auditoria. Fonte: [Cadastro Institucional do AUDESP](https://www.tce.sp.gov.br/audesp/documentacao/cadastro-institucional) (TCE-SP).
+Dados de referência carregados por migração, sem tela de cadastro nem auditoria. Fonte dos códigos: [Cadastro Institucional do AUDESP](https://www.tce.sp.gov.br/audesp/documentacao/cadastro-institucional) (TCE-SP). Os nomes seguem a grafia atual da [lista de municípios do IBGE](https://servicodados.ibge.gov.br/api/v1/localidades/estados/35/municipios), porque as planilhas do AUDESP divergem entre si e trazem erros (Florínia em vez de Florínea, São Luís em vez de São Luiz do Paraitinga).
 
 ### `organizations` — Órgão
 
