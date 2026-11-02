@@ -608,12 +608,20 @@ type Module struct {
 	UpdatedAt time.Time
 }
 
+type Municipality struct {
+	ID         int64
+	Name       string
+	AudespCode string
+	CreatedAt  time.Time
+}
+
 type Organization struct {
-	ID        int64
-	Name      string
-	Cnpj      *string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID             int64
+	Name           string
+	Cnpj           *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	MunicipalityID int64
 }
 
 type ProtocolCounter struct {

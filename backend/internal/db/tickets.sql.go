@@ -568,7 +568,7 @@ select
     t.id, t.protocol, t.status, t.sector_id, s.name as sector_name, t.spoke_with,
     t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    t.organization_id, o.name as organization_name,
+    t.organization_id, o.name as organization_name, o.municipality_id, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name,
     t.closed_by_id, cb.name as closed_by_name, t.closure_type,
     p.id as previous_id, p.protocol as previous_protocol, ps.name as previous_sector_name,
@@ -578,6 +578,7 @@ from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 left join users cb on cb.id = t.closed_by_id
 left join tickets p on p.id = t.previous_ticket_id
@@ -608,6 +609,8 @@ type GetTicketDetailRow struct {
 	ContactRegistered    bool
 	OrganizationID       *int64
 	OrganizationName     *string
+	MunicipalityID       *int64
+	MunicipalityName     *string
 	AssigneeID           *int64
 	AssigneeName         *string
 	ClosedByID           *int64
@@ -647,6 +650,8 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.ContactRegistered,
 		&i.OrganizationID,
 		&i.OrganizationName,
+		&i.MunicipalityID,
+		&i.MunicipalityName,
 		&i.AssigneeID,
 		&i.AssigneeName,
 		&i.ClosedByID,
@@ -704,11 +709,12 @@ const listClosedTickets = `-- name: ListClosedTickets :many
 select
     t.id, t.protocol, t.closure_type, t.closed_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    o.name as organization_name,
+    o.name as organization_name, m.name as municipality_name,
     t.closed_by_id, u.name as closed_by_name
 from tickets t
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 join users u on u.id = t.closed_by_id
 where t.sector_id = $1 and t.status = 'closed' and t.closed_at >= $2 and t.closed_at < $3
 order by t.closed_at desc, t.id desc
@@ -730,6 +736,7 @@ type ListClosedTicketsRow struct {
 	ContactPhone      *string
 	ContactRegistered bool
 	OrganizationName  *string
+	MunicipalityName  *string
 	ClosedByID        *int64
 	ClosedByName      string
 }
@@ -755,6 +762,7 @@ func (q *Queries) ListClosedTickets(ctx context.Context, arg ListClosedTicketsPa
 			&i.ContactPhone,
 			&i.ContactRegistered,
 			&i.OrganizationName,
+			&i.MunicipalityName,
 			&i.ClosedByID,
 			&i.ClosedByName,
 		); err != nil {
@@ -771,11 +779,12 @@ func (q *Queries) ListClosedTickets(ctx context.Context, arg ListClosedTicketsPa
 const listContactTickets = `-- name: ListContactTickets :many
 select
     t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
-    c.name as contact_name, o.name as organization_name, u.name as assignee_name
+    c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.contact_id = $1
   and ($2::bigint is null or t.sector_id = $2)
@@ -799,6 +808,7 @@ type ListContactTicketsRow struct {
 	Subject          *string
 	ContactName      string
 	OrganizationName *string
+	MunicipalityName *string
 	AssigneeName     *string
 }
 
@@ -823,6 +833,7 @@ func (q *Queries) ListContactTickets(ctx context.Context, arg ListContactTickets
 			&i.Subject,
 			&i.ContactName,
 			&i.OrganizationName,
+			&i.MunicipalityName,
 			&i.AssigneeName,
 		); err != nil {
 			return nil, err
@@ -870,11 +881,12 @@ const listOpenTickets = `-- name: ListOpenTickets :many
 select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    o.name as organization_name,
+    o.name as organization_name, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name
 from tickets t
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.sector_id = $1 and t.status <> 'closed'
 order by t.arrived_at, t.id
@@ -891,6 +903,7 @@ type ListOpenTicketsRow struct {
 	ContactPhone      *string
 	ContactRegistered bool
 	OrganizationName  *string
+	MunicipalityName  *string
 	AssigneeID        *int64
 	AssigneeName      *string
 }
@@ -916,6 +929,7 @@ func (q *Queries) ListOpenTickets(ctx context.Context, sectorID int64) ([]ListOp
 			&i.ContactPhone,
 			&i.ContactRegistered,
 			&i.OrganizationName,
+			&i.MunicipalityName,
 			&i.AssigneeID,
 			&i.AssigneeName,
 		); err != nil {
@@ -932,11 +946,12 @@ func (q *Queries) ListOpenTickets(ctx context.Context, sectorID int64) ([]ListOp
 const listOrganizationTickets = `-- name: ListOrganizationTickets :many
 select
     t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
-    c.name as contact_name, o.name as organization_name, u.name as assignee_name
+    c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.organization_id = $1
   and ($2::bigint is null or t.sector_id = $2)
@@ -960,6 +975,7 @@ type ListOrganizationTicketsRow struct {
 	Subject          *string
 	ContactName      string
 	OrganizationName *string
+	MunicipalityName *string
 	AssigneeName     *string
 }
 
@@ -984,6 +1000,7 @@ func (q *Queries) ListOrganizationTickets(ctx context.Context, arg ListOrganizat
 			&i.Subject,
 			&i.ContactName,
 			&i.OrganizationName,
+			&i.MunicipalityName,
 			&i.AssigneeName,
 		); err != nil {
 			return nil, err

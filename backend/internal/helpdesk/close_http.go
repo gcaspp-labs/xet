@@ -10,10 +10,10 @@ import (
 )
 
 type closingFormResponse struct {
-	Modules          []httpx.Ref `json:"modules"`
-	ContactModuleIDs []int64     `json:"contactModuleIds"`
-	Organization     *httpx.Ref  `json:"organization"`
-	StartedAt        time.Time   `json:"startedAt"`
+	Modules          []httpx.Ref            `json:"modules"`
+	ContactModuleIDs []int64                `json:"contactModuleIds"`
+	Organization     *httpx.OrganizationRef `json:"organization"`
+	StartedAt        time.Time              `json:"startedAt"`
 }
 
 // closingForm returns what the closing form starts with: the active modules
@@ -38,7 +38,10 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 		out.Modules[i] = httpx.Ref{ID: m.ID, Name: m.Name}
 	}
 	if o := form.Organization; o != nil {
-		out.Organization = &httpx.Ref{ID: o.ID, Name: o.Name}
+		out.Organization = &httpx.OrganizationRef{
+			ID: o.Organization.ID, Name: o.Organization.Name,
+			Municipality: httpx.Ref{ID: o.Organization.MunicipalityID, Name: o.MunicipalityName},
+		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }

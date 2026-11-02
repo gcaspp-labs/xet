@@ -125,3 +125,27 @@ func TestContactModulesKeepOnePerSector(t *testing.T) {
 		t.Fatalf("modules = %q, want %q", got, want)
 	}
 }
+
+// O município do órgão é obrigatório e sem valor padrão: a migração falha em banco com órgãos.
+func TestMunicipalitiesFailWithExistingOrganizations(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 18); err != nil {
+		t.Fatalf("up to 18: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `insert into organizations (name) values ('Prefeitura')`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := p.UpTo(ctx, 19); err == nil {
+		t.Fatal("up to 19 with organizations: want an error")
+	}
+}

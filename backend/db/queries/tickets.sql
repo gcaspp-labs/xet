@@ -35,11 +35,12 @@ returning *;
 select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    o.name as organization_name,
+    o.name as organization_name, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name
 from tickets t
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.sector_id = @sector_id and t.status <> 'closed'
 order by t.arrived_at, t.id;
@@ -50,11 +51,12 @@ order by t.arrived_at, t.id;
 select
     t.id, t.protocol, t.closure_type, t.closed_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    o.name as organization_name,
+    o.name as organization_name, m.name as municipality_name,
     t.closed_by_id, u.name as closed_by_name
 from tickets t
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 join users u on u.id = t.closed_by_id
 where t.sector_id = @sector_id and t.status = 'closed' and t.closed_at >= @closed_from and t.closed_at < @closed_until
 order by t.closed_at desc, t.id desc;
@@ -83,7 +85,7 @@ select
     t.id, t.protocol, t.status, t.sector_id, s.name as sector_name, t.spoke_with,
     t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    t.organization_id, o.name as organization_name,
+    t.organization_id, o.name as organization_name, o.municipality_id, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name,
     t.closed_by_id, cb.name as closed_by_name, t.closure_type,
     p.id as previous_id, p.protocol as previous_protocol, ps.name as previous_sector_name,
@@ -93,6 +95,7 @@ from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 left join users cb on cb.id = t.closed_by_id
 left join tickets p on p.id = t.previous_ticket_id
@@ -112,11 +115,12 @@ returning *;
 -- History of the contact, newest first. A null sector lists every sector (admin).
 select
     t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
-    c.name as contact_name, o.name as organization_name, u.name as assignee_name
+    c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.contact_id = @contact_id
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
@@ -127,11 +131,12 @@ limit 200;
 -- History of the organization, newest first. A null sector lists every sector (admin).
 select
     t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
-    c.name as contact_name, o.name as organization_name, u.name as assignee_name
+    c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.organization_id = @organization_id
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))

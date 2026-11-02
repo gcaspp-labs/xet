@@ -10,18 +10,19 @@ import (
 )
 
 const createOrganization = `-- name: CreateOrganization :one
-insert into organizations (name, cnpj)
-values ($1, $2)
-returning id, name, cnpj, created_at, updated_at
+insert into organizations (name, cnpj, municipality_id)
+values ($1, $2, $3)
+returning id, name, cnpj, created_at, updated_at, municipality_id
 `
 
 type CreateOrganizationParams struct {
-	Name string
-	Cnpj *string
+	Name           string
+	Cnpj           *string
+	MunicipalityID int64
 }
 
 func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error) {
-	row := q.db.QueryRow(ctx, createOrganization, arg.Name, arg.Cnpj)
+	row := q.db.QueryRow(ctx, createOrganization, arg.Name, arg.Cnpj, arg.MunicipalityID)
 	var i Organization
 	err := row.Scan(
 		&i.ID,
@@ -29,29 +30,40 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.Cnpj,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MunicipalityID,
 	)
 	return i, err
 }
 
 const getOrganization = `-- name: GetOrganization :one
-select id, name, cnpj, created_at, updated_at from organizations where id = $1
+select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, m.name as municipality_name
+from organizations o
+join municipalities m on m.id = o.municipality_id
+where o.id = $1
 `
 
-func (q *Queries) GetOrganization(ctx context.Context, id int64) (Organization, error) {
+type GetOrganizationRow struct {
+	Organization     Organization
+	MunicipalityName string
+}
+
+func (q *Queries) GetOrganization(ctx context.Context, id int64) (GetOrganizationRow, error) {
 	row := q.db.QueryRow(ctx, getOrganization, id)
-	var i Organization
+	var i GetOrganizationRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Cnpj,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.Organization.ID,
+		&i.Organization.Name,
+		&i.Organization.Cnpj,
+		&i.Organization.CreatedAt,
+		&i.Organization.UpdatedAt,
+		&i.Organization.MunicipalityID,
+		&i.MunicipalityName,
 	)
 	return i, err
 }
 
 const getOrganizationForUpdate = `-- name: GetOrganizationForUpdate :one
-select id, name, cnpj, created_at, updated_at from organizations
+select id, name, cnpj, created_at, updated_at, municipality_id from organizations
 where id = $1
 for update
 `
@@ -65,18 +77,22 @@ func (q *Queries) GetOrganizationForUpdate(ctx context.Context, id int64) (Organ
 		&i.Cnpj,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MunicipalityID,
 	)
 	return i, err
 }
 
 const listOrganizationNames = `-- name: ListOrganizationNames :many
-select id, name from organizations
-where id = any($1::bigint[])
+select o.id, o.name, m.name as municipality_name
+from organizations o
+join municipalities m on m.id = o.municipality_id
+where o.id = any($1::bigint[])
 `
 
 type ListOrganizationNamesRow struct {
-	ID   int64
-	Name string
+	ID               int64
+	Name             string
+	MunicipalityName string
 }
 
 func (q *Queries) ListOrganizationNames(ctx context.Context, ids []int64) ([]ListOrganizationNamesRow, error) {
@@ -88,7 +104,7 @@ func (q *Queries) ListOrganizationNames(ctx context.Context, ids []int64) ([]Lis
 	var items []ListOrganizationNamesRow
 	for rows.Next() {
 		var i ListOrganizationNamesRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.MunicipalityName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -100,11 +116,14 @@ func (q *Queries) ListOrganizationNames(ctx context.Context, ids []int64) ([]Lis
 }
 
 const searchOrganizations = `-- name: SearchOrganizations :many
-select id, name, cnpj, created_at, updated_at from organizations
+select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, m.name as municipality_name
+from organizations o
+join municipalities m on m.id = o.municipality_id
 where $1::text = ''
-   or immutable_unaccent(name) ilike immutable_unaccent($1)
-   or ($2::text <> '' and cnpj like $2)
-order by lower(name), id
+   or immutable_unaccent(o.name) ilike immutable_unaccent($1)
+   or immutable_unaccent(m.name) ilike immutable_unaccent($1)
+   or ($2::text <> '' and o.cnpj like $2)
+order by lower(o.name), lower(m.name), o.id
 limit $3
 `
 
@@ -114,24 +133,31 @@ type SearchOrganizationsParams struct {
 	MaxResults  int32
 }
 
+type SearchOrganizationsRow struct {
+	Organization     Organization
+	MunicipalityName string
+}
+
 // An empty query lists by name. name_pattern is an ILIKE pattern compared
-// without accents; cnpj_pattern is a LIKE pattern, empty when the query
-// cannot be part of a CNPJ.
-func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizationsParams) ([]Organization, error) {
+// without accents with the names of the organization and its municipality;
+// cnpj_pattern is a LIKE pattern, empty when the query cannot be part of a CNPJ.
+func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizationsParams) ([]SearchOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, searchOrganizations, arg.NamePattern, arg.CnpjPattern, arg.MaxResults)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Organization
+	var items []SearchOrganizationsRow
 	for rows.Next() {
-		var i Organization
+		var i SearchOrganizationsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Cnpj,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.Organization.ID,
+			&i.Organization.Name,
+			&i.Organization.Cnpj,
+			&i.Organization.CreatedAt,
+			&i.Organization.UpdatedAt,
+			&i.Organization.MunicipalityID,
+			&i.MunicipalityName,
 		); err != nil {
 			return nil, err
 		}
@@ -145,19 +171,25 @@ func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizatio
 
 const updateOrganization = `-- name: UpdateOrganization :one
 update organizations
-set name = $1, cnpj = $2
-where id = $3
-returning id, name, cnpj, created_at, updated_at
+set name = $1, cnpj = $2, municipality_id = $3
+where id = $4
+returning id, name, cnpj, created_at, updated_at, municipality_id
 `
 
 type UpdateOrganizationParams struct {
-	Name string
-	Cnpj *string
-	ID   int64
+	Name           string
+	Cnpj           *string
+	MunicipalityID int64
+	ID             int64
 }
 
 func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (Organization, error) {
-	row := q.db.QueryRow(ctx, updateOrganization, arg.Name, arg.Cnpj, arg.ID)
+	row := q.db.QueryRow(ctx, updateOrganization,
+		arg.Name,
+		arg.Cnpj,
+		arg.MunicipalityID,
+		arg.ID,
+	)
 	var i Organization
 	err := row.Scan(
 		&i.ID,
@@ -165,6 +197,7 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		&i.Cnpj,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MunicipalityID,
 	)
 	return i, err
 }

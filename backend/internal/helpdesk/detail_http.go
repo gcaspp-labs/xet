@@ -23,7 +23,7 @@ type ticketDetailResponse struct {
 	Subject      *string                 `json:"subject"`
 	Resolution   *string                 `json:"resolution"`
 	Contact      ticketContactResponse   `json:"contact"`
-	Organization *httpx.Ref              `json:"organization"`
+	Organization *httpx.OrganizationRef  `json:"organization"`
 	Assignee     *httpx.Ref              `json:"assignee"`
 	ClosedBy     *httpx.Ref              `json:"closedBy"`
 	ClosureType  *db.ClosureType         `json:"closureType"`
@@ -67,8 +67,11 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 		Subject: t.Subject, Resolution: t.Resolution,
 		Contact: ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},
 	}
-	if t.OrganizationID != nil && t.OrganizationName != nil {
-		out.Organization = &httpx.Ref{ID: *t.OrganizationID, Name: *t.OrganizationName}
+	if t.OrganizationID != nil && t.OrganizationName != nil && t.MunicipalityID != nil && t.MunicipalityName != nil {
+		out.Organization = &httpx.OrganizationRef{
+			ID: *t.OrganizationID, Name: *t.OrganizationName,
+			Municipality: httpx.Ref{ID: *t.MunicipalityID, Name: *t.MunicipalityName},
+		}
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {
 		out.Assignee = &httpx.Ref{ID: *t.AssigneeID, Name: *t.AssigneeName}

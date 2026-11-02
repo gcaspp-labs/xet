@@ -22,6 +22,14 @@ type Ref struct {
 	Name string `json:"name"`
 }
 
+// OrganizationRef points to an organization with its municipality, because the
+// name alone is ambiguous between cities.
+type OrganizationRef struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Municipality Ref    `json:"municipality"`
+}
+
 // URLID parses a numeric URL parameter; on failure it answers 404 with the message.
 func URLID(w http.ResponseWriter, r *http.Request, param, notFound string) (int64, bool) {
 	id, err := strconv.ParseInt(chi.URLParam(r, param), 10, 64)

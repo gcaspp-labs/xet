@@ -714,7 +714,7 @@ func TestHistoryByContactAndOrganization(t *testing.T) {
 
 	list := e.DoList(http.MethodGet, contactPath, anaToken)
 	if list[1]["status"] != "closed" || list[1]["subject"] != "Dúvida" || list[1]["sectorName"] != "Contabilidade" ||
-		list[1]["organizationName"] != "Câmara Municipal" || list[1]["closedAt"] == nil {
+		list[1]["organizationName"] != "Câmara Municipal" || list[1]["municipalityName"] != "Itu" || list[1]["closedAt"] == nil {
 		t.Fatalf("closed ticket in history = %v", list[1])
 	}
 	// A conversa de um chamado encerrado continua acessível a quem vê o setor.

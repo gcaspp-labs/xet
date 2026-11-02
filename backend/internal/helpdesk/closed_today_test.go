@@ -67,8 +67,8 @@ func TestClosedTodayListsWhatTheSectorClosed(t *testing.T) {
 		if contact, _ := first["contact"].(map[string]any); contact["phone"] != "5511988887777" {
 			t.Fatalf("contact = %v", first["contact"])
 		}
-		if first["organizationName"] != "Prefeitura de Campinas" {
-			t.Fatalf("organization = %v", first["organizationName"])
+		if first["organizationName"] != "Prefeitura de Campinas" || first["municipalityName"] != "Itu" {
+			t.Fatalf("organization = %v, municipality = %v", first["organizationName"], first["municipalityName"])
 		}
 	}
 
