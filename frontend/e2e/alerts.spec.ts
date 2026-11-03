@@ -93,6 +93,7 @@ async function setHidden(page: Page, hidden: boolean) {
     } else {
       sessionStorage.removeItem('test-hidden')
     }
+    document.dispatchEvent(new Event('visibilitychange'))
   }, hidden)
 }
 
@@ -340,6 +341,7 @@ test('voltar à aba durante a espera não notifica, e o som ainda toca', async (
     const observer = new MutationObserver(() => {
       if (document.body.textContent?.includes('Chamado recebido: Sara Retorno')) {
         sessionStorage.removeItem('test-hidden')
+        document.dispatchEvent(new Event('visibilitychange'))
         observer.disconnect()
       }
     })
@@ -353,6 +355,72 @@ test('voltar à aba durante a espera não notifica, e o som ainda toca', async (
   await setHidden(page, true)
   await receive(request, sector.id, 'Tito Oculto')
   await expect.poll(() => notified(page)).toEqual(['Tito Oculto'])
+})
+
+test('voltar a uma aba impede a notificação pendente na outra, com som único', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await context.grantPermissions(['notifications'])
+  await context.addInitScript(() => {
+    localStorage.setItem('alerts.browser', 'on')
+    localStorage.setItem('alerts.sound', 'on')
+  })
+  await spyOnAlerts(page)
+  await signIn(page, agent, userPassword)
+  const other = await context.newPage()
+  await spyOnAlerts(other)
+  await other.goto('/')
+  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
+  // O navegador só libera o som depois de uma interação com a página.
+  await other.locator('body').click({ position: { x: 1, y: 1 } })
+  await page.bringToFront()
+  await page.locator('body').click({ position: { x: 1, y: 1 } })
+  await setHidden(page, true)
+  await setHidden(other, true)
+
+  const allNotified = async () => [...(await notified(page)), ...(await notified(other))]
+  const allBeeps = async () => (await beeps(page)) + (await beeps(other))
+
+  // A resposta da fila chega depois nesta aba, e a pessoa volta a ela assim que vê o aviso.
+  let delay = 120
+  await page.route(`**/api/sectors/${sector.id}/tickets`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    await route.continue()
+  })
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('Chamado recebido: Wagner Retorno')) {
+        sessionStorage.removeItem('test-hidden')
+        document.dispatchEvent(new Event('visibilitychange'))
+        observer.disconnect()
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+  })
+  await receive(request, sector.id, 'Wagner Retorno')
+  await expect(page.getByText('Chamado recebido: Wagner Retorno')).toBeVisible()
+  await expect(other.getByText('Chamado recebido: Wagner Retorno')).toBeVisible()
+  await expect.poll(allBeeps).toBe(1)
+
+  // A aba visível responde depois da espera da outra: a de trás continua sem notificar.
+  delay = 1_500
+  await receive(request, sector.id, 'Xenia Lenta')
+  await expect(other.getByText('Chamado recebido: Xenia Lenta')).toBeVisible()
+  await expect(page.getByText('Chamado recebido: Xenia Lenta')).toBeVisible()
+  await expect.poll(allBeeps).toBe(2)
+  delay = 0
+
+  // O chamado seguinte prova que os alertas seguem ligados e únicos entre as abas; os anteriores,
+  // se tivessem notificado, estariam na lista.
+  await setHidden(page, true)
+  await receive(request, sector.id, 'Yara Oculta')
+  await expect.poll(allNotified).toEqual(['Yara Oculta'])
+  await expect.poll(allBeeps).toBe(3)
 })
 
 test('mudar as opções numa aba vale na outra, sem abrir o menu nela', async ({

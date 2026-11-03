@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react'
 const browserKey = 'alerts.browser'
 const soundKey = 'alerts.sound'
 const claimsKey = 'alerts.claims'
+const visibleTabKey = 'alerts.visible-tab'
 
 // Tempo em que o chamado fica reservado pela aba que alertou primeiro. Cobre as abas que recarregam
 // a fila pelo mesmo evento; depois dele, o chamado devolvido à fila pode alertar de novo.
@@ -132,6 +133,36 @@ function claim(ticketId: number): Promise<boolean> {
   return navigator.locks.request(claimsKey, () => reserve(ticketId))
 }
 
+let releaseVisibleTab: (() => void) | undefined
+
+// A aba visível segura uma trava compartilhada, que o navegador solta sozinho se ela fechar ou
+// travar. É assim que uma aba em segundo plano sabe que a pessoa está em outra aba do sistema.
+function syncVisibleTab() {
+  if (!('locks' in navigator)) {
+    return
+  }
+  if (document.visibilityState !== 'visible') {
+    releaseVisibleTab?.()
+    releaseVisibleTab = undefined
+  } else if (!releaseVisibleTab) {
+    const held = new Promise<void>((resolve) => {
+      releaseVisibleTab = resolve
+    })
+    void navigator.locks.request(visibleTabKey, { mode: 'shared' }, () => held)
+  }
+}
+
+syncVisibleTab()
+document.addEventListener('visibilitychange', syncVisibleTab)
+
+async function someTabVisible() {
+  if (!('locks' in navigator)) {
+    return false
+  }
+  const { held } = await navigator.locks.query()
+  return held?.some((lock) => lock.name === visibleTabKey) ?? false
+}
+
 function notify(ticketId: number, contactName: string, onOpen: () => void) {
   try {
     // Só o nome do contato: o texto da mensagem não sai da tela do sistema.
@@ -197,9 +228,9 @@ export function alertQueueEntry(ticketId: number, contactName: string, onOpen: (
     if (!(await claim(ticketId))) {
       return
     }
-    // Só notifica quem não viu o aviso na tela: a aba estava fora ao chegar e continua fora agora.
-    // A pessoa pode ter voltado à aba durante a espera.
-    if (hiddenOnArrival && isHidden() && browserEnabled()) {
+    // Só notifica quem não viu o aviso na tela: a aba estava fora ao chegar e continua fora agora,
+    // e nenhuma outra aba do sistema está à vista. A pessoa pode ter voltado durante a espera.
+    if (hiddenOnArrival && isHidden() && browserEnabled() && !(await someTabVisible())) {
       notify(ticketId, contactName, onOpen)
     }
     if (soundWanted) {
