@@ -128,6 +128,34 @@ test('item sai quando outra pessoa assume e volta quando o chamado é devolvido 
   await otherContext.close()
 })
 
+test('item sai quando outra pessoa cancela o chamado', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent, supervisor } = await connectedSector(baseURL!, request)
+  await receive(request, sector.id, 'Lauro Golpe')
+  await signIn(page, agent, userPassword)
+  await expect(bellOf(page)).toHaveAccessibleName('Notificações, 1 pendente')
+
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await signIn(other, supervisor, userPassword)
+  await other.getByRole('link', { name: 'Lauro Golpe' }).click()
+  await other.getByRole('button', { name: 'Cancelar chamado' }).click()
+  const sheet = other.getByRole('dialog', { name: 'Cancelar chamado' })
+  await sheet.getByLabel('Motivo').fill('Golpe do falso boleto.')
+  await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await expect(other.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+
+  await expect(bellOf(page)).toHaveAccessibleName('Notificações')
+  await bellOf(page).click()
+  await expect(page.getByRole('dialog').getByText('Lauro Golpe')).toHaveCount(0)
+  await expect(page.getByText('Nenhuma notificação.')).toBeVisible()
+  await otherContext.close()
+})
+
 test('quem perde a disputa pelo sino vê o erro dentro da lista', async ({
   page,
   browser,
@@ -166,7 +194,7 @@ test('quem perde a disputa pelo sino vê o erro dentro da lista', async ({
   await otherContext.close()
 })
 
-test('reconectar o WebSocket não repete o aviso dos chamados que já estavam na fila', async ({
+test('voltar a rede não repete o aviso dos chamados que entraram durante a queda', async ({
   page,
   request,
   baseURL,
@@ -179,12 +207,20 @@ test('reconectar o WebSocket não repete o aviso dos chamados que já estavam na
   await expect(page.getByText('Chamado recebido: Gabi Antes')).toBeVisible()
   await expect(page.getByText('Chamado recebido: Gabi Antes')).toBeHidden()
 
+  // A queda precisa estar de pé na página antes de a mensagem chegar.
   await page.context().setOffline(true)
+  await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false)
   await receive(request, sector.id, 'Hugo Durante')
   await page.context().setOffline(false)
-  // O contador alcança a fila sem o aviso do que chegou durante a queda.
+  // O contador alcança a fila quando a rede volta.
   await expect(bellOf(page)).toHaveAccessibleName('Notificações, 2 pendentes', { timeout: 30_000 })
-  await expect(page.getByText('Chamado recebido: Hugo Durante')).toHaveCount(0)
+
+  // Com a conexão em dia, o aviso volta a funcionar. Quando o aviso de Iara aparece, o de Hugo,
+  // se existisse, ainda estaria na tela. A contagem é pontual: o toHaveCount(0) esperaria o aviso
+  // sumir e passaria mesmo com ele tendo aparecido.
+  await receive(request, sector.id, 'Iara Depois')
+  await expect(page.getByText('Chamado recebido: Iara Depois')).toBeVisible()
+  expect(await page.getByText('Chamado recebido: Hugo Durante').count()).toBe(0)
 })
 
 test('atendente de outro setor não vê o chamado e não vê número desconectado', async ({
@@ -222,6 +258,20 @@ test('número desconectado deixa o contador em alerta para o supervisor', async 
   await expect(count).toBeVisible()
   await phone(request, sector.id, 'pair')
   await expect(count).toBeHidden()
+})
+
+test('administrador vê o número desconectado, com o contador em alerta', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector } = await seedSector(baseURL!)
+  await signIn(page, admin.email, admin.password)
+  const count = page.getByTestId('notification-count')
+  await expect(count).toHaveAttribute('data-alert', 'true')
+  await bellOf(page).click()
+  await expect(
+    page.getByRole('link', { name: `Número do setor ${sector.name} desconectado` }),
+  ).toBeVisible()
 })
 
 test('administrador vê os chamados de todos os setores, identificados', async ({

@@ -77,14 +77,21 @@ export function useRealtime() {
         }
         reconnecting = true
         setOnline(false)
+        // A fila pode mudar sem o sino ver: a próxima carga vira a referência, não novidade.
+        resetQueueBaseline()
         timer = setTimeout(connect, delay)
         delay = Math.min(delay * 2, maxDelay)
       }
     }
 
+    // A rede pode cair antes de o WebSocket perceber, e o TanStack Query recarrega a fila
+    // assim que ela volta, antes de o WebSocket reabrir. A referência vale desde a queda.
+    window.addEventListener('offline', resetQueueBaseline)
+
     connect()
     return () => {
       stopped = true
+      window.removeEventListener('offline', resetQueueBaseline)
       clearTimeout(timer)
       socket?.close()
     }

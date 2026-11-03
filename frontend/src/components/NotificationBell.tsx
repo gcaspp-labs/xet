@@ -43,7 +43,9 @@ export function NotificationBell({ user }: { user: User }) {
             aria-hidden
             className={cn(
               'mono-num absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-medium',
-              down.length > 0 ? 'bg-warning text-white' : 'bg-primary text-primary-foreground',
+              down.length > 0
+                ? 'bg-warning-soft text-warning-ink ring-1 ring-warning'
+                : 'bg-primary text-primary-foreground',
             )}
           >
             {count}
