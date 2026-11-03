@@ -450,7 +450,7 @@ A consulta que orientou esta task está nas referências: [Cloudflare Tunnel](ht
 
 **Pronto quando:** atendente vê Atendimento, Contatos e Órgãos; supervisor vê também Conexão e Módulos, sem Setores e Usuários; administrador vê tudo, com Usuários só em Configurações; os grupos e o breadcrumb seguem o `design.md`; o botão de recolher fica à direita com a barra aberta, no centro recolhida, e a altura dele e dos itens não muda; o teste de recolher em `sidebar.spec` reflete a nova regra; o combobox vazio tem respiro nos dois temas, com conferência visual.
 
-### [ ] T43 — Assumir chamado pela lista da conversa
+### [~] T43 — Assumir chamado pela lista da conversa
 
 - Em `ConversationList`, uma seção "Na fila (N)" no topo, separada do restante e só quando houver chamado na fila, com prévia e botão "Assumir" em cada item. Hoje a fila fica depois dos chamados do usuário, sem botão. O restante da ordem não muda.
 - Clicar no item abre a conversa; o botão fica fora do link, porque não pode haver botão dentro dele.
