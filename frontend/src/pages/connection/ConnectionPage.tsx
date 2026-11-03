@@ -195,7 +195,7 @@ export default function ConnectionPage() {
   return (
     <>
       <Topbar
-        breadcrumb={sector ? `Administração · ${sector.name}` : 'Administração'}
+        breadcrumb={sector ? `Helpdesk · ${sector.name}` : 'Helpdesk'}
         title="Conexão do WhatsApp"
       />
       <PageContent>

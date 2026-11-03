@@ -55,25 +55,21 @@ import { type Theme, useTheme } from '@/lib/theme'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 
-const mainItems: NavItem[] = [
+// A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
+const helpdeskItems: NavItem[] = [
   { to: '/', label: 'Atendimento', icon: MessagesSquare, roles: ['agent', 'supervisor', 'admin'] },
+  { to: '/contatos', label: 'Contatos', icon: BookUser, roles: ['agent', 'supervisor', 'admin'] },
+  { to: '/conexao', label: 'Conexão', icon: QrCode, roles: ['supervisor', 'admin'] },
 ]
 
 // Cadastro único de clientes: todos consultam; o backend restringe a edição de órgãos.
-const directoryItems: NavItem[] = [
-  { to: '/contatos', label: 'Contatos', icon: BookUser, roles: ['agent', 'supervisor', 'admin'] },
+const registryItems: NavItem[] = [
   { to: '/orgaos', label: 'Órgãos', icon: Landmark, roles: ['agent', 'supervisor', 'admin'] },
-]
-
-// A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
-const adminItems: NavItem[] = [
   { to: '/modulos', label: 'Módulos', icon: Boxes, roles: ['supervisor', 'admin'] },
-  { to: '/conexao', label: 'Conexão', icon: QrCode, roles: ['supervisor', 'admin'] },
   { to: '/admin/setores', label: 'Setores', icon: Building2, roles: ['admin'] },
-  { to: '/admin/usuarios', label: 'Usuários', icon: Users, roles: ['admin'] },
 ]
 
-function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; role: Role }) {
+function NavGroup({ label, items, role }: { label: string; items: NavItem[]; role: Role }) {
   const { pathname } = useLocation()
   const { setOpenMobile } = useSidebar()
   const visible = items.filter((item) => item.roles.includes(role))
@@ -82,11 +78,9 @@ function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; ro
   }
   return (
     <SidebarGroup>
-      {label && (
-        <SidebarGroupLabel className="overline whitespace-nowrap text-sidebar-foreground/70 group-data-[collapsible=icon]:mt-0">
-          {label}
-        </SidebarGroupLabel>
-      )}
+      <SidebarGroupLabel className="overline whitespace-nowrap text-sidebar-foreground/70 group-data-[collapsible=icon]:mt-0">
+        {label}
+      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {visible.map((item) => (
@@ -115,10 +109,11 @@ const themeItems: { value: Theme; label: string; icon: LucideIcon }[] = [
   { value: 'system', label: 'Sistema', icon: Monitor },
 ]
 
-function SettingsMenu() {
+function SettingsMenu({ role }: { role: Role }) {
   const [theme, setTheme] = useTheme()
   const logout = useLogout()
   const navigate = useNavigate()
+  const { setOpenMobile } = useSidebar()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<SidebarMenuButton />}>
@@ -138,6 +133,17 @@ function SettingsMenu() {
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        {role === 'admin' && (
+          <DropdownMenuItem
+            onClick={() => {
+              setOpenMobile(false)
+              navigate('/admin/usuarios')
+            }}
+          >
+            <Users strokeWidth={1.7} aria-hidden />
+            Usuários
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           disabled={logout.isPending}
           onClick={() =>
@@ -192,13 +198,12 @@ export default function AppLayout() {
           collapsible="icon"
           className="top-(--header-height) h-[calc(100svh-var(--header-height))]"
         >
-          <SidebarHeader className="hidden items-start md:flex">
+          <SidebarHeader className="hidden items-end group-data-[collapsible=icon]:items-center md:flex">
             <SidebarTrigger />
           </SidebarHeader>
           <SidebarContent>
-            <NavGroup items={mainItems} role={user.role} />
-            <NavGroup label="Cadastro" items={directoryItems} role={user.role} />
-            <NavGroup label="Administração" items={adminItems} role={user.role} />
+            <NavGroup label="Helpdesk" items={helpdeskItems} role={user.role} />
+            <NavGroup label="Cadastro" items={registryItems} role={user.role} />
           </SidebarContent>
           <SidebarFooter className="gap-3 border-t border-sidebar-border px-2 py-3">
             <div className="min-w-0 px-2 whitespace-nowrap transition-[opacity,visibility] duration-200 group-data-[collapsible=icon]:invisible group-data-[collapsible=icon]:opacity-0">
@@ -207,7 +212,7 @@ export default function AppLayout() {
             </div>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SettingsMenu />
+                <SettingsMenu role={user.role} />
               </SidebarMenuItem>
             </SidebarMenu>
             <p className="caption px-2 whitespace-nowrap text-sidebar-foreground/60 transition-[opacity,visibility] duration-200 group-data-[collapsible=icon]:invisible group-data-[collapsible=icon]:opacity-0">

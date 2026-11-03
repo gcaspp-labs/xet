@@ -137,7 +137,7 @@ export default function ModulesPage() {
   return (
     <>
       <Topbar
-        breadcrumb={sector ? `Administração · ${sector.name}` : 'Administração'}
+        breadcrumb={sector ? `Cadastro · ${sector.name}` : 'Cadastro'}
         title="Módulos"
         action={
           sectorId !== undefined && (

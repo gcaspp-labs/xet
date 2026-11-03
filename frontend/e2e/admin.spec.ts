@@ -25,7 +25,9 @@ test('administrador cadastra a Contabilidade e seus usuários', async ({ page, b
   await expect(row).toContainText('Não conectado')
   await expect(row).toContainText('Desconectado')
 
-  await page.getByRole('link', { name: 'Usuários' }).click()
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await page.getByRole('menuitem', { name: 'Usuários' }).click()
+  await expect(page).toHaveURL(/\/admin\/usuarios$/)
   const people = [
     { name: `Supervisora ${id}`, email: `sup.${id}@e2e.test`, role: 'Supervisor' },
     { name: `Atendente ${id}`, email: `agente.${id}@e2e.test`, role: 'Atendente' },
@@ -250,7 +252,7 @@ test('supervisor cadastra e desativa módulos do próprio setor', async ({ page,
   await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0)
 
   await page.getByRole('link', { name: 'Módulos' }).click()
-  await expect(page.getByText(`Administração · ${sector.name}`)).toBeVisible()
+  await expect(page.getByText(`Cadastro · ${sector.name}`)).toBeVisible()
   await expect(page.getByText('Nenhum módulo cadastrado.')).toBeVisible()
 
   for (const name of ['Folha de pagamento', 'Contabilidade geral']) {
@@ -290,7 +292,7 @@ test('administrador gerencia módulos de qualquer setor', async ({ page, baseURL
   await signIn(page, admin.email, admin.password)
   await page.getByRole('link', { name: 'Módulos' }).click()
   await chooseOption(page, 'Setor', sector.name)
-  await expect(page.getByText(`Administração · ${sector.name}`)).toBeVisible()
+  await expect(page.getByText(`Cadastro · ${sector.name}`)).toBeVisible()
 
   await page.getByRole('button', { name: 'Novo módulo' }).click()
   const drawer = page.getByRole('dialog', { name: 'Novo módulo' })

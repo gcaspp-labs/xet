@@ -95,7 +95,7 @@ export default function SectorsPage() {
   return (
     <>
       <Topbar
-        breadcrumb="Administração"
+        breadcrumb="Cadastro"
         title="Setores"
         action={
           <Button onClick={() => openSheet(null)}>
