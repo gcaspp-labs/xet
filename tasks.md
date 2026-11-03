@@ -449,7 +449,7 @@ A consulta que orientou esta task está nas referências: [Cloudflare Tunnel](ht
 
 **Pronto quando:** com outra conversa aberta e texto digitado, assumir pela lista não muda a tela nem apaga o texto, e o link abre a conversa assumida; o chamado sai de "Na fila" e aparece como "Você"; com a seção vazia, ela não aparece; dois atendentes disputando o mesmo chamado: um assume e o outro vê o erro; assumir no painel continua abrindo a conversa.
 
-### [ ] T44 — Sino de notificações
+### [~] T44 — Sino de notificações
 
 Depende da T43, porque reaproveita o assumir sem sair da tela.
 
