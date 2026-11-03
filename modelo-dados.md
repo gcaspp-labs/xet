@@ -120,6 +120,7 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | Alterar setores e módulos do contato | Próprio setor | Próprio setor | Todos os setores |
 | Importar contatos do WhatsApp do setor | Próprio setor | Próprio setor | Todos os setores |
 | Cadastrar e editar órgãos | — | Sim | Sim |
+| Consultar CNPJ no cadastro de órgão | — | Sim | Sim |
 
 Transferir entre atendentes: o responsável transfere o próprio chamado; supervisor (do setor) e administrador transferem qualquer chamado em atendimento. O destino é um usuário ativo do setor do chamado (atendente ou supervisor).
 
@@ -158,6 +159,7 @@ Chave primária: `(scope, subject)`. Cada tentativa é contada na linha travada 
 | --- | --- | --- |
 | `name` | text | Obrigatório; único; com acentos ("Peruíbe") |
 | `audesp_code` | char(4) | Obrigatório; único; 4 dígitos, mantendo o zero à esquerda (`0790`) |
+| `ibge_code` | char(7) | Obrigatório; único; 7 dígitos (`3500105`). Acha o município devolvido pela consulta de CNPJ sem depender da grafia |
 
 Dados de referência carregados por migração, sem tela de cadastro nem auditoria. Fonte dos códigos: [Cadastro Institucional do AUDESP](https://www.tce.sp.gov.br/audesp/documentacao/cadastro-institucional) (TCE-SP). Os nomes seguem a grafia atual da [lista de municípios do IBGE](https://servicodados.ibge.gov.br/api/v1/localidades/estados/35/municipios), porque as planilhas do AUDESP divergem entre si e trazem erros (Florínia em vez de Florínea, São Luís em vez de São Luiz do Paraitinga).
 

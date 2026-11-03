@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Landmark, Plus } from 'lucide-react'
+import { CircleAlert, Landmark, Plus } from 'lucide-react'
 import { useDeferredValue, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -9,6 +9,7 @@ import { MunicipalityPicker } from '@/components/MunicipalityPicker'
 import { SearchBox } from '@/components/SearchBox'
 import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
@@ -26,11 +27,14 @@ import { useCurrentUser } from '@/lib/auth'
 import {
   type Organization,
   searchLimit,
+  useLookupCnpj,
   useMunicipalities,
   useOrganizations,
   useSaveOrganization,
 } from '@/lib/directory'
 import { formatCnpj, isValidCnpj, normalizeCnpj, organizationLabel } from '@/lib/format'
+
+const invalidCnpjMessage = 'CNPJ inválido. Confira os 14 caracteres.'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do órgão.'),
@@ -41,10 +45,7 @@ const schema = z.object({
   cnpj: z
     .string()
     .transform(normalizeCnpj)
-    .refine(
-      (value) => value === '' || isValidCnpj(value),
-      'CNPJ inválido. Confira os 14 caracteres.',
-    ),
+    .refine((value) => value === '' || isValidCnpj(value), invalidCnpjMessage),
 })
 
 type FormValues = z.input<typeof schema>
@@ -59,11 +60,16 @@ function OrganizationSheet({
   onOpenChange: (open: boolean) => void
 }) {
   const save = useSaveOrganization()
+  const lookup = useLookupCnpj()
   const { data: municipalities = [] } = useMunicipalities(open)
   const {
     register,
     control,
     handleSubmit,
+    getValues,
+    setValue,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm<FormValues, unknown, z.output<typeof schema>>({
     resolver: zodResolver(schema),
@@ -90,6 +96,27 @@ function OrganizationSheet({
       },
     ),
   )
+
+  // A consulta só preenche o formulário: nada é salvo sem a confirmação de quem cadastra.
+  const onLookup = () => {
+    const cnpj = normalizeCnpj(getValues('cnpj'))
+    if (!isValidCnpj(cnpj)) {
+      lookup.reset()
+      setError('cnpj', { message: invalidCnpjMessage })
+      return
+    }
+    clearErrors('cnpj')
+    lookup.mutate(cnpj, {
+      onSuccess: ({ name, municipality }) => {
+        setValue('name', name)
+        setValue('municipality', municipality)
+        clearErrors('name')
+        if (municipality) {
+          clearErrors('municipality')
+        }
+      },
+    })
+  }
 
   return (
     <FormSheet
@@ -125,15 +152,34 @@ function OrganizationSheet({
       </Field>
       <Field data-invalid={!!errors.cnpj}>
         <FieldLabel htmlFor="organization-cnpj">CNPJ</FieldLabel>
-        <Input
-          id="organization-cnpj"
-          className="mono-num uppercase"
-          aria-invalid={!!errors.cnpj}
-          {...register('cnpj')}
-        />
+        <div className="flex gap-2">
+          <Input
+            id="organization-cnpj"
+            className="mono-num uppercase"
+            aria-invalid={!!errors.cnpj}
+            {...register('cnpj', { onChange: () => lookup.reset() })}
+          />
+          <Button type="button" variant="outline" disabled={lookup.isPending} onClick={onLookup}>
+            {lookup.isPending ? 'Consultando...' : 'Consultar'}
+          </Button>
+        </div>
         <FieldDescription>Opcional. Aceita o CNPJ numérico e o alfanumérico.</FieldDescription>
         <FieldError errors={[errors.cnpj]} />
       </Field>
+      {lookup.isSuccess && lookup.data.municipality && (
+        <p role="status" className="caption text-ink-soft">
+          Nome e município sugeridos pela consulta. Confira os dados antes de salvar.
+        </p>
+      )}
+      {(lookup.isError || (lookup.isSuccess && !lookup.data.municipality)) && (
+        <Alert variant="warning">
+          <CircleAlert strokeWidth={1.7} aria-hidden />
+          <AlertDescription>
+            {lookup.error?.message ??
+              'Município não encontrado na lista. Selecione o município e confira o nome antes de salvar.'}
+          </AlertDescription>
+        </Alert>
+      )}
     </FormSheet>
   )
 }

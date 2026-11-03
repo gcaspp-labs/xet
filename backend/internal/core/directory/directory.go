@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -41,6 +42,8 @@ var (
 	ErrSectorNotAllowed      = errors.New("sector not allowed")
 	ErrInvalidModules        = errors.New("invalid modules")
 	ErrOneModulePerSector    = errors.New("one module per sector")
+	ErrCNPJNotFound          = errors.New("cnpj not found by the lookup")
+	ErrCNPJLookupUnavailable = errors.New("cnpj lookup unavailable")
 )
 
 var phonePattern = regexp.MustCompile(`^[0-9]{10,15}$`)
@@ -122,12 +125,18 @@ func cnpjCheckDigit(prefix string) byte {
 }
 
 type Service struct {
-	pool *pgxpool.Pool
-	q    *db.Queries
+	pool       *pgxpool.Pool
+	q          *db.Queries
+	cnpjAPIURL string
+	cnpjClient *http.Client
 }
 
-func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool, q: db.New(pool)}
+// NewService creates the service; cnpjAPIURL is the base URL of the CNPJ lookup API.
+func NewService(pool *pgxpool.Pool, cnpjAPIURL string) *Service {
+	return &Service{
+		pool: pool, q: db.New(pool),
+		cnpjAPIURL: cnpjAPIURL, cnpjClient: &http.Client{Timeout: cnpjLookupTimeout},
+	}
 }
 
 // Organization is an organization with the name of its municipality.

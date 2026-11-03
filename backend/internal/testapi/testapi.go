@@ -42,13 +42,15 @@ type Env struct {
 	WhatsApp *fake.Adapter
 	// Files holds the attachments of the messages.
 	Files storage.Storage
+	// CNPJAPI takes the place of the CNPJ lookup API.
+	CNPJAPI *FakeCNPJAPI
 }
 
 // RouterWith is the router of the API on the same database with another
 // provider, for a test of what a provider may not offer.
 func (e *Env) RouterWith(provider messaging.Provider) http.Handler {
 	return server.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), server.Services{
-		Auth: auth.NewService(e.Pool), Users: users.NewService(e.Pool), Sectors: e.Sectors, Directory: directory.NewService(e.Pool), Helpdesk: e.TicketService, Hub: realtime.NewHub(),
+		Auth: auth.NewService(e.Pool), Users: users.NewService(e.Pool), Sectors: e.Sectors, Directory: directory.NewService(e.Pool, e.CNPJAPI.URL()), Helpdesk: e.TicketService, Hub: realtime.NewHub(),
 	}, server.Options{SecureCookie: true, Messaging: provider})
 }
 
@@ -71,8 +73,9 @@ func Start(t *testing.T, pool *pgxpool.Pool, extra func(a *auth.Handler, r chi.R
 	whatsapp := fake.New(tickets.HandleEvent)
 	tickets.SetProvider(whatsapp)
 	t.Cleanup(tickets.Wait)
+	cnpjAPI := newFakeCNPJAPI(t)
 	handler := server.NewRouter(logger, server.Services{
-		Auth: auth.NewService(pool), Users: users.NewService(pool), Sectors: sectorService, Directory: directory.NewService(pool), Helpdesk: tickets, Hub: hub,
+		Auth: auth.NewService(pool), Users: users.NewService(pool), Sectors: sectorService, Directory: directory.NewService(pool, cnpjAPI.URL()), Helpdesk: tickets, Hub: hub,
 	}, server.Options{
 		SecureCookie: true, Messaging: whatsapp, SessionCheckInterval: 200 * time.Millisecond,
 	})
@@ -85,7 +88,7 @@ func Start(t *testing.T, pool *pgxpool.Pool, extra func(a *auth.Handler, r chi.R
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &Env{T: t, Pool: pool, Q: db.New(pool), URL: srv.URL, Sectors: sectorService, TicketService: tickets, WhatsApp: whatsapp, Files: files}
+	return &Env{T: t, Pool: pool, Q: db.New(pool), URL: srv.URL, Sectors: sectorService, TicketService: tickets, WhatsApp: whatsapp, Files: files, CNPJAPI: cnpjAPI}
 }
 
 func (e *Env) Sector(name string) db.Sector {

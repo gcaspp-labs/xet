@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 // Portas próprias para não colidir com servidores de desenvolvimento.
 const backendPort = 18080
 const frontendPort = 15173
+const cnpjApiPort = 18081
 
 export default defineConfig({
   testDir: './e2e',
@@ -30,6 +31,12 @@ export default defineConfig({
   ],
   webServer: [
     {
+      // API de CNPJ falsa: os testes nunca chamam o serviço real.
+      command: 'node e2e/fake-cnpj-api.mjs',
+      url: `http://localhost:${cnpjApiPort}/health`,
+      env: { PORT: String(cnpjApiPort) },
+    },
+    {
       command: 'go run ./cmd/server',
       cwd: '../backend',
       url: `http://localhost:${backendPort}/health`,
@@ -39,6 +46,7 @@ export default defineConfig({
         COOKIE_SECURE: 'false',
         // WhatsApp simulado; as rotas /api/test/messaging controlam o celular falso.
         MESSAGING_PROVIDER: 'fake',
+        CNPJ_API_URL: `http://localhost:${cnpjApiPort}/cnpj`,
       },
     },
     {

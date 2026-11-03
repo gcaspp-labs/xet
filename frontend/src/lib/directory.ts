@@ -34,6 +34,9 @@ export type Contact = {
 
 export type ContactModule = { id: number; sectorId: number; name: string }
 
+// Sugestão da consulta de CNPJ; sem município, ele fica para escolher à mão.
+export type CnpjSuggestion = { name: string; municipality: MunicipalityRef | null }
+
 export type OrganizationInput = { name: string; cnpj: string; municipalityId: number }
 
 export type ContactInput = {
@@ -97,6 +100,13 @@ export function useOrganizations(query: string, municipalityId?: number) {
     queryKey: [...organizationsKey, query.trim(), municipalityId],
     queryFn: () => api<Organization[]>(searchPath('/organizations', query, { municipalityId })),
     placeholderData: keepPreviousData,
+  })
+}
+
+// Parte de um clique e não salva nada: é uma mutação só para não repetir a chamada à API externa.
+export function useLookupCnpj() {
+  return useMutation({
+    mutationFn: (cnpj: string) => api<CnpjSuggestion>(`/cnpj/${cnpj}`),
   })
 }
 

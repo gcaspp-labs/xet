@@ -33,6 +33,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
 		r.Get("/municipalities", h.listMunicipalities)
+		r.Get("/cnpj/{cnpj}", h.lookupCNPJ)
 		r.Post("/organizations", h.createOrganization)
 		r.Put("/organizations/{organizationID}", h.updateOrganization)
 	})
@@ -169,6 +170,10 @@ func WriteError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Selecione o município do órgão.")
 	case errors.Is(err, ErrMunicipalityNotFound):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Município não encontrado. Selecione um da lista.")
+	case errors.Is(err, ErrCNPJNotFound):
+		httpx.WriteError(w, http.StatusNotFound, "CNPJ não encontrado na consulta. Preencha os dados manualmente.")
+	case errors.Is(err, ErrCNPJLookupUnavailable):
+		httpx.WriteError(w, http.StatusServiceUnavailable, "Consulta de CNPJ indisponível. Preencha os dados manualmente.")
 	case errors.Is(err, ErrPhoneTaken):
 		httpx.WriteError(w, http.StatusConflict, "Já existe um contato com este telefone.")
 	case errors.Is(err, ErrOrganizationNotFound):

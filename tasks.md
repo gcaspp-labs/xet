@@ -415,7 +415,7 @@ Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como 
 
 **Pronto quando:** dá para salvar só o nome, sem encerrar e sem assumir, e ele aparece na conversa, no painel e na lista de contatos; nova mensagem recebida não troca o nome salvo; só com o nome, o aviso continua e o encerramento pede o órgão; o cadastro completo tira o aviso, e o chamado aberto recebe o órgão, com auditoria; contato já cadastrado e chamado encerrado não mostram o aviso.
 
-### [ ] T40 — Consulta de CNPJ no cadastro de órgão
+### [x] T40 — Consulta de CNPJ no cadastro de órgão
 
 Antes de implementar, escolher a API e registrar a justificativa em `arquitetura.md`, avaliando limites, custos, dados devolvidos e suporte ao CNPJ alfanumérico. Opções a avaliar: BrasilAPI, ReceitaWS e CNPJá. Se ela devolver o código IBGE, avaliar guardá-lo em `municipalities` para achar o município sem depender da grafia.
 
