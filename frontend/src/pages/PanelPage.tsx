@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/table'
 import { useSectors } from '@/lib/admin'
 import { type User, useCurrentUser } from '@/lib/auth'
+import { useAssignTicket } from '@/lib/conversation'
 import {
   closureTypeLabels,
   formatMessageTime,
@@ -45,7 +46,6 @@ import {
   type ClosedTicket,
   lastMessagePreview,
   type TicketSummary,
-  useAssignTicket,
   useClosedToday,
   useTickets,
   useWorkload,

@@ -248,6 +248,23 @@ export function useAssignFromTicket(ticketId: number, sectorId: number | undefin
   })
 }
 
+// Assumir chamado sem estar na conversa dele, pelo painel ou pela lista; o backend
+// decide entre cliques simultâneos.
+export function useAssignTicket(sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ticketId: number) => api<void>(`/tickets/${ticketId}/assign`, { method: 'POST' }),
+    // Em sucesso ou conflito, a lista e a conversa aberta mostram o responsável atual.
+    onSettled: (_data, _error, ticketId) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
+      ]),
+  })
+}
+
 // Transfere o chamado em atendimento para outra pessoa do setor; o backend
 // confere quem pode transferir e o destino.
 export function useTransferTicket(ticketId: number, sectorId: number) {

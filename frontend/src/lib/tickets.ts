@@ -71,20 +71,6 @@ export function useClosedToday(sectorId: number | undefined) {
   })
 }
 
-// Assumir chamado da fila; o backend decide entre cliques simultâneos.
-export function useAssignTicket(sectorId: number) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (ticketId: number) => api<void>(`/tickets/${ticketId}/assign`, { method: 'POST' }),
-    // Em sucesso ou conflito, a lista passa a mostrar o responsável atual.
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
-      ]),
-  })
-}
-
 const mediaLabels: Record<Exclude<MessageType, 'text'>, string> = {
   image: 'Imagem',
   video: 'Vídeo',
