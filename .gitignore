@@ -3,3 +3,4 @@ deploy/.env
 .claude/settings.local.json
 .dev-credentials
 backend/data/
+.verify-app/
