@@ -16,6 +16,7 @@ declare global {
       focuses: number
     }
     __requests: number
+    __stored: Record<string, string | null>
   }
 }
 
@@ -316,6 +317,96 @@ test('duas abas não repetem o mesmo chamado, e a aba visível evita a notifica�
   await setHidden(page, true)
   await receive(request, sector.id, 'Nina Final')
   await expect.poll(allNotified).toEqual(['Lia Unica', 'Nina Final'])
+})
+
+test('voltar à aba durante a espera não notifica, e o som ainda toca', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await context.grantPermissions(['notifications'])
+  await spyOnAlerts(page)
+  await signIn(page, agent, userPassword)
+  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await setOption(page, browserOption, true)
+  await setOption(page, soundOption, true)
+  await setHidden(page, true)
+
+  // A volta acontece na própria página, assim que o aviso aparece: bem antes do fim da espera,
+  // mesmo com a máquina lenta.
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('Chamado recebido: Sara Retorno')) {
+        sessionStorage.removeItem('test-hidden')
+        observer.disconnect()
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+  })
+  await receive(request, sector.id, 'Sara Retorno')
+  await expect(page.getByText('Chamado recebido: Sara Retorno')).toBeVisible()
+  await expect.poll(() => beeps(page)).toBe(1)
+
+  // O chamado seguinte prova que os alertas seguem ligados; o de Sara, se existisse, estaria na lista.
+  await setHidden(page, true)
+  await receive(request, sector.id, 'Tito Oculto')
+  await expect.poll(() => notified(page)).toEqual(['Tito Oculto'])
+})
+
+test('mudar as opções numa aba vale na outra, sem abrir o menu nela', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await context.grantPermissions(['notifications'])
+  await spyOnAlerts(page)
+  await signIn(page, agent, userPassword)
+  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await setOption(page, browserOption, true)
+  await setOption(page, soundOption, true)
+
+  const other = await context.newPage()
+  await spyOnAlerts(other)
+  await other.goto('/')
+  await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await setHidden(page, true)
+  await setHidden(other, true)
+  // Com a outra aba na frente, o navegador atrasa os cliques nesta.
+  await page.bringToFront()
+
+  // Espera a outra aba receber a mudança, para o chamado não chegar antes dela.
+  await other.evaluate(() => {
+    window.__stored = {}
+    window.addEventListener('storage', (event) => {
+      window.__stored[event.key ?? ''] = event.newValue
+    })
+  })
+  const otherReceived = (value: string | null) =>
+    expect
+      .poll(() =>
+        other.evaluate(() => [window.__stored['alerts.browser'], window.__stored['alerts.sound']]),
+      )
+      .toEqual([value, value])
+  const allNotified = async () => [...(await notified(page)), ...(await notified(other))]
+  const allBeeps = async () => (await beeps(page)) + (await beeps(other))
+
+  await setOption(page, browserOption, false)
+  await setOption(page, soundOption, false)
+  await otherReceived(null)
+  await receive(request, sector.id, 'Ursula Desligada')
+  await expect(other.getByText('Chamado recebido: Ursula Desligada')).toBeVisible()
+
+  // Religadas: o chamado de Vera alerta, e o de Ursula, se tivesse alertado, estaria na lista.
+  await setOption(page, browserOption, true)
+  await setOption(page, soundOption, true)
+  await otherReceived('on')
+  await receive(request, sector.id, 'Vera Religada')
+  await expect.poll(allNotified).toEqual(['Vera Religada'])
+  await expect.poll(allBeeps).toBe(1)
 })
 
 test('permissão só é pedida ao ativar, e a negada mostra o motivo', async ({ page }) => {

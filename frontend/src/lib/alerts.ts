@@ -81,25 +81,20 @@ function setSoundAlerts(on: boolean) {
   emit()
 }
 
-// Mantém as outras abas do navegador na mesma escolha.
-function onStorage(event: StorageEvent) {
+// Mantém as outras abas do navegador na mesma escolha. A escuta vale a sessão inteira, porque os
+// alertas usam a escolha mesmo com o menu fechado.
+window.addEventListener('storage', (event) => {
   if (event.key === browserKey || event.key === soundKey || event.key === null) {
     browserWanted = readFlag(browserKey)
     soundWanted = readFlag(soundKey)
     emit()
   }
-}
+})
 
 function subscribe(listener: () => void) {
-  if (listeners.size === 0) {
-    window.addEventListener('storage', onStorage)
-  }
   listeners.add(listener)
   return () => {
     listeners.delete(listener)
-    if (listeners.size === 0) {
-      window.removeEventListener('storage', onStorage)
-    }
   }
 }
 
@@ -196,19 +191,22 @@ export function alertQueueEntry(ticketId: number, contactName: string, onOpen: (
   if (!browserEnabled() && !soundWanted) {
     return
   }
-  const hidden = document.visibilityState !== 'visible'
+  const isHidden = () => document.visibilityState !== 'visible'
+  const hiddenOnArrival = isHidden()
   const run = async () => {
     if (!(await claim(ticketId))) {
       return
     }
-    if (hidden && browserEnabled()) {
+    // Só notifica quem não viu o aviso na tela: a aba estava fora ao chegar e continua fora agora.
+    // A pessoa pode ter voltado à aba durante a espera.
+    if (hiddenOnArrival && isHidden() && browserEnabled()) {
       notify(ticketId, contactName, onOpen)
     }
     if (soundWanted) {
       playSound()
     }
   }
-  if (hidden) {
+  if (hiddenOnArrival) {
     setTimeout(() => void run(), hiddenTabDelay)
   } else {
     void run()
