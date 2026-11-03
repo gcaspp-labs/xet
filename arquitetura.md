@@ -11,7 +11,8 @@ Decisões técnicas do piloto. As regras de negócio estão em [spec.md](spec.md
 | Interface | React + TypeScript (SPA) | Painel dos atendentes, supervisores e administradores |
 | Banco de dados | PostgreSQL | Dados do atendimento, auditoria e sessões do Whatsmeow |
 | Arquivos | Disco local (volume) | Anexos, áudios, imagens e vídeos |
-| Proxy | Caddy | HTTPS e entrega da interface |
+| Proxy | Caddy | Entrega da interface e repasse da API, em HTTP dentro do Compose |
+| Publicação | Cloudflare Tunnel e Access (`cloudflared`) | HTTPS, conexão só de saída, sem porta aberta no servidor, e controle de acesso antes do login |
 | Implantação | Docker Compose | Mesmo arquivo para servidor local ou VPS |
 
 ## Princípios
@@ -82,14 +83,15 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 - Os eventos são publicados somente depois do commit da transação. A publicação não bloqueia: uma conexão lenta, com a fila de saída cheia, é encerrada, e a interface reconecta e recarrega tudo.
 - A interface reconecta sozinha após queda, com espera crescente, e recarrega os dados ao reconectar, para não perder eventos do intervalo. Enquanto a conexão está caída, a tela mostra um aviso de que a atualização em tempo real foi interrompida.
 - A sessão é conferida a cada minuto enquanto a conexão está aberta, sem renovar a expiração (só requisições do usuário renovam); sessão encerrada, expirada ou usuário desativado fecha a conexão.
-- No desenvolvimento, o proxy do Vite repassa o WebSocket (`ws: true`); no Caddy, o `reverse_proxy` já o repassa.
+- No desenvolvimento, o proxy do Vite repassa o WebSocket (`ws: true`); no Caddy, o `reverse_proxy` já o repassa. O túnel mantém o `Host` original, porque o WebSocket confere a origem.
+- O sino e os alertas do navegador comparam a fila recarregada com a anterior para saber o que entrou; não há evento nem tabela de notificações. Notificação do navegador exige HTTPS ou `localhost`. O som é gerado no navegador, sem arquivo nem biblioteca, e só toca depois de a pessoa interagir com a página.
 
 ## Autenticação
 
 - Login com e-mail e senha (hash bcrypt), sessão gravada no PostgreSQL e cookie seguro (HttpOnly).
 - Senhas redefinidas por administradores e supervisores; sem recuperação automática.
 - Cookie `xet_session` com token aleatório de 32 bytes (somente o hash SHA-256 é gravado), `HttpOnly`, `SameSite=Lax` e `Secure` (desligável por `COOKIE_SECURE=false` no desenvolvimento sem HTTPS). Expiração deslizante de 12 horas, renovada a cada requisição autenticada.
-- Limite de tentativas na tabela `login_attempts`, sem estado em memória: a tentativa é contada em transação, antes de conferir a senha, e bloqueio responde 429. O IP é o da conexão; com `TRUST_PROXY=true`, é o último valor de `X-Forwarded-For`, o que o Caddy grava. O Compose liga essa opção porque o backend só é alcançado pelo Caddy; fora disso ela fica desligada, para o cabeçalho não ser forjado.
+- Limite de tentativas na tabela `login_attempts`, sem estado em memória: a tentativa é contada em transação, antes de conferir a senha, e bloqueio responde 429. O IP é o da conexão; com `TRUST_PROXY=true`, é o último valor de `X-Forwarded-For`, o que o Caddy grava a partir de `CF-Connecting-IP`, porque a conexão que ele recebe é sempre a do `cloudflared`. O Compose liga essa opção porque o backend só é alcançado pelo Caddy, e o Caddy só pelo túnel, sem porta publicada; fora disso ela fica desligada, para o cabeçalho não ser forjado.
 - Senhas comuns: lista própria em `core/users/common_passwords.txt`, embutida no binário, sem serviço externo.
 - Limpeza: uma rotina do serviço apaga, ao iniciar e a cada hora, as sessões expiradas e as tentativas de login vencidas.
 - Rotas da API ficam sob `/api`. Sem sessão válida a resposta é 401; com sessão, mas sem permissão (papel ou setor), 403.
