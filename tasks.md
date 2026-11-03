@@ -463,7 +463,7 @@ Depende da T43, porque reaproveita o assumir sem sair da tela.
 
 **Pronto quando:** chamado novo sobe o contador, mostra o aviso e o item, sem recarregar; assumir pelo sino não muda a tela; "Abrir" leva à conversa; quando outra pessoa assume ou cancela, o item sai; devolvido à fila volta a aparecer; recarregar a página e reconectar o WebSocket não repetem o aviso; atendente não vê número desconectado, supervisor e administrador veem, com contador em alerta, e o item leva à tela do setor e só sai ao conectar; a faixa não aparece mais; atendente de outro setor não vê o chamado; administrador vê os setores, identificados; funciona na largura do celular.
 
-### [ ] T45 — Alertas do navegador e som
+### [x] T45 — Alertas do navegador e som
 
 Só web. Depende da T44. A verificação manual precisa de HTTPS, então é feita no endereço publicado da T41; o endereço HTTP do Tailscale não libera notificações.
 
