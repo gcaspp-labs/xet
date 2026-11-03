@@ -282,6 +282,7 @@ As decisões técnicas estão em [arquitetura.md](arquitetura.md).
 - Revisão dos itens fora do piloto com base no uso real.
 - Backup: última etapa a ser resolvida, junto com a decisão final de hospedagem (servidor local ou VPS).
 - Reavaliar a publicação por Cloudflare Tunnel e Access: o limite de usuários do plano gratuito diante dos até 120 atendentes e a resposta sobre a LGPD.
+- Proteção da branch `main` (T35): depende de plano pago do GitHub e fica para quando houver mais pessoas ou agentes sem acompanhamento no repositório.
 
 Este documento consolida as decisões da conversa.
 
