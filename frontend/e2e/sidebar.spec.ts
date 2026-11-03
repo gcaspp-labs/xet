@@ -18,7 +18,7 @@ test('barra lateral acompanha o tema escolhido', async ({ page }) => {
   await expect(brand).toHaveAttribute('src', /glab-simbolo-escuro/)
 })
 
-test('cabeçalho fica fixo com a marca e o lugar das notificações, acima da barra lateral', async ({
+test('cabeçalho fica fixo com a marca e o sino de notificações, acima da barra lateral', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 400 })
@@ -26,7 +26,7 @@ test('cabeçalho fica fixo com a marca e o lugar das notificações, acima da ba
   const header = page.getByRole('banner')
   await expect(header).toContainText('GCASPP LAB')
   await expect(header).toContainText('Central de Atendimento')
-  await expect(header.getByRole('button', { name: 'Notificações' })).toBeDisabled()
+  await expect(header.getByRole('button', { name: 'Notificações' })).toBeEnabled()
 
   const height = (await header.boundingBox())!.height
   expect((await page.locator(sidebar).boundingBox())!.y).toBe(height)

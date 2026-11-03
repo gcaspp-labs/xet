@@ -4,14 +4,14 @@ O supervisor liga o número do setor por QR code e é avisado quando a ligação
 
 ## Sub-features
 
-- [jornada] Número nunca conectado: o painel avisa e leva à tela de conexão.
+- [jornada] Número nunca conectado: o sino do cabeçalho avisa e leva à tela de conexão.
 - [jornada] "Conectar" mostra o QR code, que troca sozinho quando o provedor manda outro.
 - [jornada] Quando o celular lê o QR code, a tela mostra o número conectado sem recarregar.
-- [jornada] Na queda da conexão, o aviso aparece no painel sem recarregar.
+- [jornada] Na queda da conexão, o item aparece no sino sem recarregar.
 - [jornada] Desvinculado pelo celular, a tela pede um novo QR code.
 - [jornada] Desvincular pela tela pede confirmação, e cancelar não muda nada.
 - [jornada] Número já ligado a outro setor é recusado, com o motivo na tela.
-- [jornada] O atendente não vê a tela nem o aviso, e recebe 403 pela API.
+- [jornada] O atendente não vê a tela nem o aviso no sino, e recebe 403 pela API.
 - [não coberto] Aparelho que não pôde ser avisado ao desvincular (`connection.spec.ts`).
 - [não coberto] Volta da conexão ao reiniciar o serviço (`TestConnectionSurvivesRestart`, só integração).
 - [manual] Ler o QR code real com o celular do setor.
@@ -22,7 +22,7 @@ O supervisor liga o número do setor por QR code e é avisado quando a ligação
 
 ## How to get to it
 
-1. O supervisor entra e, se o número estiver desconectado, vê o aviso no painel, com o link "Reconecte pelo QR code." O menu "Conexão" leva à mesma tela, `/conexao`.
+1. O supervisor entra e, se o número estiver desconectado, vê o contador do sino em alerta. No sino, o item "Número do setor Nome desconectado" leva à tela de conexão. O menu "Conexão" leva à mesma tela, `/conexao`.
 2. Na tela "Conexão do WhatsApp", clica em "Conectar" ou "Reconectar". O QR code aparece, com a situação "Conectando".
 3. No celular do setor, abre o WhatsApp, vai a "Dispositivos conectados" e lê o QR code. A tela passa a "Conectado", com o telefone e a última conexão.
 4. Para desligar, clica em "Desvincular número" e confirma.
@@ -42,7 +42,8 @@ O supervisor liga o número do setor por QR code e é avisado quando a ligação
 | Aparelho inalcançável | `t.phone(setor).unreachable()` | `POST .../unreachable` |
 
 - QR code: `getByRole('img', { name: 'QR code para conectar o número' })`.
-- Aviso do painel: `getByRole('alert').filter({ hasText: 'Número do setor Nome desconectado.' })`.
+- Sino: `getByRole('banner').getByRole('button', { name: /^Notificações/ })`; o nome traz o total, como em "Notificações, 1 pendente".
+- Item do sino: depois de abrir o sino, `getByRole('link', { name: 'Número do setor Nome desconectado' })`.
 - Situação na tela: `getByText('Conectado', { exact: true })`, e o mesmo para "Conectando", "Desconectado" e "Requer QR code".
 
 ## Gotchas
@@ -56,7 +57,7 @@ O supervisor liga o número do setor por QR code e é avisado quando a ligação
 
 ## Estado final observável
 
-- **Tela:** "Requer QR code", com o motivo da recusa, depois da tentativa com o número de outro setor; o atendente de volta ao painel, sem o item "Conexão".
+- **Tela:** "Requer QR code", com o motivo da recusa, depois da tentativa com o número de outro setor; o atendente de volta ao painel, sem o item "Conexão" e sem aviso no sino.
 - **`sectors`:** `connection_status = 'logged_out'` e `external_account_id` vazio.
 - **`audit_logs`:** `sector_connected` e `sector_disconnected` duas vezes cada, em ordem, com o supervisor como autor do último, porque desvinculou pela tela.
 - **API:** o atendente recebe 403 ao tentar conectar.

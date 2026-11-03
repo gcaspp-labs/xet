@@ -56,7 +56,7 @@ function ConversationLink({ ticket, user }: { ticket: TicketSummary; user: User 
 // mensagem mais recente primeiro.
 export function ConversationList({ sectorId, user }: { sectorId: number; user: User }) {
   const { data: tickets = [] } = useTickets(sectorId)
-  const assign = useAssignTicket(sectorId)
+  const assign = useAssignTicket()
   const { pathname } = useLocation()
   const { reset } = assign
   // A lista continua montada ao trocar de conversa; o erro é só da tentativa anterior.
@@ -104,19 +104,22 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
                       disabled={assign.isPending}
                       aria-label={`Assumir chamado de ${ticket.contact.name}`}
                       onClick={() =>
-                        assign.mutate(ticket.id, {
-                          onSuccess: () =>
-                            toast.success('Chamado assumido', {
-                              action: (
-                                <Link
-                                  to={`/chamados/${ticket.id}`}
-                                  className="body-strong ml-auto whitespace-nowrap text-accent-strong underline underline-offset-2"
-                                >
-                                  Abrir conversa
-                                </Link>
-                              ),
-                            }),
-                        })
+                        assign.mutate(
+                          { ticketId: ticket.id, sectorId },
+                          {
+                            onSuccess: () =>
+                              toast.success('Chamado assumido', {
+                                action: (
+                                  <Link
+                                    to={`/chamados/${ticket.id}`}
+                                    className="body-strong ml-auto whitespace-nowrap text-accent-strong underline underline-offset-2"
+                                  >
+                                    Abrir conversa
+                                  </Link>
+                                ),
+                              }),
+                          },
+                        )
                       }
                     >
                       <UserCheck strokeWidth={1.7} aria-hidden />

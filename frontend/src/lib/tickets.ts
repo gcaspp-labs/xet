@@ -44,11 +44,15 @@ export const ticketsKey = (sectorId: number) => ['sectors', sectorId, 'tickets']
 export const workloadKey = (sectorId: number) => ['sectors', sectorId, 'workload']
 export const closedTodayKey = (sectorId: number) => ['sectors', sectorId, 'closed-today']
 
+export const ticketsQuery = (sectorId: number) => ({
+  queryKey: ticketsKey(sectorId),
+  queryFn: () => api<TicketSummary[]>(`/sectors/${sectorId}/tickets`),
+})
+
 // Chamados abertos do setor (fila e em atendimento), atualizados pelo WebSocket.
 export function useTickets(sectorId: number | undefined) {
   return useQuery({
-    queryKey: ticketsKey(sectorId ?? 0),
-    queryFn: () => api<TicketSummary[]>(`/sectors/${sectorId}/tickets`),
+    ...ticketsQuery(sectorId ?? 0),
     enabled: sectorId !== undefined,
   })
 }

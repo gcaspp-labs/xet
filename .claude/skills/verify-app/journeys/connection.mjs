@@ -10,15 +10,23 @@ await journey('connection', async (t) => {
   const formatted = `+55 (11) ${account.slice(4, 9)}-${account.slice(9)}`
 
   const page = await t.signIn(sector.supervisor)
-  const notice = page
-    .getByRole('alert')
-    .filter({ hasText: `Número do setor ${sector.name} desconectado.` })
+  const bell = page.getByRole('banner').getByRole('button', { name: /^Notificações/ })
+  const notice = page.getByRole('link', {
+    name: `Número do setor ${sector.name} desconectado`,
+  })
+  // O aviso mora no sino: abre o popover e escolhe o item, que leva à tela de conexão.
+  const openNotice = async () => {
+    await bell.click()
+    await notice.click()
+  }
   const qr = page.getByRole('img', { name: 'QR code para conectar o número' })
 
-  await t.step('Número nunca conectado: o painel avisa e leva à tela de conexão', async () => {
+  await t.step('Número nunca conectado: o sino avisa e leva à tela de conexão', async () => {
+    await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+    await bell.click()
     await expect(notice).toBeVisible()
-    await t.shot(page, 'aviso-no-painel')
-    await notice.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
+    await t.shot(page, 'aviso-no-sino')
+    await notice.click()
     await expect(page.getByRole('heading', { name: 'Conexão do WhatsApp' })).toBeVisible()
     await expect(page.getByText('Desconectado', { exact: true })).toBeVisible()
     await expect(page.getByText('O número ainda não foi conectado.')).toBeVisible()
@@ -52,22 +60,27 @@ await journey('connection', async (t) => {
       await t.shot(page, 'conectado')
       await page.getByRole('link', { name: 'Atendimento' }).click()
       await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+      await expect(bell).toHaveAccessibleName('Notificações')
+      await bell.click()
       await expect(notice).toBeHidden()
+      await page.keyboard.press('Escape')
     },
   )
 
-  await t.step('Queda da conexão: o aviso aparece no painel, sem recarregar', async () => {
+  await t.step('Queda da conexão: o item aparece no sino, sem recarregar', async () => {
     await phone.drop()
+    await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+    await bell.click()
     await expect(notice).toBeVisible()
-    await t.shot(page, 'queda-no-painel')
-    await notice.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
+    await t.shot(page, 'queda-no-sino')
+    await notice.click()
     await expect(page.getByText(formatted)).toBeVisible()
     await page.getByRole('link', { name: 'Atendimento' }).click()
   })
 
   await t.step('Desvinculado pelo celular: a tela pede um novo QR code', async () => {
     await phone.logOut()
-    await notice.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
+    await openNotice()
     await expect(page.getByText('Requer QR code', { exact: true })).toBeVisible()
     await expect(
       page.getByText('O número foi desvinculado. Conecte de novo pelo QR code.'),
@@ -109,19 +122,24 @@ await journey('connection', async (t) => {
     await t.shot(page, 'numero-de-outro-setor')
   })
 
-  await t.step('Atendente não vê a conexão nem o aviso, e a rota o devolve ao painel', async () => {
-    const agentPage = await t.signIn(sector.agents[0])
-    await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
-    await expect(agentPage.getByRole('link', { name: 'Conexão' })).toBeHidden()
-    await expect(agentPage.getByText(/desconectado\./)).toBeHidden()
-    await agentPage.goto('/conexao')
-    await expect(agentPage).toHaveURL(/\/$/)
-    await t.shot(agentPage, 'atendente-sem-conexao')
-    const blocked = await agentPage.request.post(`/api/sectors/${sector.id}/connection`)
-    expect(blocked.status()).toBe(403)
-    t.observe('Atendente tentando conectar pela API', { http: blocked.status() })
-    await t.closeSession(agentPage)
-  })
+  await t.step(
+    'Atendente não vê a conexão nem o aviso no sino, e a rota o devolve ao painel',
+    async () => {
+      const agentPage = await t.signIn(sector.agents[0])
+      await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+      await expect(agentPage.getByRole('link', { name: 'Conexão' })).toBeHidden()
+      await expect(agentPage.getByRole('button', { name: /^Notificações/ })).toHaveAccessibleName(
+        'Notificações',
+      )
+      await agentPage.goto('/conexao')
+      await expect(agentPage).toHaveURL(/\/$/)
+      await t.shot(agentPage, 'atendente-sem-conexao')
+      const blocked = await agentPage.request.post(`/api/sectors/${sector.id}/connection`)
+      expect(blocked.status()).toBe(403)
+      t.observe('Atendente tentando conectar pela API', { http: blocked.status() })
+      await t.closeSession(agentPage)
+    },
+  )
 
   await t.step('Estado final no banco, com a auditoria da conexão', async () => {
     const [row] = t.sql(
