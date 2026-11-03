@@ -4,6 +4,7 @@ import {
   test,
   type APIRequestContext,
   type Page,
+  type WebSocketRoute,
 } from '@playwright/test'
 import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
 
@@ -53,11 +54,12 @@ test('chamado novo sobe o contador, avisa e aparece no sino sem recarregar', asy
   await signIn(page, agent, userPassword)
   const bell = bellOf(page)
   await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
-  // Primeira carga: o chamado que já estava na fila não avisa.
-  await expect(page.getByText('Chamado recebido: Ana Antiga')).toHaveCount(0)
 
   await receive(request, sector.id, 'Bruno Novo')
   await expect(page.getByText('Chamado recebido: Bruno Novo')).toBeVisible()
+  // Primeira carga: o chamado que já estava na fila não avisa. A contagem é pontual, feita quando
+  // o aviso seguinte aparece: o toHaveCount(0) passaria mesmo se o aviso tivesse aparecido antes.
+  expect(await page.getByText('Chamado recebido: Ana Antiga').count()).toBe(0)
   await expect(bell).toHaveAccessibleName('Notificações, 2 pendentes')
 
   await bell.click()
@@ -69,7 +71,11 @@ test('chamado novo sobe o contador, avisa e aparece no sino sem recarregar', asy
   // Recarregar não repete o aviso do chamado que já estava na fila.
   await page.reload()
   await expect(bellOf(page)).toHaveAccessibleName('Notificações, 2 pendentes')
-  await expect(page.getByText('Chamado recebido: Bruno Novo')).toHaveCount(0)
+  // Um chamado novo prova que o aviso está de pé; o de Bruno, se fosse repetido, estaria na tela.
+  await receive(request, sector.id, 'Caio Depois')
+  await expect(page.getByText('Chamado recebido: Caio Depois')).toBeVisible()
+  expect(await page.getByText('Chamado recebido: Bruno Novo').count()).toBe(0)
+  expect(await page.getByText('Chamado recebido: Ana Antiga').count()).toBe(0)
 })
 
 test('assumir pelo sino não muda a tela e "Abrir" leva à conversa', async ({
@@ -221,6 +227,38 @@ test('voltar a rede não repete o aviso dos chamados que entraram durante a qued
   await receive(request, sector.id, 'Iara Depois')
   await expect(page.getByText('Chamado recebido: Iara Depois')).toBeVisible()
   expect(await page.getByText('Chamado recebido: Hugo Durante').count()).toBe(0)
+})
+
+test('queda real do WebSocket não repete o aviso quando a conexão reabre', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  // Intermedia o WebSocket do painel para simular a queda da conexão.
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket(/\/api\/ws$/, (ws) => {
+    sockets.push(ws)
+    ws.connectToServer()
+  })
+  await signIn(page, agent, userPassword)
+  // A fila precisa ter carregado: a primeira carga é a referência e não avisa.
+  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  // No desenvolvimento, o StrictMode do React abre e fecha uma conexão a mais.
+  await expect.poll(() => sockets.length).toBeGreaterThan(0)
+  const opened = sockets.length
+
+  // Queda: a mensagem que chega nesse intervalo entra na fila, mas não avisa depois da volta.
+  await sockets[opened - 1].close({ code: 1006 })
+  await receive(request, sector.id, 'Lia Durante')
+  await expect.poll(() => sockets.length, { timeout: 10_000 }).toBe(opened + 1)
+  await expect(bellOf(page)).toHaveAccessibleName('Notificações, 1 pendente', { timeout: 30_000 })
+
+  // Com a conexão de volta, o aviso funciona. Quando o de Mia aparece, o de Lia, se existisse,
+  // ainda estaria na tela. A contagem é pontual: o toHaveCount(0) passaria mesmo com ele tendo aparecido.
+  await receive(request, sector.id, 'Mia Depois')
+  await expect(page.getByText('Chamado recebido: Mia Depois')).toBeVisible()
+  expect(await page.getByText('Chamado recebido: Lia Durante').count()).toBe(0)
 })
 
 test('atendente de outro setor não vê o chamado e não vê número desconectado', async ({
