@@ -145,7 +145,7 @@ A evidência fica nesta cópia do repositório: apagar o worktree apaga a evidê
 .claude/skills/verify-app/scripts/publish-evidence.sh <número-do-PR>
 ```
 
-O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit solto, apontado por `refs/verify-app/<execução>`, e comenta no PR com as imagens. Assim, nada entra na `main` nem em branch: o clone normal não baixa essa referência e o CI não roda nela. Ele recusa repositório público e não publica os rastros, que guardam requisições e cookies. A referência continua no repositório até ser apagada, e o comando para isso está no fim do comentário. Rode depois do merge.
+O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit solto, apontado por `refs/verify-app/<execução>`, e comenta no PR com as imagens. Assim, nada entra na `main` nem em branch: o clone normal não baixa essa referência e o CI não roda nela. Ele recusa repositório público e não publica os rastros, que guardam requisições e cookies. As imagens só abrem para quem está logado no GitHub com acesso ao repositório; sem login, o GitHub responde 404. Cada execução publicada ocupa alguns megabytes, e a referência continua no repositório até ser apagada. O comando para apagar está no fim do comentário: rode depois do merge.
 
 ## Cleanup
 
