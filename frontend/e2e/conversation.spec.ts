@@ -44,7 +44,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Bom dia, preciso do balancete')
   await expect(conversation).toContainText('Chamado na fila. Assuma o chamado para responder.')
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 
   // O supervisor acompanha a mesma conversa em outra janela, sem poder responder.
@@ -144,12 +144,148 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   })
   const pedro = list.getByRole('link', { name: /Pedro Cliente/ })
   await expect(pedro).toContainText('Boa tarde')
-  await expect(pedro).toContainText('Na fila')
+  await expect(list.getByRole('region', { name: 'Na fila (1)' })).toContainText('Pedro Cliente')
   await pedro.click()
   await expect(page.getByRole('heading', { name: 'Pedro Cliente' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
     'Boa tarde',
   )
+  await otherContext.close()
+})
+
+test('assumir pela lista não muda a tela nem apaga o texto em digitação', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName: 'Ana Aberta',
+    body: 'Primeira conversa',
+  })
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Ana Aberta' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  // O aviso deste chamado sai antes, para o seguinte não empilhar sobre ele.
+  const notice = page.getByText('Chamado assumido')
+  await expect(notice).toBeVisible()
+  await expect(notice).toBeHidden()
+  const draft = page.getByRole('textbox', { name: 'Mensagem' })
+  await draft.fill('Texto ainda em digitação')
+  const openedAt = page.url()
+
+  // Só com chamado na fila a seção aparece, com a prévia e o botão fora do link.
+  const list = page.getByRole('navigation', { name: 'Conversas abertas' })
+  await expect(list.getByRole('heading', { name: /Na fila/ })).toHaveCount(0)
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName: 'Bia Fila',
+    body: 'Mensagem na fila',
+  })
+  const queue = list.getByRole('region', { name: 'Na fila (1)' })
+  await expect(queue.getByRole('link', { name: /Bia Fila/ })).toContainText('Mensagem na fila')
+  await expect(queue.getByRole('link').getByRole('button')).toHaveCount(0)
+
+  await queue.getByRole('button', { name: 'Assumir chamado de Bia Fila' }).click()
+  await expect(notice).toBeVisible()
+  // Com o mouse em cima, o aviso não some antes de clicar no link.
+  const openConversation = page.getByRole('link', { name: 'Abrir conversa' })
+  await openConversation.hover()
+  expect(page.url()).toBe(openedAt)
+  await expect(page.getByRole('heading', { name: 'Ana Aberta' })).toBeVisible()
+  await expect(draft).toHaveValue('Texto ainda em digitação')
+
+  // O chamado sai da fila, a seção vazia some e ele aparece como do usuário.
+  await expect(list.getByRole('heading', { name: /Na fila/ })).toHaveCount(0)
+  await expect(list.getByRole('link', { name: /Bia Fila/ })).toContainText('Você')
+
+  // O link do aviso abre a conversa assumida, já com a caixa de resposta.
+  await openConversation.click()
+  await expect(page.getByRole('heading', { name: 'Bia Fila' })).toBeVisible()
+  await expect(draft).toBeVisible()
+})
+
+test('assumir pela lista a conversa aberta mostra o novo responsável', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName: 'Caio Aberto',
+    body: 'Olá',
+  })
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Caio Aberto' }).click()
+  const details = page.getByRole('region', { name: 'Chamado' })
+  await expect(details).toContainText('Sem responsável')
+  const openedAt = page.url()
+
+  await page.getByRole('button', { name: 'Assumir chamado de Caio Aberto' }).click()
+  await expect(page.getByText('Chamado assumido')).toBeVisible()
+  expect(page.url()).toBe(openedAt)
+  await expect(details).toContainText(/agent \d+/)
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+})
+
+test('quem perde a disputa pela lista vê o erro e o chamado sai da fila', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  for (const contactName of ['Duda Aberta', 'Enzo Disputado']) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Duda Aberta' }).click()
+
+  // Sem o WebSocket, a janela do colega continua mostrando o chamado na fila.
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await other.routeWebSocket(/\/api\/ws$/, () => {})
+  await signIn(other, supervisor, userPassword)
+  await other.getByRole('link', { name: 'Duda Aberta' }).click()
+  const otherQueue = other.getByRole('region', { name: 'Na fila (2)' })
+  const contested = otherQueue.getByRole('button', { name: 'Assumir chamado de Enzo Disputado' })
+  await expect(contested).toBeVisible()
+
+  await page.getByRole('button', { name: 'Assumir chamado de Enzo Disputado' }).click()
+  await expect(page.getByText('Chamado assumido')).toBeVisible()
+
+  await contested.click()
+  const conflict = other
+    .getByRole('region', { name: 'Conversas do setor' })
+    .getByRole('alert')
+    .filter({ hasText: 'Este chamado já foi assumido por outro atendente.' })
+  await expect(conflict).toBeVisible()
+  const otherList = other.getByRole('navigation', { name: 'Conversas abertas' })
+  const remaining = otherList.getByRole('region', { name: 'Na fila (1)' })
+  await expect(remaining.getByRole('link', { name: /Enzo Disputado/ })).toHaveCount(0)
+  await expect(otherList.getByRole('link', { name: /Enzo Disputado/ })).toContainText(/agent \d+/)
+  await expect(other.getByText('Chamado assumido')).toHaveCount(0)
+
+  // Ao trocar de conversa, o erro da tentativa anterior some.
+  await otherList.getByRole('link', { name: /Enzo Disputado/ }).click()
+  await expect(other.getByRole('heading', { name: 'Enzo Disputado' })).toBeVisible()
+  await expect(conflict).toHaveCount(0)
   await otherContext.close()
 })
 
@@ -165,7 +301,7 @@ test('mensagem que falhou é reenviada pelo responsável', async ({ page, reques
   })
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'João Cliente' }).click()
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 
   // Número desconectado: a mensagem fica como falha, sem reenvio automático.
