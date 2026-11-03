@@ -1,6 +1,6 @@
 ---
-name: implementar-task
-description: Implementa uma task do tasks.md do zero até o PR aberto. Use quando o usuário chamar /implementar-task com o número da task (ex.: /implementar-task 02).
+name: implement-task
+description: Implementa uma task do tasks.md do zero até o PR aberto. Use quando o usuário chamar /implement-task com o número da task (ex.: /implement-task 02).
 argument-hint: <número da task, ex.: 02>
 ---
 

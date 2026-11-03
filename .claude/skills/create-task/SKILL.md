@@ -1,12 +1,12 @@
 ---
-name: criar-task
-description: Transforma pedidos e ideias em tasks do tasks.md prontas para a skill implementar-task, com as decisões registradas nos documentos, até o PR de documentação aberto. Use quando o usuário chamar /criar-task ou pedir para preparar ou planejar novas tasks.
+name: create-task
+description: Transforma pedidos e ideias em tasks do tasks.md prontas para a skill implement-task, com as decisões registradas nos documentos, até o PR de documentação aberto. Use quando o usuário chamar /create-task ou pedir para preparar ou planejar novas tasks.
 argument-hint: <descrição do que deve virar task, opcional>
 ---
 
 # Criar tasks: $ARGUMENTS
 
-A task será implementada por outra sessão, com o contexto zerado, pela skill `/implementar-task`. Ela só conhece o que está no repositório: nenhuma informação pode ficar só nesta conversa ou em arquivo temporário.
+A task será implementada por outra sessão, com o contexto zerado, pela skill `/implement-task`. Ela só conhece o que está no repositório: nenhuma informação pode ficar só nesta conversa ou em arquivo temporário.
 
 Esta skill só escreve documentação. Não implemente nada.
 
@@ -18,7 +18,7 @@ Esta skill só escreve documentação. Não implemente nada.
 ## 2. Levantar o contexto
 
 1. Leia `CLAUDE.md` e, em `tasks.md`, "Como usar" e "Ideias em avaliação". Veja os títulos com `grep -n '^##' tasks.md` e leia duas ou três tasks recentes como modelo.
-2. Leia `.claude/skills/implementar-task/SKILL.md`: é ela que vai consumir a task.
+2. Leia `.claude/skills/implement-task/SKILL.md`: é ela que vai consumir a task.
 3. Liste os títulos de `spec.md`, `modelo-dados.md` e `arquitetura.md` com `grep -n '^##'` e leia as seções do assunto. Procure também o assunto no código, com `grep -rn`, para saber o que já existe.
 4. Se o pedido depender de outro repositório ou de uma fonte externa, consulte e registre o que usar. Baixar arquivos exige permissão do usuário.
 
@@ -49,7 +49,7 @@ Sempre antes de escrever a task:
 
 Numeração, conforme "Como usar" do `tasks.md`: task nova entra com o próximo número. Se precisar vir antes de outras pendentes, as seguintes são renumeradas; concluídas nunca mudam. Um ajuste pequeno de processo pode usar sufixo (T20.1).
 
-Se a task puder rodar antes de pendentes anteriores, diga isso no texto, porque a `/implementar-task` para e pede confirmação ao encontrar task anterior que não esteja `[x]`.
+Se a task puder rodar antes de pendentes anteriores, diga isso no texto, porque a `/implement-task` para e pede confirmação ao encontrar task anterior que não esteja `[x]`.
 
 Formato obrigatório, porque a skill localiza as tasks com `grep -n '^### ' tasks.md`:
 
@@ -78,7 +78,7 @@ Regras do conteúdo:
 
 Ideia não aprovada vai para "Ideias em avaliação", uma linha em negrito e a explicação.
 
-## 7. Conferir contra a implementar-task
+## 7. Conferir contra a implement-task
 
 1. Títulos: `grep -n '^### ' tasks.md` mostra as novas tasks na ordem de execução, com `[ ]`.
 2. Caminhos: todo arquivo citado em `**Ler:**` existe nas pastas de partida. Arquivo que a própria task vai criar não entra nessa linha.
@@ -91,7 +91,7 @@ Ideia não aprovada vai para "Ideias em avaliação", uma linha em negrito e a e
 1. Apague o `backlog.md` só depois de confirmar que todo pedido virou regra, task ou ideia em avaliação.
 2. Faça o commit em português (`docs: tasks de ...`). Como só muda documentação, não é preciso rodar `make lint` nem `make test`; diga isso no PR.
 3. Envie a branch com `git push -u origin <branch>` e abra o PR com `gh pr create --base main`. O corpo traz as tasks criadas, as regras alteradas, as decisões do usuário, o que você decidiu sozinho e o que falta avaliar.
-4. Envie uma notificação push curta com o link do PR, dizendo que é só documentação, sem teste manual. As tasks só podem rodar depois do merge, porque a `/implementar-task` parte da main.
-5. Responda com o link do PR, a tabela das tasks (número, entrega, dependência) e o comando da próxima, por exemplo `/implementar-task 41`.
+4. Envie uma notificação push curta com o link do PR, dizendo que é só documentação, sem teste manual. As tasks só podem rodar depois do merge, porque a `/implement-task` parte da main.
+5. Responda com o link do PR, a tabela das tasks (número, entrega, dependência) e o comando da próxima, por exemplo `/implement-task 41`.
 
 Não faça merge do PR. A revisão e o merge são do usuário.
