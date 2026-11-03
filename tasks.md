@@ -438,7 +438,7 @@ A consulta que orientou esta task está nas referências: [Cloudflare Tunnel](ht
 
 **Pronto quando:** no Compose, sem token real, `web` não publica porta e `make up` recusa subir sem o token do túnel; dentro da rede do Compose, um login errado com `CF-Connecting-IP` definido grava esse IP em `login_attempts`, e dois valores diferentes contam separados, com o resultado registrado em `validacao-piloto.md`; o roteiro cobre todos os passos acima, com os dois lembretes; há verificação manual explícita, a fazer no servidor na T34: login, cookie `Secure`, WebSocket pelo túnel, envio de arquivo de 16 MB, acesso de casa com código e do escritório sem código, e o comportamento do WebSocket ao expirar a sessão do Access.
 
-### [ ] T42 — Reorganização do menu e ajustes visuais
+### [x] T42 — Reorganização do menu e ajustes visuais
 
 - **Menu**, em `AppLayout`: grupo Helpdesk (Atendimento, Contatos, Conexão) e grupo Cadastro (Órgãos, Módulos, Setores), com o título fixo de hoje. O grupo Administração deixa de existir, cada item continua visível para os mesmos papéis e os endereços não mudam, como `/admin/usuarios`.
 - **Configurações:** ganha "Usuários", só para o administrador, entre o tema e "Sair".
