@@ -6,6 +6,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 load_run "${1:-}"
+require_started
 summary="$EVIDENCE_DIR/SUMMARY.md"
 
 {
@@ -55,7 +56,17 @@ summary="$EVIDENCE_DIR/SUMMARY.md"
   echo "## Sinais do backend"
   echo
   if [ -f "$LOG_DIR/backend.log" ]; then
-    echo "- Linhas de erro no log do backend: $(grep -c '"level":"ERROR"' "$LOG_DIR/backend.log" || true)"
+    errors="$(grep -c '"level":"ERROR"' "$LOG_DIR/backend.log" || true)"
+    cancelled="$(grep '"level":"ERROR"' "$LOG_DIR/backend.log" | grep -c 'context canceled' || true)"
+    echo "- Linhas de erro no log do backend: $errors, sendo $cancelled de requisição cancelada pelo cliente."
+    if [ "$errors" != "$cancelled" ]; then
+      echo "- Outros erros, que precisam de explicação:"
+      echo
+      echo '```text'
+      grep '"level":"ERROR"' "$LOG_DIR/backend.log" | grep -v 'context canceled' | head -n 10 | cut -c1-300
+      echo '```'
+      echo
+    fi
     echo "- Log: \`$LOG_DIR/backend.log\`"
   else
     echo "- Log do backend não encontrado."

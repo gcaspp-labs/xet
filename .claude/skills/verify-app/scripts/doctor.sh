@@ -6,6 +6,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 load_run "${1:-}"
+require_started
 problems=0
 
 check() {

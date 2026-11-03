@@ -52,8 +52,10 @@ if [ -n "${left// /}" ]; then
 else
   say "Nenhum processo da execução ficou para trás."
 fi
-containers="$(docker ps -aq --filter "label=xet.verify-app.run=$RUN_ID" 2>/dev/null)"
-if [ -n "$containers" ]; then
+if ! containers="$(docker ps -aq --filter "label=xet.verify-app.run=$RUN_ID" 2>&1)"; then
+  say "FALHA: o Docker não respondeu, e não deu para conferir o contêiner: $containers"
+  problems=$((problems + 1))
+elif [ -n "$containers" ]; then
   say "FALHA: contêiner da execução ainda existe: $containers"
   problems=$((problems + 1))
 else

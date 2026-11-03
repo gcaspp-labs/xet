@@ -9,6 +9,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 pr="${1:-}"
 [ -n "$pr" ] || fail "informe o número do PR."
+cd "$ROOT"
 load_run "${2:-}"
 [ -f "$EVIDENCE_DIR/SUMMARY.md" ] || fail "rode evidence.sh antes de publicar."
 

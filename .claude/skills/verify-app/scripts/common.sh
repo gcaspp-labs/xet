@@ -63,6 +63,11 @@ load_run() {
   fi
 }
 
+# Para quem só faz sentido depois de o banco da execução ter subido.
+require_started() {
+  [ -f "$STATE_DIR/run.env" ] || fail "a execução $RUN_ID não chegou a subir; rode launch.sh."
+}
+
 # Processos da execução, achados pela marca herdada no ambiente, e nunca pelo nome: vale também para
 # os filhos e não pega nada que a execução não iniciou. O Chromium sobrescreve o próprio ambiente, então
 # a marca dele vem num argumento, e os filhos dele são achados pelo grupo do processo principal.
@@ -91,6 +96,7 @@ memory_report() {
   vmstat 1 2
 }
 
+# LC_ALL=C porque o rótulo da linha muda com o idioma do sistema.
 available_mb() {
-  free -m | awk '/^(Mem|Mem\.):/ {print $NF}'
+  LC_ALL=C free -m | awk '/^Mem:/ {print $NF}'
 }

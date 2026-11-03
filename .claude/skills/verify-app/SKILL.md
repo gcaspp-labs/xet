@@ -103,6 +103,7 @@ await journey('nome-da-jornada', async (t) => {
 | `t.shot(página, nome)` | Captura de tela numerada, ligada ao passo |
 | `t.observe(título, valor)` | Registra um estado final no resumo |
 | `t.admin` | Sessão de API do administrador, para preparar dados |
+| `t.apiOk(requisição, descrição)` | Espera a resposta e falha com "Pré-condição não atendida" se ela não for 2xx |
 
 Use papéis e nomes visíveis (`getByRole`, `getByLabel`), como em `frontend/e2e/`, nunca coordenadas. Toda jornada termina num passo que confere o estado final no banco, e não só a tela.
 
@@ -132,7 +133,11 @@ Gera e imprime `evidence/SUMMARY.md`, com o commit, o resultado de cada fluxo do
 | Rastro do Playwright, só na falha | `evidence/<jornada>/falha-*-trace.zip` |
 | Logs dos serviços | `logs/` |
 
+A evidência fica nesta cópia do repositório: apagar o worktree apaga a evidência local junto.
+
 **Para relatar:** diga o commit e o que foi provado, com o caminho de `SUMMARY.md`; o que ficou como não provado, sem arredondar; e o que depende do WhatsApp real. Uma jornada só prova o que está nos passos dela. O adaptador falso não prova o WhatsApp real.
+
+**Linhas de erro no log do backend:** `context canceled` quer dizer que o cliente desistiu da requisição, por exemplo ao trocar de tela ou fechar a sessão. Hoje o backend registra isso como erro 500, mas a resposta não chega a ninguém, e por isso a contagem varia de uma execução para outra. Qualquer outra linha aparece no resumo e precisa de explicação antes de você dizer que a verificação passou, mesmo com todas as jornadas certas.
 
 **Para levar a evidência a um PR** (só quando a tarefa pedir, porque publica no repositório):
 
