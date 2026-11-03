@@ -327,9 +327,9 @@ A autenticação em dois fatores saiu desta task e foi para a T36.
 
 ### [~] T34 — Implantação e validação
 
-Pode rodar antes das anteriores, quando houver acesso ao servidor. Como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
+Depende da T41 (publicação por Cloudflare Tunnel). Pode rodar antes das demais, quando houver acesso ao servidor. Como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
 
-- Implantação no servidor da empresa com Docker Compose e HTTPS.
+- Implantação no servidor da empresa com Docker Compose, publicada pelo túnel.
 - Percorrer todos os critérios de validação da spec com o número real da Contabilidade.
 - Testes ponta a ponta (Playwright) dos fluxos principais.
 - Teste de reconexão: queda de internet, reinício do servidor, desconexão do celular.
@@ -352,21 +352,6 @@ Ajustes fora do código, feitos no GitHub por quem administra o repositório.
 **Ler:** arquitetura.md › Integração contínua; código: `.github/workflows/ci.yml`.
 
 **Pronto quando:** um PR com check falhando não pode ser mergeado e push direto na `main` é recusado.
-
-## Dependem da implantação
-
-Ficam para depois de escolher onde o sistema será implantado.
-
-### [ ] T36 — Autenticação em dois fatores
-
-Separada da T33 porque o envio de e-mail depende do local de implantação, ainda não escolhido. Antes de implementar, definir na spec o meio do segundo fator: código por e-mail ou aplicativo autenticador (TOTP), que não usa e-mail.
-
-- Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
-- O limite de tentativas da T33 vale também para o código do segundo fator.
-
-**Ler:** spec.md › Usuários e acesso; modelo-dados.md › `users`, `sessions`, `login_attempts`, `audit_logs`; arquitetura.md › Autenticação; design.md; código: `core/auth/auth.go`, `core/auth/auth_http.go`, `core/auth/auth_test.go`, `src/pages/LoginPage.tsx`, `src/lib/auth.ts`, `e2e/auth.spec.ts`.
-
-**Pronto quando:** usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
 
 ## Fase 7 — Órgãos, municípios e contatos
 
@@ -427,9 +412,118 @@ Antes de implementar, escolher a API e registrar a justificativa em `arquitetura
 
 **Pronto quando:** com um servidor falso no lugar da API, sem chamar o serviço real, a consulta sugere os dados e nada é salvo sem confirmação; CNPJ não encontrado e API fora do ar não impedem o cadastro manual; atendente não consulta; há verificação manual com a API real.
 
+## Fase 8 — Publicação, navegação e notificações
+
+Para as tasks desta fase, a skill `/implementar-task` para porque T34, T35 e T36 continuam abertas, e a T40 enquanto o PR dela não for mergeado. É só confirmar para ela seguir.
+
+### [ ] T41 — Publicação por Cloudflare Tunnel e Access
+
+Publica o sistema em `https://atendimento.gcaspp.com.br`, sem porta aberta no servidor. O código é entregue aqui; a parte no painel da Cloudflare, no Registro.br e no servidor é do usuário, seguindo o roteiro. Avise-o no resumo final dos lembretes marcados abaixo. A implantação em si e os critérios com o número real continuam na T34.
+
+- `deploy/compose.yml`: serviço `cloudflared` com imagem de versão fixa e token vindo do `.env`, nunca do repositório; tirar a publicação das portas 80 e 443 do serviço `web`.
+- `deploy/.env.example`: token do túnel, `SITE_ADDRESS=:80` e `COOKIE_SECURE=true`. O HTTPS termina na Cloudflare e o cookie continua `Secure`, porque o navegador fala HTTPS.
+- **Limite de login:** hoje o Caddy grava em `X-Forwarded-For` o IP de quem conecta nele, que passaria a ser sempre o `cloudflared`, e o backend usa esse valor (`clientIP`, em `core/auth/auth_http.go`). Sem ajuste, 30 tentativas erradas de qualquer pessoa bloqueiam o login de todos por 15 minutos. `deploy/Caddyfile` deve gravar nele o `CF-Connecting-IP`. O Caddy só pode ser alcançado pelo túnel, para o cabeçalho não ser forjado.
+- `validacao-piloto.md`: atualizar "Situação" e "Roteiro de implantação" (o passo 1 ainda fala em portas abertas), e incluir "Teste da implantação" para o novo caminho. O roteiro traz, nesta ordem:
+  1. Criar a conta da Cloudflare com dois fatores e adicionar `gcaspp.com.br`, no plano gratuito, que exige mover o DNS do domínio inteiro.
+  2. **Lembrete ao usuário:** antes de trocar os nameservers no Registro.br, conferir no painel da Cloudflare os 5 registros MX e o SPF do Google. Valores conferidos no DNS público em 2026-11-02: MX `1 aspmx.l.google.com`, `5 alt1.aspmx.l.google.com`, `5 alt2.aspmx.l.google.com`, `10 aspmx2.googlemail.com`, `10 aspmx3.googlemail.com`; TXT `v=spf1 include:_spf.google.com ~all`. Nameservers atuais: `nsa1` a `nsa6.hostnet.com.br`. O site atual não está em uso (responde erro 500) e não precisa ser preservado.
+  3. Trocar os nameservers no Registro.br. **Lembrete ao usuário:** depois da troca, testar enviar e receber e-mail.
+  4. Criar o túnel apontando `atendimento.gcaspp.com.br` para `http://web:80`, sem reescrever o `Host`, porque o WebSocket confere a origem.
+  5. Ativar "Always Use HTTPS" e uma regra para não fazer cache de `/api/*`.
+  6. Criar a aplicação no Cloudflare Access com duas regras: liberar o IP do escritório e, para os demais, código por e-mail só para os e-mails da equipe. Com o IP alterado, o escritório passa a pedir o código, sem ficar sem acesso. Antes, confirmar com o provedor que o IP é fixo (o usuário acredita que sim) e o limite de usuários do plano gratuito.
+  7. Só usar dados reais depois da avaliação de LGPD (`spec.md`, Estrutura e implantação).
+
+A consulta que orientou esta task está nas referências: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) e [políticas do Access](https://developers.cloudflare.com/cloudflare-one/policies/access/). Limites de planos e o suporte a WebSocket não estavam nessas páginas: confirme no teste.
+
+**Ler:** spec.md › Estrutura e implantação; arquitetura.md › Componentes, Tempo real, Autenticação; código: `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/.env.example`, `deploy/web.Dockerfile`, `core/auth/auth_http.go`, `core/auth/login_limit_test.go`, `src/lib/realtime.ts`; `validacao-piloto.md` (Situação, Teste da implantação, Roteiro de implantação).
+
+**Pronto quando:** no Compose, sem token real, `web` não publica porta e `make up` recusa subir sem o token do túnel; dentro da rede do Compose, um login errado com `CF-Connecting-IP` definido grava esse IP em `login_attempts`, e dois valores diferentes contam separados, com o resultado registrado em `validacao-piloto.md`; o roteiro cobre todos os passos acima, com os dois lembretes; há verificação manual explícita, a fazer no servidor na T34: login, cookie `Secure`, WebSocket pelo túnel, envio de arquivo de 16 MB, acesso de casa com código e do escritório sem código, e o comportamento do WebSocket ao expirar a sessão do Access.
+
+### [ ] T42 — Reorganização do menu e ajustes visuais
+
+- **Menu**, em `AppLayout`: grupo Helpdesk (Atendimento, Contatos, Conexão) e grupo Cadastro (Órgãos, Módulos, Setores), com o título fixo de hoje. O grupo Administração deixa de existir, cada item continua visível para os mesmos papéis e os endereços não mudam, como `/admin/usuarios`.
+- **Configurações:** ganha "Usuários", só para o administrador, entre o tema e "Sair".
+- **Breadcrumb:** Contatos e Conexão passam a Helpdesk; Módulos e Setores, a Cadastro; Usuários, a Configurações. Conexão e Módulos mantêm o nome do setor depois do grupo.
+- **Botão de recolher:** no topo da barra, alinhado à direita, mais próximo do conteúdo; recolhida, no centro da coluna de ícones. A altura não muda. O usuário quer ver como fica: registre isso no PR como ponto de revisão visual.
+- **Combobox vazio:** a mensagem "Nenhum município encontrado." está apertada na lista do filtro de município, em Contatos. Ajustar o padding em `ComboboxEmpty`, que vale para os outros seletores, sem trocar o texto.
+
+**Ler:** spec.md › Administração; design.md; código: `src/components/AppLayout.tsx`, `src/components/ui/sidebar.tsx`, `src/components/ui/combobox.tsx`, `src/components/MunicipalityPicker.tsx`, `src/pages/admin/UsersPage.tsx`, `src/pages/admin/SectorsPage.tsx`, `src/pages/admin/ModulesPage.tsx`, `src/pages/connection/ConnectionPage.tsx`, `src/pages/directory/ContactsPage.tsx`, `e2e/sidebar.spec.ts`, `e2e/admin.spec.ts`, `e2e/theme.spec.ts`, `e2e/connection.spec.ts`.
+
+**Pronto quando:** atendente vê Atendimento, Contatos e Órgãos; supervisor vê também Conexão e Módulos, sem Setores e Usuários; administrador vê tudo, com Usuários só em Configurações; os grupos e o breadcrumb seguem o `design.md`; o botão de recolher fica à direita com a barra aberta, no centro recolhida, e a altura dele e dos itens não muda; o teste de recolher em `sidebar.spec` reflete a nova regra; o combobox vazio tem respiro nos dois temas, com conferência visual.
+
+### [ ] T43 — Assumir chamado pela lista da conversa
+
+- Em `ConversationList`, uma seção "Na fila (N)" no topo, separada do restante e só quando houver chamado na fila, com prévia e botão "Assumir" em cada item. Hoje a fila fica depois dos chamados do usuário, sem botão. O restante da ordem não muda.
+- Clicar no item abre a conversa; o botão fica fora do link, porque não pode haver botão dentro dele.
+- Ao assumir, a tela não muda e aparece o aviso "Chamado assumido" com o link "Abrir conversa", sem perder o texto em digitação. Se a conversa aberta for a do próprio chamado, ela passa a mostrar o novo responsável.
+- Se outra pessoa assumir antes, mostra o erro de concorrência da API em Note, e o item sai da seção. O assumir no painel continua abrindo a conversa.
+- A lista segue escondida abaixo de 1280px; a T44 cobre esse caso.
+
+**Ler:** spec.md › Recebimento e distribuição; design.md; código: `src/components/ConversationList.tsx`, `src/lib/tickets.ts`, `src/pages/PanelPage.tsx` (modelo do botão), `src/pages/ticket/TicketPage.tsx`, `e2e/conversation.spec.ts`, `e2e/panel.spec.ts`.
+
+**Pronto quando:** com outra conversa aberta e texto digitado, assumir pela lista não muda a tela nem apaga o texto, e o link abre a conversa assumida; o chamado sai de "Na fila" e aparece como "Você"; com a seção vazia, ela não aparece; dois atendentes disputando o mesmo chamado: um assume e o outro vê o erro; assumir no painel continua abrindo a conversa.
+
+### [ ] T44 — Sino de notificações
+
+Depende da T43, porque reaproveita o assumir sem sair da tela.
+
+- Botão do cabeçalho habilitado, abrindo a lista, em todos os papéis e larguras. O componente `Popover` entra sobre `@base-ui/react`, já usado no projeto; nenhuma biblioteca nova.
+- **Número desconectado:** a faixa `DisconnectionNote` sai das telas e vira item fixo no topo, para supervisor e administrador, levando a `/conexao?setor=<id>`. Mudança de regra: fica também durante `connecting` e na tela de conexão. Cor de alerta no contador.
+- **Chamado na fila:** itens com contato, prévia, "Abrir" e "Assumir", da fila do setor do usuário; administrador consulta todos os setores, com o nome do setor no item. O texto é "Assumir", termo do resto do sistema. Assumir segue a regra da T43, com erro em Note na lista.
+- **Aviso ao entrar na fila:** toast breve, sem botão ("Chamado recebido: <contato>"), comparando a fila recarregada com a anterior. Primeira carga e reconexão do WebSocket não avisam.
+- Sem tabela nem rota nova: usa `GET` da lista de chamados e os avisos do WebSocket. Atualizar o teste em `sidebar.spec` que espera o botão desabilitado.
+
+**Ler:** spec.md › Estrutura e implantação, Recebimento e distribuição, Notificações; arquitetura.md › Tempo real; design.md; código: `src/components/AppLayout.tsx`, `src/components/DisconnectionNote.tsx`, `src/components/ConversationList.tsx`, `src/lib/realtime.ts`, `src/lib/tickets.ts`, `src/lib/admin.ts`, `src/components/ui/combobox.tsx` (modelo de `@base-ui/react`), `e2e/sidebar.spec.ts`, `e2e/connection.spec.ts`, `e2e/conversation.spec.ts`, `e2e/panel.spec.ts`.
+
+**Pronto quando:** chamado novo sobe o contador, mostra o aviso e o item, sem recarregar; assumir pelo sino não muda a tela; "Abrir" leva à conversa; quando outra pessoa assume ou cancela, o item sai; devolvido à fila volta a aparecer; recarregar a página e reconectar o WebSocket não repetem o aviso; atendente não vê número desconectado, supervisor e administrador veem, com contador em alerta, e o item leva à tela do setor e só sai ao conectar; a faixa não aparece mais; atendente de outro setor não vê o chamado; administrador vê os setores, identificados; funciona na largura do celular.
+
+### [ ] T45 — Alertas do navegador e som
+
+Só web. Depende da T44. A verificação manual precisa de HTTPS, então é feita no endereço publicado da T41; o endereço HTTP do Tailscale não libera notificações.
+
+- Em Configurações, uma opção para ativar a notificação do navegador e outra para o som, guardadas no navegador, como o tema. A permissão só é pedida ao ativar, nunca ao abrir a página, e permissão negada mostra o motivo.
+- Notificação ao entrar um chamado na fila, só com a aba em segundo plano: nome do contato, sem o texto da mensagem, sem repetir o mesmo chamado entre abas. Clicar traz a aba para a frente e abre a conversa.
+- Som curto gerado no navegador, sem arquivo nem biblioteca. Sem interação prévia com a página, o navegador bloqueia e nada quebra.
+- Título da aba com o contador do sino, por exemplo `(2) Central de Atendimento`, voltando ao título normal com zero.
+- Usa a mesma comparação de fila da T44: primeira carga e reconexão não alertam. Fora do escopo: PWA e Web Push.
+
+**Ler:** spec.md › Notificações; arquitetura.md › Tempo real; design.md; código: `src/components/AppLayout.tsx`, `src/lib/theme.ts` (modelo da escolha no navegador), `src/lib/realtime.ts`, `src/lib/tickets.ts`, `e2e/sidebar.spec.ts`, `e2e/theme.spec.ts`.
+
+**Pronto quando:** com a permissão concedida no Playwright, em `localhost`, aba em segundo plano gera a notificação e aba visível não; recarregar não gera; opção desligada não notifica nem toca; a escolha sobrevive ao recarregar; permissão negada mostra o motivo; o título acompanha o contador; há verificação manual em Chrome, Edge e Firefox, no endereço publicado, de notificação, clique e som.
+
+### [ ] T46 — Tamanho do texto e alto contraste
+
+Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. Decisão do usuário: só estes recursos, sem compromisso de conformidade com a norma brasileira.
+
+- Em Configurações, "Tamanho do texto" (Padrão, Grande e Maior, ou 100%, 115% e 130%) e "Alto contraste", guardados no navegador e aplicados antes de pintar a tela.
+- As fontes hoje são fixas em pixels em `src/index.css`, com tamanhos fixos também nos componentes (`text-[..px]`). Passar a responder ao fator, sem o restante da tela quebrar. O corpo continua em 14px no Padrão.
+- Alto contraste com tokens próprios, em `src/index.css`, para os temas claro e escuro. Texto com 7:1 ou mais, bordas e foco visíveis. Status continua com a palavra, nunca só com a cor.
+- Conferir nas telas de maior densidade: conversa, painel, sino, formulário de encerramento e barra lateral. O zoom do navegador continua funcionando.
+
+**Ler:** spec.md › Acessibilidade; design.md; código: `src/index.css`, `index.html`, `src/lib/theme.ts`, `src/components/AppLayout.tsx`, `e2e/theme.spec.ts`, `e2e/sidebar.spec.ts`.
+
+**Pronto quando:** cada tamanho muda o texto medido no Playwright e sobrevive ao recarregar, sem piscar; alto contraste muda as cores nos temas claro e escuro, e a combinação com o tamanho funciona; o contraste de texto, botão primário, status e foco é medido e fica em 7:1 ou mais para o texto; na largura do celular, em "Maior", não há rolagem horizontal na página; há verificação manual com a pessoa da equipe com baixa visão, registrada no PR.
+
+## Pós-piloto
+
+Ficam para depois da validação do piloto. A skill `/implementar-task` vai pedir confirmação nas tasks acima por causa desta, que está aberta: é só seguir.
+
+### [ ] T36 — Autenticação em dois fatores
+
+Separada da T33. Antes de implementar, definir na spec o meio do segundo fator: código por e-mail ou aplicativo autenticador (TOTP), que não usa e-mail. O e-mail da Hostnet não será usado, porque o plano será encerrado.
+
+- Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
+- O limite de tentativas da T33 vale também para o código do segundo fator.
+
+**Ler:** spec.md › Usuários e acesso; modelo-dados.md › `users`, `sessions`, `login_attempts`, `audit_logs`; arquitetura.md › Autenticação; design.md; código: `core/auth/auth.go`, `core/auth/auth_http.go`, `core/auth/auth_test.go`, `src/pages/LoginPage.tsx`, `src/lib/auth.ts`, `e2e/auth.spec.ts`.
+
+**Pronto quando:** usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
+
 ## Ideias em avaliação
 
 Levantadas nos testes e na revisão do código, sem decisão por enquanto. Se aprovadas, viram regra em `spec.md` e task nesta lista.
+
+- **PWA:** depois de validar os alertas da T45 na web, instalar o sistema como aplicativo, com contador no ícone (Badging API, com suporte limitado entre navegadores). Web Push, para avisar com tudo fechado, e aplicativo desktop (Tauri ou MyGo) ficam de fora por agora.
+- **Conformidade com a ABNT NBR 17225:** norma brasileira de acessibilidade web, de março de 2025, baseada no WCAG 2.2. A conformidade regular corresponde aos níveis A e AA. A T46 não a cobre: faltaria revisar teclado, formulários e leitores de tela. Vale reavaliar se um cliente exigir, inclusive pelo art. 63 da Lei Brasileira de Inclusão.
 
 - **Órgãos no contrato:** quando houver contratos, o contrato aponta o órgão cliente (por exemplo, a prefeitura) e os outros órgãos que fazem parte dele. A sugestão é uma tabela ligando contrato e órgãos, sem órgão pai no cadastro, porque uma autarquia também pode contratar sozinha.
 

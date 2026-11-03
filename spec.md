@@ -14,8 +14,10 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - O piloto será feito no setor de Contabilidade.
 - A conexão inicial será feita com Whatsmeow, biblioteca em Go que utiliza o protocolo do WhatsApp Web.
 - O sistema será hospedado inicialmente em servidor da própria empresa, podendo migrar para uma VPS. A implantação não deve depender de recursos específicos do servidor local, para que a migração seja simples. Em servidor local, a disponibilidade depende da internet e da energia do escritório, e o acesso externo, se necessário, exigirá publicação segura (HTTPS).
+- A validação roda no servidor da empresa, publicado por Cloudflare Tunnel em subdomínio de `gcaspp.com.br`, sem porta de entrada aberta. Todos usam o mesmo endereço, no escritório e em casa; sem internet no escritório, ninguém acessa. O Cloudflare Access fica na frente do sistema: em casa, código por e-mail só para os e-mails da equipe; no escritório, liberado pelo IP da empresa. O login do sistema continua valendo nos dois casos.
+- A Cloudflare vê o tráfego aberto, inclusive conversas e senhas. Antes de usar dados reais, quem responde pela LGPD na empresa precisa avaliar esse ponto.
 - O Whatsmeow é uma conexão não oficial; a operação precisa considerar manutenção da integração e possíveis desconexões. A camada de conexão deve permitir uma futura substituição sem alterar os registros de atendimento.
-- Quando o número de um setor desconectar, o sistema avisará os supervisores no painel (sem envio de e-mail) e oferecerá uma tela para reconectar por QR code.
+- Quando o número de um setor desconectar, o sistema avisará os supervisores e administradores no sino de notificações (sem envio de e-mail) e oferecerá uma tela para reconectar por QR code.
 - Riscos conhecidos: o celular principal precisa se conectar periodicamente (cerca de 14 dias) para manter os dispositivos vinculados, e iniciar muitas conversas com números novos aumenta o risco de banimento.
 
 ## Usuários e acesso
@@ -26,7 +28,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - A senha também não pode ser comum ou fácil de adivinhar, como recomenda o NIST SP 800-63B-4. O sistema recusa senhas de uma lista própria de palavras e sequências conhecidas, inclusive com variações de maiúsculas, com números e símbolos no começo ou no fim, ou com letras trocadas por símbolos (`Senha@123`, `P@ssw0rd1!`). A regra vale ao cadastrar e ao redefinir a senha; senhas já gravadas continuam valendo.
 - Depois de 5 tentativas de login erradas seguidas com o mesmo e-mail, ou 30 vindas do mesmo IP, o login fica bloqueado por 15 minutos, mesmo com a senha certa. O limite por IP é maior porque um escritório costuma sair por um único IP. Tentativas erradas com mais de 15 minutos deixam de contar, e o login certo zera a contagem do e-mail. E-mail não cadastrado conta da mesma forma, para a resposta não revelar quais e-mails existem.
 - Não há botão de desbloqueio: redefinir a senha do usuário libera o e-mail dele na hora.
-- A autenticação em dois fatores fica para depois da escolha do local de implantação (T36).
+- A autenticação em dois fatores fica para depois do piloto (T36).
 - A sessão expira após 12 horas sem uso; cada acesso renova o prazo. Sair encerra a sessão imediatamente. Sessões expiradas são apagadas periodicamente, mesmo de quem não volta a entrar.
 - Cada usuário pertence a um único setor, como atendente ou supervisor, e visualiza apenas as filas e os atendimentos do próprio setor.
 - O administrador funciona como supervisor global: acessa todos os setores, além da administração do sistema.
@@ -46,7 +48,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - Ao cadastrar um usuário, o administrador digita a senha inicial, que segue a mesma regra de complexidade da redefinição, e a repassa ao usuário.
 - Usuários não são excluídos, apenas desativados; desativar encerra as sessões abertas. O administrador não pode desativar a própria conta nem alterar o próprio papel, para não perder o acesso à administração.
 - A desativação ou a troca de setor de um usuário é recusada enquanto ele tiver chamados em atendimento, informando quantos são; os chamados precisam ser transferidos antes.
-- A tela de usuários é exclusiva do administrador. A redefinição de senha pelo supervisor existe na API, mas ainda não tem tela.
+- A tela de usuários é exclusiva do administrador, que a abre pelo menu Configurações. A redefinição de senha pelo supervisor existe na API, mas ainda não tem tela.
 
 ## Órgãos e contatos
 
@@ -99,7 +101,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 
 Não haverá distribuição automática nem limite de chamados ativos por atendente.
 
-Ao assumir pelo painel, a conversa abre em seguida. A linha inteira do chamado no painel também abre a conversa. Encerrar, transferir para outro setor, cancelar e devolver à fila levam de volta ao painel; a correção continua na mesma tela.
+Ao assumir pelo painel, a conversa abre em seguida. Ao assumir pela lista "Conversas do setor" ou pelo sino de notificações, a tela não muda e aparece o aviso "Chamado assumido" com o link "Abrir conversa", sem interromper a conversa atual nem o texto em digitação. A linha inteira do chamado no painel também abre a conversa. Encerrar, transferir para outro setor, cancelar e devolver à fila levam de volta ao painel; a correção continua na mesma tela.
 
 O painel mostra também os **realizados hoje**: todos os atendimentos do setor encerrados no dia, no horário de Brasília e pelo momento real do encerramento, com "Você" nos próprios. Transferidos para outro setor e cancelados aparecem identificados. Cada linha abre o chamado. O administrador vê o setor escolhido no painel.
 
@@ -108,6 +110,15 @@ Fora do expediente, as mensagens entrarão na fila normalmente, sem resposta aut
 Mensagens de grupos do WhatsApp serão ignoradas no piloto e não gerarão chamados. O tratamento de grupos será reavaliado com base no uso real.
 
 Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão registradas no chamado correspondente com a marcação "enviada fora do sistema", sem atendente identificado. Se não houver chamado aberto para o contato, será criado um chamado na fila do setor. O uso do aparelho para atendimento deve ser evitado.
+
+### Notificações
+
+- O sino do cabeçalho está em todas as telas. Clicar nele abre a lista; o contador soma os chamados na fila e os números desconectados.
+- **Chamado na fila:** cada um é um item com o contato, a prévia da última mensagem e os botões "Abrir" e "Assumir". O item existe enquanto o chamado estiver na fila, inclusive devolvido ou transferido, e sai quando alguém assume ou cancela. Não há lido nem histórico.
+- Atendentes e supervisores veem a fila do próprio setor; o administrador vê a de todos os setores, com o nome do setor em cada item.
+- Ao entrar um chamado na fila, além do contador, aparece um aviso breve, sem botão, para evitar assumir sem querer ao digitar. Abrir a tela ou recuperar a conexão não avisa dos chamados que já estavam na fila.
+- **Número desconectado:** item fixo no topo da lista, só para supervisores e administradores, que leva à tela de conexão do setor. Fica até o número conectar, inclusive enquanto a conexão está em andamento e na própria tela de conexão. Enquanto houver número desconectado, o contador fica na cor de alerta.
+- **Fora da tela:** quem ativar recebe a notificação do navegador quando a aba está em segundo plano, com o nome do contato e sem o texto da mensagem, e um som curto ao entrar um chamado na fila. O título da aba mostra o contador. Cada pessoa liga ou desliga no menu Configurações, e a escolha fica no navegador. Com tudo fechado, não há aviso.
 
 ## Conversa
 
@@ -209,6 +220,11 @@ Alterações nos horários deverão ficar registradas no histórico de auditoria
 - O chamado cancelado fica no histórico, identificado como cancelado, e não é corrigido nem reaberto. Notas internas continuam permitidas.
 - Uma nova mensagem do mesmo número abre outro chamado, como após um encerramento.
 
+## Acessibilidade
+
+- No menu Configurações, cada pessoa escolhe o tamanho do texto (Padrão, Grande ou Maior) e liga o alto contraste, que vale com o tema claro e com o escuro. A escolha fica no navegador, como o tema.
+- O alvo é atender pessoas com baixa visão. O sistema não declara conformidade com a ABNT NBR 17225.
+
 ## Armazenamento
 
 - O sistema armazenará mensagens e anexos durante o piloto. Isso é necessário porque o Whatsmeow não recupera o histórico antigo sob demanda, os links de mídia do WhatsApp expiram e a transferência entre setores exige histórico compartilhado entre números diferentes.
@@ -265,6 +281,7 @@ As decisões técnicas estão em [arquitetura.md](arquitetura.md).
 - Política de retenção, recuperação e LGPD para mensagens e anexos.
 - Revisão dos itens fora do piloto com base no uso real.
 - Backup: última etapa a ser resolvida, junto com a decisão final de hospedagem (servidor local ou VPS).
+- Reavaliar a publicação por Cloudflare Tunnel e Access: o limite de usuários do plano gratuito diante dos até 120 atendentes e a resposta sobre a LGPD.
 
 Este documento consolida as decisões da conversa.
 
