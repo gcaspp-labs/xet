@@ -1,5 +1,5 @@
 import { Bell, BellOff, CircleAlert, QrCode, UserCheck } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -13,6 +13,8 @@ import { useNotifications } from '@/lib/notifications'
 import { lastMessagePreview } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 
+const appTitle = 'Central de Atendimento'
+
 // Sino do cabeçalho (spec.md › Notificações): números desconectados no topo, depois os
 // chamados na fila. O contador soma os dois; fica em alerta enquanto houver número caído.
 export function NotificationBell({ user }: { user: User }) {
@@ -22,6 +24,14 @@ export function NotificationBell({ user }: { user: User }) {
   const { reset } = assign
   const label =
     count > 0 ? `Notificações, ${count} ${count === 1 ? 'pendente' : 'pendentes'}` : 'Notificações'
+
+  // O título da aba mostra o contador para quem está em outra aba.
+  useEffect(() => {
+    document.title = count > 0 ? `(${count}) ${appTitle}` : appTitle
+    return () => {
+      document.title = appTitle
+    }
+  }, [count])
 
   return (
     <Popover

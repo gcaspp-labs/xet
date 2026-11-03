@@ -1,9 +1,11 @@
 import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
 import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
 import {
+  BellRing,
   BookUser,
   Boxes,
   Building2,
+  CircleAlert,
   Landmark,
   LogOut,
   MessagesSquare,
@@ -13,14 +15,17 @@ import {
   Settings,
   Sun,
   Users,
+  Volume2,
   type LucideIcon,
 } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { NotificationBell } from '@/components/NotificationBell'
 import { RealtimeNote } from '@/components/RealtimeNote'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -46,6 +51,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { type NotificationBlock, useAlertSettings } from '@/lib/alerts'
 import { type Role, type User, useCurrentUser, useLogout } from '@/lib/auth'
 import { roleLabels } from '@/lib/format'
 import { useRealtime } from '@/lib/realtime'
@@ -107,6 +113,39 @@ const themeItems: { value: Theme; label: string; icon: LucideIcon }[] = [
   { value: 'system', label: 'Sistema', icon: Monitor },
 ]
 
+const notificationBlockReasons: Record<NotificationBlock, string> = {
+  denied: 'Notificações bloqueadas neste navegador. Libere nas permissões do site.',
+  insecure: 'Notificações exigem endereço seguro. Acesse o sistema por HTTPS.',
+  unsupported: 'Este navegador não oferece notificações. Use outro navegador.',
+}
+
+function AlertSettings() {
+  const { browser, sound, block, setBrowserAlerts, setSoundAlerts } = useAlertSettings()
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Alertas</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={browser}
+        disabled={block !== undefined}
+        onCheckedChange={(checked) => void setBrowserAlerts(checked)}
+      >
+        <BellRing strokeWidth={1.7} aria-hidden />
+        Notificação do navegador
+      </DropdownMenuCheckboxItem>
+      {block && (
+        <Alert variant="warning" className="my-1">
+          <CircleAlert strokeWidth={1.7} aria-hidden />
+          <AlertDescription>{notificationBlockReasons[block]}</AlertDescription>
+        </Alert>
+      )}
+      <DropdownMenuCheckboxItem checked={sound} onCheckedChange={setSoundAlerts}>
+        <Volume2 strokeWidth={1.7} aria-hidden />
+        Som
+      </DropdownMenuCheckboxItem>
+    </DropdownMenuGroup>
+  )
+}
+
 function SettingsMenu({ role }: { role: Role }) {
   const [theme, setTheme] = useTheme()
   const logout = useLogout()
@@ -118,7 +157,7 @@ function SettingsMenu({ role }: { role: Role }) {
         <Settings strokeWidth={1.7} className="size-[15px]!" aria-hidden />
         <span>Configurações</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top">
+      <DropdownMenuContent side="top" className="min-w-60">
         <DropdownMenuGroup>
           <DropdownMenuLabel>Tema</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
@@ -130,6 +169,8 @@ function SettingsMenu({ role }: { role: Role }) {
             ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <AlertSettings />
         <DropdownMenuSeparator />
         {role === 'admin' && (
           <DropdownMenuItem

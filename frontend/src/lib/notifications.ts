@@ -1,7 +1,9 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { type Sector, useSectors } from '@/lib/admin'
+import { alertQueueEntry } from '@/lib/alerts'
 import type { User } from '@/lib/auth'
 import { type TicketSummary, ticketsQuery } from '@/lib/tickets'
 
@@ -41,6 +43,7 @@ function sectorOfTicketsKey(key: readonly unknown[]) {
 // com um toast quando um chamado entra na fila.
 export function useNotifications(user: User) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { data: sectors = [] } = useSectors()
   const isAdmin = user.role === 'admin'
   const canConnect = isAdmin || user.role === 'supervisor'
@@ -69,6 +72,12 @@ export function useNotifications(user: User) {
   useEffect(() => {
     watchedIds.current = new Set(watched.map((s) => s.id))
   }, [watched])
+
+  // A notificação do navegador pode ser clicada bem depois de criada, já em outra tela.
+  const navigateRef = useRef(navigate)
+  useEffect(() => {
+    navigateRef.current = navigate
+  }, [navigate])
 
   // Ouve o cache, e não a tela, para comparar cada carga com a anterior sem depender de renderização.
   useEffect(() => {
@@ -104,6 +113,9 @@ export function useNotifications(user: User) {
       for (const ticket of queued) {
         if (!before.has(ticket.id)) {
           toast(`Chamado recebido: ${ticket.contact.name}`, { id: `queue-${ticket.id}` })
+          alertQueueEntry(ticket.id, ticket.contact.name, () => {
+            void navigateRef.current(`/chamados/${ticket.id}`)
+          })
         }
       }
     })
