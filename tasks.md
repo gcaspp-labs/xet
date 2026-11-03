@@ -9,7 +9,7 @@ Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](sp
 - Status: `[ ]` pendente, `[~]` em andamento, `[x]` concluída.
 - Se durante uma task surgir uma decisão não prevista na spec, ela é registrada na spec antes de seguir.
 - O número identifica a task. As tasks pendentes são numeradas na ordem de execução, então basta chamar a próxima. Task nova entra com o próximo número; se precisar vir antes de outras pendentes, as seguintes são renumeradas. As concluídas mantêm o número, porque commits e PRs o citam. Um ajuste pequeno de processo pode entrar com sufixo (T20.1), sem renumerar as seguintes.
-- A linha `**Ler:**` de cada task aponta as seções dos documentos e os arquivos de partida, para não ler tudo a cada task (passo 2 da skill `/implementar-task`). Os caminhos partem de `backend/internal/`, de `backend/` (em `db/`), de `frontend/` (em `src/`, `e2e/` e `index.html`) e da raiz (em `deploy/` e `.github/`).
+- A linha `**Ler:**` de cada task aponta as seções dos documentos e os arquivos de partida, para não ler tudo a cada task (passo 2 da skill `/implement-task`). Os caminhos partem de `backend/internal/`, de `backend/` (em `db/`), de `frontend/` (em `src/`, `e2e/` e `index.html`) e da raiz (em `deploy/` e `.github/`).
 
 ## Fase 1 — Fundação
 
@@ -170,7 +170,7 @@ Só reorganiza, para facilitar a leitura e reduzir conflitos nas tasks seguintes
 
 ### [x] T20.1 — Leitura por camadas
 
-Ajuste de processo, sem mudança no produto. A skill `/implementar-task` lia seis documentos inteiros a cada task e passa a ler só o que a task precisa, sem esquecer regra de negócio.
+Ajuste de processo, sem mudança no produto. A skill `/implement-task` lia seis documentos inteiros a cada task e passa a ler só o que a task precisa, sem esquecer regra de negócio.
 
 - **Skill:** leitura por camadas, com gatilhos que obrigam a ler mais e registro, no PR, do que foi lido e do que ficou de fora.
 - **Mapa:** cada task pendente ganha a linha `**Ler:**`, com as seções dos documentos e os arquivos de partida. "Permissões", em `modelo-dados.md`, passa a ser um título, para os gatilhos e os mapas poderem citá-la.
@@ -282,7 +282,7 @@ Só muda onde o código fica, para ler o backend por funcionalidade. Comportamen
 - `core` não importa módulos e um módulo não importa outro; os dois garantidos por `depguard` em `backend/.golangci.yml`.
 - `sector.go` guarda um `messaging.Provider` (`SetProvider`), que precisa sair de lá para o `core` não importar `helpdesk`. Se isso exigir mudança de comportamento, parar e perguntar.
 - Ficam como estão, porque exigiriam mudar o banco ou uma regra: `core/users` consulta os chamados em andamento do usuário; `sectors` mantém as colunas do WhatsApp, gravadas por `helpdesk/connection.go`; `audit_logs` mantém a chave para `tickets`.
-- Atualizar `arquitetura.md` (Estrutura do repositório e "Um arquivo por assunto") e `modelo-dados.md` (Domínios e dependências) antes de mover o código, e depois os caminhos da skill `/implementar-task` (passo 2) e das linhas `**Ler:**` das tasks pendentes.
+- Atualizar `arquitetura.md` (Estrutura do repositório e "Um arquivo por assunto") e `modelo-dados.md` (Domínios e dependências) antes de mover o código, e depois os caminhos da skill `/implement-task` (passo 2) e das linhas `**Ler:**` das tasks pendentes.
 - Commits pequenos, por módulo, sempre compilando e com os testes passando.
 
 **Ler:** arquitetura.md › Estrutura do repositório; modelo-dados.md › Domínios; código: `httpapi/router.go`, `httpapi/respond.go`, `auth/auth.go`, `sector/sector.go`, `sector/connection.go`, `directory/contact_import.go`, `ticket/service.go`, `cmd/server/main.go`, `httpapi/auth_test.go` (auxiliares dos testes), `backend/.golangci.yml`.
@@ -327,7 +327,7 @@ A autenticação em dois fatores saiu desta task e foi para a T36.
 
 ### [~] T34 — Implantação e validação
 
-Depende da T41 (publicação por Cloudflare Tunnel). Pode rodar antes das demais, quando houver acesso ao servidor. Como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
+Depende da T41 (publicação por Cloudflare Tunnel). Pode rodar antes das demais, quando houver acesso ao servidor. Como a skill `/implement-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
 
 - Implantação no servidor da empresa com Docker Compose, publicada pelo túnel.
 - Percorrer todos os critérios de validação da spec com o número real da Contabilidade.
@@ -342,7 +342,7 @@ Depende da T41 (publicação por Cloudflare Tunnel). Pode rodar antes das demais
 
 ## Fase 7 — Órgãos, municípios e contatos
 
-Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
+Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como a skill `/implement-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
 
 ### [x] T37 — Municípios no cadastro de órgãos
 
@@ -401,7 +401,7 @@ Antes de implementar, escolher a API e registrar a justificativa em `arquitetura
 
 ## Fase 8 — Publicação, navegação e notificações
 
-Para as tasks desta fase, a skill `/implementar-task` para porque T34, T35 e T36 continuam abertas, e a T40 enquanto o PR dela não for mergeado. É só confirmar para ela seguir.
+Para as tasks desta fase, a skill `/implement-task` para porque T34, T35 e T36 continuam abertas, e a T40 enquanto o PR dela não for mergeado. É só confirmar para ela seguir.
 
 ### [ ] T41 — Publicação por Cloudflare Tunnel e Access
 
@@ -492,7 +492,7 @@ Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. D
 
 ## Pós-piloto
 
-Ficam para depois da validação do piloto. A skill `/implementar-task` vai pedir confirmação nas tasks acima por causa destas, que estão abertas: é só seguir.
+Ficam para depois da validação do piloto. A skill `/implement-task` vai pedir confirmação nas tasks acima por causa destas, que estão abertas: é só seguir.
 
 ### [ ] T35 — Proteção da branch main
 
