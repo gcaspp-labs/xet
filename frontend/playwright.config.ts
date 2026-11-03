@@ -11,6 +11,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // Na máquina de desenvolvimento, com outros programas abertos, mais navegadores em paralelo
+  // esgotam a memória e param o sistema por segundos, estourando os tempos de espera dos testes.
+  workers: process.env.CI ? undefined : 4,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${frontendPort}`,
