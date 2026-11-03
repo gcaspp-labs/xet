@@ -466,7 +466,9 @@ test('filtra contatos por município e órgão, junto com setor, módulo e texto
 
   // O filtro de município mostra só os que têm órgão.
   await municipalityFilter.fill('Zacarias')
-  await expect(page.getByText('Nenhum município encontrado.')).toBeVisible()
+  const empty = page.getByText('Nenhum município encontrado.')
+  await expect(empty).toBeVisible()
+  await expect(empty).toHaveCSS('padding', '16px 12px')
   await municipalityFilter.fill('ibiuna')
   await page.getByRole('option', { name: 'Ibiúna', exact: true }).click()
   await expect(rows).toHaveCount(3)

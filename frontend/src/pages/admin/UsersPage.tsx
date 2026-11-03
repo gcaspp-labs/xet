@@ -325,7 +325,7 @@ export default function UsersPage() {
   return (
     <>
       <Topbar
-        breadcrumb="Administração"
+        breadcrumb="Configurações"
         title="Usuários"
         action={
           <Button onClick={() => openSheet(null)}>

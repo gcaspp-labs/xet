@@ -43,7 +43,7 @@ export default function ContactsPage() {
   return (
     <>
       <Topbar
-        breadcrumb="Cadastro"
+        breadcrumb="Helpdesk"
         title="Contatos"
         action={
           <div className="flex flex-wrap justify-end gap-2">
