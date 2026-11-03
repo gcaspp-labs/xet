@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { connectionKey } from '@/lib/connection'
 import { historyKey, ticketKey } from '@/lib/conversation'
 import { contactsKey } from '@/lib/directory'
+import { resetQueueBaseline } from '@/lib/notifications'
 import { closedTodayKey, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Avisos do backend (arquitetura.md, Tempo real): dizem o que mudou, e os dados
@@ -57,6 +58,8 @@ export function useRealtime() {
         delay = minDelay
         setOnline(true)
         if (reconnecting) {
+          // O que entrou na fila durante a queda não é novidade para o sino: não avisa.
+          resetQueueBaseline()
           void queryClient.invalidateQueries()
         }
       }

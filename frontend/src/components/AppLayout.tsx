@@ -1,7 +1,6 @@
 import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
 import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
 import {
-  Bell,
   BookUser,
   Boxes,
   Building2,
@@ -18,8 +17,7 @@ import {
 } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { DisconnectionNote } from '@/components/DisconnectionNote'
-import { Button } from '@/components/ui/button'
+import { NotificationBell } from '@/components/NotificationBell'
 import { RealtimeNote } from '@/components/RealtimeNote'
 import {
   DropdownMenu,
@@ -48,7 +46,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { type Role, useCurrentUser, useLogout } from '@/lib/auth'
+import { type Role, type User, useCurrentUser, useLogout } from '@/lib/auth'
 import { roleLabels } from '@/lib/format'
 import { useRealtime } from '@/lib/realtime'
 import { type Theme, useTheme } from '@/lib/theme'
@@ -161,7 +159,7 @@ function SettingsMenu({ role }: { role: Role }) {
 }
 
 // Cabeçalho fixo: a marca e as notificações não mudam de lugar ao recolher a barra lateral.
-function AppHeader() {
+function AppHeader({ user }: { user: User }) {
   return (
     <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-2.5 border-b border-line bg-card px-2 md:px-4">
       <SidebarTrigger className="md:hidden" />
@@ -171,10 +169,7 @@ function AppHeader() {
         <p className="body-strong truncate">GCASPP LAB</p>
         <p className="caption truncate text-ink-soft">Central de Atendimento</p>
       </div>
-      {/* Só marca o lugar: as notificações ainda não existem. */}
-      <Button variant="ghost" size="icon" aria-label="Notificações" disabled>
-        <Bell strokeWidth={1.7} aria-hidden />
-      </Button>
+      <NotificationBell user={user} />
     </header>
   )
 }
@@ -192,7 +187,7 @@ export default function AppLayout() {
       className="flex-col"
       style={{ '--header-height': '3.5rem' } as CSSProperties}
     >
-      <AppHeader />
+      <AppHeader user={user} />
       <div className="flex flex-1">
         <Sidebar
           collapsible="icon"
@@ -222,7 +217,6 @@ export default function AppLayout() {
         </Sidebar>
         <SidebarInset>
           {!online && <RealtimeNote />}
-          <DisconnectionNote />
           <Outlet />
         </SidebarInset>
       </div>

@@ -248,14 +248,16 @@ export function useAssignFromTicket(ticketId: number, sectorId: number | undefin
   })
 }
 
-// Assumir chamado sem estar na conversa dele, pelo painel ou pela lista; o backend
-// decide entre cliques simultâneos.
-export function useAssignTicket(sectorId: number) {
+// Assumir chamado sem estar na conversa dele, pelo painel, pela lista ou pelo sino; o
+// backend decide entre cliques simultâneos. O setor vem na chamada porque o sino reúne
+// vários setores para o administrador.
+export function useAssignTicket() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (ticketId: number) => api<void>(`/tickets/${ticketId}/assign`, { method: 'POST' }),
+    mutationFn: ({ ticketId }: { ticketId: number; sectorId: number }) =>
+      api<void>(`/tickets/${ticketId}/assign`, { method: 'POST' }),
     // Em sucesso ou conflito, a lista e a conversa aberta mostram o responsável atual.
-    onSettled: (_data, _error, ticketId) =>
+    onSettled: (_data, _error, { ticketId, sectorId }) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),

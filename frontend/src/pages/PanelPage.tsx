@@ -94,7 +94,7 @@ function MessageCell({ ticket }: { ticket: TicketSummary }) {
 }
 
 function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSummary[] }) {
-  const assign = useAssignTicket(sectorId)
+  const assign = useAssignTicket()
   const navigate = useNavigate()
 
   return (
@@ -134,12 +134,15 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
                     disabled={assign.isPending}
                     aria-label={`Assumir chamado de ${ticket.contact.name}`}
                     onClick={() =>
-                      assign.mutate(ticket.id, {
-                        onSuccess: () => {
-                          toast.success('Chamado assumido')
-                          void navigate(`/chamados/${ticket.id}`)
+                      assign.mutate(
+                        { ticketId: ticket.id, sectorId },
+                        {
+                          onSuccess: () => {
+                            toast.success('Chamado assumido')
+                            void navigate(`/chamados/${ticket.id}`)
+                          },
                         },
-                      })
+                      )
                     }
                   >
                     <UserCheck strokeWidth={1.7} aria-hidden />

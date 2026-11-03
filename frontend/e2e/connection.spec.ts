@@ -20,12 +20,15 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   const { sector, supervisor } = await seedSector(baseURL!)
   await signIn(page, supervisor, userPassword)
 
-  // Número nunca conectado: o painel avisa e leva à tela de conexão.
-  const note = page
-    .getByRole('alert')
-    .filter({ hasText: `Número do setor ${sector.name} desconectado.` })
-  await expect(note).toBeVisible()
-  await note.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
+  // Número nunca conectado: o sino avisa e leva à tela de conexão.
+  const bell = page.getByRole('banner').getByRole('button', { name: /^Notificações/ })
+  const item = page.getByRole('link', { name: `Número do setor ${sector.name} desconectado` })
+  const openItem = async () => {
+    await bell.click()
+    await item.click()
+  }
+  await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+  await openItem()
   await expect(page.getByRole('heading', { name: 'Conexão do WhatsApp' })).toBeVisible()
   await expect(page.getByText('Desconectado', { exact: true })).toBeVisible()
   await expect(page.getByText('O número ainda não foi conectado.')).toBeVisible()
@@ -56,20 +59,28 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   ).toBeVisible()
   await expect(qr).toBeHidden()
 
+  await expect(bell).toHaveAccessibleName('Notificações')
   await page.getByRole('link', { name: 'Atendimento' }).click()
   await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
-  await expect(note).toBeHidden()
+  await bell.click()
+  await expect(page.getByText('Nenhuma notificação.')).toBeVisible()
+  await page.keyboard.press('Escape')
 
-  // Queda da conexão: o aviso aparece no painel sem recarregar.
+  // Queda da conexão: o item aparece no sino sem recarregar, e a faixa antiga não volta.
   await phone(request, sector.id, 'drop')
-  await expect(note).toBeVisible()
-  await note.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
+  await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+  await expect(page.getByText(/desconectado\./)).toBeHidden()
+  await openItem()
   await expect(page.getByText(formatted)).toBeVisible()
+  // O item continua na própria tela de conexão, até o número conectar.
+  await bell.click()
+  await expect(item).toBeVisible()
+  await page.keyboard.press('Escape')
   await page.getByRole('link', { name: 'Atendimento' }).click()
 
   // Desvinculado pelo celular: a tela pede um novo QR code.
   await phone(request, sector.id, 'logout')
-  await note.getByRole('link', { name: 'Reconecte pelo QR code.' }).click()
+  await openItem()
   await expect(page.getByText('Requer QR code', { exact: true })).toBeVisible()
   await expect(
     page.getByText('O número foi desvinculado. Conecte de novo pelo QR code.'),
