@@ -88,6 +88,7 @@ test('supervisor desvincula o número com confirmação e conecta de novo', asyn
   await signIn(page, supervisor, userPassword)
   await page.goto('/conexao')
   await page.getByRole('button', { name: 'Conectar' }).click()
+  await expect(page.getByRole('img', { name: 'QR code para conectar o número' })).toBeVisible()
   await phone(request, sector.id, 'pair')
   await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
 
@@ -123,6 +124,7 @@ test('aparelho que não pôde ser avisado é removido também pelo celular', asy
   await signIn(page, supervisor, userPassword)
   await page.goto('/conexao')
   await page.getByRole('button', { name: 'Conectar' }).click()
+  await expect(page.getByRole('img', { name: 'QR code para conectar o número' })).toBeVisible()
   await phone(request, sector.id, 'pair')
   await expect(page.getByText('Conectado', { exact: true })).toBeVisible()
 
