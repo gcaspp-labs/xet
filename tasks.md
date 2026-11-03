@@ -340,19 +340,6 @@ Depende da T41 (publicação por Cloudflare Tunnel). Pode rodar antes das demais
 
 **Situação:** a parte que não depende do servidor está feita (cobertura dos critérios, teste do Compose com HTTPS local, roteiros). Falta implantar e percorrer os critérios pendentes com o número real, em `validacao-piloto.md`.
 
-## Configurações pendentes
-
-Ajustes fora do código, feitos no GitHub por quem administra o repositório.
-
-### [ ] T35 — Proteção da branch main
-
-- Exigir PR para alterar a `main` (sem push direto).
-- Exigir os checks do CI (T18) verdes e a branch atualizada antes do merge.
-
-**Ler:** arquitetura.md › Integração contínua; código: `.github/workflows/ci.yml`.
-
-**Pronto quando:** um PR com check falhando não pode ser mergeado e push direto na `main` é recusado.
-
 ## Fase 7 — Órgãos, municípios e contatos
 
 Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como a skill `/implementar-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
@@ -505,7 +492,22 @@ Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. D
 
 ## Pós-piloto
 
-Ficam para depois da validação do piloto. A skill `/implementar-task` vai pedir confirmação nas tasks acima por causa desta, que está aberta: é só seguir.
+Ficam para depois da validação do piloto. A skill `/implementar-task` vai pedir confirmação nas tasks acima por causa destas, que estão abertas: é só seguir.
+
+### [ ] T35 — Proteção da branch main
+
+Ajuste fora do código, feito no GitHub por quem administra o repositório. Adiada porque o plano gratuito da organização não permite proteção de branch nem rulesets em repositório privado: a API do GitHub responde 403 pedindo upgrade (conferido em 2026-11-03). No piloto, só o usuário faz merge e o deploy é manual, então um merge ruim não chega sozinho ao servidor.
+
+Reavaliar quando entrar outra pessoa no repositório, agentes rodarem sem acompanhamento, o deploy ficar automático ou houver dados reais de clientes em produção.
+
+Exige o GitHub Team (US$ 4 por usuário/mês em novembro de 2026). Com os agentes na conta do usuário, a regra não impede o merge de um PR com checks verdes: para isso, eles precisam de conta própria, e a regra precisa exigir a aprovação do usuário. O administrador só fica sujeito às regras com a opção "Do not allow bypassing the above settings".
+
+- Exigir PR para alterar a `main` (sem push direto).
+- Exigir os checks do CI (T18) verdes e a branch atualizada antes do merge.
+
+**Ler:** arquitetura.md › Integração contínua; código: `.github/workflows/ci.yml`.
+
+**Pronto quando:** um PR com check falhando não pode ser mergeado e push direto na `main` é recusado.
 
 ### [ ] T36 — Autenticação em dois fatores
 
