@@ -110,7 +110,7 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
   await expect(received.nth(2).getByLabel('Duração do áudio')).toHaveText('0:07')
 
   // Grava pelo microfone (simulado), ouve antes de enviar e envia como mensagem de voz.
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await page.getByRole('button', { name: 'Gravar áudio' }).click()
   await expect(page.getByRole('status', { name: 'Gravação de áudio' })).toContainText('Gravando')
@@ -173,7 +173,7 @@ test('player de áudio toca, avança e responde ao teclado na gravação e nas m
   await expect(received.nth(0)).toContainText('Áudio indisponível')
   await expect(received.nth(0).getByLabel('Duração do áudio')).toHaveText('0:03')
 
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await page.getByRole('button', { name: 'Gravar áudio' }).click()
   await expect(page.getByRole('status', { name: 'Gravação de áudio' })).toContainText('Gravando')

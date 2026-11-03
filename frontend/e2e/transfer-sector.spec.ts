@@ -58,7 +58,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   // Na origem, o responsável preenche o formulário completo e escolhe o destino.
   await signIn(page, origin.agent, userPassword)
   await page.getByRole('link', { name: contact }).click()
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await page.getByRole('button', { name: 'Outro setor' }).click()
   const sheet = page.getByRole('dialog', { name: 'Transferir para outro setor' })
@@ -116,7 +116,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
 
   // Ao assumir, o destino escreve a primeira mensagem pelo próprio número.
   await page.goto(destinationUrl)
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await page.getByRole('textbox', { name: 'Mensagem' }).fill('Olá, aqui é o setor de destino.')
   await page.getByRole('textbox', { name: 'Mensagem' }).press('Enter')

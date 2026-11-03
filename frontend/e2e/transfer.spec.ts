@@ -44,7 +44,7 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   // O atendente assume e transfere para o colega.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Joana Cliente' }).click()
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText(`${agentName} assumiu o chamado`)

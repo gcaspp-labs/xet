@@ -62,7 +62,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Paulo Cliente' }).click()
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 
   // Número desconhecido: o formulário pede o cadastro e não encerra com campos vazios.
@@ -201,7 +201,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   await expect(details).not.toContainText('Histórico de alterações')
   await expect(details).not.toContainText('Assunto')
   for (const name of ['Corrigir', 'Cancelar chamado', 'Assumir']) {
-    await expect(page.getByRole('button', { name })).toHaveCount(0)
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0)
   }
   await details.getByRole('tab', { name: 'Histórico' }).click()
   await expect(details.getByRole('list', { name: 'Chamados do contato' })).toContainText(
@@ -224,7 +224,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   // Em atendimento, outro atendente não vê a ação; o supervisor cancela.
   await queue.getByRole('link', { name: 'Paula Golpe' }).click()
   const url = page.url()
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 
   // No celular, as ações do responsável cabem na tela sem rolagem lateral.
@@ -312,7 +312,7 @@ test('os módulos do contato vêm marcados no encerramento e podem ser alterados
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: `Vera ${id}` }).click()
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   await expect(sheet.getByRole('checkbox', { name: 'Folha' })).toBeChecked()
@@ -379,7 +379,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   await expect(page.getByRole('heading', { name: saved })).toBeVisible()
   await expect(details).toContainText(saved)
   await expect(conversation).toContainText('Contato não cadastrado')
-  await expect(page.getByRole('button', { name: 'Assumir' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
 
   // Quem já estava nas outras telas vê o nome sem recarregar.
   await expect(otherQueue.getByRole('link', { name: saved })).toBeVisible()
@@ -392,7 +392,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   await expect(page.getByRole('heading', { name: saved })).toBeVisible()
 
   // Só com o nome, o encerramento ainda pede o órgão.
-  await page.getByRole('button', { name: 'Assumir' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const closing = page.getByRole('dialog', { name: 'Encerrar chamado' })
