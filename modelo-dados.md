@@ -112,6 +112,7 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | Cancelar chamado na fila | Próprio setor | Próprio setor | Todos os setores |
 | Cancelar ou devolver à fila chamado em atendimento | Só sendo o responsável | Próprio setor | Todos os setores |
 | Corrigir chamado encerrado | Só os que encerrou | Próprio setor | Todos os setores |
+| Ver o dashboard do atendimento | — | Próprio setor | Todos os setores |
 | Gerenciar módulos | — | Próprio setor | Todos os setores |
 | Redefinir senha | — | Usuários do próprio setor | Todos |
 | Conectar e desvincular número (QR code) e ver status | — | Próprio setor | Todos os setores |
