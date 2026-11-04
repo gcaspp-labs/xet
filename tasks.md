@@ -477,7 +477,7 @@ Só web. Depende da T44. A verificação manual precisa de HTTPS, então é feit
 
 **Pronto quando:** com a permissão concedida no Playwright, em `localhost`, aba em segundo plano gera a notificação e aba visível não; recarregar não gera; opção desligada não notifica nem toca; a escolha sobrevive ao recarregar; permissão negada mostra o motivo; o título acompanha o contador; há verificação manual em Chrome, Edge e Firefox, no endereço publicado, de notificação, clique e som.
 
-### [~] T46 — Tamanho do texto e alto contraste
+### [x] T46 — Tamanho do texto e alto contraste
 
 Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. Decisão do usuário: só estes recursos, sem compromisso de conformidade com a norma brasileira.
 
