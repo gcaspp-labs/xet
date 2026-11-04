@@ -49,7 +49,7 @@ Sempre antes de escrever a task:
 
 Numeração, conforme "Como usar" do `tasks.md`: task nova entra com o próximo número. Se precisar vir antes de outras pendentes, as seguintes são renumeradas; concluídas nunca mudam. Um ajuste pequeno de processo pode usar sufixo (T20.1).
 
-Se a task puder rodar antes de pendentes anteriores, diga isso no texto, porque a `/implement-task` para e pede confirmação ao encontrar task anterior que não esteja `[x]`.
+Se a task puder rodar antes de pendentes anteriores, diga isso no texto, porque a `/implement-task` para e pede confirmação ao encontrar task anterior que não esteja `[x]`, a não ser que a anterior seja `**Verificação:** humana`.
 
 Formato obrigatório, porque a skill localiza as tasks com `grep -n '^### ' tasks.md`:
 
@@ -63,6 +63,8 @@ Contexto ou condição prévia, só quando necessários.
 **Ler:** spec.md › Seção; modelo-dados.md › `tabela`, Permissões; arquitetura.md › Seção; design.md; código: `core/modulo/arquivo.go`, `db/queries/tabela.sql`, `src/pages/Pagina.tsx`, `e2e/assunto.spec.ts`.
 
 **Pronto quando:** resultados verificáveis, separados por ponto e vírgula, cobrindo cada regra.
+
+**Verificação:** automática
 ```
 
 Regras do conteúdo:
@@ -74,6 +76,7 @@ Regras do conteúdo:
 - **Autossuficiente:** coloque na task links, números, dados conferidos, cuidados e comandos descobertos no levantamento. Não aponte para a conversa, o `backlog.md` ou a pasta temporária.
 - **Decisão técnica:** registre o que importa para o resultado. Deixe o resto para a implementação, sem escrever o código na task.
 - **"Pronto quando":** toda regra nova precisa de um teste de integração ou ponta a ponta, conforme o `CLAUDE.md`. Regras críticas (concorrência, permissões por setor, idempotência) têm teste específico. O que depender do WhatsApp real ou de serviço externo vira verificação manual explícita.
+- **"Verificação":** `automática` ou `humana`, decidida aqui e não depois de implementar. Sem o campo, vale `humana`. É `humana` se o "Pronto quando" depender de pessoa, do WhatsApp real, de servidor ou de serviço externo, ou se a task for fora do código. Também é `humana` se ela mudar migração, login, permissões, Whatsmeow, deploy, CI ou as regras dos agentes. Mudança visual pode ser `automática` quando as capturas bastarem para provar. Uma task `automática` entra na esteira do agente chief of staff, que pode fazer o merge sem a pessoa.
 - **Dados existentes:** se a migração puder falhar ou perder dados, inclusive no banco de desenvolvimento, diga o que fazer. Migração já mergeada nunca é alterada.
 
 Ideia não aprovada vai para "Ideias em avaliação", uma linha em negrito e a explicação.
@@ -84,7 +87,8 @@ Ideia não aprovada vai para "Ideias em avaliação", uma linha em negrito e a e
 2. Caminhos: todo arquivo citado em `**Ler:**` existe nas pastas de partida. Arquivo que a própria task vai criar não entra nessa linha.
 3. Seções: todo título citado aparece em `grep -n '^##' <documento>`. As tabelas são citadas pelo nome em crase.
 4. Documentos: cada regra da task está em `spec.md` ou `modelo-dados.md`, e nenhuma contradiz outra (`grep -n '<termo>' spec.md modelo-dados.md arquitetura.md`).
-5. Releia cada task como quem não viu esta conversa: dá para implementar sem perguntar nada?
+5. Verificação: toda task nova tem o campo, coerente com o "Pronto quando" e os arquivos que vai alterar.
+6. Releia cada task como quem não viu esta conversa: dá para implementar sem perguntar nada?
 
 ## 8. Finalizar com o PR
 

@@ -15,7 +15,7 @@ Você está começando com o contexto zerado. Tudo o que precisa saber está nos
 3. Atualize a main: `git checkout main && git pull --ff-only origin main`.
 4. Em `tasks.md` (já atualizado da main), verifique:
    - A task `T$ARGUMENTS` existe. Se não existir, pare e avise.
-   - Todas as tasks anteriores estão `[x]`. Se alguma não estiver, o PR dela provavelmente ainda não foi mergeado: pare, diga qual está pendente e pergunte se deve seguir mesmo assim.
+   - Todas as tasks anteriores estão `[x]`, sem contar as marcadas `**Verificação:** humana`, que não bloqueiam as seguintes, a não ser que a task diga que depende delas. Se alguma não estiver, o PR dela provavelmente ainda não foi mergeado: pare, diga qual está pendente e pergunte se deve seguir mesmo assim.
    - A task não está `[x]`. Se estiver, pare e avise que já foi concluída.
 5. Crie a branch a partir da main atualizada: `task/NN-nome-curto` (nome curto em minúsculas, sem acentos, derivado do título da task, ex.: `task/02-banco-de-dados-base`). Se a branch já existir, pare e pergunte se deve continuar nela.
 
