@@ -65,3 +65,7 @@ var errDuplicate = errors.New("message already recorded")
 
 // errOpenTicket rolls back a conversation start that found an open ticket.
 var errOpenTicket = errors.New("contact has an open ticket in the sector")
+
+// ErrInvalidDashboardFilter refuses an assignee or module of another sector or
+// sent without a sector, and a sector or organization that does not exist.
+var ErrInvalidDashboardFilter = errors.New("dashboard filter outside the sector or without one")
