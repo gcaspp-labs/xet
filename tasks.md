@@ -406,7 +406,7 @@ Antes de implementar, escolher a API e registrar a justificativa em `arquitetura
 
 Para as tasks desta fase, a skill `/implement-task` para porque T34, T35 e T36 continuam abertas, e a T40 enquanto o PR dela não for mergeado. É só confirmar para ela seguir.
 
-### [ ] T41 — Publicação por Cloudflare Tunnel e Access
+### [x] T41 — Publicação por Cloudflare Tunnel e Access
 
 Publica o sistema em `https://atendimento.gcaspp.com.br`, sem porta aberta no servidor. O código é entregue aqui; a parte no painel da Cloudflare, no Registro.br e no servidor é do usuário, seguindo o roteiro. Avise-o no resumo final dos lembretes marcados abaixo. A implantação em si e os critérios com o número real continuam na T34.
 
