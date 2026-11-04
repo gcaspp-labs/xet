@@ -2,7 +2,10 @@
 	encode zstd gzip
 
 	handle /api/* {
-		reverse_proxy backend:8080
+		reverse_proxy backend:8080 {
+			# IP real de quem acessa, para o limite de login. Só o túnel alcança o Caddy.
+			header_up X-Forwarded-For {header.CF-Connecting-IP}
+		}
 	}
 
 	handle /health {
