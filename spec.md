@@ -242,7 +242,7 @@ Mostra a situação e o desempenho do atendimento, com filtros. Só leitura.
 | Tempo médio de atendimento | De quando foi assumido até o "Fim" do formulário, em encerrados e transferidos | Momento real do encerramento |
 
 - Na visão de todos os setores, uma transferência conta como transferido na origem e recebido no destino. Um chamado recebido do cliente e depois transferido soma dois recebidos, um em cada setor.
-- A espera conta só a primeira vez na fila de cada chamado: o tempo depois de devolver à fila não entra. O chamado transferido tem a espera contada no destino, a partir da transferência.
+- A espera conta só a primeira vez na fila de cada chamado: o tempo depois de devolver à fila não entra. O chamado transferido tem a espera contada no destino, a partir da transferência. Se a chegada for posterior ao momento em que foi assumido, por causa do relógio de quem enviou a mensagem, a espera conta como zero.
 - O tempo de atendimento ignora o "Início" editado no formulário, mas respeita o "Fim" editado. Se o "Fim" for anterior ao momento em que o chamado foi assumido, o chamado fica fora da média. Cancelados também ficam fora. Como há atendimentos simultâneos, esse tempo não representa trabalho exclusivo naquele cliente.
 - Sem chamados para calcular, a média aparece como "—".
 
