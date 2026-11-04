@@ -499,7 +499,7 @@ Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. D
 
 Pedido da issue #61.
 
-### [~] T47 — API do dashboard do atendimento
+### [x] T47 — API do dashboard do atendimento
 
 - Assunto novo em `helpdesk`, com o trio `dashboard.go`, `dashboard_http.go` e `dashboard_test.go`, e as queries em `db/queries/dashboard.sql`. Sem migração: tudo é calculado na hora, com os índices atuais.
 - `GET /api/dashboard`, com os filtros de período, setor, atendente, módulo e órgão, devolve os nove números e a tabela por atendente, conforme spec.md › Dashboard do atendimento. A resposta distingue "não se aplica ao filtro" de "sem dados", e a tela só mostra o que a API disser.
