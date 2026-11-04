@@ -225,6 +225,14 @@ Alterações nos horários deverão ficar registradas no histórico de auditoria
 - No menu Configurações, cada pessoa escolhe o tamanho do texto (Padrão, Grande ou Maior) e liga o alto contraste, que vale com o tema claro e com o escuro. A escolha fica no navegador, como o tema.
 - O alvo é atender pessoas com baixa visão. O sistema não declara conformidade com a ABNT NBR 17225.
 
+## Janelas de formulário
+
+Formulários e consultas que abrem por cima da tela aparecem em uma janela no centro. O painel fixo da conversa (Detalhes, Notas e Histórico) continua onde está.
+
+- **Com bloqueio:** encerrar, transferir para atendente ou setor, devolver à fila, cancelar chamado, corrigir atendimento, nova conversa e o cadastro de contato aberto durante um atendimento ou pela nova conversa. Não há X, e Esc ou clique fora não fecham: a saída é concluir ou usar o botão Cancelar/Voltar.
+- **Com fechamento normal:** usuários, setores, módulos, órgãos, contatos e importação pelo menu, desvincular número e histórico. X, Esc e clique fora fecham.
+- Cancelar o cadastro de contato volta à janela de onde ele foi aberto, sem perder o que já estava nela.
+
 ## Armazenamento
 
 - O sistema armazenará mensagens e anexos durante o piloto. Isso é necessário porque o Whatsmeow não recupera o histórico antigo sob demanda, os links de mídia do WhatsApp expiram e a transferência entre setores exige histórico compartilhado entre números diferentes.
