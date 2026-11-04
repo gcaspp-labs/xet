@@ -12,7 +12,7 @@ const alertVariants = cva(
           "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
         // Note do design system: uma frase em warning-ink sobre warning-soft, sem título.
         warning:
-          "gap-x-[9px] rounded-(--radius-9) border-transparent bg-warning-soft px-[13px] py-2.5 text-[12.5px] text-warning-ink *:[svg:not([class*='size-'])]:size-[15px] *:data-[slot=alert-description]:text-[12.5px] *:data-[slot=alert-description]:text-warning-ink",
+          "gap-x-[9px] rounded-(--radius-9) border-transparent bg-warning-soft px-[13px] py-2.5 text-[calc(12.5px*var(--text-scale))] text-warning-ink *:[svg:not([class*='size-'])]:size-[15px] *:data-[slot=alert-description]:text-[calc(12.5px*var(--text-scale))] *:data-[slot=alert-description]:text-warning-ink",
       },
     },
     defaultVariants: {

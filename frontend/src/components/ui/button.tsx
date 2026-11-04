@@ -18,8 +18,8 @@ const buttonVariants = cva(
         link: "border-transparent text-accent-strong underline-offset-4 hover:underline",
       },
       size: {
-        default: "gap-[7px] rounded-(--radius-8) px-3.5 py-2 text-[13px]",
-        sm: "gap-[5px] rounded-(--radius-7) px-2.5 py-[5px] text-[12.5px]",
+        default: "gap-[7px] rounded-(--radius-8) px-3.5 py-2 text-[calc(13px*var(--text-scale))]",
+        sm: "gap-[5px] rounded-(--radius-7) px-2.5 py-[5px] text-[calc(12.5px*var(--text-scale))]",
         icon: "size-8 rounded-(--radius-7) [&_svg:not([class*='size-'])]:size-3.5",
       },
     },

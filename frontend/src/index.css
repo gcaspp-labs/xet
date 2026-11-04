@@ -24,6 +24,9 @@
   }
 }
 
+/* Com o texto maior que o padrão, para o layout que depende da largura do texto (design.md). */
+@custom-variant scaled-text (&:is([data-text-size] *));
+
 /*
  * Cores do shadcn mapeadas uma única vez para os tokens. O mapeamento é feito
  * direto nas cores do Tailwind (--color-*), sem as variáveis intermediárias do
@@ -36,6 +39,11 @@
 
   /* Abaixo de 760px a barra lateral vira gaveta (design.md). */
   --breakpoint-md: 760px;
+
+  /* Os tamanhos do Tailwind em uso acompanham o tamanho do texto escolhido. */
+  --text-xs: calc(0.75rem * var(--text-scale));
+  --text-sm: calc(0.875rem * var(--text-scale));
+  --text-base: calc(1rem * var(--text-scale));
 
   --color-background: var(--paper);
   --color-foreground: var(--ink);
@@ -86,64 +94,163 @@
   --radius-xl: var(--radius-12);
 }
 
+/*
+ * Tamanho do texto (design.md): todo tamanho de fonte é multiplicado por --text-scale.
+ * Em tamanho fixo no componente, usar text-[calc(13px*var(--text-scale))].
+ */
+:root {
+  --text-scale: 1;
+}
+:root[data-text-size='large'] {
+  --text-scale: 1.15;
+}
+:root[data-text-size='larger'] {
+  --text-scale: 1.3;
+}
+
+/*
+ * Alto contraste (design.md): camada do projeto sobre os tokens, com texto em 7:1 ou mais.
+ * Os três blocos seguem a regra de tema de tokens.css: claro, escuro pelo sistema e escuro forçado.
+ * Fora de @layer, como tokens.css, e com seletores mais específicos que os dele.
+ */
+:root[data-contrast='high'] {
+  --ink: #000000;
+  --ink-soft: #1f2428;
+  --ink-faint: #33393e;
+  --paper: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eef0f0;
+  --line: #4d555b;
+  --line-soft: #6b7379;
+  --accent: #0b3d41;
+  --accent-strong: #062629;
+  --accent-soft: #d5ebeb;
+  --on-accent: #ffffff;
+  --focus: #000000;
+  --success: #0b5535;
+  --success-soft: #d6efdf;
+  --warning: #6b3e00;
+  --warning-soft: #ffe9c9;
+  --warning-ink: #452800;
+  --danger: #8f1414;
+  --danger-soft: #ffe0e0;
+  --overlay: rgba(0, 0, 0, 0.7);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-contrast='high']:not([data-theme='light']) {
+    --ink: #ffffff;
+    --ink-soft: #e6ebe9;
+    --ink-faint: #c9d1ce;
+    --paper: #000000;
+    --surface: #0a0d0e;
+    --surface-2: #181d1f;
+    --line: #a3adaa;
+    --line-soft: #7f8a87;
+    --accent: #8fdde0;
+    --accent-strong: #c2f0f2;
+    --accent-soft: #123235;
+    --on-accent: #000000;
+    --focus: #ffffff;
+    --success: #7fe0b5;
+    --success-soft: #0f3524;
+    --warning: #f6c27f;
+    --warning-soft: #3a2709;
+    --warning-ink: #ffd8a3;
+    --danger: #ffaaaa;
+    --danger-soft: #3f1515;
+    --overlay: rgba(0, 0, 0, 0.8);
+  }
+}
+:root[data-contrast='high'][data-theme='dark'] {
+  --ink: #ffffff;
+  --ink-soft: #e6ebe9;
+  --ink-faint: #c9d1ce;
+  --paper: #000000;
+  --surface: #0a0d0e;
+  --surface-2: #181d1f;
+  --line: #a3adaa;
+  --line-soft: #7f8a87;
+  --accent: #8fdde0;
+  --accent-strong: #c2f0f2;
+  --accent-soft: #123235;
+  --on-accent: #000000;
+  --focus: #ffffff;
+  --success: #7fe0b5;
+  --success-soft: #0f3524;
+  --warning: #f6c27f;
+  --warning-soft: #3a2709;
+  --warning-ink: #ffd8a3;
+  --danger: #ffaaaa;
+  --danger-soft: #3f1515;
+  --overlay: rgba(0, 0, 0, 0.8);
+}
+/* O foco vence o outline-none dos campos; o controle desabilitado continua legível. */
+:root[data-contrast='high'] :focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+:root[data-contrast='high'] :is(:disabled, [aria-disabled='true'], [data-disabled]) {
+  opacity: 0.85;
+}
+
 /* Estilos de texto do design system (classes .t-* de tokens.css) como utilitários. */
 @utility title-detail {
   font-family: var(--font-serif);
-  font-size: 21px;
+  font-size: calc(21px * var(--text-scale));
   line-height: 1.5;
   font-weight: 600;
 }
 @utility title-page {
   font-family: var(--font-serif);
-  font-size: 19px;
+  font-size: calc(19px * var(--text-scale));
   line-height: 1.5;
   font-weight: 600;
 }
 @utility title-drawer {
   font-family: var(--font-serif);
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale));
   line-height: 1.5;
   font-weight: 600;
 }
 @utility title-panel {
   font-family: var(--font-serif);
-  font-size: 15.5px;
+  font-size: calc(15.5px * var(--text-scale));
   line-height: 1.5;
   font-weight: 600;
 }
 @utility body {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   line-height: 1.5;
   font-weight: 400;
 }
 @utility body-strong {
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--text-scale));
   line-height: 1.5;
   font-weight: 500;
 }
 @utility body-sm {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
   line-height: 1.5;
   font-weight: 400;
 }
 @utility label {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   line-height: 1.5;
   font-weight: 600;
 }
 @utility caption {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   line-height: 1.5;
   font-weight: 400;
 }
 @utility overline {
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--text-scale));
   line-height: 1.5;
   font-weight: 600;
   letter-spacing: 0.07em;
@@ -151,7 +258,7 @@
 }
 @utility table-head {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   line-height: 1.5;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -159,21 +266,21 @@
 }
 @utility kpi-value {
   font-family: var(--font-mono);
-  font-size: 26px;
+  font-size: calc(26px * var(--text-scale));
   line-height: 1.5;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 @utility mono-num {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
   line-height: 1.5;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 @utility wordmark-short {
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: calc(15px * var(--text-scale));
   line-height: 1.2;
   font-weight: 500;
   font-variant-numeric: tabular-nums;

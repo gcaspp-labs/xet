@@ -19,7 +19,7 @@ function ComboboxInput({
       <ComboboxPrimitive.Input
         data-slot="combobox-input"
         className={cn(
-          "w-full min-w-0 rounded-(--radius-7) border border-input bg-card py-2 pr-9 pl-[11px] text-[13px] text-foreground transition-colors outline-none placeholder:text-ink-faint focus:border-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
+          "w-full min-w-0 rounded-(--radius-7) border border-input bg-card py-2 pr-9 pl-[11px] text-[calc(13px*var(--text-scale))] text-foreground transition-colors outline-none placeholder:text-ink-faint focus:border-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
           clearLabel && "pr-16",
           className
         )}

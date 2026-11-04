@@ -1,11 +1,13 @@
 import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
 import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
 import {
+  ALargeSmall,
   BellRing,
   BookUser,
   Boxes,
   Building2,
   CircleAlert,
+  Contrast,
   Landmark,
   LogOut,
   MessagesSquare,
@@ -51,6 +53,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { type TextSize, useContrast, useTextSize } from '@/lib/accessibility'
 import { type NotificationBlock, useAlertSettings } from '@/lib/alerts'
 import { type Role, type User, useCurrentUser, useLogout } from '@/lib/auth'
 import { roleLabels } from '@/lib/format'
@@ -82,7 +85,7 @@ function NavGroup({ label, items, role }: { label: string; items: NavItem[]; rol
   }
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="overline whitespace-nowrap text-sidebar-foreground/70 group-data-[collapsible=icon]:mt-0">
+      <SidebarGroupLabel className="overline whitespace-nowrap text-ink-faint group-data-[collapsible=icon]:mt-0">
         {label}
       </SidebarGroupLabel>
       <SidebarGroupContent>
@@ -146,6 +149,35 @@ function AlertSettings() {
   )
 }
 
+const textSizeItems: { value: TextSize; label: string }[] = [
+  { value: 'default', label: 'Padrão' },
+  { value: 'large', label: 'Grande' },
+  { value: 'larger', label: 'Maior' },
+]
+
+function AccessibilitySettings() {
+  const [textSize, setTextSize] = useTextSize()
+  const [highContrast, setHighContrast] = useContrast()
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Tamanho do texto</DropdownMenuLabel>
+      <DropdownMenuRadioGroup value={textSize} onValueChange={setTextSize}>
+        {textSizeItems.map((item) => (
+          <DropdownMenuRadioItem key={item.value} value={item.value}>
+            <ALargeSmall strokeWidth={1.7} aria-hidden />
+            {item.label}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+      <DropdownMenuSeparator />
+      <DropdownMenuCheckboxItem checked={highContrast} onCheckedChange={setHighContrast}>
+        <Contrast strokeWidth={1.7} aria-hidden />
+        Alto contraste
+      </DropdownMenuCheckboxItem>
+    </DropdownMenuGroup>
+  )
+}
+
 function SettingsMenu({ role }: { role: Role }) {
   const [theme, setTheme] = useTheme()
   const logout = useLogout()
@@ -169,6 +201,8 @@ function SettingsMenu({ role }: { role: Role }) {
             ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <AccessibilitySettings />
         <DropdownMenuSeparator />
         <AlertSettings />
         <DropdownMenuSeparator />
@@ -251,7 +285,7 @@ export default function AppLayout() {
                 <SettingsMenu role={user.role} />
               </SidebarMenuItem>
             </SidebarMenu>
-            <p className="caption px-2 whitespace-nowrap text-sidebar-foreground/60 transition-[opacity,visibility] duration-200 group-data-[collapsible=icon]:invisible group-data-[collapsible=icon]:opacity-0">
+            <p className="caption px-2 whitespace-nowrap text-ink-faint transition-[opacity,visibility] duration-200 group-data-[collapsible=icon]:invisible group-data-[collapsible=icon]:opacity-0">
               g-lab
             </p>
           </SidebarFooter>

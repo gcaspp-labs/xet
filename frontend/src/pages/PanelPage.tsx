@@ -302,7 +302,7 @@ function SectorPanel({ sectorId, user }: { sectorId: number; user: User }) {
   const inProgress = tickets.filter((t) => t.status === 'in_progress')
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px] scaled-text:grid-cols-1">
       <div className="flex min-w-0 flex-col gap-4">
         <QueueCard sectorId={sectorId} tickets={queued} />
         <InProgressCard tickets={inProgress} user={user} />
