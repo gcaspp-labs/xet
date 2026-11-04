@@ -15,6 +15,18 @@
       } catch {
         // Sem acesso ao armazenamento do navegador, vale o tema do sistema.
       }
+      // Tamanho do texto e alto contraste, nas mesmas chaves de src/lib/accessibility.ts.
+      try {
+        const textSize = localStorage.getItem('text-size')
+        if (textSize === 'large' || textSize === 'larger') {
+          document.documentElement.dataset.textSize = textSize
+        }
+        if (localStorage.getItem('contrast') === 'high') {
+          document.documentElement.dataset.contrast = 'high'
+        }
+      } catch {
+        // Sem acesso ao armazenamento do navegador, valem o tamanho padrão e o contraste normal.
+      }
     </script>
   </head>
   <body>

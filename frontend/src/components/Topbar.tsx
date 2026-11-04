@@ -27,7 +27,7 @@ export function Topbar({
             <ArrowLeft strokeWidth={1.7} aria-hidden />
           </Link>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 scaled-text:basis-64">
           {breadcrumb && <p className="caption text-ink-faint">{breadcrumb}</p>}
           <h1 className="title-page truncate">{title}</h1>
         </div>
