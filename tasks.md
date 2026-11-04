@@ -495,6 +495,42 @@ Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. D
 
 **Pronto quando:** cada tamanho muda o texto medido no Playwright e sobrevive ao recarregar, sem piscar; alto contraste muda as cores nos temas claro e escuro, e a combinação com o tamanho funciona; o contraste de texto, botão primário, status e foco é medido e fica em 7:1 ou mais para o texto; na largura do celular, em "Maior", não há rolagem horizontal na página; há verificação manual com a pessoa da equipe com baixa visão, registrada no PR.
 
+## Fase 9 — Dashboard do atendimento
+
+Pedido da issue #61.
+
+### [ ] T47 — API do dashboard do atendimento
+
+- Assunto novo em `helpdesk`, com o trio `dashboard.go`, `dashboard_http.go` e `dashboard_test.go`, e as queries em `db/queries/dashboard.sql`. Sem migração: tudo é calculado na hora, com os índices atuais.
+- `GET /api/dashboard`, com os filtros de período, setor, atendente, módulo e órgão, devolve os nove números e a tabela por atendente, conforme spec.md › Dashboard do atendimento. A resposta distingue "não se aplica ao filtro" de "sem dados", e a tela só mostra o que a API disser.
+- Uma rota para as opções do filtro de atendente de um setor: quem é do setor, ativo ou não, e quem já foi responsável por chamado dele. Para o filtro de módulo, a rota `GET /api/sectors/{id}/modules` já atende supervisor e administrador.
+- O período é escolhido por nome (hoje, 7 dias, 30 dias) ou por datas. O backend resolve os dias no horário de Brasília, como em `closed_today.go`. Data inválida ou início depois do fim dão 400.
+- Permissões no backend: só supervisor e administrador. O supervisor fica sempre no próprio setor, e pedir outro dá 403. Atendente ou módulo de outro setor, ou enviados sem setor, dão 400.
+- **Dados conferidos:** `tickets.created_by_id` preenchido indica conversa iniciada no sistema. Chamado criado por mensagem enviada do celular tem `created_by_id` vazio, e a primeira mensagem dele tem `origin = 'phone'`: conta como iniciado, não como recebido, e fica fora da espera. Chamado de transferência entre setores tem `previous_ticket_id` e conta como recebido. Chamado cancelado da fila tem `assigned_at` vazio e fica fora da espera. `assigned_at` guarda só a primeira vez que alguém assumiu.
+- Fora do escopo: a tela (T48) e transferência entre atendentes como número.
+
+**Ler:** spec.md › Dashboard do atendimento, Encerramento, retorno e correções, Cancelamento; modelo-dados.md › `tickets`, `ticket_modules`, `messages`, Permissões, Ciclo de vida do chamado; arquitetura.md › Um arquivo por assunto; código: `helpdesk/routes.go`, `helpdesk/closed_today.go`, `helpdesk/closed_today_http.go`, `helpdesk/closed_today_test.go`, `helpdesk/helpers_test.go`, `db/queries/tickets.sql`.
+
+**Pronto quando:** testes de integração cobrem cada número e a data que o põe no período, inclusive a virada do dia em Brasília; cada célula da tabela de filtros da spec, inclusive os casos "não se aplica"; a transferência entre setores contada na origem e no destino; chamado iniciado no sistema e pelo celular fora dos recebidos; espera sem contar a volta à fila e contada no destino da transferência; tempo de atendimento ignorando o "Início" editado, respeitando o "Fim" editado e sem o chamado com "Fim" anterior a ter sido assumido, nem cancelados; correção de órgão e módulos refletida nos números; chamado com dois módulos contado em cada um; tabela por atendente com responsável final, sem linhas zeradas; atendente recebe 403; supervisor vê o próprio setor e recebe 403 em outro; administrador vê um setor ou todos; filtros de outro setor e datas inválidas dão 400.
+
+**Verificação:** humana
+
+### [ ] T48 — Tela do dashboard do atendimento
+
+Depende da T47: só comece com ela mergeada.
+
+- Tela em `/dashboard`, para supervisor e administrador, com "Dashboard" no grupo Helpdesk do menu, logo depois de Atendimento. O atendente não vê o item, e o endereço o leva ao painel, como as outras rotas protegidas.
+- Filtros no topo, guardados no endereço da página, para sobreviver ao recarregar: período em Chip (`ToggleGroup`, sobre `@base-ui/react`, sem biblioteca nova), com datas à escolha; setor só para o administrador; atendente; módulo; órgão com o `OrganizationPicker`. Atendente e módulo seguem a regra da spec para o administrador sem setor escolhido.
+- Nove KpiCards, separando "Agora" (fila e em atendimento) do período. O componente KpiCard ainda não existe no código: criar conforme o `design.md`, sobre `Card`, usando o estilo `kpi-value`. Tempo médio em horas e minutos ("1 h 05 min"; abaixo de um minuto, "menos de 1 min"). "—" com "Não se aplica ao filtro" quando a API indicar.
+- Tabela por atendente conforme o `design.md`, com números em mono à direita e EmptyState quando não houver linhas. Coluna de setor só na visão de todos os setores.
+- Recarregar os dados com os avisos de chamado do WebSocket e ao reconectar, em `lib/realtime.ts`. Sem gráficos.
+
+**Ler:** spec.md › Dashboard do atendimento, Acessibilidade; arquitetura.md › Tempo real, Bibliotecas padrão; design.md; código: `src/App.tsx`, `src/components/AppLayout.tsx`, `src/components/Topbar.tsx`, `src/components/ui/card.tsx`, `src/components/ui/table.tsx`, `src/components/ContactFilters.tsx` (modelo de filtros), `src/components/ContactSheet.tsx` (`OrganizationPicker`), `src/lib/realtime.ts`, `src/lib/tickets.ts`, `src/pages/PanelPage.tsx` (modelo do setor do administrador), `src/index.css`, `e2e/panel.spec.ts`, `e2e/sidebar.spec.ts`, `e2e/fixtures.ts`.
+
+**Pronto quando:** testes ponta a ponta mostram que o supervisor abre a tela pelo menu, vê só o próprio setor e não tem filtro de setor; o administrador alterna entre todos os setores e um setor; o atendente não vê o item e, pelo endereço, volta ao painel; um chamado novo muda "Na fila" e "Recebidos" sem recarregar; trocar período, atendente, módulo e órgão muda os números; "Na fila" não muda com o período; "Não se aplica ao filtro" aparece nos números indicados pela API; atendente e módulo ficam desabilitados para o administrador sem setor e são limpos ao trocar de setor; os filtros sobrevivem ao recarregar; os itens existentes do menu continuam como estão em `sidebar.spec`; capturas nos temas claro e escuro, no desktop e no celular, sem rolagem horizontal na página, inclusive no texto "Maior", estão no PR.
+
+**Verificação:** automática
+
 ## Pós-piloto
 
 Ficam para depois da validação do piloto.

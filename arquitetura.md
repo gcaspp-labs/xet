@@ -84,6 +84,7 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 - A interface reconecta sozinha após queda, com espera crescente, e recarrega os dados ao reconectar, para não perder eventos do intervalo. Enquanto a conexão está caída, a tela mostra um aviso de que a atualização em tempo real foi interrompida.
 - A sessão é conferida a cada minuto enquanto a conexão está aberta, sem renovar a expiração (só requisições do usuário renovam); sessão encerrada, expirada ou usuário desativado fecha a conexão.
 - No desenvolvimento, o proxy do Vite repassa o WebSocket (`ws: true`); no Caddy, o `reverse_proxy` já o repassa. O túnel mantém o `Host` original, porque o WebSocket confere a origem.
+- O dashboard usa os mesmos avisos de chamado para recarregar os números, sem evento nem tabela próprios. Ele é calculado na hora, a partir de `tickets`, `ticket_modules` e `messages`, sem migração.
 - O sino e os alertas do navegador comparam a fila recarregada com a anterior para saber o que entrou; não há evento nem tabela de notificações. Notificação do navegador exige HTTPS ou `localhost`. O som é gerado no navegador, sem arquivo nem biblioteca, e só toca depois de a pessoa interagir com a página.
 
 ## Autenticação
