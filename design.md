@@ -62,7 +62,7 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | SearchBox | `Input` com ícone de busca | Largura máxima 260px; busca imediata, sem botão |
 | Table | `Table` | Cabeçalho `table-head`; números em mono à direita; primeira coluna com título e subtítulo |
 | Tabs | `Tabs` | Ativa com sublinhado `accent` de 2px |
-| Toast | `sonner` | Rodapé central, ~2,5s, ícone de confirmação em `success`, frase no particípio ("Chamado encerrado"). Erros que exigem ação usam Note, não toast |
+| Toast | `sonner` | Rodapé central, ~2,5s, ícone de confirmação em `success`, frase no particípio ("Chamado encerrado"), 13px no tamanho Padrão, acompanhando o tamanho do texto. Erros que exigem ação usam Note, não toast |
 | Note | `Alert` (variante `warning`) | Ícone de aviso + uma frase em `warning-ink` sobre `warning-soft`, sem título |
 | EmptyState | `Empty` | Ícone de 30px a 50% e uma frase em `ink-faint` |
 | Sidebar | `Sidebar` | Acompanha o tema, sobre `surface`, em vez de ficar escura nos dois temas como no brand book (decisão do projeto); começa abaixo do Cabeçalho; recolhe para só os ícones, com o botão no topo da própria barra, alinhado à direita e, recolhida, no centro da coluna de ícones, e a escolha fica no navegador; abaixo de 760px vira gaveta, aberta pelo botão do Cabeçalho. Grupos com título fixo: Helpdesk (Atendimento, Contatos, Conexão) e Cadastro (Órgãos, Módulos, Setores). O breadcrumb da Topbar usa o nome do grupo |

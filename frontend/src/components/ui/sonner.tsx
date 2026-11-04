@@ -4,6 +4,7 @@ import { useTheme } from "@/lib/theme"
 
 // Toast do design system (design.md): rodapé central, ~2,5s, ícone de
 // confirmação em success. O tema acompanha a escolha do menu de configurações.
+// O CSS do sonner fixa 13px fora de @layer, então só uma utilidade com ! vence e segue o tamanho do texto.
 const Toaster = ({ ...props }: ToasterProps) => {
   const [theme] = useTheme()
   return (
@@ -29,7 +30,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast body",
+          toast: "cn-toast body text-[calc(13px*var(--text-scale))]!",
         },
       }}
       {...props}

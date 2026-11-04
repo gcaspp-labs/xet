@@ -246,6 +246,61 @@ test('tamanho do texto muda o texto medido e sobrevive ao recarregar', async ({ 
   expect(await fontSize(page, 'body')).toBe(14)
 })
 
+test('o aviso temporário acompanha o tamanho escolhido', async ({ page, baseURL }) => {
+  const { sector, agent } = await connectedSector(baseURL!)
+  await signIn(page, agent, userPassword)
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+
+  for (const [label, expected] of [
+    ['Padrão', 13],
+    ['Grande', 13 * 1.15],
+    ['Maior', 13 * 1.3],
+  ] as const) {
+    await chooseInMenu(page, 'menuitemradio', label)
+    const contact = await receive(baseURL!, sector.id)
+    const title = page.locator('[data-sonner-toast] [data-title]', {
+      hasText: `Chamado recebido: ${contact}`,
+    })
+    await expect(title).toBeVisible()
+    expect(await title.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(
+      expected,
+      1,
+    )
+  }
+})
+
+test('em "Maior", na largura do celular, o aviso com ação cabe na tela', async ({
+  browser,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!)
+  const contact = await receive(baseURL!, sector.id)
+
+  const context = await browser.newContext({ viewport: { width: 375, height: 700 } })
+  const page = await context.newPage()
+  await prefer(page, { size: 'larger' })
+  await signIn(page, agent, userPassword)
+  // No painel, assumir leva à conversa e o aviso vem sem ação; pelo sino, ele traz "Abrir conversa".
+  await page
+    .getByRole('banner')
+    .getByRole('button', { name: /^Notificações/ })
+    .click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: `Assumir chamado de ${contact}` })
+    .click()
+
+  const toast = page.locator('[data-sonner-toast]', { hasText: 'Chamado assumido' })
+  const action = toast.getByRole('link', { name: 'Abrir conversa' })
+  await expect(action).toBeVisible()
+  const [toastBox, actionBox] = [await toast.boundingBox(), await action.boundingBox()]
+  expect(toastBox!.x).toBeGreaterThanOrEqual(0)
+  expect(toastBox!.x + toastBox!.width).toBeLessThanOrEqual(375)
+  expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(toastBox!.x + toastBox!.width)
+  await expectNoPageScroll(page, 'aviso com ação')
+  await context.close()
+})
+
 test('todo texto das telas densas acompanha o tamanho escolhido', async ({ browser, baseURL }) => {
   test.slow()
   const { sector, agent } = await connectedSector(baseURL!)
