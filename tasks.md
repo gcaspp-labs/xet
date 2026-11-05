@@ -1,16 +1,12 @@
 # Tasks — Piloto (Contabilidade)
 
-Fluxo de implementação do piloto. As regras de negócio estão em [spec.md](spec.md), as decisões técnicas em [arquitetura.md](arquitetura.md), o modelo de dados em [modelo-dados.md](modelo-dados.md) e as regras de implementação em [CLAUDE.md](CLAUDE.md).
+Histórico da implementação do piloto. As regras de negócio estão em [spec.md](spec.md), as decisões técnicas em [arquitetura.md](arquitetura.md), o modelo de dados em [modelo-dados.md](modelo-dados.md) e as regras de implementação em [CLAUDE.md](CLAUDE.md).
 
 ## Como usar
 
-- As tasks são executadas uma por vez, na ordem, cada uma em sua própria branch (`task/NN-nome-curto`).
-- Uma task só é considerada pronta quando todos os itens de "Pronto quando" estiverem atendidos, os testes passarem e a revisão for aprovada.
-- Status: `[ ]` pendente, `[~]` em andamento, `[x]` concluída.
-- `**Verificação:**` diz quem confirma a task: `automática` (o agente chief of staff pode fazer o merge, se a trava liberar) ou `humana` (a pessoa testa e faz o merge). Sem o campo, vale `humana`. Task humana aberta não bloqueia as seguintes, a não ser que elas digam que dependem dela.
-- Se durante uma task surgir uma decisão não prevista na spec, ela é registrada na spec antes de seguir.
-- O número identifica a task. As tasks pendentes são numeradas na ordem de execução, então basta chamar a próxima. Task nova entra com o próximo número; se precisar vir antes de outras pendentes, as seguintes são renumeradas. As concluídas mantêm o número, porque commits e PRs o citam. Um ajuste pequeno de processo pode entrar com sufixo (T20.1), sem renumerar as seguintes.
-- A linha `**Ler:**` de cada task aponta as seções dos documentos e os arquivos de partida, para não ler tudo a cada task (passo 2 da skill `/implement-task`). Os caminhos partem de `backend/internal/`, de `backend/` (em `db/`), de `frontend/` (em `src/`, `e2e/` e `index.html`) e da raiz (em `deploy/` e `.github/`).
+- **Este arquivo é histórico.** Desde 2026-11-05, as tasks são issues do GitHub com o rótulo `task`: `gh issue list --label task --state open`. Aqui ficam as concluídas até a T49, com o número que commits e PRs citam, e as ideias em avaliação.
+- O número da task é o da issue, então as novas começam acima da #77 e não se confundem com as antigas.
+- As regras de como escrever e rodar uma task estão nas skills `create-task` e `implement-task`.
 
 ## Fase 1 — Fundação
 
@@ -324,25 +320,6 @@ A autenticação em dois fatores saiu desta task e foi para a T36.
 
 **Pronto quando:** login bloqueia após o limite de tentativas; senha comum é recusada; sessões expiradas são removidas sem depender de novo login; testes cobrem cada regra.
 
-## Fase 6 — Validação do piloto
-
-### [~] T34 — Implantação e validação
-
-Depende da T41 (publicação por Cloudflare Tunnel). Pode rodar antes das demais, quando houver acesso ao servidor.
-
-- Implantação no servidor da empresa com Docker Compose, publicada pelo túnel.
-- Percorrer todos os critérios de validação da spec com o número real da Contabilidade.
-- Testes ponta a ponta (Playwright) dos fluxos principais.
-- Teste de reconexão: queda de internet, reinício do servidor, desconexão do celular.
-
-**Ler:** spec.md › Estrutura e implantação, Critérios de validação do piloto; arquitetura.md › Componentes, Conexão do número; código: `deploy/compose.yml`, `deploy/Caddyfile`, `deploy/web.Dockerfile`, `e2e/`.
-
-**Pronto quando:** todos os critérios de validação da spec estão marcados como atendidos.
-
-**Verificação:** humana
-
-**Situação:** a parte que não depende do servidor está feita (cobertura dos critérios, teste do Compose com HTTPS local, roteiros). Falta implantar e percorrer os critérios pendentes com o número real, em `validacao-piloto.md`.
-
 ## Fase 7 — Órgãos, municípios e contatos
 
 Levantadas nos testes da interface. Podem rodar antes das pendentes acima: como a skill `/implement-task` para ao encontrar task anterior pendente, é só confirmar para ela seguir.
@@ -553,43 +530,9 @@ Depende da T47: só comece com ela mergeada.
 
 **Verificação:** automática
 
-## Pós-piloto
-
-Ficam para depois da validação do piloto.
-
-### [ ] T35 — Proteção da branch main
-
-Ajuste fora do código, feito no GitHub por quem administra o repositório. Adiada porque o plano gratuito da organização não permite proteção de branch nem rulesets em repositório privado: a API do GitHub responde 403 pedindo upgrade (conferido em 2026-11-03). No piloto, só o usuário faz merge e o deploy é manual, então um merge ruim não chega sozinho ao servidor.
-
-Reavaliar quando entrar outra pessoa no repositório, o deploy ficar automático ou houver dados reais de clientes em produção. Em 2026-11-04, com o merge automático do agente chief of staff, o usuário manteve a proteção só por script e instruções, sem pagar o plano; qualquer agente com o `gh` ainda consegue fazer merge direto.
-
-Exige o GitHub Team (US$ 4 por usuário/mês em novembro de 2026). Com os agentes na conta do usuário, a regra não impede o merge de um PR com checks verdes: para isso, eles precisam de conta própria, e a regra precisa exigir a aprovação do usuário. O administrador só fica sujeito às regras com a opção "Do not allow bypassing the above settings".
-
-- Exigir PR para alterar a `main` (sem push direto).
-- Exigir os checks do CI (T18) verdes e a branch atualizada antes do merge.
-
-**Ler:** arquitetura.md › Integração contínua; código: `.github/workflows/ci.yml`.
-
-**Pronto quando:** um PR com check falhando não pode ser mergeado e push direto na `main` é recusado.
-
-**Verificação:** humana
-
-### [ ] T36 — Autenticação em dois fatores
-
-Separada da T33. Antes de implementar, definir na spec o meio do segundo fator: código por e-mail ou aplicativo autenticador (TOTP), que não usa e-mail. O e-mail da Hostnet não será usado, porque o plano será encerrado.
-
-- Autenticação em dois fatores, recomendada pelo guia de segurança da ANPD para agentes de pequeno porte (item 44).
-- O limite de tentativas da T33 vale também para o código do segundo fator.
-
-**Ler:** spec.md › Usuários e acesso; modelo-dados.md › `users`, `sessions`, `login_attempts`, `audit_logs`; arquitetura.md › Autenticação; design.md; código: `core/auth/auth.go`, `core/auth/auth_http.go`, `core/auth/auth_test.go`, `src/pages/LoginPage.tsx`, `src/lib/auth.ts`, `e2e/auth.spec.ts`.
-
-**Pronto quando:** usuário consegue ativar e usar o segundo fator; testes cobrem cada regra.
-
-**Verificação:** humana
-
 ## Ideias em avaliação
 
-Levantadas nos testes e na revisão do código, sem decisão por enquanto. Se aprovadas, viram regra em `spec.md` e task nesta lista.
+Levantadas nos testes e na revisão do código, sem decisão por enquanto. Se aprovadas, viram regra em `spec.md` e uma issue com o rótulo `task`.
 
 - **PWA:** depois de validar os alertas da T45 na web, instalar o sistema como aplicativo, com contador no ícone (Badging API, com suporte limitado entre navegadores). Web Push, para avisar com tudo fechado, e aplicativo desktop (Tauri ou MyGo) ficam de fora por agora.
 - **Conformidade com a ABNT NBR 17225:** norma brasileira de acessibilidade web, de março de 2025, baseada no WCAG 2.2. A conformidade regular corresponde aos níveis A e AA. A T46 não a cobre: faltaria revisar teclado, formulários e leitores de tela. Vale reavaliar se um cliente exigir, inclusive pelo art. 63 da Lei Brasileira de Inclusão.

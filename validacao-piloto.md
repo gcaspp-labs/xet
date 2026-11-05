@@ -1,8 +1,8 @@
 # Validação do piloto
 
-Acompanha a T34. Cruza cada critério de validação da `spec.md` com os testes automatizados e com o que ainda precisa do servidor e do número real da Contabilidade.
+Acompanha a [T79](https://github.com/gcaspp-labs/xet/issues/79), antiga T34. Cruza cada critério de validação da `spec.md` com os testes automatizados e com o que ainda precisa do servidor e do número real da Contabilidade.
 
-A T34 só termina quando a última coluna da matriz estiver toda como **Atendido**. Até lá, ela fica `[~]` em `tasks.md`.
+A T79 só termina quando a última coluna da matriz estiver toda como **Atendido**. Até lá, a issue fica aberta, com o rótulo `em-andamento`.
 
 ## Situação
 
@@ -60,7 +60,7 @@ Executado com `deploy/compose.yml`, num projeto isolado, com `SITE_ADDRESS=:80`,
 | IPv6 em `CF-Connecting-IP` (`2001:db8::7`): gravado como enviado | OK |
 | `X-Forwarded-For` forjado (`192.0.2.99`) junto de `CF-Connecting-IP: 192.0.2.30`: só o segundo é gravado | OK |
 
-### Verificação manual no servidor, a fazer na T34
+### Verificação manual no servidor, a fazer na T79
 
 | Verificação | Resultado |
 | --- | --- |

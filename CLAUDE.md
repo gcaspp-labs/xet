@@ -6,15 +6,17 @@ Documentos do projeto:
 - [arquitetura.md](arquitetura.md): decisões técnicas, bibliotecas padrão e estrutura do repositório.
 - [modelo-dados.md](modelo-dados.md): domínios, entidades, ligações, restrições e permissões. Migrações seguem este documento; mudanças no modelo são registradas nele antes da migração.
 - [design.md](design.md): aplicação do design system da GCASPP LAB com shadcn/ui: tokens, tema, tipografia, componentes, ícones, marca e tom dos textos.
-- [tasks.md](tasks.md): fluxo de implementação do piloto.
+- Issues do GitHub com o rótulo `task`: as tasks abertas e em andamento.
+- [tasks.md](tasks.md): histórico das tasks concluídas até a T49 e ideias em avaliação.
 - [validacao-piloto.md](validacao-piloto.md): situação dos critérios de validação do piloto, roteiro de implantação e teste de reconexão.
 
 ## Fluxo de trabalho
 
-- Cada task é implementada com a skill `/implement-task NN`, em sessão com contexto zerado. A skill atualiza a main, cria a branch, implementa, valida e termina abrindo o PR.
+- Cada task é uma issue com o rótulo `task`, e o número dela é o da task: a issue #80 é a T80. Ela é implementada com a skill `/implement-task NN`, em sessão com contexto zerado. A skill atualiza a main, cria a branch, implementa, valida e termina abrindo o PR.
 - Cada task diz em `**Verificação:**` se pode entrar sem a pessoa. Só a skill `chief-of-staff` faz merge automático, pela trava `.claude/skills/chief-of-staff/scripts/merge-gate.sh`; sem o campo, vale `humana`.
-- Implementar uma task por vez, na ordem de `tasks.md`, em branch própria `task/NN-nome-curto`.
-- Antes de começar, marcar a task como `[~]`; ao concluir, como `[x]`.
+- Uma issue só pode rodar depois do merge do PR de documentação citado em `**Plano:**`.
+- Implementar uma task por vez, da menor issue para a maior, respeitando `**Depende de:**`, em branch própria `task/NN-nome-curto`.
+- Antes de começar, colocar o rótulo `em-andamento` na issue. O PR tem `Closes #NN` e fecha a issue no merge.
 - A task só termina quando todos os itens de "Pronto quando" forem atendidos e os testes passarem. Não avançar para a próxima sem revisão.
 - Não implementar nada fora do escopo da task atual. Melhorias percebidas viram anotação, não código.
 - Se a spec não cobrir uma situação, parar e perguntar. A decisão tomada é registrada em `spec.md` antes de implementar.
