@@ -1,6 +1,6 @@
 -- name: CreateSector :one
-insert into sectors (name, provider)
-values (@name, @provider)
+insert into sectors (name, email, provider)
+values (@name, @email, @provider)
 returning *;
 
 -- name: GetSector :one
@@ -18,7 +18,8 @@ for update;
 
 -- name: UpdateSector :one
 update sectors
-set name = @name
+set name = @name,
+    email = @email
 where id = @id
 returning *;
 
