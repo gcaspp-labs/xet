@@ -38,6 +38,15 @@ func (h *Handler) Routes(r chi.Router) {
 		r.Get("/qr.png", h.connectionQR)
 	})
 
+	// Assuntos: supervisor do próprio setor e administrador. O atendente lê a lista pelo formulário de encerramento.
+	r.Route("/sectors/{sectorID}/subjects", func(r chi.Router) {
+		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin), auth.RequireSector("sectorID"))
+		r.Get("/", h.listSubjects)
+		r.Post("/", h.createSubject)
+		r.Put("/{subjectID}", h.updateSubject)
+		r.Delete("/{subjectID}", h.deleteSubject)
+	})
+
 	// Painel: chamados abertos, carga de cada atendente e realizados hoje, para todos os papéis do setor.
 	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/tickets", h.listTickets)
 	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/workload", h.workload)

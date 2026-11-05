@@ -9,8 +9,9 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
 
+// correctRequest has no limit on the subject, as in closeRequest.
 type correctRequest struct {
-	Subject        string    `json:"subject" validate:"required,max=500"`
+	Subject        string    `json:"subject" validate:"required"`
 	Resolution     string    `json:"resolution" validate:"required,max=10000"`
 	ModuleIDs      []int64   `json:"moduleIds" validate:"required,min=1,max=100"`
 	OrganizationID int64     `json:"organizationId" validate:"required"`
@@ -18,6 +19,7 @@ type correctRequest struct {
 	EndedAt        time.Time `json:"endedAt" validate:"required"`
 	SpokeWith      string    `json:"spokeWith" validate:"max=200"`
 	Reason         string    `json:"reason" validate:"max=2000"`
+	AddSubject     bool      `json:"addSubject"`
 }
 
 // correctTicket corrects the closing data of a closed ticket, with a reason.

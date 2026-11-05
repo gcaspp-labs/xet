@@ -654,6 +654,14 @@ type Session struct {
 	CreatedAt  time.Time
 }
 
+type Subject struct {
+	ID        int64
+	SectorID  int64
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type Ticket struct {
 	ID               int64
 	Protocol         string

@@ -18,7 +18,8 @@ import (
 
 // Closing is the closing form filled by the assignee. A nil StartedAt keeps
 // the automatic start (arrival of the first message) and a nil EndedAt ends
-// the ticket at the moment it is saved.
+// the ticket at the moment it is saved. AddSubject also adds the subject to the
+// list of the sector, with the form.
 type Closing struct {
 	Subject        string
 	Resolution     string
@@ -26,13 +27,15 @@ type Closing struct {
 	OrganizationID int64
 	StartedAt      *time.Time
 	EndedAt        *time.Time
+	AddSubject     bool
 }
 
 // ClosingForm is what the closing form shows before the assignee fills it:
-// the active modules of the sector, those of the contact among them, the
-// suggested organization and the automatic start.
+// the active modules and the subjects of the sector, the modules of the contact
+// among them, the suggested organization and the automatic start.
 type ClosingForm struct {
 	Modules          []db.Module
+	Subjects         []db.Subject
 	ContactModuleIDs []int64
 	Organization     *db.GetOrganizationRow
 	StartedAt        time.Time
@@ -54,7 +57,11 @@ func (s *Service) ClosingForm(ctx context.Context, actor auth.User, ticketID int
 	if err != nil {
 		return ClosingForm{}, fmt.Errorf("list contact modules: %w", err)
 	}
-	form := ClosingForm{Modules: modules, ContactModuleIDs: contactModules, StartedAt: t.StartedAt}
+	subjects, err := s.Subjects(ctx, t.SectorID)
+	if err != nil {
+		return ClosingForm{}, err
+	}
+	form := ClosingForm{Modules: modules, Subjects: subjects, ContactModuleIDs: contactModules, StartedAt: t.StartedAt}
 	orgID := t.OrganizationID
 	if orgID == nil {
 		c, err := s.q.GetContactWithOrganization(ctx, t.ContactID)
@@ -92,6 +99,11 @@ func (s *Service) Close(ctx context.Context, actor auth.User, ticketID int64, in
 		ticket, changes, err = closeLocked(ctx, q, actor, ticketID, in, db.ClosureTypeResolved)
 		if err != nil {
 			return err
+		}
+		if in.AddSubject {
+			if err := addFormSubject(ctx, q, actor.ID, ticket.SectorID, in.Subject); err != nil {
+				return err
+			}
 		}
 		return recordTicket(ctx, q, ticket.ID, "ticket_closed", actor.ID, changes)
 	})
