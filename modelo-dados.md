@@ -12,7 +12,7 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 | Conexão do número | `internal/helpdesk` | — (colunas do WhatsApp em Setor) | Ligar e desligar o número de WhatsApp de cada setor |
 | Acesso | `internal/core/auth`, `internal/core/users` | Usuário, Sessão, Tentativas de login | Login, papéis e permissões; cadastro de usuários e senhas |
 | Cadastro de clientes | `internal/core/directory` | Município, Órgão, Contato | Pessoas atendidas, os órgãos a que pertencem e os municípios desses órgãos |
-| Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções |
+| Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo, Assunto, Solução | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções; listas de assuntos e soluções do formulário |
 | Mensagens | `internal/helpdesk` | Mensagem, Arquivo | Histórico de mensagens e anexos |
 | Mensageria | `internal/helpdesk/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
 | Auditoria | `internal/core/audit` | Registro de auditoria | Histórico de alterações relevantes |
@@ -26,6 +26,8 @@ erDiagram
     sectors ||--o{ users : "atendentes e supervisores"
     sectors ||--o{ modules : possui
     sectors ||--o{ tickets : "fila do setor"
+    sectors ||--o{ subjects : possui
+    subjects ||--o{ subject_solutions : possui
     users ||--o{ sessions : possui
     municipalities ||--o{ organizations : "município do órgão"
     organizations ||--o{ contacts : "órgão principal"
@@ -116,6 +118,8 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 | Corrigir chamado encerrado | Só os que encerrou | Próprio setor | Todos os setores |
 | Ver o dashboard do atendimento | — | Próprio setor | Todos os setores |
 | Gerenciar módulos | — | Próprio setor | Todos os setores |
+| Gerenciar assuntos e soluções pela tela | — | Próprio setor | Todos os setores |
+| Adicionar assunto ou solução ao salvar o formulário | Quem pode salvar o formulário | Quem pode salvar o formulário | Quem pode salvar o formulário |
 | Redefinir senha | — | Usuários do próprio setor | Todos |
 | Conectar e desvincular número (QR code) e ver status | — | Próprio setor | Todos os setores |
 | Cadastrar setores e usuários | — | — | Sim |
@@ -275,6 +279,26 @@ Restrições:
 
 Notas não são editadas nem excluídas. Qualquer pessoa com acesso ao setor do chamado escreve notas, mesmo sem ser o responsável e após o encerramento. Ficam visíveis para quem pode ver o chamado e, após transferência entre setores, para o setor de destino.
 
+### `subjects` — Assunto da lista do setor
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `sector_id` | bigint → `sectors` | Obrigatório |
+| `name` | text | Obrigatório, não em branco, até 500 caracteres; único por setor, sem diferenciar maiúsculas (`subjects_sector_id_name_key`, em `(sector_id, lower(name))`) |
+
+Assuntos são excluídos de verdade. `tickets.subject` guarda o próprio texto, sem ligação com esta tabela.
+
+### `subject_solutions` — Solução da lista do assunto
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `subject_id` | bigint → `subjects` | Obrigatório; `on delete cascade` |
+| `body` | text | Obrigatório, não em branco, até 10.000 caracteres; único por assunto, sem diferenciar maiúsculas (`subject_solutions_subject_id_body_key`, em `(subject_id, md5(lower(body)))`, porque o texto pode passar do limite de tamanho do índice) |
+
+Soluções são excluídas de verdade e não mudam de assunto. `tickets.resolution` guarda o próprio texto, sem ligação com esta tabela.
+
+Ao salvar o formulário com "adicionar", o item é gravado na mesma transação do chamado, depois de travá-lo, com `on conflict do nothing`. A solução trava o assunto (`for share`) e, se ele não existir mais, não é gravada, sem erro.
+
 ### `protocol_counters` — Contador de protocolo
 
 | Coluna | Tipo | Regras |
@@ -374,7 +398,7 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `ticket_id` | bigint → `tickets` | Preenchido em ações sobre chamados |
-| `entity_type` | text | Ex.: `ticket`, `user`, `sector`, `module` |
+| `entity_type` | text | Ex.: `ticket`, `user`, `sector`, `module`, `subject`, `subject_solution` |
 | `entity_id` | bigint | Obrigatório |
 | `action` | text | Ver tabela abaixo |
 | `actor_id` | bigint → `users` | Quem fez; vazio para ações do sistema |
@@ -401,6 +425,8 @@ A tabela é criada na T03 (primeira ação auditada: redefinição de senha), an
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |
 | `module_created`, `module_updated` | Administração de módulos |
+| `subject_created`, `subject_updated`, `subject_deleted` | Tela de assuntos e, em `subject_created`, também a pergunta do formulário. `changes` com `sector_id` e `name`; `subject_deleted` guarda também o texto das soluções apagadas (`solutions`) |
+| `solution_created`, `solution_updated`, `solution_deleted` | Tela de assuntos e, em `solution_created`, também a pergunta do formulário. `changes` com `subject_id` e `body`. Excluir um assunto não grava um registro por solução: elas ficam em `subject_deleted` |
 | `organization_created`, `organization_updated` | Administração de órgãos |
 | `contact_links_updated` | Cadastro ou edição muda setores ou módulos do contato, na entidade `contact`: `changes` só com o que mudou entre `sector_ids` e `module_ids` (listas ordenadas) |
 | `contact_sector_linked` | Contato entra no setor sozinho ou pela importação, na entidade `contact`: `changes` com `sector_id` de vazio para o setor; `actor_id` vazio em mensagem recebida ou enviada pelo celular, e quem agiu na nova conversa, na transferência e na importação. Vínculo já existente não gera registro |
