@@ -3,6 +3,8 @@
 # Uso: .claude/skills/verify-app/scripts/publish-evidence.sh <número-do-PR> [id-da-execução]
 # Grava imagens e resumos num commit solto, apontado por refs/verify-app/<execução>: o clone normal
 # não baixa essa referência e o CI não roda nela. Depois comenta no PR com as imagens.
+# O repositório é público: tudo o que for publicado fica aberto a qualquer pessoa. Só publique
+# evidência gerada pelas jornadas desta skill, com os dados falsos delas.
 # Para apagar depois do merge: git push origin --delete refs/verify-app/<execução>
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -14,8 +16,6 @@ load_run "${2:-}"
 [ -f "$EVIDENCE_DIR/SUMMARY.md" ] || fail "rode evidence.sh antes de publicar."
 
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-visibility="$(gh repo view --json visibility --jq .visibility)"
-[ "$visibility" = PRIVATE ] || fail "$repo não é privado ($visibility); as evidências ficam locais."
 
 index="$(mktemp -u)"
 body="$(mktemp)"
@@ -23,6 +23,8 @@ trap 'rm -f "$index" "$body"' EXIT
 
 ref="refs/verify-app/$RUN_ID"
 git_dir="$(git -C "$ROOT" rev-parse --absolute-git-dir)"
+# O caminho local da máquina não vai para o repositório.
+sed -i "s#$ROOT/##g" "$EVIDENCE_DIR/SUMMARY.md"
 commit="$(
   cd "$EVIDENCE_DIR"
   export GIT_DIR="$git_dir" GIT_WORK_TREE=. GIT_INDEX_FILE="$index"
