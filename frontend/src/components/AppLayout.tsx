@@ -9,6 +9,7 @@ import {
   CircleAlert,
   Contrast,
   Landmark,
+  LayoutDashboard,
   LogOut,
   MessagesSquare,
   Monitor,
@@ -65,6 +66,7 @@ type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 // A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
 const helpdeskItems: NavItem[] = [
   { to: '/', label: 'Atendimento', icon: MessagesSquare, roles: ['agent', 'supervisor', 'admin'] },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['supervisor', 'admin'] },
   { to: '/contatos', label: 'Contatos', icon: BookUser, roles: ['agent', 'supervisor', 'admin'] },
   { to: '/conexao', label: 'Conexão', icon: QrCode, roles: ['supervisor', 'admin'] },
 ]
@@ -290,7 +292,7 @@ export default function AppLayout() {
             </p>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           {!online && <RealtimeNote />}
           <Outlet />
         </SidebarInset>

@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router'
 import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
+import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import PanelPage from '@/pages/PanelPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/modulos" element={<ModulesPage />} />
             <Route path="/conexao" element={<ConnectionPage />} />
           </Route>

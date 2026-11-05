@@ -129,3 +129,20 @@ export function formatDuration(seconds: number) {
   const total = Math.floor(seconds)
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
+
+// Tempo médio do dashboard: "1 h 05 min", "12 min" ou "menos de 1 min".
+export function formatAverageTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 1) {
+    return 'menos de 1 min'
+  }
+  if (minutes < 60) {
+    return `${minutes} min`
+  }
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`
+}
+
+// Dia que a API devolve como 2026-03-02, no formato pt-BR, sem passar pelo fuso do navegador.
+export function formatDay(day: string) {
+  return day.split('-').reverse().join('/')
+}

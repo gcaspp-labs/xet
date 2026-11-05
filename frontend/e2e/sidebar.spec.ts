@@ -132,7 +132,7 @@ test('supervisor vê também Conexão e Módulos, com o breadcrumb do grupo', as
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Contatos', 'Conexão'],
+      ['Helpdesk', 'Atendimento', 'Dashboard', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos'],
     ])
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -155,7 +155,7 @@ test('administrador vê tudo, com Usuários só em Configurações, e o breadcru
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Contatos', 'Conexão'],
+      ['Helpdesk', 'Atendimento', 'Dashboard', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos', 'Setores'],
     ])
   await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0)

@@ -2,6 +2,7 @@ import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { connectionKey } from '@/lib/connection'
 import { historyKey, ticketKey } from '@/lib/conversation'
+import { dashboardAssigneesKey, dashboardKey } from '@/lib/dashboard'
 import { contactsKey } from '@/lib/directory'
 import { resetQueueBaseline } from '@/lib/notifications'
 import { closedTodayKey, ticketsKey, workloadKey } from '@/lib/tickets'
@@ -23,6 +24,8 @@ function handle(queryClient: QueryClient, event: RealtimeEvent) {
       void queryClient.invalidateQueries({ queryKey: ticketsKey(event.sectorId) })
       void queryClient.invalidateQueries({ queryKey: workloadKey(event.sectorId) })
       void queryClient.invalidateQueries({ queryKey: closedTodayKey(event.sectorId) })
+      void queryClient.invalidateQueries({ queryKey: dashboardKey })
+      void queryClient.invalidateQueries({ queryKey: dashboardAssigneesKey(event.sectorId) })
       // Conversa, notas e histórico abertos do chamado.
       void queryClient.invalidateQueries({ queryKey: ticketKey(event.ticketId) })
       void queryClient.invalidateQueries({ queryKey: historyKey })
