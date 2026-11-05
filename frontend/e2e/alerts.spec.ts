@@ -6,7 +6,7 @@ import {
   type Page,
   type WebSocketRoute,
 } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, onlySectors, seedSector, signIn, unique, userPassword } from './fixtures'
 
 declare global {
   interface Window {
@@ -477,7 +477,73 @@ test('mudar as opções numa aba vale na outra, sem abrir o menu nela', async ({
   await expect.poll(allBeeps).toBe(1)
 })
 
-test('permissão só é pedida ao ativar, e a negada mostra o motivo', async ({ page }) => {
+test('administrador não recebe notificação nem som, mesmo com a escolha salva no navegador', async ({
+  page,
+  browser,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await connectedSector(baseURL!, request)
+  await context.grantPermissions(['notifications'])
+  await spyOnAlerts(page)
+  // Escolha feita antes de o administrador perder as opções: ela continua no navegador.
+  await page.addInitScript(() => {
+    localStorage.setItem('alerts.browser', 'on')
+    localStorage.setItem('alerts.sound', 'on')
+  })
+  await onlySectors(page, sector.id)
+  await signIn(page, admin.email, admin.password)
+  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await setHidden(page, true)
+
+  const otherContext = await browser.newContext()
+  await otherContext.grantPermissions(['notifications'])
+  const other = await otherContext.newPage()
+  await spyOnAlerts(other)
+  await signIn(other, supervisor, userPassword)
+  await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await setOption(other, browserOption, true)
+  await setOption(other, soundOption, true)
+  await setHidden(other, true)
+
+  // O supervisor é alertado, e o painel do administrador recebe o chamado. A espera cobre o atraso
+  // da aba em segundo plano (hiddenTabDelay, em alerts.ts), depois do qual o alerta já teria saído.
+  await receive(request, sector.id, 'Olivia Fila')
+  await expect.poll(() => notified(other)).toEqual(['Olivia Fila'])
+  await expect.poll(() => beeps(other)).toBe(1)
+  await expect(page.getByRole('link', { name: 'Olivia Fila' })).toBeVisible()
+  await page.waitForTimeout(1_000)
+  expect(await notified(page)).toEqual([])
+  expect(await beeps(page)).toBe(0)
+  await otherContext.close()
+})
+
+test('o menu do administrador não tem o grupo Alertas, e o do supervisor tem', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const { supervisor } = await seedSector(baseURL!)
+  await signIn(page, admin.email, admin.password)
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Usuários' })).toBeVisible()
+  await expect(page.getByRole('menu').getByText('Alertas', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('menuitemcheckbox', { name: browserOption })).toHaveCount(0)
+  await expect(page.getByRole('menuitemcheckbox', { name: soundOption })).toHaveCount(0)
+
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await signIn(other, supervisor, userPassword)
+  await other.getByRole('button', { name: 'Configurações' }).click()
+  await expect(other.getByRole('menu').getByText('Alertas', { exact: true })).toBeVisible()
+  await expect(other.getByRole('menuitemcheckbox', { name: browserOption })).toBeVisible()
+  await expect(other.getByRole('menuitemcheckbox', { name: soundOption })).toBeVisible()
+  await otherContext.close()
+})
+
+test('permissão só é pedida ao ativar, e a negada mostra o motivo', async ({ page, baseURL }) => {
+  const { supervisor } = await seedSector(baseURL!)
   await page.addInitScript(() => {
     let state: NotificationPermission = 'default'
     window.__requests = 0
@@ -488,7 +554,7 @@ test('permissão só é pedida ao ativar, e a negada mostra o motivo', async ({ 
       return Promise.resolve(state)
     }
   })
-  await signIn(page, admin.email, admin.password)
+  await signIn(page, supervisor, userPassword)
   await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
   expect(await page.evaluate(() => window.__requests)).toBe(0)
 
@@ -508,11 +574,12 @@ test('permissão só é pedida ao ativar, e a negada mostra o motivo', async ({ 
   expect(await page.evaluate(() => localStorage.getItem('alerts.browser'))).toBeNull()
 })
 
-test('endereço sem HTTPS explica por que não há notificação', async ({ page }) => {
+test('endereço sem HTTPS explica por que não há notificação', async ({ page, baseURL }) => {
+  const { supervisor } = await seedSector(baseURL!)
   await page.addInitScript(() => {
     Object.defineProperty(window, 'isSecureContext', { get: () => false })
   })
-  await signIn(page, admin.email, admin.password)
+  await signIn(page, supervisor, userPassword)
   await page.getByRole('button', { name: 'Configurações' }).click()
   await expect(
     page.getByRole('alert').filter({ hasText: 'Notificações exigem endereço seguro.' }),

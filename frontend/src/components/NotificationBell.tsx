@@ -19,7 +19,7 @@ const appTitle = 'Central de Atendimento'
 // chamados na fila. O contador soma os dois; fica em alerta enquanto houver número caído.
 export function NotificationBell({ user }: { user: User }) {
   const [open, setOpen] = useState(false)
-  const { queue, down, count, showSector } = useNotifications(user)
+  const { queue, down, count } = useNotifications(user)
   const assign = useAssignTicket()
   const { reset } = assign
   const label =
@@ -112,7 +112,6 @@ export function NotificationBell({ user }: { user: User }) {
                     </span>
                   )}
                 </span>
-                {showSector && <span className="caption text-ink-faint">{ticket.sectorName}</span>}
                 <span className="caption truncate text-ink-soft">{lastMessagePreview(ticket)}</span>
                 <span className="mt-1 flex items-center justify-end gap-2">
                   <Link
