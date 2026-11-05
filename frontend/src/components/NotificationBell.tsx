@@ -43,7 +43,7 @@ export function NotificationBell({ user }: { user: User }) {
       }}
     >
       <PopoverTrigger
-        render={<Button variant="ghost" size="icon" aria-label={label} className="relative" />}
+        render={<Button variant="outline" size="icon" aria-label={label} className="relative" />}
       >
         <Bell strokeWidth={1.7} aria-hidden />
         {count > 0 && (

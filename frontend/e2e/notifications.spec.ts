@@ -78,6 +78,44 @@ test('chamado novo sobe o contador, avisa e aparece no sino sem recarregar', asy
   expect(await page.getByText('Chamado recebido: Ana Antiga').count()).toBe(0)
 })
 
+test('o botão do sino tem borda visível e o contador continua legível', async ({
+  page,
+  baseURL,
+  request,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await signIn(page, agent, userPassword)
+  const bell = bellOf(page)
+  const style = await bell.evaluate((element) => {
+    const { borderTopWidth, borderTopStyle, borderTopColor } = getComputedStyle(element)
+    return { borderTopWidth, borderTopStyle, borderTopColor }
+  })
+  expect(parseFloat(style.borderTopWidth)).toBeGreaterThan(0)
+  expect(style.borderTopStyle).toBe('solid')
+  const alpha = await page.evaluate((color) => {
+    const context = document.createElement('canvas').getContext('2d')!
+    context.fillStyle = color
+    context.fillRect(0, 0, 1, 1)
+    return context.getImageData(0, 0, 1, 1).data[3]
+  }, style.borderTopColor)
+  expect(alpha).toBeGreaterThan(0)
+
+  await receive(request, sector.id, 'Ana Cliente')
+  const count = page.getByTestId('notification-count')
+  await expect(count).toHaveText('1')
+  // Nada cobre o contador, e ele fica inteiro dentro da tela.
+  const box = (await count.boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  const onTop = await count.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+    return hit === element || (hit !== null && element.contains(hit))
+  })
+  expect(onTop).toBe(true)
+})
+
 test('assumir pelo sino não muda a tela e "Abrir" leva à conversa', async ({
   page,
   request,
