@@ -6,7 +6,7 @@ import {
   type Page,
   type WebSocketRoute,
 } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, onlySectors, seedSector, signIn, unique, userPassword } from './fixtures'
 
 async function connectSector(baseURL: string, sectorId: number) {
   const api = await apiRequest.newContext({ baseURL })
@@ -350,22 +350,93 @@ test('administrador vê o número desconectado, com o contador em alerta', async
   ).toBeVisible()
 })
 
-test('administrador vê os chamados de todos os setores, identificados', async ({
+test('administrador não vê os chamados no sino, mas os vê e assume pelo painel', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await connectedSector(baseURL!, request)
+  await onlySectors(page, sector.id)
+  await receive(request, sector.id, 'Julia Antiga')
+  await signIn(page, admin.email, admin.password)
+  const bell = bellOf(page)
+  await expect(page.getByRole('link', { name: 'Julia Antiga' })).toBeVisible()
+  await expect(bell).toHaveAccessibleName('Notificações')
+  await expect(page).toHaveTitle('Central de Atendimento')
+
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await signIn(other, supervisor, userPassword)
+  await expect(bellOf(other)).toHaveAccessibleName('Notificações, 1 pendente')
+
+  // O painel do administrador recebe o chamado, e o aviso do supervisor marca o momento em que o
+  // dele estaria na tela. A contagem é pontual: o toHaveCount(0) passaria com o aviso já fechado.
+  await receive(request, sector.id, 'Kleber Novo')
+  await expect(other.getByText('Chamado recebido: Kleber Novo')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Kleber Novo' })).toBeVisible()
+  expect(await page.getByText('Chamado recebido: Kleber Novo').count()).toBe(0)
+  await expect(page.getByTestId('notification-count')).toBeHidden()
+  await expect(bell).toHaveAccessibleName('Notificações')
+  await expect(page).toHaveTitle('Central de Atendimento')
+
+  await bell.click()
+  const popover = page.getByRole('dialog')
+  await expect(popover.getByText('Nenhuma notificação.')).toBeVisible()
+  await expect(popover.getByText('Kleber Novo')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // Atendentes e supervisores continuam com a lista, sem o nome do setor em cada item.
+  await expect(bellOf(other)).toHaveAccessibleName('Notificações, 2 pendentes')
+  await bellOf(other).click()
+  const otherItem = other
+    .getByRole('dialog')
+    .getByRole('listitem')
+    .filter({ hasText: 'Kleber Novo' })
+  await expect(otherItem).toBeVisible()
+  await expect(otherItem).not.toContainText(sector.name)
+  await other.keyboard.press('Escape')
+
+  // Pelo painel, o administrador assume como sempre, e o item sai do sino do supervisor.
+  await page.getByRole('link', { name: 'Kleber Novo' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  await expect(bellOf(other)).toHaveAccessibleName('Notificações, 1 pendente')
+  await otherContext.close()
+})
+
+test('administrador só conta o número desconectado, no sino e no título da aba', async ({
   page,
   request,
   baseURL,
 }) => {
-  const first = await connectedSector(baseURL!, request)
-  const second = await connectedSector(baseURL!, request)
-  await receive(request, first.sector.id, 'Julia Primeiro')
-  await receive(request, second.sector.id, 'Kleber Segundo')
+  const connected = await connectedSector(baseURL!, request)
+  const { sector: down } = await seedSector(baseURL!)
+  await onlySectors(page, connected.sector.id, down.id)
+  await receive(request, connected.sector.id, 'Lucas Fila')
   await signIn(page, admin.email, admin.password)
-  await bellOf(page).click()
+  const bell = bellOf(page)
+  const count = page.getByTestId('notification-count')
+  await expect(count).toHaveText('1')
+  await expect(count).toHaveAttribute('data-alert', 'true')
+  await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+  await expect(page).toHaveTitle('(1) Central de Atendimento')
+
+  await bell.click()
   const popover = page.getByRole('dialog')
-  const juliaItem = popover.getByRole('listitem').filter({ hasText: 'Julia Primeiro' })
-  const kleberItem = popover.getByRole('listitem').filter({ hasText: 'Kleber Segundo' })
-  await expect(juliaItem).toContainText(first.sector.name)
-  await expect(kleberItem).toContainText(second.sector.name)
+  await expect(popover.getByRole('listitem')).toHaveCount(1)
+  await expect(
+    popover.getByRole('link', { name: `Número do setor ${down.name} desconectado` }),
+  ).toBeVisible()
+  await expect(popover.getByText('Lucas Fila')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // O número conecta: o chamado na fila não deixa nada no contador nem no título da aba.
+  await connectSector(baseURL!, down.id)
+  await phone(request, down.id, 'pair')
+  await expect(count).toBeHidden()
+  await expect(bell).toHaveAccessibleName('Notificações')
+  await expect(page).toHaveTitle('Central de Atendimento')
 })
 
 test('o sino cabe na largura do celular', async ({ page, request, baseURL }) => {

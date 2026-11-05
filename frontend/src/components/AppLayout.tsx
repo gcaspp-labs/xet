@@ -206,8 +206,12 @@ function SettingsMenu({ role }: { role: Role }) {
         <DropdownMenuSeparator />
         <AccessibilitySettings />
         <DropdownMenuSeparator />
-        <AlertSettings />
-        <DropdownMenuSeparator />
+        {role !== 'admin' && (
+          <>
+            <AlertSettings />
+            <DropdownMenuSeparator />
+          </>
+        )}
         {role === 'admin' && (
           <DropdownMenuItem
             onClick={() => {

@@ -68,6 +68,17 @@ export async function seedSector(baseURL: string) {
   return result
 }
 
+// O banco é compartilhado entre os testes, que rodam em paralelo e deixam números desconectados.
+// Limita a lista de setores da página aos do teste, para a contagem do sino do administrador ser
+// exata. O restante, inclusive a fila e o tempo real, continua vindo do backend.
+export async function onlySectors(page: Page, ...ids: number[]) {
+  await page.route('**/api/sectors', async (route) => {
+    const response = await route.fetch()
+    const sectors = (await response.json()) as SectorData[]
+    await route.fulfill({ response, json: sectors.filter((s) => ids.includes(s.id)) })
+  })
+}
+
 // Dígito verificador do CNPJ (módulo 11, cada caractere vale o código ASCII menos 48).
 function cnpjCheckDigit(prefix: string) {
   let sum = 0

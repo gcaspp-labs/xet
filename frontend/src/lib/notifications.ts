@@ -7,7 +7,7 @@ import { alertQueueEntry } from '@/lib/alerts'
 import type { User } from '@/lib/auth'
 import { type TicketSummary, ticketsQuery } from '@/lib/tickets'
 
-export type QueuedTicket = TicketSummary & { sectorId: number; sectorName: string }
+export type QueuedTicket = TicketSummary & { sectorId: number }
 
 // Chamados que o sino já conhece na fila, por setor. A comparação com a fila recarregada
 // diz o que entrou (arquitetura.md, Tempo real). Sem registro do setor, a carga é a
@@ -39,8 +39,9 @@ function sectorOfTicketsKey(key: readonly unknown[]) {
 }
 
 // Reúne o que o sino mostra: números desconectados (só supervisor e administrador) e chamados
-// na fila (do setor do usuário; todos os setores ativos para o administrador). Também avisa
-// com um toast quando um chamado entra na fila.
+// na fila do setor do usuário. Também avisa com um toast quando um chamado entra na fila. O
+// administrador não acompanha fila nenhuma (spec.md › Notificações): sem setor acompanhado, não
+// há item, contador, aviso, som nem notificação de chamados.
 export function useNotifications(user: User) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -49,7 +50,7 @@ export function useNotifications(user: User) {
   const canConnect = isAdmin || user.role === 'supervisor'
 
   const watched = useMemo(
-    () => sectors.filter((s) => s.active && (isAdmin || s.id === user.sectorId)),
+    () => sectors.filter((s) => !isAdmin && s.active && s.id === user.sectorId),
     [sectors, isAdmin, user.sectorId],
   )
   const results = useQueries({ queries: watched.map((s) => ticketsQuery(s.id)) })
@@ -59,7 +60,7 @@ export function useNotifications(user: User) {
     watched.forEach((sector, index) => {
       for (const ticket of results[index]?.data ?? []) {
         if (ticket.status === 'queued') {
-          items.push({ ...ticket, sectorId: sector.id, sectorName: sector.name })
+          items.push({ ...ticket, sectorId: sector.id })
         }
       }
     })
@@ -125,5 +126,5 @@ export function useNotifications(user: User) {
     }
   }, [queryClient])
 
-  return { queue, down, count: queue.length + down.length, showSector: isAdmin }
+  return { queue, down, count: queue.length + down.length }
 }
