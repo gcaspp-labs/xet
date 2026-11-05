@@ -537,7 +537,7 @@ Pedido da issue #61.
 
 **Verificação:** humana
 
-### [~] T48 — Tela do dashboard do atendimento
+### [x] T48 — Tela do dashboard do atendimento
 
 Depende da T47: só comece com ela mergeada.
 
