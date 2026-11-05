@@ -420,6 +420,69 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   await expect(details).toContainText(`${organization} — ${defaultMunicipality}`)
 })
 
+test('o aviso sobre o botão não bloqueia o clique nem espera o cursor sair', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  // Tela baixa: a janela ocupa toda a altura e o rodapé fica no mesmo lugar do aviso.
+  await page.setViewportSize({ width: 1280, height: 560 })
+  const { sector, agent } = await seedSector(baseURL!)
+  const { organization } = await prepare(baseURL!, sector.id)
+  const { id, phone } = unique()
+  const name = `Aviso ${id}`
+  expect(
+    (
+      await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+        data: { externalMessageId: `E2E-${id}`, phone, contactName: name, body: 'Bom dia' },
+      })
+    ).ok(),
+  ).toBeTruthy()
+
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await sheet.getByLabel('Assunto').fill('Contracheque')
+  await sheet.getByLabel('Resolução').fill('Enviada a segunda via.')
+  await sheet.getByRole('checkbox', { name: 'Folha' }).click()
+  await sheet.getByLabel('Órgão').fill(organization)
+  await page.getByRole('option', { name: organization }).click()
+
+  await sheet.getByRole('button', { name: 'Cadastrar contato' }).click()
+  const contactSheet = page.getByRole('dialog', { name: 'Editar contato' })
+  await contactSheet.getByLabel('Órgão').fill(organization)
+  await page.getByRole('option', { name: organization }).click()
+  await contactSheet.getByRole('button', { name: 'Salvar' }).click()
+  const notice = page.locator('[data-sonner-toast]', { hasText: 'Contato salvo' })
+  await expect(notice).toBeVisible()
+  await expect(contactSheet).toBeHidden()
+  await expect(sheet).not.toContainText('Contato não cadastrado')
+
+  // Ponto em que o aviso cobre o botão: é ali que a pessoa tenta clicar.
+  const close = sheet.getByRole('button', { name: 'Encerrar' })
+  const overlap = async () => {
+    const [a, b] = [await close.boundingBox(), await notice.boundingBox()]
+    if (!a || !b) return null
+    const [left, right] = [Math.max(a.x, b.x), Math.min(a.x + a.width, b.x + b.width)]
+    const [top, bottom] = [Math.max(a.y, b.y), Math.min(a.y + a.height, b.y + b.height)]
+    return right > left && bottom > top ? { x: (left + right) / 2, y: (top + bottom) / 2 } : null
+  }
+  await expect
+    .poll(overlap, { message: 'o aviso precisa estar sobre o botão para o teste valer' })
+    .not.toBeNull()
+  const point = await overlap()
+  expect(point).not.toBeNull()
+
+  await page.mouse.move(point!.x, point!.y)
+  await page.mouse.click(point!.x, point!.y)
+  await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
+
+  // Com o cursor parado no mesmo lugar, o aviso some no tempo normal.
+  await expect(notice).toBeHidden()
+})
+
 test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request, baseURL }) => {
   const { sector, agent } = await seedSector(baseURL!)
   await prepare(baseURL!, sector.id)

@@ -30,7 +30,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast body text-[calc(13px*var(--text-scale))]!",
+          // O aviso pode ficar sobre um botão: só o link de ação dele recebe o cursor.
+          toast:
+            "cn-toast body text-[calc(13px*var(--text-scale))]! pointer-events-none [&_a]:pointer-events-auto",
         },
       }}
       {...props}
