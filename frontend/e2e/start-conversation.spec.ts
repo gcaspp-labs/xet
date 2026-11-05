@@ -165,14 +165,13 @@ test('atendente cadastra o contato em "Nova conversa" e envia a primeira mensage
   await expect(sheet).toBeVisible()
   await expect(sheet.getByRole('searchbox', { name: 'Buscar contato' })).toHaveValue(`Marta ${id}`)
 
-  await sheet.getByRole('button', { name: 'Novo contato' }).click()
-  await page.keyboard.press('Escape')
-  await expect(drawer).toBeHidden()
-  await expect(sheet).toBeVisible()
-
+  // Com bloqueio: Esc e clique fora não fecham o cadastro nem a conversa.
   await sheet.getByRole('button', { name: 'Novo contato' }).click()
   await expect(drawer).toBeVisible()
+  await page.keyboard.press('Escape')
   await page.mouse.click(10, 300)
+  await expect(drawer).toBeVisible()
+  await drawer.getByRole('button', { name: 'Cancelar' }).click()
   await expect(drawer).toBeHidden()
   await expect(sheet).toBeVisible()
 
