@@ -49,6 +49,7 @@ func (h *Handler) Routes(r chi.Router) {
 type sectorResponse struct {
 	ID               int64               `json:"id"`
 	Name             string              `json:"name"`
+	Email            *string             `json:"email"`
 	Phone            *string             `json:"phone"`
 	Provider         string              `json:"provider"`
 	ConnectionStatus db.ConnectionStatus `json:"connectionStatus"`
@@ -60,6 +61,7 @@ func toSectorResponse(s db.Sector) sectorResponse {
 	return sectorResponse{
 		ID:               s.ID,
 		Name:             s.Name,
+		Email:            s.Email,
 		Phone:            s.Phone,
 		Provider:         s.Provider,
 		ConnectionStatus: s.ConnectionStatus,
@@ -110,7 +112,8 @@ func (h *Handler) listSectors(w http.ResponseWriter, r *http.Request) {
 }
 
 type sectorRequest struct {
-	Name string `json:"name" validate:"required"`
+	Name  string `json:"name" validate:"required"`
+	Email string `json:"email"`
 }
 
 func (h *Handler) createSector(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +234,10 @@ func WriteError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Informe o nome.")
 	case errors.Is(err, ErrNameTaken):
 		httpx.WriteError(w, http.StatusConflict, "Já existe um setor com este nome.")
+	case errors.Is(err, ErrInvalidEmail):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Informe um e-mail válido.")
+	case errors.Is(err, ErrEmailTaken):
+		httpx.WriteError(w, http.StatusConflict, "Já existe um setor com este e-mail.")
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Setor não encontrado.")
 	case errors.Is(err, ErrModuleNameTaken):

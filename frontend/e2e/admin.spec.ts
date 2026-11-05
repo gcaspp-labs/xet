@@ -73,6 +73,94 @@ test('cadastro de setor exige o nome e recusa nome repetido', async ({ page, bas
   await expect(drawer.getByRole('alert')).toHaveText('Já existe um setor com este nome.')
 })
 
+test('administrador cadastra, troca e limpa o e-mail do setor', async ({ page }) => {
+  const { id } = unique()
+  const name = `Financeiro ${id}`
+  const email = `financeiro.${id}@e2e.test`
+  const otherEmail = `contas.${id}@e2e.test`
+
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/setores')
+  await expect(page.getByRole('columnheader', { name: 'E-mail' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Novo setor' }).click()
+  const newDrawer = page.getByRole('dialog', { name: 'Novo setor' })
+  await expect(newDrawer.getByText('Opcional. E-mail universal do setor.')).toBeVisible()
+  await newDrawer.getByLabel('Nome').fill(name)
+  await newDrawer.getByLabel('E-mail').fill('sem-arroba')
+  await newDrawer.getByRole('button', { name: 'Cadastrar setor' }).click()
+  await expect(newDrawer.getByText('Informe um e-mail válido.')).toBeVisible()
+  await newDrawer.getByLabel('E-mail').fill(email)
+  await newDrawer.getByRole('button', { name: 'Cadastrar setor' }).click()
+  await expect(newDrawer).toBeHidden()
+
+  const row = page.getByRole('row', { name: new RegExp(name) })
+  await expect(row).toContainText(email)
+
+  const editDrawer = page.getByRole('dialog', { name: 'Editar setor' })
+  await page.getByRole('button', { name: `Editar ${name}` }).click()
+  await expect(editDrawer.getByLabel('E-mail')).toHaveValue(email)
+  await editDrawer.getByLabel('E-mail').fill(otherEmail)
+  await editDrawer.getByRole('button', { name: 'Salvar' }).click()
+  await expect(editDrawer).toBeHidden()
+  await expect(row).toContainText(otherEmail)
+
+  await page.getByRole('button', { name: `Editar ${name}` }).click()
+  await expect(editDrawer.getByLabel('E-mail')).toHaveValue(otherEmail)
+  await editDrawer.getByLabel('E-mail').fill('')
+  await editDrawer.getByRole('button', { name: 'Salvar' }).click()
+  await expect(editDrawer).toBeHidden()
+  await expect(row.getByRole('cell').nth(1)).toHaveText('—')
+})
+
+test('e-mail repetido é recusado no cadastro e na edição do setor', async ({ page, baseURL }) => {
+  const { sector } = await seedSector(baseURL!)
+  const { id } = unique()
+  const email = `setor.${id}@e2e.test`
+
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/setores')
+
+  await page.getByRole('button', { name: 'Novo setor' }).click()
+  const newDrawer = page.getByRole('dialog', { name: 'Novo setor' })
+  await newDrawer.getByLabel('Nome').fill(`Primeiro ${id}`)
+  await newDrawer.getByLabel('E-mail').fill(email)
+  await newDrawer.getByRole('button', { name: 'Cadastrar setor' }).click()
+  await expect(newDrawer).toBeHidden()
+
+  await page.getByRole('button', { name: 'Novo setor' }).click()
+  await newDrawer.getByLabel('Nome').fill(`Segundo ${id}`)
+  await newDrawer.getByLabel('E-mail').fill(email.toUpperCase())
+  await newDrawer.getByRole('button', { name: 'Cadastrar setor' }).click()
+  await expect(newDrawer.getByRole('alert')).toHaveText('Já existe um setor com este e-mail.')
+  await newDrawer.getByRole('button', { name: 'Cancelar' }).click()
+
+  await page.getByRole('button', { name: `Editar ${sector.name}` }).click()
+  const editDrawer = page.getByRole('dialog', { name: 'Editar setor' })
+  await editDrawer.getByLabel('E-mail').fill(email.toUpperCase())
+  await editDrawer.getByRole('button', { name: 'Salvar' }).click()
+  await expect(editDrawer.getByRole('alert')).toHaveText('Já existe um setor com este e-mail.')
+})
+
+test('e-mail longo quebra na coluna e deixa à vista as ações do setor, com o texto "Maior"', async ({
+  page,
+}) => {
+  const { id } = unique()
+  const name = `Longo ${id}`
+  await signIn(page, admin.email, admin.password)
+  await page.evaluate(() => localStorage.setItem('text-size', 'larger'))
+  await page.goto('/admin/setores')
+
+  await page.getByRole('button', { name: 'Novo setor' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo setor' })
+  await drawer.getByLabel('Nome').fill(name)
+  await drawer.getByLabel('E-mail').fill(`atendimento.financeiro.${id}@prefeitura-exemplo.test`)
+  await drawer.getByRole('button', { name: 'Cadastrar setor' }).click()
+  await expect(drawer).toBeHidden()
+
+  await expect(page.getByRole('button', { name: `Editar ${name}` })).toBeInViewport({ ratio: 1 })
+})
+
 test('senha comum é recusada ao cadastrar usuário', async ({ page, baseURL }) => {
   const { sector } = await seedSector(baseURL!)
   const { id } = unique()

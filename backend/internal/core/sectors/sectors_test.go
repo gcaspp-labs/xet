@@ -81,6 +81,154 @@ func TestAdminCreatesAndEditsSectors(t *testing.T) {
 	}
 }
 
+func TestSectorEmail(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+
+	// Sem espaços nas pontas e como foi digitado.
+	resp := e.Do(http.MethodPost, "/api/sectors", token, map[string]string{"name": "Contabilidade", "email": "  Contab@Exemplo.com "})
+	if resp.Status != http.StatusCreated || resp.Body["email"] != "Contab@Exemplo.com" {
+		t.Fatalf("create with email: status %d, body %v", resp.Status, resp.Body)
+	}
+	contabID := id(resp.Body)
+
+	// Sem e-mail, com o campo vazio ou só com espaços: grava nulo, e os setores convivem.
+	for name, body := range map[string]map[string]string{
+		"Sem campo": {"name": "Sem campo"},
+		"Vazio":     {"name": "Vazio", "email": ""},
+		"Espaços":   {"name": "Espaços", "email": "   "},
+	} {
+		resp := e.Do(http.MethodPost, "/api/sectors", token, body)
+		if resp.Status != http.StatusCreated || resp.Body["email"] != nil {
+			t.Fatalf("%s: status %d, body %v", name, resp.Status, resp.Body)
+		}
+	}
+	var empty int
+	if err := e.Pool.QueryRow(t.Context(), "select count(*) from sectors where email is null").Scan(&empty); err != nil || empty != 3 {
+		t.Fatalf("sectors with null email = %d (%v), want 3", empty, err)
+	}
+
+	rh := e.Do(http.MethodPost, "/api/sectors", token, map[string]string{"name": "RH"})
+	if rh.Status != http.StatusCreated || rh.Body["email"] != nil {
+		t.Fatalf("create RH: status %d, body %v", rh.Status, rh.Body)
+	}
+	rhID := id(rh.Body)
+	rhPath := fmt.Sprintf("/api/sectors/%d", rhID)
+
+	refused := []struct {
+		name         string
+		method, path string
+		body         map[string]string
+		want         int
+		message      string
+	}{
+		{"create invalid", http.MethodPost, "/api/sectors", map[string]string{"name": "Novo", "email": "sem-arroba"}, http.StatusUnprocessableEntity, "Informe um e-mail válido."},
+		{"update invalid", http.MethodPut, rhPath, map[string]string{"name": "RH", "email": "rh@"}, http.StatusUnprocessableEntity, "Informe um e-mail válido."},
+		{"create repeated", http.MethodPost, "/api/sectors", map[string]string{"name": "Novo", "email": "CONTAB@exemplo.COM"}, http.StatusConflict, "Já existe um setor com este e-mail."},
+		{"update repeated", http.MethodPut, rhPath, map[string]string{"name": "RH", "email": "contab@EXEMPLO.com"}, http.StatusConflict, "Já existe um setor com este e-mail."},
+	}
+	for _, tc := range refused {
+		resp := e.Do(tc.method, tc.path, token, tc.body)
+		if resp.Status != tc.want || resp.Body["error"] != tc.message {
+			t.Errorf("%s: status %d, want %d (body %v)", tc.name, resp.Status, tc.want, resp.Body)
+		}
+	}
+	if actions, _ := e.AuditChanges("sector", rhID); len(actions) != 1 {
+		t.Fatalf("refused updates must not be audited: %v", actions)
+	}
+
+	// Preencher, trocar e limpar.
+	steps := []struct {
+		name  string
+		email string
+		want  any
+	}{
+		{"fill", " rh@exemplo.com ", "rh@exemplo.com"},
+		{"change", "pessoas@exemplo.com", "pessoas@exemplo.com"},
+		{"clear", "  ", nil},
+	}
+	for _, step := range steps {
+		resp := e.Do(http.MethodPut, rhPath, token, map[string]string{"name": "RH", "email": step.email})
+		if resp.Status != http.StatusOK || resp.Body["email"] != step.want {
+			t.Fatalf("%s: status %d, body %v", step.name, resp.Status, resp.Body)
+		}
+	}
+
+	// O próprio setor pode salvar o mesmo e-mail, e salvar sem mudança não gera auditoria.
+	contabPath := fmt.Sprintf("/api/sectors/%d", contabID)
+	resp = e.Do(http.MethodPut, contabPath, token, map[string]string{"name": "Contabilidade", "email": "Contab@Exemplo.com"})
+	if resp.Status != http.StatusOK || resp.Body["email"] != "Contab@Exemplo.com" {
+		t.Fatalf("save without changes: status %d, body %v", resp.Status, resp.Body)
+	}
+	// E-mail liberado ao limpar pode ser usado por outro setor.
+	resp = e.Do(http.MethodPost, "/api/sectors", token, map[string]string{"name": "Pessoas", "email": "pessoas@exemplo.com"})
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("reuse cleared email: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	list := e.DoList(http.MethodGet, "/api/sectors", token)
+	if list[0]["name"] != "Contabilidade" || list[0]["email"] != "Contab@Exemplo.com" {
+		t.Fatalf("list: %v", list[0])
+	}
+
+	actions, changes := e.AuditChanges("sector", contabID)
+	if len(actions) != 1 || changes[0]["email"]["from"] != nil || changes[0]["email"]["to"] != "Contab@Exemplo.com" {
+		t.Fatalf("contabilidade audit: %v %v", actions, changes)
+	}
+	actions, changes = e.AuditChanges("sector", rhID)
+	if len(actions) != 4 || actions[0] != "sector_created" || actions[3] != "sector_updated" {
+		t.Fatalf("rh audit actions: %v", actions)
+	}
+	if _, ok := changes[0]["email"]; ok {
+		t.Fatalf("created without email must not record it: %v", changes[0])
+	}
+	wantChanges := []struct{ from, to any }{
+		{nil, "rh@exemplo.com"},
+		{"rh@exemplo.com", "pessoas@exemplo.com"},
+		{"pessoas@exemplo.com", nil},
+	}
+	for i, want := range wantChanges {
+		got := changes[i+1]
+		if len(got) != 1 || got["email"]["from"] != want.from || got["email"]["to"] != want.to {
+			t.Errorf("update %d changes: %v, want %v", i, got, want)
+		}
+	}
+}
+
+func TestOnlyAdminChangesSectorEmail(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	e.User("agente@exemplo.com", db.UserRoleAgent, &contab.ID)
+
+	path := fmt.Sprintf("/api/sectors/%d", contab.ID)
+	body := map[string]string{"name": "Contabilidade", "email": "contab@exemplo.com"}
+	cases := []struct {
+		who   string
+		token string
+		want  int
+	}{
+		{"supervisor", e.Login("sup@exemplo.com", testPassword), http.StatusForbidden},
+		{"agent", e.Login("agente@exemplo.com", testPassword), http.StatusForbidden},
+		{"none", "", http.StatusUnauthorized},
+	}
+	for _, tc := range cases {
+		if resp := e.Do(http.MethodPut, path, tc.token, body); resp.Status != tc.want {
+			t.Errorf("%s PUT: status %d, want %d", tc.who, resp.Status, tc.want)
+		}
+		if resp := e.Do(http.MethodPost, "/api/sectors", tc.token, body); resp.Status != tc.want {
+			t.Errorf("%s POST: status %d, want %d", tc.who, resp.Status, tc.want)
+		}
+	}
+	var email *string
+	if err := e.Pool.QueryRow(t.Context(), "select email from sectors where id = $1", contab.ID).Scan(&email); err != nil || email != nil {
+		t.Fatalf("email = %v (%v), want null", email, err)
+	}
+}
+
 func TestSectorListIsLimitedToOwnSector(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)

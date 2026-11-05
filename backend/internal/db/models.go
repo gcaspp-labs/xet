@@ -642,6 +642,7 @@ type Sector struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	ConnectionError   *string
+	Email             *string
 }
 
 type Session struct {

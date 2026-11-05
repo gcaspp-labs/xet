@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,9 +23,15 @@ var (
 	ErrNotFound        = errors.New("sector not found")
 	ErrInvalidName     = errors.New("invalid name")
 	ErrNameTaken       = errors.New("sector name already in use")
+	ErrInvalidEmail    = errors.New("invalid email")
+	ErrEmailTaken      = errors.New("sector email already in use")
 	ErrModuleNotFound  = errors.New("module not found")
 	ErrModuleNameTaken = errors.New("module name already in use in the sector")
 )
+
+// The email is optional and trimmed before validation, so it is checked here
+// and not by the request tags.
+var validate = validator.New()
 
 type Service struct {
 	pool *pgxpool.Pool
@@ -37,7 +44,8 @@ func NewService(pool *pgxpool.Pool) *Service {
 
 // SectorInput holds the editable fields of a sector.
 type SectorInput struct {
-	Name string
+	Name  string
+	Email string
 }
 
 func (in SectorInput) normalize() (SectorInput, error) {
@@ -45,7 +53,19 @@ func (in SectorInput) normalize() (SectorInput, error) {
 	if in.Name == "" {
 		return in, ErrInvalidName
 	}
+	in.Email = strings.TrimSpace(in.Email)
+	if in.Email != "" && validate.Var(in.Email, "email") != nil {
+		return in, ErrInvalidEmail
+	}
 	return in, nil
+}
+
+// email returns the value to store: an empty email is stored as null.
+func (in SectorInput) email() *string {
+	if in.Email == "" {
+		return nil
+	}
+	return &in.Email
 }
 
 // List returns the sectors ordered by name.
@@ -79,12 +99,13 @@ func (s *Service) Create(ctx context.Context, actorID int64, in SectorInput) (db
 	var sector db.Sector
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		sector, err = q.CreateSector(ctx, db.CreateSectorParams{Name: in.Name, Provider: DefaultProvider})
+		sector, err = q.CreateSector(ctx, db.CreateSectorParams{Name: in.Name, Email: in.email(), Provider: DefaultProvider})
 		if err != nil {
 			return sectorError("create sector", err)
 		}
 		changes := audit.Changes{}
 		changes.Set("name", nil, sector.Name)
+		changes.Set("email", nil, sector.Email)
 		changes.Set("provider", nil, sector.Provider)
 		return record(ctx, q, "sector", sector.ID, "sector_created", &actorID, changes)
 	})
@@ -94,7 +115,7 @@ func (s *Service) Create(ctx context.Context, actorID int64, in SectorInput) (db
 	return sector, nil
 }
 
-// Update changes the name of a sector, locking its row and
+// Update changes the name and the email of a sector, locking its row and
 // recording what changed in the same transaction.
 func (s *Service) Update(ctx context.Context, actorID, id int64, in SectorInput) (db.Sector, error) {
 	in, err := in.normalize()
@@ -114,11 +135,12 @@ func (s *Service) Update(ctx context.Context, actorID, id int64, in SectorInput)
 		}
 		changes := audit.Changes{}
 		changes.Set("name", before.Name, in.Name)
+		changes.Set("email", before.Email, in.email())
 		if changes.Empty() {
 			sector = before
 			return nil
 		}
-		sector, err = q.UpdateSector(ctx, db.UpdateSectorParams{ID: id, Name: in.Name})
+		sector, err = q.UpdateSector(ctx, db.UpdateSectorParams{ID: id, Name: in.Name, Email: in.email()})
 		if err != nil {
 			return sectorError("update sector", err)
 		}
@@ -239,8 +261,11 @@ func record(ctx context.Context, q *db.Queries, entityType string, entityID int6
 func sectorError(op string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		if pgErr.ConstraintName == "sectors_name_key" {
+		switch pgErr.ConstraintName {
+		case "sectors_name_key":
 			return ErrNameTaken
+		case "sectors_email_key":
+			return ErrEmailTaken
 		}
 	}
 	return fmt.Errorf("%s: %w", op, err)

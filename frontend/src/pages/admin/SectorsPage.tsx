@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -25,6 +25,12 @@ import { connectionLabels, formatPhone } from '@/lib/format'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do setor.'),
+  email: z
+    .string()
+    .trim()
+    .refine((value) => value === '' || z.email().safeParse(value).success, {
+      error: 'Informe um e-mail válido.',
+    }),
 })
 
 type FormValues = z.input<typeof schema>
@@ -45,7 +51,7 @@ function SectorSheet({
     formState: { errors },
   } = useForm<FormValues, unknown, z.output<typeof schema>>({
     resolver: zodResolver(schema),
-    defaultValues: { name: sector?.name ?? '' },
+    defaultValues: { name: sector?.name ?? '', email: sector?.email ?? '' },
   })
 
   const onSubmit = handleSubmit((values) =>
@@ -74,6 +80,17 @@ function SectorSheet({
         <FieldLabel htmlFor="sector-name">Nome</FieldLabel>
         <Input id="sector-name" aria-invalid={!!errors.name} {...register('name')} />
         <FieldError errors={[errors.name]} />
+      </Field>
+      <Field data-invalid={!!errors.email}>
+        <FieldLabel htmlFor="sector-email">E-mail</FieldLabel>
+        <Input
+          id="sector-email"
+          type="email"
+          aria-invalid={!!errors.email}
+          {...register('email')}
+        />
+        <FieldDescription>Opcional. E-mail universal do setor.</FieldDescription>
+        <FieldError errors={[errors.email]} />
       </Field>
     </FormDialog>
   )
@@ -111,6 +128,7 @@ export default function SectorsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Setor</TableHead>
+                  <TableHead>E-mail</TableHead>
                   <TableHead>Número</TableHead>
                   <TableHead>Conexão</TableHead>
                   <TableHead className="w-0">
@@ -124,6 +142,15 @@ export default function SectorsPage() {
                   return (
                     <TableRow key={sector.id}>
                       <TableCell className="body-strong">{sector.name}</TableCell>
+                      <TableCell
+                        className={
+                          sector.email
+                            ? 'min-w-40 whitespace-normal wrap-anywhere'
+                            : 'text-muted-foreground'
+                        }
+                      >
+                        {sector.email ?? '—'}
+                      </TableCell>
                       <TableCell className={sector.phone ? 'mono-num' : 'text-muted-foreground'}>
                         {sector.phone ? formatPhone(sector.phone) : 'Não conectado'}
                       </TableCell>
