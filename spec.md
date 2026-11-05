@@ -42,6 +42,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 
 - O administrador geral cadastra usuários, setores e permissões.
 - O supervisor gerencia a lista de módulos/sistemas do próprio setor. As listas serão cadastradas no sistema, sem necessidade de defini-las antes da implementação.
+- O supervisor gerencia também os assuntos e as soluções do próprio setor (ver Formulário de encerramento › Assuntos e soluções).
 - Setores são cadastrados e editados pelo nome e por um e-mail opcional, o e-mail universal do setor. Dois setores não podem ter o mesmo e-mail, sem diferenciar maiúsculas. Nesta etapa, o e-mail é só cadastro: o sistema não envia nada para ele. Não há desativação de setor.
 - O telefone do setor não é digitado: vem do número lido no QR code ao conectar. Número já ligado a outro setor é recusado: o aparelho é desvinculado e a tela de conexão mostra o motivo. O telefone é apagado quando o número é desvinculado e continua na tela durante quedas temporárias da conexão.
 - Os supervisores do setor e os administradores desvinculam o número pela tela de conexão, com confirmação, além de poder desvincular pelo celular. Os chamados abertos continuam no sistema, e as respostas falham até um número ser conectado de novo.
@@ -187,8 +188,8 @@ Ao clicar em finalizar, o sistema abrirá o formulário de registro. O chamado s
 
 | Campo | Comportamento |
 | --- | --- |
-| Assunto | Preenchido pelo atendente; obrigatório |
-| Resolução | Preenchida pelo atendente; obrigatória |
+| Assunto | Escolhido na lista do setor ou digitado; obrigatório; nenhum vem marcado |
+| Resolução | Preenchida pelo atendente, a partir de uma solução da lista ou digitada; obrigatória |
 | Módulos/sistemas | Seleção de um ou mais módulos atendidos pelo setor; ao menos um obrigatório |
 | Contato | Automático |
 | Órgão | Automático, com base no órgão principal do contato; editável |
@@ -203,6 +204,24 @@ Ao clicar em finalizar, o sistema abrirá o formulário de registro. O chamado s
 - Os módulos selecionáveis são os ativos do setor do chamado. O módulo do contato nesse setor, se estiver ativo, já vem marcado, e a pessoa pode alterar ou marcar outros para aquele chamado.
 
 Cada setor terá sua própria lista de módulos/sistemas. Um chamado poderá tratar de vários módulos, com uma resolução geral.
+
+### Assuntos e soluções
+
+Cada setor tem sua lista de assuntos, e cada assunto, sua lista de soluções. As duas começam vazias.
+
+- **Quem gerencia:** o supervisor gerencia a lista do próprio setor, e o administrador, as de todos os setores, pela tela Assuntos. O atendente não abre essa tela: usa a lista do setor do chamado no formulário e só acrescenta itens pela pergunta descrita abaixo.
+- **Onde vale:** no encerramento, na transferência entre setores (lista do setor de origem) e na correção, que usam o mesmo formulário. O cancelamento não tem assunto.
+- **Assunto:** o campo sugere os assuntos do setor enquanto a pessoa digita, e ela pode escolher um ou escrever outro. Nenhum vem marcado.
+- **Solução:** com um assunto da lista que tenha soluções, aparece a escolha "Soluções sugeridas". Escolher uma substitui o texto do campo Resolução, que continua editável. Trocar de assunto não apaga a Resolução.
+- **Comparação:** um texto é igual a um item da lista quando coincidem, depois de tirar os espaços das pontas e sem diferenciar maiúsculas. Assuntos não se repetem no setor, nem soluções no assunto, pela mesma comparação.
+- **Pergunta ao salvar:** com o formulário válido e antes de gravar, se o assunto não estiver na lista, o sistema pergunta se deve adicioná-lo. Depois, se a resolução não estiver na lista do assunto, pergunta se deve adicioná-la, inclusive quando for uma solução da lista com o texto alterado. As opções são adicionar, não adicionar e voltar ao formulário, sem salvar nada.
+- **Solução precisa de assunto:** se o assunto não entrar na lista, não há a pergunta da solução.
+- **Na correção:** só há pergunta para o assunto ou a resolução alterados na própria correção, para que corrigir um chamado antigo não pergunte sobre textos que já estavam nele.
+- **Ao responder "adicionar":** o item entra na lista na hora, vale para todos os papéis, junto com o salvamento do formulário. Se o chamado não for salvo, nada entra. Se outra pessoa já tiver adicionado o mesmo item, ele fica como está e o chamado é salvo normalmente. Se o assunto da solução tiver sido excluído nesse meio-tempo, a solução não é adicionada e o chamado é salvo normalmente.
+- **Chamados:** guardam o próprio texto, sem ligação com as listas. Editar ou excluir um item não altera nenhum chamado, e os chamados antigos continuam como estão.
+- **Excluir:** apaga de verdade, depois de uma confirmação, e não pode ser desfeito. Excluir um assunto também apaga as soluções dele, e a confirmação avisa quantas são. A exclusão fica registrada na auditoria.
+- **Limites:** assunto com até 500 caracteres e solução com até 10.000, como no formulário. Texto maior não entra na lista e não impede salvar o chamado.
+- **Tela Assuntos:** mostra os assuntos do setor com as soluções de cada um e permite adicionar, editar e excluir os dois. O administrador escolhe o setor. A busca filtra, sem diferenciar acentos nem maiúsculas: um assunto encontrado pelo nome aparece com todas as soluções; encontrado por uma solução, aparece só com as soluções que batem.
 
 O momento em que o chamado foi assumido é registrado separadamente, permitindo medir o tempo de espera na fila.
 
@@ -282,7 +301,7 @@ Cada filtro vale só para os números em que faz sentido. Nos demais, com aquele
 Formulários e consultas que abrem por cima da tela aparecem em uma janela no centro. O painel fixo da conversa (Detalhes, Notas e Histórico) continua onde está.
 
 - **Com bloqueio:** encerrar, transferir para atendente ou setor, devolver à fila, cancelar chamado, corrigir atendimento, nova conversa e o cadastro de contato aberto durante um atendimento ou pela nova conversa. Não há X, e Esc ou clique fora não fecham: a saída é concluir ou usar o botão Cancelar/Voltar.
-- **Com fechamento normal:** usuários, setores, módulos, órgãos, contatos e importação pelo menu, desvincular número e histórico. X, Esc e clique fora fecham.
+- **Com fechamento normal:** usuários, setores, módulos, assuntos, soluções e a confirmação de exclusão deles, órgãos, contatos e importação pelo menu, desvincular número e histórico. X, Esc e clique fora fecham.
 - Cancelar o cadastro de contato volta à janela de onde ele foi aberto, sem perder o que já estava nela.
 
 ## Armazenamento
