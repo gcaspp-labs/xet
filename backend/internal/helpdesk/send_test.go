@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -214,7 +215,7 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 	}
 	m := got[0]
 	if m.Origin != "agent" || m.AuthorID == nil || *m.AuthorID != c.ana.ID || m.Type != "text" ||
-		str(m.Body) != "Bom dia, em que posso ajudar?" || str(m.Status) != "sent" || m.ExternalMessageID == nil {
+		str(m.Body) != "ana@exemplo.com: Bom dia, em que posso ajudar?" || str(m.Status) != "sent" || m.ExternalMessageID == nil {
 		t.Fatalf("sent message = %+v", m)
 	}
 	sent := e.WhatsApp.SentMessages()
@@ -222,7 +223,7 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 		t.Fatalf("sent to WhatsApp = %+v", sent)
 	}
 	if msg, ok := sent[0].(messaging.TextMessage); !ok || msg.To != "5511988887777@s.whatsapp.net" ||
-		msg.SectorID != c.sector.ID || msg.Body != "Bom dia, em que posso ajudar?" || msg.IdempotencyKey != requestA {
+		msg.SectorID != c.sector.ID || msg.Body != "ana@exemplo.com: Bom dia, em que posso ajudar?" || msg.IdempotencyKey != requestA {
 		t.Fatalf("WhatsApp message = %+v", sent[0])
 	}
 
@@ -325,7 +326,7 @@ func TestSendingFiles(t *testing.T) {
 	}
 
 	got := e.outbound(c.ticket.ID)
-	if len(got) != 2 || got[0].Type != "image" || str(got[0].Body) != "Comprovante" || got[1].Type != "document" || got[1].Body != nil {
+	if len(got) != 2 || got[0].Type != "image" || str(got[0].Body) != "ana@exemplo.com: Comprovante" || got[1].Type != "document" || str(got[1].Body) != "ana@exemplo.com:" {
 		t.Fatalf("file messages = %+v", got)
 	}
 	if f := e.media(*got[1].MediaID); f.MimeType != "application/pdf" || str(f.FileName) != "balancete.pdf" || f.SizeBytes != int64(len(pdf)) {
@@ -333,11 +334,11 @@ func TestSendingFiles(t *testing.T) {
 	}
 	sent := e.WhatsApp.SentMessages()
 	img, ok := sent[0].(messaging.MediaMessage)
-	if !ok || img.Type != messaging.TypeImage || img.Caption != "Comprovante" || !bytes.Equal(img.Media.Data, png) {
+	if !ok || img.Type != messaging.TypeImage || img.Caption != "ana@exemplo.com: Comprovante" || !bytes.Equal(img.Media.Data, png) {
 		t.Fatalf("image sent = %+v", sent[0])
 	}
 	doc, ok := sent[1].(messaging.MediaMessage)
-	if !ok || doc.Type != messaging.TypeDocument || doc.Media.FileName != "balancete.pdf" || !bytes.Equal(doc.Media.Data, pdf) {
+	if !ok || doc.Type != messaging.TypeDocument || doc.Media.FileName != "balancete.pdf" || doc.Caption != "ana@exemplo.com:" || !bytes.Equal(doc.Media.Data, pdf) {
 		t.Fatalf("document sent = %+v", sent[1])
 	}
 
@@ -518,6 +519,97 @@ func TestDeliveryStatusOnlyMovesForward(t *testing.T) {
 	}
 	if got := str(e.outbound(c.ticket.ID)[0].Status); got != "read" {
 		t.Fatalf("status from another sector changed the message: %s", got)
+	}
+}
+
+// O prefixo é o apelido atual de quem envia e fica gravado: reenviar ou repetir a
+// requisição não o aplica de novo, e trocar o apelido só muda as mensagens seguintes.
+func TestMessagesCarryTheNicknameOfTheSender(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	path := fmt.Sprintf("/api/users/%d", c.ana.ID)
+	rename := func(nickname string) {
+		t.Helper()
+		resp := e.Do(http.MethodPut, path, c.adminToken, map[string]any{
+			"name": "ana@exemplo.com", "nickname": nickname, "email": "ana@exemplo.com",
+			"role": "agent", "sectorId": c.sector.ID, "active": true,
+		})
+		if resp.Status != http.StatusOK {
+			t.Fatalf("rename: status %d, body %v", resp.Status, resp.Body)
+		}
+	}
+	rename("Ana Souza")
+	const (
+		requestD = "9c4e9a6b-4a3d-4c8e-8f41-3d4e5f607182"
+		requestE = "ad5fab7c-5b4e-4d9f-9a52-4e5f60718293"
+	)
+
+	// Texto; a repetição com o mesmo identificador devolve a mesma mensagem.
+	first := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia")
+	if first.Status != http.StatusOK {
+		t.Fatalf("send: status %d, body %v", first.Status, first.Body)
+	}
+	if r := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); r.Status != http.StatusOK || id(r.Body) != id(first.Body) {
+		t.Fatalf("repeated: status %d, body %v", r.Status, r.Body)
+	}
+
+	// Legenda em branco é anexo sem legenda.
+	pdf := []byte("%PDF-1.7 balancete")
+	if r := e.sendFile(c.ticket.ID, c.anaToken, requestB, "balancete.pdf", "application/pdf", pdf, "   "); r.Status != http.StatusOK {
+		t.Fatalf("file: status %d, body %v", r.Status, r.Body)
+	}
+
+	// Falha com o apelido antigo; o reenvio depois da troca repete o texto gravado.
+	if err := e.WhatsApp.Drop(t.Context(), c.sector.ID); err != nil {
+		t.Fatal(err)
+	}
+	failed := e.sendText(c.ticket.ID, c.anaToken, requestC, "Segue o boleto")
+	if failed.Status != http.StatusOK || failed.Body["status"] != "failed" {
+		t.Fatalf("send while disconnected: status %d, body %v", failed.Status, failed.Body)
+	}
+	e.connectSector(c.sector.ID)
+	rename("Aninha")
+	retryPath := fmt.Sprintf("/api/messages/%d/retry", id(failed.Body))
+	if r := e.Do(http.MethodPost, retryPath, c.anaToken, nil); r.Status != http.StatusOK || r.Body["status"] != "sent" {
+		t.Fatalf("retry: status %d, body %v", r.Status, r.Body)
+	}
+
+	// A mensagem seguinte já sai com o apelido novo.
+	if r := e.sendText(c.ticket.ID, c.anaToken, requestD, "Mais alguma dúvida?"); r.Status != http.StatusOK {
+		t.Fatalf("send after rename: status %d, body %v", r.Status, r.Body)
+	}
+
+	got := e.outbound(c.ticket.ID)
+	want := []string{"Ana Souza: Bom dia", "Ana Souza:", "Ana Souza: Segue o boleto", "Aninha: Mais alguma dúvida?"}
+	if len(got) != len(want) {
+		t.Fatalf("messages = %+v", got)
+	}
+	for i, m := range got {
+		if str(m.Body) != want[i] {
+			t.Fatalf("message %d = %q, want %q", i, str(m.Body), want[i])
+		}
+	}
+	var delivered []string
+	for _, m := range e.WhatsApp.SentMessages() {
+		switch msg := m.(type) {
+		case messaging.TextMessage:
+			delivered = append(delivered, msg.Body)
+		case messaging.MediaMessage:
+			delivered = append(delivered, msg.Caption)
+		}
+	}
+	if !slices.Equal(delivered, want) {
+		t.Fatalf("sent to WhatsApp = %q, want %q", delivered, want)
+	}
+
+	// Texto vazio continua recusado, sem virar uma mensagem só com o prefixo.
+	if r := e.sendText(c.ticket.ID, c.anaToken, requestE, "   "); r.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("blank text: status %d", r.Status)
+	}
+	if got := e.outbound(c.ticket.ID); len(got) != len(want) {
+		t.Fatalf("blank text created a message: %+v", got)
 	}
 }
 

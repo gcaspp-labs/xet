@@ -512,6 +512,10 @@ func TestMessagesSentFromThePhone(t *testing.T) {
 			t.Fatalf("message from the phone = %+v", m)
 		}
 	}
+	// O que sai pelo celular não passa pelo sistema: fica sem o apelido.
+	if m := msgs[2]; m.Body == nil || *m.Body != "Pode mandar o documento?" {
+		t.Fatalf("message from the phone = %+v", m)
+	}
 	if m := msgs[1]; m.Direction != "inbound" || m.Origin != "customer" {
 		t.Fatalf("message from the customer = %+v", m)
 	}
