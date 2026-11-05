@@ -43,12 +43,22 @@ func TestCreateAdmin(t *testing.T) {
 		t.Fatalf("audit logs: %+v", logs)
 	}
 
+	// O apelido vem do nome, e a auditoria o registra.
+	var nickname string
+	if err := pool.QueryRow(ctx, "select nickname from users where id = $1", user.ID).Scan(&nickname); err != nil {
+		t.Fatal(err)
+	}
+	if nickname != "Maria Admin" || !strings.Contains(string(logs[0].Changes), "Maria Admin") {
+		t.Fatalf("nickname %q, audit changes %s", nickname, logs[0].Changes)
+	}
+
 	cases := []struct {
 		name  string
 		args  []string
 		stdin string
 	}{
 		{"duplicate email", []string{"-name", "Outra", "-email", "MARIA@exemplo.com"}, "Cofre#Azul47\n"},
+		{"duplicate nickname", []string{"-name", "Maria da Silva Admin", "-email", "outra@exemplo.com"}, "Cofre#Azul47\n"},
 		{"weak password", []string{"-name", "Outra", "-email", "outra@exemplo.com"}, "fraca\n"},
 		{"missing email", []string{"-name", "Outra"}, "Cofre#Azul47\n"},
 		{"common password", []string{"-name", "Outra", "-email", "outra@exemplo.com"}, "Senha@123\n"},

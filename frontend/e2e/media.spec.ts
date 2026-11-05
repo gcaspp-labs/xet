@@ -123,6 +123,13 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
   // O envio só responde depois da conversão com ffmpeg, mais lenta com a máquina carregada.
   await expect(voice).toContainText('Enviada', { timeout: 15_000 })
   await expect(voice.getByLabel('Duração do áudio')).toHaveText(/^0:0[12]$/)
+  // O áudio sai sem legenda, portanto sem o apelido.
+  const ticketId = page.url().split('/').pop()
+  const messages = (await (await page.request.get(`/api/tickets/${ticketId}/messages`)).json()) as {
+    direction: string
+    body: string | null
+  }[]
+  expect(messages.filter((m) => m.direction === 'outbound').map((m) => m.body)).toEqual([null])
   const src = await voice.locator('audio').getAttribute('src')
   // O backend converteu a gravação para OGG/Opus, o formato da mensagem de voz do WhatsApp.
   const file = await page.request.get(src!)

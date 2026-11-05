@@ -73,7 +73,7 @@ func TestStartConversationCreatesTicketAssignedToTheAgent(t *testing.T) {
 	// O início é o envio da primeira mensagem.
 	msgs := e.messages(ticketID)
 	if len(msgs) != 1 || msgs[0].Origin != "agent" || *msgs[0].AuthorID != c.ana.ID ||
-		str(msgs[0].Body) != "Bom dia, Carla. Sua guia está pronta." || str(msgs[0].Status) != "sent" {
+		str(msgs[0].Body) != "ana@exemplo.com: Bom dia, Carla. Sua guia está pronta." || str(msgs[0].Status) != "sent" {
 		t.Fatalf("messages = %+v", msgs)
 	}
 	if !got.ArrivedAt.Equal(msgs[0].SentAt) || !got.StartedAt.Equal(got.ArrivedAt) || got.AssignedAt == nil || !got.AssignedAt.Equal(got.ArrivedAt) {
@@ -84,7 +84,7 @@ func TestStartConversationCreatesTicketAssignedToTheAgent(t *testing.T) {
 		t.Fatalf("sent to WhatsApp = %+v", sent)
 	}
 	if msg, ok := sent[0].(messaging.TextMessage); !ok || msg.SectorID != c.sector.ID || msg.To != "5513988881111@fake" ||
-		msg.IdempotencyKey != requestA {
+		msg.Body != "ana@exemplo.com: Bom dia, Carla. Sua guia está pronta." || msg.IdempotencyKey != requestA {
 		t.Fatalf("WhatsApp message = %+v", sent[0])
 	}
 

@@ -23,6 +23,7 @@ var (
 	ErrCommonPassword  = errors.New("common password")
 	ErrPasswordTooLong = errors.New("password too long")
 	ErrEmailTaken      = errors.New("email already in use")
+	ErrNicknameTaken   = errors.New("nickname already in use")
 	ErrUserNotFound    = errors.New("user not found")
 	ErrForbidden       = errors.New("forbidden")
 	ErrInvalidUser     = errors.New("invalid user data")
@@ -119,21 +120,25 @@ func (s *Service) CreateAdmin(ctx context.Context, name, email, password string)
 		q := s.q.WithTx(tx)
 		u, err = q.CreateUser(ctx, db.CreateUserParams{
 			Name:         strings.TrimSpace(name),
+			Nickname:     defaultNickname(name),
 			Email:        strings.TrimSpace(email),
 			PasswordHash: hash,
 			Role:         db.UserRoleAdmin,
 		})
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.ConstraintName == "users_email_key" {
-			return ErrEmailTaken
-		}
 		if err != nil {
-			return fmt.Errorf("create user: %w", err)
+			return userError("create user", err)
+		}
+		changes := audit.Changes{}
+		changes.Set("nickname", nil, u.Nickname)
+		raw, err := changes.JSON()
+		if err != nil {
+			return err
 		}
 		if err := q.CreateAuditLog(ctx, db.CreateAuditLogParams{
 			EntityType: "user",
 			EntityID:   u.ID,
 			Action:     "user_created",
+			Changes:    raw,
 		}); err != nil {
 			return fmt.Errorf("audit: %w", err)
 		}
@@ -149,14 +154,32 @@ func (s *Service) CreateAdmin(ctx context.Context, name, email, password string)
 // sector; agents and supervisors need one.
 type UserInput struct {
 	Name     string
+	Nickname string
 	Email    string
 	Role     db.UserRole
 	SectorID *int64
 	Active   bool
 }
 
+// defaultNickname is the first and last words of the name, or the only word.
+func defaultNickname(name string) string {
+	words := strings.Fields(name)
+	switch len(words) {
+	case 0:
+		return ""
+	case 1:
+		return words[0]
+	default:
+		return words[0] + " " + words[len(words)-1]
+	}
+}
+
 func (in UserInput) normalize() (UserInput, error) {
 	in.Name = strings.TrimSpace(in.Name)
+	in.Nickname = strings.TrimSpace(in.Nickname)
+	if in.Nickname == "" {
+		in.Nickname = defaultNickname(in.Name)
+	}
 	in.Email = strings.TrimSpace(in.Email)
 	if in.Name == "" || in.Email == "" || !in.Role.Valid() {
 		return in, ErrInvalidUser
@@ -198,6 +221,7 @@ func (s *Service) CreateUser(ctx context.Context, actor auth.User, in UserInput,
 		q := s.q.WithTx(tx)
 		u, err = q.CreateUser(ctx, db.CreateUserParams{
 			Name:         in.Name,
+			Nickname:     in.Nickname,
 			Email:        in.Email,
 			PasswordHash: hash,
 			Role:         in.Role,
@@ -208,6 +232,7 @@ func (s *Service) CreateUser(ctx context.Context, actor auth.User, in UserInput,
 		}
 		changes := audit.Changes{}
 		changes.Set("name", nil, u.Name)
+		changes.Set("nickname", nil, u.Nickname)
 		changes.Set("email", nil, u.Email)
 		changes.Set("role", nil, u.Role)
 		changes.Set("sector_id", nil, u.SectorID)
@@ -247,6 +272,7 @@ func (s *Service) UpdateUser(ctx context.Context, actor auth.User, targetID int6
 		}
 		changes := audit.Changes{}
 		changes.Set("name", before.Name, in.Name)
+		changes.Set("nickname", before.Nickname, in.Nickname)
 		changes.Set("email", before.Email, in.Email)
 		changes.Set("role", before.Role, in.Role)
 		changes.Set("sector_id", before.SectorID, in.SectorID)
@@ -268,6 +294,7 @@ func (s *Service) UpdateUser(ctx context.Context, actor auth.User, targetID int6
 		u, err = q.UpdateUser(ctx, db.UpdateUserParams{
 			ID:       targetID,
 			Name:     in.Name,
+			Nickname: in.Nickname,
 			Email:    in.Email,
 			Role:     in.Role,
 			SectorID: in.SectorID,
@@ -313,11 +340,13 @@ func userError(op string, err error) error {
 		switch pgErr.ConstraintName {
 		case "users_email_key":
 			return ErrEmailTaken
+		case "users_nickname_key":
+			return ErrNicknameTaken
 		case "users_sector_id_fkey":
 			return ErrSectorNotFound
 		case "users_admin_without_sector":
 			return ErrSectorRequired
-		case "users_email_check", "users_name_check":
+		case "users_email_check", "users_name_check", "users_nickname_check":
 			return ErrInvalidUser
 		}
 	}

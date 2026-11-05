@@ -58,7 +58,7 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
   await expect(
     conversation
       .getByRole('listitem', { name: 'Mensagem enviada' })
-      .filter({ hasText: 'Bom dia, sua guia está pronta.' }),
+      .filter({ hasText: /agent \d+: Bom dia, sua guia está pronta\./ }),
   ).toContainText('Enviada')
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
   // Iniciar a conversa conta como assumir o chamado e fica registrado, antes da

@@ -44,12 +44,14 @@ const msgWeakPassword = "A senha precisa ter no mínimo 8 caracteres, com letra 
 // hash never leaves the backend.
 type adminUserResponse struct {
 	auth.UserResponse
-	Active bool `json:"active"`
+	Nickname string `json:"nickname"`
+	Active   bool   `json:"active"`
 }
 
 func toAdminUserResponse(u db.User) adminUserResponse {
 	return adminUserResponse{
 		UserResponse: auth.UserResponse{ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role, SectorID: u.SectorID},
+		Nickname:     u.Nickname,
 		Active:       u.Active,
 	}
 }
@@ -69,6 +71,7 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 
 type createUserRequest struct {
 	Name     string      `json:"name" validate:"required"`
+	Nickname string      `json:"nickname"`
 	Email    string      `json:"email" validate:"required,email"`
 	Role     db.UserRole `json:"role" validate:"required,oneof=agent supervisor admin"`
 	SectorID *int64      `json:"sectorId"`
@@ -81,7 +84,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := h.service.CreateUser(r.Context(), auth.CurrentUser(r.Context()), UserInput{
-		Name: req.Name, Email: req.Email, Role: req.Role, SectorID: req.SectorID, Active: true,
+		Name: req.Name, Nickname: req.Nickname, Email: req.Email, Role: req.Role, SectorID: req.SectorID, Active: true,
 	}, req.Password)
 	if err != nil {
 		h.userError(w, r, err)
@@ -92,6 +95,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 
 type updateUserRequest struct {
 	Name     string      `json:"name" validate:"required"`
+	Nickname string      `json:"nickname"`
 	Email    string      `json:"email" validate:"required,email"`
 	Role     db.UserRole `json:"role" validate:"required,oneof=agent supervisor admin"`
 	SectorID *int64      `json:"sectorId"`
@@ -108,7 +112,7 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := h.service.UpdateUser(r.Context(), auth.CurrentUser(r.Context()), id, UserInput{
-		Name: req.Name, Email: req.Email, Role: req.Role, SectorID: req.SectorID, Active: *req.Active,
+		Name: req.Name, Nickname: req.Nickname, Email: req.Email, Role: req.Role, SectorID: req.SectorID, Active: *req.Active,
 	})
 	if err != nil {
 		h.userError(w, r, err)
@@ -140,6 +144,8 @@ func (h *Handler) userError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Setor não encontrado.")
 	case errors.Is(err, ErrEmailTaken):
 		httpx.WriteError(w, http.StatusConflict, "Já existe um usuário com este e-mail.")
+	case errors.Is(err, ErrNicknameTaken):
+		httpx.WriteError(w, http.StatusConflict, "Já existe um usuário com este apelido.")
 	case errors.Is(err, ErrSelfLockout):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Você não pode desativar a própria conta nem alterar o próprio papel.")
 	case errors.Is(err, ErrUserNotFound):

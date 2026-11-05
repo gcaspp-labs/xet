@@ -67,6 +67,8 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
     .getByRole('listitem', { name: 'Mensagem enviada' })
     .filter({ hasText: 'Segue o balancete em anexo.' })
   await expect(sent).toContainText('Enviada')
+  // O painel mostra o texto como o cliente recebeu, com o apelido de quem enviou.
+  await expect(sent).toContainText(/agent \d+: Segue o balancete em anexo\./)
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
   // A outra janela recebe a mensagem sem recarregar.
   await expect(otherConversation).toContainText('Segue o balancete em anexo.')
@@ -89,7 +91,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   const file = conversation
     .getByRole('listitem', { name: 'Mensagem enviada' })
     .filter({ hasText: 'balancete.pdf' })
-  await expect(file).toContainText('Balancete de outubro')
+  await expect(file).toContainText(/agent \d+: Balancete de outubro/)
   await expect(file).toContainText('Enviada')
   await expect(file.getByRole('link', { name: /balancete\.pdf/ })).toHaveAttribute(
     'href',

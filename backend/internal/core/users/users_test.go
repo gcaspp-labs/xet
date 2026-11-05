@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
@@ -417,5 +418,182 @@ func TestResetPasswordEndsLoginLock(t *testing.T) {
 	}
 	if status := login(newPassword); status != http.StatusOK {
 		t.Fatalf("login after the reset: status %d", status)
+	}
+}
+
+func TestNicknameDefaultsToFirstAndLastName(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+
+	cases := []struct{ name, nickname, want string }{
+		{"Ana Maria de Souza", "", "Ana Souza"},
+		{"Bruno", "", "Bruno"},
+		{"Carla  Dias", "   ", "Carla Dias"},
+		{"Daniel Lima", "  Dani  ", "Dani"},
+	}
+	for i, tc := range cases {
+		resp := e.Do(http.MethodPost, "/api/users", token, map[string]any{
+			"name": tc.name, "nickname": tc.nickname, "email": fmt.Sprintf("u%d@exemplo.com", i),
+			"role": "agent", "sectorId": contab.ID, "password": testPassword,
+		})
+		if resp.Status != http.StatusCreated || resp.Body["nickname"] != tc.want {
+			t.Fatalf("%q: status %d, body %v, want %q", tc.name, resp.Status, resp.Body, tc.want)
+		}
+		_, changes := e.AuditChanges("user", id(resp.Body))
+		if changes[0]["nickname"]["to"] != tc.want {
+			t.Fatalf("%q: audit %v", tc.name, changes)
+		}
+	}
+
+	// A lista da administração devolve o campo.
+	found := false
+	for _, u := range e.DoList(http.MethodGet, "/api/users", token) {
+		found = found || u["nickname"] == "Dani"
+	}
+	if !found {
+		t.Fatal("list without the nickname")
+	}
+}
+
+func TestNicknameIsUnique(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+	create := func(name, nickname, email string) (int, map[string]any) {
+		t.Helper()
+		resp := e.Do(http.MethodPost, "/api/users", token, map[string]any{
+			"name": name, "nickname": nickname, "email": email, "role": "agent", "sectorId": contab.ID, "password": testPassword,
+		})
+		return resp.Status, resp.Body
+	}
+	const taken = "Já existe um usuário com este apelido."
+
+	status, ana := create("Ana Souza", "", "ana@exemplo.com")
+	if status != http.StatusCreated {
+		t.Fatalf("create: status %d, body %v", status, ana)
+	}
+	status, other := create("Bia Lima", "Bia", "bia@exemplo.com")
+	if status != http.StatusCreated {
+		t.Fatalf("create: status %d, body %v", status, other)
+	}
+	put := func(body map[string]any, target map[string]any) (int, map[string]any) {
+		t.Helper()
+		resp := e.Do(http.MethodPut, fmt.Sprintf("/api/users/%d", id(target)), token, body)
+		return resp.Status, resp.Body
+	}
+
+	// No cadastro, com outra combinação de maiúsculas e pelo apelido gerado do nome.
+	for _, nickname := range []string{"ANA SOUZA", ""} {
+		if status, body := create("Ana Maria Souza", nickname, "outra@exemplo.com"); status != http.StatusConflict || body["error"] != taken {
+			t.Fatalf("create %q: status %d, body %v", nickname, status, body)
+		}
+	}
+	// Na edição.
+	edit := map[string]any{"name": "Bia Lima", "nickname": "ana souza", "email": "bia@exemplo.com", "role": "agent", "sectorId": contab.ID, "active": true}
+	if status, body := put(edit, other); status != http.StatusConflict || body["error"] != taken {
+		t.Fatalf("update: status %d, body %v", status, body)
+	}
+
+	// Usuário inativo continua segurando o apelido.
+	deactivate := map[string]any{"name": "Ana Souza", "nickname": "Ana Souza", "email": "ana@exemplo.com", "role": "agent", "sectorId": contab.ID, "active": false}
+	if status, body := put(deactivate, ana); status != http.StatusOK {
+		t.Fatalf("deactivate: status %d, body %v", status, body)
+	}
+	if status, body := create("Ana Souza", "", "outra@exemplo.com"); status != http.StatusConflict || body["error"] != taken {
+		t.Fatalf("create against inactive: status %d, body %v", status, body)
+	}
+	if status, body := put(edit, other); status != http.StatusConflict || body["error"] != taken {
+		t.Fatalf("update against inactive: status %d, body %v", status, body)
+	}
+}
+
+// Criações simultâneas com o mesmo apelido: o banco deixa passar só uma, e as
+// demais recebem a mesma recusa, não um erro 500.
+func TestConcurrentCreationsWithTheSameNickname(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+
+	const attempts = 6
+	statuses := make([]int, attempts)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range attempts {
+		wg.Go(func() {
+			<-start
+			statuses[i] = e.Do(http.MethodPost, "/api/users", token, map[string]any{
+				"name": "Ana Souza", "nickname": "Ana", "email": fmt.Sprintf("ana%d@exemplo.com", i),
+				"role": "agent", "sectorId": contab.ID, "password": testPassword,
+			}).Status
+		})
+	}
+	close(start)
+	wg.Wait()
+
+	created := 0
+	for _, status := range statuses {
+		switch status {
+		case http.StatusCreated:
+			created++
+		case http.StatusConflict:
+		default:
+			t.Fatalf("statuses = %v", statuses)
+		}
+	}
+	if created != 1 {
+		t.Fatalf("statuses = %v, want exactly one created", statuses)
+	}
+}
+
+func TestEditingKeepsOrChangesTheNickname(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	sup := e.User("sup@exemplo.com", db.UserRoleSupervisor, &contab.ID)
+	agent := e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
+	token := e.Login("admin@exemplo.com", testPassword)
+	path := fmt.Sprintf("/api/users/%d", agent.ID)
+	body := func(name, nickname string) map[string]any {
+		return map[string]any{"name": name, "nickname": nickname, "email": "ana@exemplo.com", "role": "agent", "sectorId": contab.ID, "active": true}
+	}
+
+	resp := e.Do(http.MethodPut, path, token, body("Ana Souza", "Aninha"))
+	if resp.Status != http.StatusOK || resp.Body["nickname"] != "Aninha" {
+		t.Fatalf("set nickname: status %d, body %v", resp.Status, resp.Body)
+	}
+	// Mudar o nome não muda o apelido.
+	resp = e.Do(http.MethodPut, path, token, body("Ana Maria Souza", "Aninha"))
+	if resp.Status != http.StatusOK || resp.Body["name"] != "Ana Maria Souza" || resp.Body["nickname"] != "Aninha" {
+		t.Fatalf("rename: status %d, body %v", resp.Status, resp.Body)
+	}
+	// Vazio volta a ser o primeiro e o último nome.
+	resp = e.Do(http.MethodPut, path, token, body("Ana Maria Souza", ""))
+	if resp.Status != http.StatusOK || resp.Body["nickname"] != "Ana Souza" {
+		t.Fatalf("clear: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	_, changes := e.AuditChanges("user", agent.ID)
+	last := changes[len(changes)-1]["nickname"]
+	if last["from"] != "Aninha" || last["to"] != "Ana Souza" {
+		t.Fatalf("audit: %v", changes)
+	}
+	if _, ok := changes[1]["nickname"]; ok {
+		t.Fatalf("rename recorded a nickname change: %v", changes[1])
+	}
+
+	// Só o administrador altera.
+	for _, who := range []string{sup.Email, agent.Email} {
+		other := e.Login(who, testPassword)
+		if r := e.Do(http.MethodPut, path, other, body("Ana Maria Souza", "Outro")); r.Status != http.StatusForbidden {
+			t.Fatalf("%s: status %d", who, r.Status)
+		}
 	}
 }

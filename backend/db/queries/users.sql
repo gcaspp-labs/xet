@@ -1,6 +1,6 @@
 -- name: CreateUser :one
-insert into users (name, email, password_hash, role, sector_id)
-values (@name, @email, @password_hash, @role, @sector_id)
+insert into users (name, nickname, email, password_hash, role, sector_id)
+values (@name, @nickname, @email, @password_hash, @role, @sector_id)
 returning *;
 
 -- name: GetUserByEmail :one
@@ -23,9 +23,13 @@ order by lower(name), id;
 
 -- name: UpdateUser :one
 update users
-set name = @name, email = @email, role = @role, sector_id = @sector_id, active = @active
+set name = @name, nickname = @nickname, email = @email, role = @role, sector_id = @sector_id, active = @active
 where id = @id
 returning *;
+
+-- name: GetUserNickname :one
+select nickname from users
+where id = @id;
 
 -- name: GetUserForShare :one
 -- Keeps the user from being deactivated or moved to another sector until the

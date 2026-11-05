@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Users } from 'lucide-react'
-import { useState } from 'react'
+import { type ChangeEvent, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -54,6 +54,7 @@ const roleItems = (Object.keys(roleLabels) as Role[]).map((value) => ({
 
 const baseSchema = z.object({
   name: z.string().trim().min(1, 'Informe o nome.'),
+  nickname: z.string(),
   email: z.email('Informe um e-mail válido.'),
   role: z.enum(['agent', 'supervisor', 'admin']),
   sectorId: z.string(),
@@ -81,6 +82,12 @@ function schemaFor(creating: boolean) {
 }
 
 type FormValues = z.infer<typeof baseSchema>
+
+// Primeiro e último nome, a mesma regra do backend para o apelido vazio.
+function suggestNickname(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  return words.length > 1 ? `${words[0]} ${words[words.length - 1]}` : (words[0] ?? '')
+}
 
 function ResetPasswordForm({ user }: { user: AdminUser }) {
   const reset = useResetPassword()
@@ -154,11 +161,13 @@ function UserSheet({
     register,
     control,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schemaFor(user === null)),
     defaultValues: {
       name: user?.name ?? '',
+      nickname: user?.nickname ?? '',
       email: user?.email ?? '',
       role: user?.role ?? 'agent',
       sectorId: user?.sectorId?.toString() ?? '',
@@ -167,11 +176,14 @@ function UserSheet({
     },
   })
   const role = useWatch({ control, name: 'role' })
+  // No cadastro, o apelido acompanha o nome até ser editado à mão.
+  const [nicknameEdited, setNicknameEdited] = useState(false)
   const sectorItems = sectors.map((s) => ({ value: s.id.toString(), label: s.name }))
 
   const onSubmit = handleSubmit((values) => {
     const input = {
       name: values.name,
+      nickname: values.nickname,
       email: values.email,
       role: values.role,
       sectorId: values.role === 'admin' ? null : Number(values.sectorId),
@@ -200,8 +212,30 @@ function UserSheet({
     >
       <Field data-invalid={!!errors.name}>
         <FieldLabel htmlFor="user-name">Nome</FieldLabel>
-        <Input id="user-name" aria-invalid={!!errors.name} {...register('name')} />
+        <Input
+          id="user-name"
+          aria-invalid={!!errors.name}
+          {...register('name', {
+            onChange: (event: ChangeEvent<HTMLInputElement>) => {
+              if (!user && !nicknameEdited) {
+                setValue('nickname', suggestNickname(event.target.value))
+              }
+            },
+          })}
+        />
         <FieldError errors={[errors.name]} />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="user-nickname">Apelido</FieldLabel>
+        <Input
+          id="user-nickname"
+          {...register('nickname', {
+            onChange: () => setNicknameEdited(true),
+          })}
+        />
+        <FieldDescription>
+          O cliente vê este nome nas mensagens. Em branco, usa o primeiro e o último nome.
+        </FieldDescription>
       </Field>
       <Field data-invalid={!!errors.email}>
         <FieldLabel htmlFor="user-email">E-mail</FieldLabel>

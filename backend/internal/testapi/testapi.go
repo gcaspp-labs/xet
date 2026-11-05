@@ -107,7 +107,7 @@ func (e *Env) User(email string, role db.UserRole, sectorID *int64) db.User {
 		e.T.Fatal(err)
 	}
 	u, err := e.Q.CreateUser(e.T.Context(), db.CreateUserParams{
-		Name: email, Email: email, PasswordHash: hash, Role: role, SectorID: sectorID,
+		Name: email, Nickname: email, Email: email, PasswordHash: hash, Role: role, SectorID: sectorID,
 	})
 	if err != nil {
 		e.T.Fatal(err)

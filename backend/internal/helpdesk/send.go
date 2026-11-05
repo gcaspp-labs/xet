@@ -125,13 +125,22 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 			}
 			mediaID = &m.ID
 		}
+		// The voice message goes without caption, so it has no prefix.
+		body := optional(out.Body)
+		if msgType != messaging.TypeAudio {
+			prefixed, err := withNickname(ctx, q, actor.ID, out.Body)
+			if err != nil {
+				return err
+			}
+			body = &prefixed
+		}
 		msg, err = q.CreateAgentMessage(ctx, db.CreateAgentMessageParams{
 			TicketID:        t.ID,
 			SectorID:        t.SectorID,
 			ContactID:       t.ContactID,
 			AuthorID:        &actor.ID,
 			Type:            db.MessageType(msgType),
-			Body:            optional(out.Body),
+			Body:            body,
 			MediaID:         mediaID,
 			ClientRequestID: out.ClientRequestID,
 		})
@@ -156,6 +165,21 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 	}
 	s.hub.Publish(realtime.TicketChanged(msg.SectorID, msg.TicketID))
 	return s.deliver(ctx, provider, msg), nil
+}
+
+// withNickname puts the current nickname of the sender before the text, as the
+// client sees it. A blank text is an attachment without caption, since an empty
+// text message was refused before getting here. The result is what gets
+// recorded: retries and repeated requests never prefix it again.
+func withNickname(ctx context.Context, q *db.Queries, userID int64, body string) (string, error) {
+	nickname, err := q.GetUserNickname(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("get nickname: %w", err)
+	}
+	if strings.TrimSpace(body) == "" {
+		return nickname + ":", nil
+	}
+	return nickname + ": " + body, nil
 }
 
 // repeated returns the message of a repeated request, refusing a request ID

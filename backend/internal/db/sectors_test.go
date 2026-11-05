@@ -104,7 +104,7 @@ func TestUserAdminSectorConstraint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	insert := `insert into users (name, email, password_hash, role, sector_id) values ($1, $2, 'x', $3, $4)`
+	insert := `insert into users (name, nickname, email, password_hash, role, sector_id) values ($1, $2, $2, 'x', $3, $4)`
 	cases := []struct {
 		name     string
 		email    string

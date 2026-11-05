@@ -116,13 +116,17 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 		if err := recordTicket(ctx, q, t.ID, "ticket_started", actor.ID, changes); err != nil {
 			return err
 		}
+		prefixed, err := withNickname(ctx, q, actor.ID, body)
+		if err != nil {
+			return err
+		}
 		msg, err = q.CreateAgentMessage(ctx, db.CreateAgentMessageParams{
 			TicketID:        t.ID,
 			SectorID:        t.SectorID,
 			ContactID:       t.ContactID,
 			AuthorID:        &actor.ID,
 			Type:            db.MessageTypeText,
-			Body:            &body,
+			Body:            &prefixed,
 			ClientRequestID: requestID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {

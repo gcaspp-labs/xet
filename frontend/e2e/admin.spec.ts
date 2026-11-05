@@ -339,3 +339,80 @@ for (const theme of [
     await expect(page.getByText('GCASPP LAB')).toBeVisible()
   })
 }
+
+test('apelido acompanha o nome no cadastro e não muda na edição', async ({ page, baseURL }) => {
+  const { sector } = await seedSector(baseURL!)
+  const { id } = unique()
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/usuarios')
+
+  await page.getByRole('button', { name: 'Novo usuário' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo usuário' })
+  const nickname = drawer.getByLabel('Apelido')
+  await expect(drawer.getByText('O cliente vê este nome nas mensagens.')).toBeVisible()
+
+  // A sugestão acompanha o nome digitado: primeiro e último nome.
+  await drawer.getByLabel('Nome').fill('Ana')
+  await expect(nickname).toHaveValue('Ana')
+  await drawer.getByLabel('Nome').fill(`Ana Maria ${id}`)
+  await expect(nickname).toHaveValue(`Ana ${id}`)
+
+  // Editado à mão, o apelido para de acompanhar o nome, mesmo depois de ficar vazio.
+  await nickname.fill(`Aninha ${id}`)
+  await drawer.getByLabel('Nome').fill(`Ana Maria Souza ${id}`)
+  await expect(nickname).toHaveValue(`Aninha ${id}`)
+  await nickname.fill('')
+  await drawer.getByLabel('Nome').fill(`Ana Clara ${id}`)
+  await expect(nickname).toHaveValue('')
+
+  // Vazio grava o primeiro e o último nome.
+  await drawer.getByLabel('E-mail').fill(`ana.${id}@e2e.test`)
+  await chooseOption(page, 'Setor', sector.name)
+  await drawer.getByLabel('Senha inicial').fill(userPassword)
+  await drawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
+  await expect(page.getByText('Usuário salvo')).toBeVisible()
+
+  // Na edição, mudar o nome não muda o apelido.
+  await page.getByRole('button', { name: `Editar Ana Clara ${id}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Editar usuário' })
+  await expect(edit.getByLabel('Apelido')).toHaveValue(`Ana ${id}`)
+  await edit.getByLabel('Nome').fill(`Ana Beatriz Lima ${id}`)
+  await expect(edit.getByLabel('Apelido')).toHaveValue(`Ana ${id}`)
+  await edit.getByRole('button', { name: 'Salvar' }).click()
+  await expect(edit).toHaveCount(0)
+  await page.getByRole('button', { name: `Editar Ana Beatriz Lima ${id}` }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Editar usuário' }).getByLabel('Apelido'),
+  ).toHaveValue(`Ana ${id}`)
+})
+
+test('apelido repetido é recusado no formulário', async ({ page, baseURL }) => {
+  const { sector } = await seedSector(baseURL!)
+  const { id } = unique()
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/usuarios')
+
+  const register = async (email: string) => {
+    const drawer = page.getByRole('dialog', { name: 'Novo usuário' })
+    await page.getByRole('button', { name: 'Novo usuário' }).click()
+    await drawer.getByLabel('Nome').fill(`Rui Dias ${id}`)
+    await drawer.getByLabel('E-mail').fill(email)
+    await chooseOption(page, 'Setor', sector.name)
+    await drawer.getByLabel('Senha inicial').fill(userPassword)
+    await drawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
+    return drawer
+  }
+
+  await register(`rui.${id}@e2e.test`)
+  await expect(page.getByText('Usuário salvo')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Novo usuário' })).toHaveCount(0)
+
+  // O segundo, com o mesmo nome, recebe o mesmo apelido e fica na janela com o aviso.
+  const drawer = await register(`rui2.${id}@e2e.test`)
+  await expect(drawer.getByText('Já existe um usuário com este apelido.')).toBeVisible()
+
+  // Trocando o apelido, o cadastro passa.
+  await drawer.getByLabel('Apelido').fill(`Rui D ${id}`)
+  await drawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
+  await expect(drawer).toHaveCount(0)
+})
