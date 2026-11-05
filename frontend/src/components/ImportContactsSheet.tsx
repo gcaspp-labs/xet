@@ -1,6 +1,6 @@
 import { type FormEventHandler, useState } from 'react'
 import { OrganizationPicker } from '@/components/ContactSheet'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { SearchBox } from '@/components/SearchBox'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -88,7 +88,7 @@ export function ImportContactsSheet({
 
   if (result) {
     return (
-      <FormSheet
+      <FormDialog
         open={open}
         onOpenChange={onOpenChange}
         title="Importar contatos"
@@ -109,7 +109,7 @@ export function ImportContactsSheet({
             </li>
           )}
         </ul>
-      </FormSheet>
+      </FormDialog>
     )
   }
 
@@ -126,7 +126,7 @@ export function ImportContactsSheet({
   }
 
   return (
-    <FormSheet
+    <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Importar contatos"
@@ -235,6 +235,6 @@ export function ImportContactsSheet({
           </FieldSet>
         </>
       )}
-    </FormSheet>
+    </FormDialog>
   )
 }

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -61,7 +61,7 @@ function SectorSheet({
   )
 
   return (
-    <FormSheet
+    <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={sector ? 'Editar setor' : 'Novo setor'}
@@ -75,7 +75,7 @@ function SectorSheet({
         <Input id="sector-name" aria-invalid={!!errors.name} {...register('name')} />
         <FieldError errors={[errors.name]} />
       </Field>
-    </FormSheet>
+    </FormDialog>
   )
 }
 

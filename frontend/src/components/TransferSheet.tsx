@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { toast } from 'sonner'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -13,7 +13,7 @@ import { type TicketDetail, useTransferTicket } from '@/lib/conversation'
 import { roleLabels } from '@/lib/format'
 import { useWorkload } from '@/lib/tickets'
 
-// Drawer de transferência entre atendentes: o destino é uma pessoa ativa do
+// Janela de transferência entre atendentes: o destino é uma pessoa ativa do
 // setor do chamado (spec.md, Transferências). O backend confere de novo.
 export function TransferSheet({
   ticket,
@@ -65,7 +65,8 @@ export function TransferSheet({
   }
 
   return (
-    <FormSheet
+    <FormDialog
+      locked
       open={open}
       onOpenChange={changeOpen}
       title="Transferir chamado"
@@ -93,6 +94,6 @@ export function TransferSheet({
           <FieldDescription>Não há outra pessoa ativa no setor.</FieldDescription>
         )}
       </Field>
-    </FormSheet>
+    </FormDialog>
   )
 }

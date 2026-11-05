@@ -2,7 +2,7 @@ import { CircleAlert, QrCode, RefreshCw, Unlink } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -29,7 +29,7 @@ import { useCurrentUser } from '@/lib/auth'
 import { qrCodeUrl, useConnect, useConnection, useDisconnect } from '@/lib/connection'
 import { connectionLabels, formatDateTime, formatPhone } from '@/lib/format'
 
-// Drawer de confirmação para desvincular o número (spec.md, Administração).
+// Janela de confirmação para desvincular o número (spec.md, Administração).
 function DisconnectSheet({
   sector,
   phone,
@@ -68,7 +68,7 @@ function DisconnectSheet({
 
   const number = phone ? `O número ${formatPhone(phone)}` : 'O número'
   return (
-    <FormSheet
+    <FormDialog
       open={open}
       onOpenChange={changeOpen}
       title="Desvincular número"
@@ -79,7 +79,7 @@ function DisconnectSheet({
       onSubmit={submit}
     >
       {null}
-    </FormSheet>
+    </FormDialog>
   )
 }
 

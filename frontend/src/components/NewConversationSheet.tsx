@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { ContactFilters } from '@/components/ContactFilters'
 import { ContactSheet } from '@/components/ContactSheet'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { SearchBox } from '@/components/SearchBox'
 import { Button } from '@/components/ui/button'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
@@ -90,7 +90,7 @@ function ContactSearch({
   )
 }
 
-// Drawer de nova conversa: escolhe o contato e escreve a primeira mensagem,
+// Janela de nova conversa: escolhe o contato e escreve a primeira mensagem,
 // enviada pelo número do setor.
 export function NewConversationSheet({
   sectorId,
@@ -165,7 +165,8 @@ export function NewConversationSheet({
 
   return (
     <>
-      <FormSheet
+      <FormDialog
+        locked
         open={open}
         onOpenChange={onOpenChange}
         title="Nova conversa"
@@ -216,9 +217,10 @@ export function NewConversationSheet({
             onRegister={() => setRegistering(true)}
           />
         )}
-      </FormSheet>
+      </FormDialog>
       {registering && (
         <ContactSheet
+          locked
           contact={null}
           open={registering}
           onOpenChange={setRegistering}

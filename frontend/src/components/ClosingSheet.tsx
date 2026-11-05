@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { ClosingFields } from '@/components/ClosingFields'
 import { RegisterContactSheet } from '@/components/ContactSheet'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
@@ -34,7 +34,7 @@ const schema = z.object(closingShape).superRefine(checkPeriod)
 
 type FormValues = z.input<typeof schema>
 
-// Drawer de encerramento (spec.md, Formulário de encerramento): assunto,
+// Janela de encerramento (spec.md, Formulário de encerramento): assunto,
 // resolução e módulos obrigatórios; contato, atendente e setor automáticos;
 // órgão, início e fim sugeridos e editáveis. Com `transfer`, o mesmo
 // formulário encerra a etapa e transfere o chamado para outro setor
@@ -150,7 +150,8 @@ export function ClosingSheet({
 
   return (
     <>
-      <FormSheet
+      <FormDialog
+        locked
         open={open}
         onOpenChange={onOpenChange}
         title={transfer ? 'Transferir para outro setor' : 'Encerrar chamado'}
@@ -230,7 +231,7 @@ export function ClosingSheet({
         <FieldDescription>
           Alterações de horário ficam registradas no histórico de auditoria.
         </FieldDescription>
-      </FormSheet>
+      </FormDialog>
       {registering && (
         <RegisterContactSheet
           contactId={ticket.contact.id}

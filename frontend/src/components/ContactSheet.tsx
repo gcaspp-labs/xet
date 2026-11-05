@@ -3,7 +3,7 @@ import { useDeferredValue, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import {
   Combobox,
   ComboboxContent,
@@ -150,6 +150,7 @@ export function ContactSheet({
   onOpenChange,
   onSaved,
   organizationOptional = false,
+  locked = false,
 }: {
   contact: Contact | null
   open: boolean
@@ -157,6 +158,8 @@ export function ContactSheet({
   onSaved?: (saved: Contact) => void
   // Na conversa, o órgão é opcional: sem ele, grava-se só o nome (spec.md, Órgãos e contatos).
   organizationOptional?: boolean
+  // Aberto no atendimento ou na nova conversa (spec.md, Janelas de formulário).
+  locked?: boolean
 }) {
   const save = useSaveContact()
   const saveName = useSaveContactName()
@@ -258,7 +261,8 @@ export function ContactSheet({
   }
 
   return (
-    <FormSheet
+    <FormDialog
+      locked={locked}
       open={open}
       onOpenChange={onOpenChange}
       title={title}
@@ -374,7 +378,7 @@ export function ContactSheet({
           Módulos de outros setores: {otherModules.map((module) => module.name).join(', ')}.
         </FieldDescription>
       )}
-    </FormSheet>
+    </FormDialog>
   )
 }
 
@@ -397,6 +401,7 @@ export function RegisterContactSheet({
   }
   return (
     <ContactSheet
+      locked
       contact={contact}
       open
       onOpenChange={onOpenChange}
