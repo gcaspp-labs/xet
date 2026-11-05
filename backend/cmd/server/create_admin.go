@@ -59,6 +59,8 @@ func createAdmin(ctx context.Context, svc *users.Service, args []string, stdin i
 		return errors.New("a senha pode ter no máximo 72 caracteres")
 	case errors.Is(err, users.ErrEmailTaken):
 		return fmt.Errorf("já existe um usuário com o e-mail %s", *email)
+	case errors.Is(err, users.ErrNicknameTaken):
+		return errors.New("já existe um usuário com o apelido gerado a partir deste nome; informe outro nome e ajuste depois na tela de usuários")
 	case err != nil:
 		return err
 	}

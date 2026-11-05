@@ -2,6 +2,8 @@ package migrations_test
 
 import (
 	"database/sql"
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/gcaspp-labs/xet/backend/db/migrations"
@@ -147,5 +149,81 @@ func TestMunicipalitiesFailWithExistingOrganizations(t *testing.T) {
 	}
 	if _, err := p.UpTo(ctx, 19); err == nil {
 		t.Fatal("up to 19 with organizations: want an error")
+	}
+}
+
+// Os usuários existentes recebem o primeiro e o último nome; em caso de repetição,
+// sem diferenciar maiúsculas, o menor id fica com o apelido e os demais, com um número.
+func TestNicknamesAreFilledFromNames(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 20); err != nil {
+		t.Fatalf("up to 20: %v", err)
+	}
+	names := []string{
+		"Ana Maria Souza", // Ana Souza
+		"ana souza",       // ana souza 2
+		"Ana de Souza",    // Ana Souza 3
+		"Bruno",           // Bruno
+		"  Carla   Dias ", // Carla Dias
+		"Lia 2",           // Lia 2
+		"Lia",             // Lia
+		"Lia",             // o número 2 já é de outro usuário: Lia 3
+	}
+	for i, name := range names {
+		if _, err := db.ExecContext(ctx, `insert into users (name, email, password_hash, role) values ($1, $2, 'x', 'admin')`,
+			name, fmt.Sprintf("u%d@exemplo.com", i)); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	var auditBefore int
+	if err := db.QueryRowContext(ctx, `select count(*) from audit_logs`).Scan(&auditBefore); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 21); err != nil {
+		t.Fatalf("up to 21: %v", err)
+	}
+
+	rows, err := db.QueryContext(ctx, `select nickname from users order by id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []string
+	for rows.Next() {
+		var nickname string
+		if err := rows.Scan(&nickname); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, nickname)
+	}
+	want := []string{"Ana Souza", "ana souza 2", "Ana Souza 3", "Bruno", "Carla Dias", "Lia 2", "Lia", "Lia 3"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("nicknames = %q, want %q", got, want)
+	}
+
+	var auditAfter int
+	if err := db.QueryRowContext(ctx, `select count(*) from audit_logs`).Scan(&auditAfter); err != nil {
+		t.Fatal(err)
+	}
+	if auditAfter != auditBefore {
+		t.Fatalf("audit logs: %d before, %d after", auditBefore, auditAfter)
+	}
+
+	// As restrições passam a valer para quem vier depois.
+	insert := `insert into users (name, nickname, email, password_hash, role) values ('Novo', $1, 'novo@exemplo.com', 'x', 'admin')`
+	for _, nickname := range []any{"ANA SOUZA", "  ", nil} {
+		if _, err := db.ExecContext(ctx, insert, nickname); err == nil {
+			t.Fatalf("insert with nickname %v: want an error", nickname)
+		}
 	}
 }

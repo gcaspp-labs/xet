@@ -10,13 +10,14 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-insert into users (name, email, password_hash, role, sector_id)
-values ($1, $2, $3, $4, $5)
-returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at
+insert into users (name, nickname, email, password_hash, role, sector_id)
+values ($1, $2, $3, $4, $5, $6)
+returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname
 `
 
 type CreateUserParams struct {
 	Name         string
+	Nickname     string
 	Email        string
 	PasswordHash string
 	Role         UserRole
@@ -26,6 +27,7 @@ type CreateUserParams struct {
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Name,
+		arg.Nickname,
 		arg.Email,
 		arg.PasswordHash,
 		arg.Role,
@@ -42,12 +44,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Nickname,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at from users
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
 where lower(email) = lower($1)
 `
 
@@ -64,12 +67,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Nickname,
 	)
 	return i, err
 }
 
 const getUserForShare = `-- name: GetUserForShare :one
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at from users
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
 where id = $1
 for share
 `
@@ -89,12 +93,13 @@ func (q *Queries) GetUserForShare(ctx context.Context, id int64) (User, error) {
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Nickname,
 	)
 	return i, err
 }
 
 const getUserForUpdate = `-- name: GetUserForUpdate :one
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at from users
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
 where id = $1
 for update
 `
@@ -112,12 +117,25 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id int64) (User, error) 
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Nickname,
 	)
 	return i, err
 }
 
+const getUserNickname = `-- name: GetUserNickname :one
+select nickname from users
+where id = $1
+`
+
+func (q *Queries) GetUserNickname(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRow(ctx, getUserNickname, id)
+	var nickname string
+	err := row.Scan(&nickname)
+	return nickname, err
+}
+
 const listUsers = `-- name: ListUsers :many
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at from users
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
 order by lower(name), id
 `
 
@@ -140,6 +158,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.Active,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Nickname,
 		); err != nil {
 			return nil, err
 		}
@@ -153,13 +172,14 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 
 const updateUser = `-- name: UpdateUser :one
 update users
-set name = $1, email = $2, role = $3, sector_id = $4, active = $5
-where id = $6
-returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at
+set name = $1, nickname = $2, email = $3, role = $4, sector_id = $5, active = $6
+where id = $7
+returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname
 `
 
 type UpdateUserParams struct {
 	Name     string
+	Nickname string
 	Email    string
 	Role     UserRole
 	SectorID *int64
@@ -170,6 +190,7 @@ type UpdateUserParams struct {
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Name,
+		arg.Nickname,
 		arg.Email,
 		arg.Role,
 		arg.SectorID,
@@ -187,6 +208,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Nickname,
 	)
 	return i, err
 }
