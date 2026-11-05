@@ -1,10 +1,10 @@
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { type TicketDetail, useReturnTicket } from '@/lib/conversation'
 
-// Drawer de confirmação para devolver à fila o chamado em atendimento
+// Janela de confirmação para devolver à fila o chamado em atendimento
 // (spec.md, Devolver à fila). O backend confere de novo.
 export function ReturnSheet({
   ticket,
@@ -41,7 +41,8 @@ export function ReturnSheet({
   }
 
   return (
-    <FormSheet
+    <FormDialog
+      locked
       open={open}
       onOpenChange={changeOpen}
       title="Devolver à fila"
@@ -52,6 +53,6 @@ export function ReturnSheet({
       onSubmit={submit}
     >
       {null}
-    </FormSheet>
+    </FormDialog>
   )
 }

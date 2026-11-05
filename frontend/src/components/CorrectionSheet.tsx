@@ -4,7 +4,7 @@ import { FormProvider, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { ClosingFields } from '@/components/ClosingFields'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -21,7 +21,7 @@ const schema = z
 
 type FormValues = z.input<typeof schema>
 
-// Drawer de correção do atendimento encerrado (spec.md, Encerramento, retorno
+// Janela de correção do atendimento encerrado (spec.md, Encerramento, retorno
 // e correções): os dados do encerramento e o "falou com", com motivo
 // obrigatório. Só é montado aberto, já com os módulos gravados; o backend
 // confere quem pode corrigir e as regras de novo.
@@ -96,7 +96,8 @@ export function CorrectionSheet({
   })
 
   return (
-    <FormSheet
+    <FormDialog
+      locked
       open
       onOpenChange={onOpenChange}
       title="Corrigir atendimento"
@@ -128,6 +129,6 @@ export function CorrectionSheet({
         />
         <FieldError errors={[errors.reason]} />
       </Field>
-    </FormSheet>
+    </FormDialog>
   )
 }

@@ -315,7 +315,7 @@ test('todo texto das telas densas acompanha o tamanho escolhido', async ({ brows
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   await expect(sheet).toBeVisible()
   const standard = await textSizes(page)
-  await page.keyboard.press('Escape')
+  await sheet.getByRole('button', { name: 'Cancelar', exact: true }).click()
   await expect(sheet).toBeHidden()
 
   await chooseInMenu(page, 'menuitemradio', 'Maior')

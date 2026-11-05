@@ -1,4 +1,4 @@
-import { type APIRequestContext, expect, request, type Page } from '@playwright/test'
+import { type APIRequestContext, expect, type Locator, request, type Page } from '@playwright/test'
 
 // Administrador de teste criado no banco próprio dos testes ponta a ponta.
 export const admin = {
@@ -153,4 +153,42 @@ export async function seedDirectory(
   }
   await api.dispose()
   return created
+}
+
+// Janela com bloqueio (spec.md, Janelas de formulário): sem X, Esc e clique fora não fecham, o
+// texto digitado continua, e o botão do rodapé fecha. Sem `field`, a janela não tem texto a digitar.
+export async function expectLockedDialog(
+  page: Page,
+  dialog: Locator,
+  { field, cancel = 'Cancelar' }: { field?: string; cancel?: string } = {},
+) {
+  const text = 'Texto digitado antes de tentar fechar'
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Fechar', exact: true })).toHaveCount(0)
+  if (field) {
+    await dialog.getByLabel(field).fill(text)
+  }
+  await page.keyboard.press('Escape')
+  await page.mouse.click(10, 300)
+  await expect(dialog).toBeVisible()
+  if (field) {
+    await expect(dialog.getByLabel(field)).toHaveValue(text)
+  }
+  await dialog.getByRole('button', { name: cancel, exact: true }).click()
+  await expect(dialog).toBeHidden()
+}
+
+// Janela com fechamento normal: X, Esc e clique fora fecham.
+export async function expectClosableDialog(page: Page, dialog: Locator, open: () => Promise<void>) {
+  await open()
+  await dialog.getByRole('button', { name: 'Fechar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await open()
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await open()
+  await expect(dialog).toBeVisible()
+  await page.mouse.click(10, 300)
+  await expect(dialog).toBeHidden()
 }

@@ -1,14 +1,14 @@
 import { History } from 'lucide-react'
 import { Link } from 'react-router'
 import { Badge } from '@/components/ui/badge'
-import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { type HistoryEntry, useContactHistory, useOrganizationHistory } from '@/lib/conversation'
 import { formatDateTime, organizationLabel, ticketStatusLabel } from '@/lib/format'
 
@@ -76,7 +76,7 @@ export function TicketHistoryList({
   )
 }
 
-// Drawer com o histórico de um contato ou de um órgão, aberto pelos cadastros.
+// Janela com o histórico de um contato ou de um órgão, aberto pelos cadastros.
 export function HistorySheet({
   target,
   onClose,
@@ -91,20 +91,20 @@ export function HistorySheet({
   const entries = target?.kind === 'contact' ? contact.data : organization.data
 
   return (
-    <Sheet open={target !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="gap-0">
-        <SheetHeader>
-          <SheetTitle>Histórico</SheetTitle>
-          <SheetDescription>{target?.name}</SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 overflow-y-auto px-5 py-2">
+    <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader className="pr-12">
+          <DialogTitle>Histórico</DialogTitle>
+          <DialogDescription>{target?.name}</DialogDescription>
+        </DialogHeader>
+        <div data-slot="dialog-body" className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
           <TicketHistoryList
             label={`Chamados de ${target?.name ?? ''}`}
             entries={entries}
             onOpen={onClose}
           />
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   )
 }

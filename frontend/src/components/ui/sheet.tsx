@@ -5,8 +5,7 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-// Drawer do design system (design.md): largura drawer-width (até 92vw),
-// sombra shadow, véu overlay e título title-drawer.
+// Só para a gaveta da barra lateral no celular. Os formulários usam ui/dialog.tsx (design.md).
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />

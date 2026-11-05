@@ -4,7 +4,7 @@ import { useDeferredValue, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { MunicipalityPicker } from '@/components/MunicipalityPicker'
 import { SearchBox } from '@/components/SearchBox'
 import { HistorySheet } from '@/components/TicketHistory'
@@ -119,7 +119,7 @@ function OrganizationSheet({
   }
 
   return (
-    <FormSheet
+    <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={organization ? 'Editar órgão' : 'Novo órgão'}
@@ -180,7 +180,7 @@ function OrganizationSheet({
           </AlertDescription>
         </Alert>
       )}
-    </FormSheet>
+    </FormDialog>
   )
 }
 

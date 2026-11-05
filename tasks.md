@@ -499,7 +499,7 @@ Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. D
 
 Pedido da issue #63.
 
-### [ ] T49 — Trocar os painéis laterais por janelas centrais
+### [x] T49 — Trocar os painéis laterais por janelas centrais
 
 Pode rodar antes das T47 e T48, porque não depende delas.
 

@@ -2,6 +2,7 @@ import { expect, request as apiRequest, test } from '@playwright/test'
 import {
   admin,
   clearSession,
+  expectLockedDialog,
   seedDirectory,
   seedSector,
   signIn,
@@ -150,4 +151,14 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   await signIn(page, supervisor, userPassword)
   await page.goto(`/chamados/${ticketId}`)
   await expect(page.getByRole('button', { name: 'Corrigir' })).toBeVisible()
+})
+
+test('a janela de correção tem bloqueio', async ({ page, baseURL }) => {
+  const { ticketId, agent } = await closedTicket(baseURL!)
+  await signIn(page, agent, userPassword)
+  await page.goto(`/chamados/${ticketId}`)
+  await page.getByRole('button', { name: 'Corrigir' }).click()
+  await expectLockedDialog(page, page.getByRole('dialog', { name: 'Corrigir atendimento' }), {
+    field: 'Motivo da correção',
+  })
 })

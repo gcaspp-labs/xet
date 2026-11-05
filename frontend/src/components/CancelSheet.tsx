@@ -1,12 +1,12 @@
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { FormSheet } from '@/components/FormSheet'
+import { FormDialog } from '@/components/FormDialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { type TicketDetail, useCancelTicket } from '@/lib/conversation'
 
-// Drawer de cancelamento: finaliza o chamado sem lançar o atendimento, com
+// Janela de cancelamento: finaliza o chamado sem lançar o atendimento, com
 // motivo obrigatório (spec.md, Cancelamento). O backend confere de novo.
 export function CancelSheet({
   ticket,
@@ -52,7 +52,8 @@ export function CancelSheet({
   }
 
   return (
-    <FormSheet
+    <FormDialog
+      locked
       open={open}
       onOpenChange={changeOpen}
       title="Cancelar chamado"
@@ -74,6 +75,6 @@ export function CancelSheet({
         />
         {missing && <FieldError>Informe o motivo do cancelamento.</FieldError>}
       </Field>
-    </FormSheet>
+    </FormDialog>
   )
 }
