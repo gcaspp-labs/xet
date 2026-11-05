@@ -5,6 +5,7 @@ import type { Role, User } from '@/lib/auth'
 export type Sector = {
   id: number
   name: string
+  email: string | null
   // Lido do QR code; vazio enquanto nenhum número está vinculado.
   phone: string | null
   provider: string
@@ -22,7 +23,7 @@ export type Module = {
 
 export type AdminUser = User & { nickname: string; active: boolean }
 
-export type SectorInput = { name: string }
+export type SectorInput = { name: string; email: string }
 
 export type UserInput = {
   name: string
