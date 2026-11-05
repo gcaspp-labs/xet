@@ -20,12 +20,13 @@ export type Module = {
   active: boolean
 }
 
-export type AdminUser = User & { active: boolean }
+export type AdminUser = User & { nickname: string; active: boolean }
 
 export type SectorInput = { name: string }
 
 export type UserInput = {
   name: string
+  nickname: string
   email: string
   role: Role
   sectorId: number | null
