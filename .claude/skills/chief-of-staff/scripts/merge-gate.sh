@@ -35,21 +35,51 @@ IFS=$'\t' read -r state draft base mergeable head title <<<"$fields"
 [[ "$base" == "main" ]] || refuse "base não é a main ($base)"
 [[ "$mergeable" == "MERGEABLE" ]] || refuse "GitHub não confirma o merge ($mergeable)"
 
-# A classificação vem da main, para o próprio PR não poder se declarar automático.
-task=$(sed -nE 's/^T([0-9]+(\.[0-9]+)?) — .*/\1/p' <<<"$title")
+# A classificação vem da issue da task, liberada pelo merge do PR de documentação.
+# Editar o título ou o corpo da issue depois desse merge conta como mudança sem aprovação.
+task=$(sed -nE 's/^T([0-9]+) — .*/\1/p' <<<"$title")
 if [[ -z "$task" ]]; then
   refuse "PR não é de task: o título não começa com 'TNN — '"
 else
-  tasks=$(gh api -H "Accept: application/vnd.github.raw" "repos/{owner}/{repo}/contents/tasks.md?ref=main") ||
-    fail "não foi possível ler tasks.md da main"
-  section=$(awk -v id="T$task" '
-    /^##/ { if (inside) exit; if ($0 ~ "^### \\[.\\] " id " — ") inside = 1 }
-    inside { print }' <<<"$tasks")
-  if [[ -z "$section" ]]; then
-    refuse "T$task não existe em tasks.md da main"
-  elif ! grep -qE '^\*\*Verificação:\*\* automática\s*$' <<<"$section"; then
+  issue_query() {
+    gh api graphql -F owner='{owner}' -F name='{repo}' -F number="$task" \
+      -f query='query($owner: String!, $name: String!, $number: Int!) {
+        repository(owner: $owner, name: $name) {
+          issue(number: $number) { state lastEditedAt body labels(first: 50) { nodes { name } } }
+        }
+      }' --jq "$1"
+  }
+  issue=$(issue_query '.data.repository.issue | [.state, ([.labels.nodes[].name] | join(",")), (.lastEditedAt // "-")] | @tsv') ||
+    fail "não foi possível ler a issue $task"
+  IFS=$'\t' read -r issue_state issue_labels issue_edited <<<"$issue"
+  issue_body=$(issue_query '.data.repository.issue.body' | tr -d '\r') ||
+    fail "não foi possível ler a issue $task"
+
+  [[ ",$issue_labels," == *",task,"* ]] || refuse "issue #$task não tem o rótulo 'task'"
+  [[ "$issue_state" == "OPEN" ]] || refuse "issue #$task não está aberta ($issue_state)"
+  grep -qE '^\*\*Verificação:\*\* automática\s*$' <<<"$issue_body" ||
     refuse "T$task não está marcada como '**Verificação:** automática'"
+
+  plan=$(sed -nE 's/^\*\*Plano:\*\* #([0-9]+)[[:space:]]*$/\1/p' <<<"$issue_body" | head -1)
+  if [[ -z "$plan" ]]; then
+    refuse "issue #$task sem '**Plano:** #PR'"
+  else
+    plan_fields=$(gh pr view "$plan" --json state,mergedAt --jq '[.state, (.mergedAt // "-")] | @tsv') ||
+      fail "não foi possível ler o PR de plano #$plan"
+    IFS=$'\t' read -r plan_state plan_merged <<<"$plan_fields"
+    plan_body=$(gh pr view "$plan" --json body --jq '.body' | tr -d '\r') ||
+      fail "não foi possível ler o PR de plano #$plan"
+    [[ "$plan_state" == "MERGED" ]] || refuse "PR de plano #$plan sem merge ($plan_state)"
+    grep -qE "^Tasks: .*#$task([^0-9]|\$)" <<<"$plan_body" || refuse "PR de plano #$plan não cita a issue #$task"
+    # Datas em UTC e no mesmo formato: a comparação de texto respeita a ordem.
+    if [[ "$plan_state" == "MERGED" && "$issue_edited" != "-" && "$issue_edited" > "$plan_merged" ]]; then
+      refuse "issue #$task editada depois do merge do plano #$plan"
+    fi
   fi
+
+  closes=$(gh pr view "$pr" --json closingIssuesReferences --jq '[.closingIssuesReferences[].number] | map(tostring) | join(",")') ||
+    fail "não foi possível ler as issues que o PR fecha"
+  [[ "$closes" == "$task" ]] || refuse "PR precisa fechar só a issue #$task; fecha: ${closes:-nenhuma}"
 fi
 
 for check in "${required_checks[@]}"; do

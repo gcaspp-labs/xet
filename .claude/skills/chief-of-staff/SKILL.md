@@ -18,7 +18,7 @@ Quando o Revisor disser que terminou:
 
 1. Se ele pediu mudanças ao Implementador, não faça nada: o ciclo volta para ele. Se ele esgotou as 2 devoluções, vá ao passo 5.
 2. Rode `.claude/skills/chief-of-staff/scripts/merge-gate.sh <PR>`, sem `--merge`. Saída 0 é liberado; 10 é chamar a pessoa, com os motivos; 2 é erro: tente uma vez e, se repetir, chame a pessoa.
-3. Com a trava liberada, ainda julgue. Leia o parecer, a seção da task em `tasks.md` e `gh pr diff <PR>`. Chame a pessoa se:
+3. Com a trava liberada, ainda julgue. Leia o parecer, a issue da task (`gh issue view <número>`) e `gh pr diff <PR>`. Chame a pessoa se:
    - o diff foge do escopo da task;
    - a evidência não mostra o que o parecer afirma;
    - uma mudança visual afeta muitas telas ou muda a identidade visual, e não só o comportamento pedido;
@@ -36,7 +36,7 @@ Nunca use `gh pr merge` diretamente nem altere a trava para ela passar.
 
 ## 3. Chamar a próxima task
 
-1. Em `tasks.md` da main atualizada, pegue a primeira task `[ ]`, com `**Verificação:** automática` e sem dependência aberta ("Depende da TNN").
+1. Liste as tasks com `gh issue list --label task --state open --limit 100 --json number,title,labels,body`. Pegue a de menor número que atenda a tudo isto: sem o rótulo `em-andamento`, com `**Verificação:** automática`, com o PR de `**Plano:**` já mergeado (`gh pr view <número> --json state`) e com todas as issues de `**Depende de:**` fechadas.
 2. Escreva `@implementador implemente a task NN`. O Implementador chama o Revisor, e o ciclo volta ao passo 1.
 3. Uma task por vez. Nunca rode dois implementadores juntos: as portas são fixas e a memória é pouca.
 
@@ -46,7 +46,7 @@ Sem task elegível, vá ao passo 4.
 
 1. Liste as issues: `gh issue list --label backlog --state open`.
 2. Com issues, avise a pessoa com número, título, a ordem que sugere e o motivo, e diga para chamar o `@planejador` junto com ela. Não chame o Planejador por conta própria.
-3. Liste também as tasks abertas que dependem da pessoa, com `**Verificação:** humana`, e o que falta para cada uma.
+3. Liste também as issues `task` abertas que dependem da pessoa: com `**Verificação:** humana` ou com o PR de `**Plano:**` ainda sem merge. Diga o que falta para cada uma.
 4. Sem issues e sem tasks, avise que a esteira terminou.
 
 ## 5. Parar e chamar a pessoa
