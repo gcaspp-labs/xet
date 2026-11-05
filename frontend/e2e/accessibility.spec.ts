@@ -501,6 +501,7 @@ test('na largura do celular, em "Maior", a página não rola para o lado', async
   await signIn(adminPage, admin.email, admin.password)
   for (const [path, title] of [
     ['/', 'Atendimento'],
+    ['/dashboard', 'Dashboard'],
     ['/contatos', 'Contatos'],
     ['/orgaos', 'Órgãos'],
     ['/modulos', 'Módulos'],
