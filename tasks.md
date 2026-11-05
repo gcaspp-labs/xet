@@ -495,6 +495,28 @@ Atende, primeiro, uma pessoa da equipe com baixa visão, que valida a entrega. D
 
 **Pronto quando:** cada tamanho muda o texto medido no Playwright e sobrevive ao recarregar, sem piscar; alto contraste muda as cores nos temas claro e escuro, e a combinação com o tamanho funciona; o contraste de texto, botão primário, status e foco é medido e fica em 7:1 ou mais para o texto; na largura do celular, em "Maior", não há rolagem horizontal na página; há verificação manual com a pessoa da equipe com baixa visão, registrada no PR.
 
+## Fase 10 — Janelas de formulário
+
+Pedido da issue #63.
+
+### [ ] T49 — Trocar os painéis laterais por janelas centrais
+
+Pode rodar antes das T47 e T48, porque não depende delas.
+
+- Trazer o `Dialog` do shadcn para `ui/`, sobre `@base-ui/react/dialog`, a mesma base do `Sheet`; nenhuma biblioteca nova. O `ui/sheet.tsx` fica só para a gaveta da barra lateral no celular.
+- Trocar os 15 painéis: os 14 que usam `FormSheet` e o histórico (`HistorySheet`, que usa o `Sheet` direto). Renomear o `FormSheet` para `FormDialog`. Os demais componentes mantêm o nome, para a revisão ficar pequena.
+- `FormDialog` ganha uma opção de bloqueio, que tira o X e não fecha com Esc nem com clique fora. Na Base UI 1.9, a documentação indica `disablePointerDismissal` no `Dialog.Root` para o clique fora e `eventDetails.cancel()` em `onOpenChange`, com `reason === 'escape-key'`, para o Esc.
+- Com bloqueio: `ClosingSheet` (encerrar e transferir para setor), `TransferSheet`, `ReturnSheet`, `CancelSheet`, `CorrectionSheet`, `NewConversationSheet` e `RegisterContactSheet`, além do `ContactSheet` aberto pela nova conversa.
+- Com fechamento normal: `ContactSheet` e `ImportContactsSheet` em Contatos, `HistorySheet` e os formulários de `UsersPage`, `SectorsPage`, `ModulesPage`, `OrganizationsPage` e `ConnectionPage`.
+- A janela de encerramento cobre a conversa, como os outros formulários: registre isso no PR como ponto de revisão visual. O painel fixo da conversa (Detalhes, Notas e Histórico) não muda.
+- Atualizar os testes que dependem do fechamento: `e2e/start-conversation.spec.ts` hoje fecha o cadastro de contato com Esc e clique fora.
+
+**Ler:** spec.md › Janelas de formulário, Iniciar conversas, Formulário de encerramento, Acessibilidade; arquitetura.md › Bibliotecas padrão; design.md; código: `src/components/FormSheet.tsx`, `src/components/ui/sheet.tsx`, `src/components/ui/sidebar.tsx`, `src/components/TicketHistory.tsx`, `src/components/ContactSheet.tsx`, `src/components/NewConversationSheet.tsx`, `src/components/ClosingSheet.tsx`, `src/pages/ticket/TicketPage.tsx`, `src/pages/directory/ContactsPage.tsx`, `e2e/start-conversation.spec.ts`, `e2e/closing.spec.ts`, `e2e/directory.spec.ts`, `e2e/accessibility.spec.ts`.
+
+**Pronto quando:** cada janela com bloqueio é coberta por teste: sem X, Esc e clique fora não fecham e o texto digitado continua, e Cancelar fecha; cada janela com fechamento normal fecha por X, Esc e clique fora; o mesmo cadastro de contato tem bloqueio no atendimento e na nova conversa e fechamento normal em Contatos; cancelar o cadastro aberto pela nova conversa ou pelo encerramento volta à janela de origem com os dados mantidos, e o Esc nele não fecha nenhuma das duas; seletores (combobox) funcionam dentro da janela; em formulário longo, só o corpo rola e o rodapé fica visível; a barra lateral continua como gaveta no celular; nenhum teste foi desativado; capturas de um formulário curto, um longo e um aninhado, nos temas claro e escuro, no desktop e no celular, com texto "Maior" sem rolagem horizontal, estão no PR para a revisão visual de Thiago antes do merge.
+
+**Verificação:** humana
+
 ## Fase 9 — Dashboard do atendimento
 
 Pedido da issue #61.

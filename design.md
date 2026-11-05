@@ -54,7 +54,7 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | --- | --- | --- |
 | Button | `Button` | Variantes: `default` = primário (uma vez por tela), `outline` = padrão, `ghost`, `sm`; `destructive` vira texto em `danger`, nunca botão vermelho cheio; botão de ícone 32×32 sempre com `aria-label` |
 | Panel | `Card` | `surface`, borda `line`, raio `radius-12`, **sem sombra**; título `title-panel`; corpo sem padding quando contém tabela |
-| Drawer | `Sheet` (lado direito) | Largura `drawer-width` (até 92vw), sombra `shadow`, véu `overlay`; título `title-drawer`; rodapé com Cancelar (ghost) e ação primária. Criar e editar registros sempre em Drawer |
+| Drawer | `Dialog` no centro da tela (exceção do projeto) | O design system define o Drawer lateral e não tem dialog; o xet usa janela central por decisão do projeto. Largura `drawer-width` (até 92vw), altura limitada à tela, com rolagem só no corpo; sombra `shadow`, véu `overlay`; título `title-drawer`; rodapé sempre visível, com Cancelar (ghost) e ação primária. Criar e editar registros sempre nessa janela. Com bloqueio ou fechamento normal, conforme spec.md › Janelas de formulário. A gaveta da barra lateral no celular continua em `Sheet` |
 | Pill | `Badge` (variante `status`) | Ponto colorido + palavra; `success`, `warning`, `danger`, `neutral`. A palavra é obrigatória |
 | Tag | `Badge` (variante `tag`) | `accent-strong` sobre `accent-soft`, raio `radius-6`; para categorias (ex.: módulos), nunca status |
 | Chip | `ToggleGroup` | Seleção única; ativo em `accent` com `on-accent` |
