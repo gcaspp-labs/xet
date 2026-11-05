@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
@@ -190,4 +190,48 @@ export function useDashboardFilter() {
       }),
     setDate: (name: 'from' | 'to', value: string) => update((next) => next.set(name, value)),
   }
+}
+
+export type DashboardSection = 'now' | 'period'
+
+const collapsedKeys: Record<DashboardSection, string> = {
+  now: 'dashboard-now-collapsed',
+  period: 'dashboard-period-collapsed',
+}
+
+function readCollapsed(section: DashboardSection) {
+  try {
+    return localStorage.getItem(collapsedKeys[section]) === 'on'
+  } catch {
+    return false
+  }
+}
+
+// Mantém a escolha ao trocar de tela mesmo sem acesso ao armazenamento do navegador.
+const collapsedSections: Record<DashboardSection, boolean> = {
+  now: readCollapsed('now'),
+  period: readCollapsed('period'),
+}
+
+function writeCollapsed(section: DashboardSection, collapsed: boolean) {
+  try {
+    if (collapsed) {
+      localStorage.setItem(collapsedKeys[section], 'on')
+    } else {
+      localStorage.removeItem(collapsedKeys[section])
+    }
+  } catch {
+    // Sem acesso ao armazenamento do navegador, a escolha vale até recarregar a página.
+  }
+}
+
+export function useSectionCollapsed(section: DashboardSection) {
+  const [collapsed, setCollapsed] = useState(collapsedSections[section])
+  const toggle = useCallback(() => {
+    const next = !collapsedSections[section]
+    collapsedSections[section] = next
+    writeCollapsed(section, next)
+    setCollapsed(next)
+  }, [section])
+  return [collapsed, toggle] as const
 }

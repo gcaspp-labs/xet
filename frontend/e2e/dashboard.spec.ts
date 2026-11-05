@@ -357,6 +357,120 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   await expect(page).not.toHaveURL(/organizationId/)
 })
 
+test('cada seção recolhe e abre, por clique e por teclado, sem afetar a outra', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  await createModule(baseURL!, sector, 'Folha')
+  await receive(baseURL!, sector.id, 'Ana Cliente')
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+
+  const now = page.getByRole('region', { name: 'Agora', exact: true })
+  const period = page.getByRole('region', { name: 'No período', exact: true })
+  const table = page.getByRole('region', { name: 'Por atendente' })
+
+  // Sem escolha salva, as duas começam abertas.
+  await expect(now.getByRole('button', { name: 'Recolher Agora' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(period.getByRole('button', { name: 'Recolher No período' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expectKpi(page, 'Na fila', '1')
+  await expectKpi(page, 'Recebidos', '1')
+
+  // Filtro ativo, para mostrar que recolher não mexe nele nem na tabela.
+  await choose(page, 'Módulo', 'Folha')
+  await page.getByRole('button', { name: '7 dias' }).click()
+  await expect(page).toHaveURL(/moduleId=.*period=7d|period=7d.*moduleId=/)
+  // As datas de "7 dias" mostram que a resposta com o novo período já chegou à tela.
+  const detail = period.locator('p.caption.mono-num')
+  await expect(detail).toContainText(' a ')
+  const address = page.url()
+  const tableBefore = await table.innerText()
+  const dates = await detail.innerText()
+
+  // Por clique: "Agora" recolhe e "No período" continua aberta.
+  await now.getByRole('button', { name: 'Recolher Agora' }).click()
+  await expect(now.getByRole('button', { name: 'Abrir Agora' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await expect(kpi(page, 'Na fila')).toHaveCount(0)
+  await expect(kpi(page, 'Em atendimento')).toHaveCount(0)
+  await expect(now.getByRole('heading', { name: 'Agora' })).toBeVisible()
+  await expect(kpi(page, 'Recebidos')).toBeVisible()
+
+  // Por teclado: "No período" recolhe com Enter, mantém título e datas, e o foco fica no botão.
+  await period.getByRole('button', { name: 'Recolher No período' }).focus()
+  await page.keyboard.press('Enter')
+  const openPeriod = period.getByRole('button', { name: 'Abrir No período' })
+  await expect(openPeriod).toBeFocused()
+  await expect(kpi(page, 'Recebidos')).toHaveCount(0)
+  await expect(kpi(page, 'Tempo médio de atendimento')).toHaveCount(0)
+  await expect(period.getByRole('heading', { name: 'No período' })).toBeVisible()
+  await expect(detail).toHaveText(dates)
+
+  // Recolher não mudou filtros nem tabela.
+  expect(page.url()).toBe(address)
+  await expect(page.getByRole('combobox', { name: 'Módulo' })).toHaveText(/Folha/)
+  await expect(page.getByRole('button', { name: '7 dias' })).toHaveAttribute('aria-pressed', 'true')
+  expect(await table.innerText()).toBe(tableBefore)
+
+  // A escolha sobrevive ao recarregar.
+  await page.reload()
+  await expect(now.getByRole('button', { name: 'Abrir Agora' })).toBeVisible()
+  await expect(period.getByRole('button', { name: 'Abrir No período' })).toBeVisible()
+  await expect(kpi(page, 'Na fila')).toHaveCount(0)
+  await expect(kpi(page, 'Recebidos')).toHaveCount(0)
+
+  // Por teclado, com espaço, "Agora" abre sem abrir a outra.
+  await now.getByRole('button', { name: 'Abrir Agora' }).focus()
+  await page.keyboard.press('Space')
+  await expect(now.getByRole('button', { name: 'Recolher Agora' })).toBeFocused()
+  await expect(kpi(page, 'Na fila')).toBeVisible()
+  await expect(kpi(page, 'Recebidos')).toHaveCount(0)
+
+  // Por clique, "No período" abre, e aberta também sobrevive ao recarregar.
+  await period.getByRole('button', { name: 'Abrir No período' }).click()
+  await expect(kpi(page, 'Recebidos')).toBeVisible()
+  await page.reload()
+  await expect(kpi(page, 'Na fila')).toBeVisible()
+  await expect(kpi(page, 'Recebidos')).toBeVisible()
+})
+
+test('sem acesso ao armazenamento, recolher vale até recarregar', async ({ page, baseURL }) => {
+  const { supervisor } = await seedSector(baseURL!)
+  await page.addInitScript(() => {
+    const blocked = () => {
+      throw new DOMException('Armazenamento indisponível', 'SecurityError')
+    }
+    Storage.prototype.getItem = blocked
+    Storage.prototype.setItem = blocked
+    Storage.prototype.removeItem = blocked
+  })
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+
+  await page.getByRole('button', { name: 'Recolher Agora' }).click()
+  await expect(kpi(page, 'Na fila')).toHaveCount(0)
+
+  // Trocar de tela não perde a escolha.
+  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  await expect(page.getByRole('button', { name: 'Abrir Agora' })).toBeVisible()
+  await expect(kpi(page, 'Na fila')).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Recolher Agora' })).toBeVisible()
+  await expect(kpi(page, 'Na fila')).toBeVisible()
+})
+
 for (const viewport of [
   { width: 375, height: 700 },
   { width: 1280, height: 800 },

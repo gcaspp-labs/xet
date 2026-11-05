@@ -1,9 +1,10 @@
-import { BarChart3, CircleAlert } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
 import { useId, type ReactNode } from 'react'
 import { OrganizationPicker } from '@/components/ContactSheet'
 import { KpiCard } from '@/components/KpiCard'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
@@ -30,10 +31,12 @@ import {
   type Dashboard,
   type DashboardAssignee,
   type DashboardNumber,
+  type DashboardSection,
   type PeriodChoice,
   useDashboard,
   useDashboardAssignees,
   useDashboardFilter,
+  useSectionCollapsed,
 } from '@/lib/dashboard'
 import { formatDay, formatAverageTime, organizationLabel } from '@/lib/format'
 
@@ -230,26 +233,41 @@ function Filters({
 }
 
 function KpiSection({
+  section,
   title,
   detail,
   children,
 }: {
+  section: DashboardSection
   title: string
   detail?: string
   children: ReactNode
 }) {
   const id = useId()
+  const [collapsed, toggle] = useSectionCollapsed(section)
+  const Icon = collapsed ? ChevronDown : ChevronUp
   return (
     <section aria-labelledby={id} className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-baseline gap-x-2">
+      <div className="flex flex-wrap items-center gap-x-2">
         <h2 id={id} className="title-panel">
           {title}
         </h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Abrir' : 'Recolher'} ${title}`}
+          onClick={toggle}
+        >
+          <Icon strokeWidth={1.7} aria-hidden />
+        </Button>
         {detail && <p className="caption mono-num text-ink-faint">{detail}</p>}
       </div>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,calc(170px*var(--text-scale))),1fr))] gap-3">
-        {children}
-      </div>
+      {!collapsed && (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,calc(170px*var(--text-scale))),1fr))] gap-3">
+          {children}
+        </div>
+      )}
     </section>
   )
 }
@@ -369,11 +387,11 @@ export default function DashboardPage() {
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
-        <KpiSection title="Agora">
+        <KpiSection section="now" title="Agora">
           <Kpi label="Na fila" number={numbers?.queued} />
           <Kpi label="Em atendimento" number={numbers?.inProgress} />
         </KpiSection>
-        <KpiSection title="No período" detail={periodDetail(data?.period)}>
+        <KpiSection section="period" title="No período" detail={periodDetail(data?.period)}>
           <Kpi label="Recebidos" number={numbers?.received} />
           <Kpi label="Iniciados" number={numbers?.started} />
           <Kpi label="Encerrados" number={numbers?.resolved} />
