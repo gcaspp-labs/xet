@@ -142,7 +142,13 @@ export default function SectorsPage() {
                   return (
                     <TableRow key={sector.id}>
                       <TableCell className="body-strong">{sector.name}</TableCell>
-                      <TableCell className={sector.email ? undefined : 'text-muted-foreground'}>
+                      <TableCell
+                        className={
+                          sector.email
+                            ? 'min-w-40 whitespace-normal wrap-anywhere'
+                            : 'text-muted-foreground'
+                        }
+                      >
                         {sector.email ?? '—'}
                       </TableCell>
                       <TableCell className={sector.phone ? 'mono-num' : 'text-muted-foreground'}>

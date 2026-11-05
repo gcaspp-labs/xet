@@ -142,6 +142,25 @@ test('e-mail repetido é recusado no cadastro e na edição do setor', async ({ 
   await expect(editDrawer.getByRole('alert')).toHaveText('Já existe um setor com este e-mail.')
 })
 
+test('e-mail longo quebra na coluna e deixa à vista as ações do setor, com o texto "Maior"', async ({
+  page,
+}) => {
+  const { id } = unique()
+  const name = `Longo ${id}`
+  await signIn(page, admin.email, admin.password)
+  await page.evaluate(() => localStorage.setItem('text-size', 'larger'))
+  await page.goto('/admin/setores')
+
+  await page.getByRole('button', { name: 'Novo setor' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Novo setor' })
+  await drawer.getByLabel('Nome').fill(name)
+  await drawer.getByLabel('E-mail').fill(`atendimento.financeiro.${id}@prefeitura-exemplo.test`)
+  await drawer.getByRole('button', { name: 'Cadastrar setor' }).click()
+  await expect(drawer).toBeHidden()
+
+  await expect(page.getByRole('button', { name: `Editar ${name}` })).toBeInViewport({ ratio: 1 })
+})
+
 test('senha comum é recusada ao cadastrar usuário', async ({ page, baseURL }) => {
   const { sector } = await seedSector(baseURL!)
   const { id } = unique()
