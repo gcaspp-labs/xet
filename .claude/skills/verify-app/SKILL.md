@@ -39,7 +39,8 @@ Parte do zero e leva menos de 1 minuto, ou mais se precisar baixar dependências
 - Também cria o administrador da execução pelo `create-admin`, como na implantação, e instala `frontend/node_modules` e o Chromium do Playwright, se faltarem.
 - Tudo fica em `.verify-app/runs/<execução>/`, ignorado pelo git: `evidence/`, `logs/`, `state/` e `build/`.
 - **Uma execução por vez na máquina.** As portas são fixas de propósito, porque não há memória para duas instâncias. Se uma estiver ocupada, o Launch para sem encerrar nada: espere a outra verificação terminar.
-- **Saída 3: o Docker não responde.** Com `NoNewPrivs=1` no shell, o Docker via snap pode falhar. Avise o usuário e pare. O `Makefile` tem um desvio próprio para isso, mas aqui a decisão é dele.
+- **Docker via snap:** com `NoNewPrivs=1` no shell, o `common.sh` chama o binário do snap direto, pelo socket, como o `Makefile`. Esse caminho dá acesso ao Docker inteiro da máquina, por isso use-o só para esta verificação e só com o contêiner da própria execução. Não pare, remova nem altere contêineres de outros projetos.
+- **Saída 3: o Docker não responde mesmo assim.** Avise o usuário e pare.
 - Em qualquer outra falha, o Launch desfaz o que iniciou e aponta os logs.
 
 ## Doctor
@@ -139,13 +140,13 @@ A evidência fica nesta cópia do repositório: apagar o worktree apaga a evidê
 
 **Linhas de erro no log do backend:** `context canceled` quer dizer que o cliente desistiu da requisição, por exemplo ao trocar de tela ou fechar a sessão. Hoje o backend registra isso como erro 500, mas a resposta não chega a ninguém, e por isso a contagem varia de uma execução para outra. Qualquer outra linha aparece no resumo e precisa de explicação antes de você dizer que a verificação passou, mesmo com todas as jornadas certas.
 
-**Para levar a evidência a um PR** (só quando a tarefa pedir, porque publica no repositório):
+**Para levar a evidência a um PR:** só com capturas geradas pelas jornadas desta skill, com os dados falsos delas. Qualquer outra captura, por exemplo de um ambiente com dados reais, precisa de autorização do usuário.
 
 ```bash
 .claude/skills/verify-app/scripts/publish-evidence.sh <número-do-PR>
 ```
 
-O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit solto, apontado por `refs/verify-app/<execução>`, e comenta no PR com as imagens. Assim, nada entra na `main` nem em branch: o clone normal não baixa essa referência e o CI não roda nela. Ele recusa repositório público e não publica os rastros, que guardam requisições e cookies. As imagens só abrem para quem está logado no GitHub com acesso ao repositório; sem login, o GitHub responde 404. Cada execução publicada ocupa alguns megabytes, e a referência continua no repositório até ser apagada. O comando para apagar está no fim do comentário: rode depois do merge.
+O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit solto, apontado por `refs/verify-app/<execução>`, e comenta no PR com as imagens. Assim, nada entra na `main` nem em branch: o clone normal não baixa essa referência e o CI não roda nela. Ele não publica os rastros, que guardam requisições e cookies. **O repositório é público:** as imagens abrem para qualquer pessoa, sem login, e apagar a referência depois não garante que sumiram de cópias. Olhe as capturas antes de publicar. Cada execução publicada ocupa alguns megabytes, e a referência continua no repositório até ser apagada. O comando para apagar está no fim do comentário: rode depois do merge.
 
 ## Cleanup
 

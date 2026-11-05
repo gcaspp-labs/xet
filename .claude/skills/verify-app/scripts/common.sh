@@ -28,14 +28,20 @@ fail() {
   exit 1
 }
 
-# Testa o Docker sem contornar nada: se o snap falhar, quem decide é o usuário.
+# Com NoNewPrivs (shell de agente), o /snap/bin/docker falha no snap-confine. Como no Makefile, chama
+# o binário do snap direto, pelo socket do Docker. O caminho vale só para a instância desta skill.
+SNAP_DOCKER_BIN=/snap/docker/current/bin
+if [ -x "$SNAP_DOCKER_BIN/docker" ] && grep -q '^NoNewPrivs:[[:space:]]*1' /proc/self/status; then
+  export PATH="$SNAP_DOCKER_BIN:$PATH"
+  export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
+fi
+
+# Se o Docker não responder mesmo assim, a verificação para aqui.
 require_docker() {
   local output
   if ! output="$(docker ps --format '{{.ID}}' 2>&1)"; then
-    echo "ERRO: o Docker não responde neste shell. Avise o usuário e pare, sem contornar:" >&2
+    echo "ERRO: o Docker não responde neste shell. Avise o usuário e pare:" >&2
     echo "$output" | head -n 3 >&2
-    grep -q '^NoNewPrivs:[[:space:]]*1' /proc/self/status &&
-      echo "Este shell roda com NoNewPrivs=1, que costuma quebrar o Docker via snap." >&2
     exit 3
   fi
 }
