@@ -58,7 +58,7 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | Pill | `Badge` (variante `status`) | Ponto colorido + palavra; `success`, `warning`, `danger`, `neutral`. A palavra é obrigatória |
 | Tag | `Badge` (variante `tag`) | `accent-strong` sobre `accent-soft`, raio `radius-6`; para categorias (ex.: módulos), nunca status |
 | Chip | `ToggleGroup` | Seleção única; ativo em `accent` com `on-accent` |
-| FormField | `Field`, `Label`, `Input`, `Textarea`, `Select`, `Checkbox` | Rótulo `label` em `ink-soft` sempre visível; dica abaixo; raio `radius-7`; foco troca a borda para `accent` |
+| FormField | `Field`, `Label`, `Input`, `Textarea`, `Select`, `Checkbox` | Rótulo `label` em `ink-soft` sempre visível; dica abaixo; raio `radius-7`; foco troca a borda para `accent`. A lista do `Select` abre abaixo do campo, sem cobrir o item selecionado; sem espaço embaixo, abre acima dele |
 | SearchBox | `Input` com ícone de busca | Largura máxima 260px; busca imediata, sem botão |
 | Table | `Table` | Cabeçalho `table-head`; números em mono à direita; primeira coluna com título e subtítulo |
 | Tabs | `Tabs` | Ativa com sublinhado `accent` de 2px |
@@ -68,9 +68,9 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | Sidebar | `Sidebar` | Acompanha o tema, sobre `surface`, em vez de ficar escura nos dois temas como no brand book (decisão do projeto); começa abaixo do Cabeçalho; recolhe para só os ícones, com o botão no topo da própria barra, alinhado à direita e, recolhida, no centro da coluna de ícones, e a escolha fica no navegador; abaixo de 760px vira gaveta, aberta pelo botão do Cabeçalho. Grupos com título fixo: Helpdesk (Atendimento, Dashboard, Contatos, Conexão) e Cadastro (Órgãos, Módulos, Setores). O breadcrumb da Topbar usa o nome do grupo |
 | Menu de configurações | `DropdownMenu` | No rodapé da barra lateral, abaixo do nome do usuário: botão "Configurações" com a escolha de tema, as preferências de alertas e de acessibilidade, "Usuários" (só para o administrador) e "Sair". Ícones de 15px |
 | Cabeçalho | Componente próprio | Fixo no topo, na largura toda, sobre `surface` com borda `line` e altura `--header-height` (56px): marca à esquerda e notificações à direita |
-| Sino de notificações | `Popover` sobre `@base-ui/react` | Botão `ghost` com contador em `accent`, ou em cor de alerta com número desconectado. Número desconectado no topo, depois os chamados na fila com `Button` `sm` "Abrir" (`ghost`) e "Assumir" (`outline`); vazio usa EmptyState. Erro ao assumir aparece como Note dentro da lista. Cabe na largura do celular |
+| Sino de notificações | `Popover` sobre `@base-ui/react` | Botão `outline` com contador em `accent`, ou em cor de alerta com número desconectado. Número desconectado no topo, depois os chamados na fila com `Button` `sm` "Abrir" (`ghost`) e "Assumir" (`outline`); vazio usa EmptyState. Erro ao assumir aparece como Note dentro da lista. Cabe na largura do celular |
 | Topbar | Componente próprio | Fixa abaixo do Cabeçalho, sobre `paper`: voltar nas telas internas (ex.: "Voltar à lista", da conversa para a lista de atendimentos), breadcrumb, título `title-page` e no máximo uma ação primária |
-| KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption` |
+| KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption`. No dashboard, cada seção de KpiCards recolhe por um botão de ícone `ghost` ao lado do título, com `aria-expanded` e `aria-label` |
 
 Componentes sem equivalente no design system (ex.: balões de conversa, player de áudio, indicador de conexão) são compostos com os mesmos tokens e regras: `surface` e `line` para contêineres, raios pequenos, sem sombra fora de camadas flutuantes, estados com palavra além da cor.
 

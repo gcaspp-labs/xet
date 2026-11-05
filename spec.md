@@ -42,10 +42,13 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 
 - O administrador geral cadastra usuários, setores e permissões.
 - O supervisor gerencia a lista de módulos/sistemas do próprio setor. As listas serão cadastradas no sistema, sem necessidade de defini-las antes da implementação.
-- Setores são cadastrados e editados pelo nome. Nesta etapa não há desativação de setor.
+- Setores são cadastrados e editados pelo nome e por um e-mail opcional, o e-mail universal do setor. Dois setores não podem ter o mesmo e-mail, sem diferenciar maiúsculas. Nesta etapa, o e-mail é só cadastro: o sistema não envia nada para ele. Não há desativação de setor.
 - O telefone do setor não é digitado: vem do número lido no QR code ao conectar. Número já ligado a outro setor é recusado: o aparelho é desvinculado e a tela de conexão mostra o motivo. O telefone é apagado quando o número é desvinculado e continua na tela durante quedas temporárias da conexão.
 - Os supervisores do setor e os administradores desvinculam o número pela tela de conexão, com confirmação, além de poder desvincular pelo celular. Os chamados abertos continuam no sistema, e as respostas falham até um número ser conectado de novo.
 - Ao cadastrar um usuário, o administrador digita a senha inicial, que segue a mesma regra de complexidade da redefinição, e a repassa ao usuário.
+- Cada usuário tem um apelido, que o cliente vê nas mensagens. Ao cadastrar, o formulário sugere o primeiro e o último nome enquanto o administrador digita o nome ("Ana Maria Souza" sugere "Ana Souza"; nome de uma palavra só sugere essa palavra), e ele pode trocar a sugestão. A sugestão para de acompanhar o nome assim que o campo é editado à mão. Na edição do usuário, mudar o nome não muda o apelido.
+- O preenchimento é opcional: se o campo for salvo vazio, o sistema grava o primeiro e o último nome. Apelidos não se repetem entre usuários, sem diferenciar maiúsculas e também contando os inativos: apelido em uso é recusado com aviso, e o administrador escolhe outro.
+- Na implantação, cada usuário existente recebe o primeiro e o último nome como apelido. Em caso de repetição, o usuário mais antigo fica com o apelido, e os demais recebem um número no fim ("Ana Souza 2"), que o administrador pode trocar.
 - Usuários não são excluídos, apenas desativados; desativar encerra as sessões abertas. O administrador não pode desativar a própria conta nem alterar o próprio papel, para não perder o acesso à administração.
 - A desativação ou a troca de setor de um usuário é recusada enquanto ele tiver chamados em atendimento, informando quantos são; os chamados precisam ser transferidos antes.
 - A tela de usuários é exclusiva do administrador, que a abre pelo menu Configurações. A redefinição de senha pelo supervisor existe na API, mas ainda não tem tela.
@@ -115,14 +118,17 @@ Mensagens enviadas diretamente pelo celular do setor, fora do sistema, serão re
 
 - O sino do cabeçalho está em todas as telas. Clicar nele abre a lista; o contador soma os chamados na fila e os números desconectados.
 - **Chamado na fila:** cada um é um item com o contato, a prévia da última mensagem e os botões "Abrir" e "Assumir". O item existe enquanto o chamado estiver na fila, inclusive devolvido ou transferido, e sai quando alguém assume ou cancela. Não há lido nem histórico.
-- Atendentes e supervisores veem a fila do próprio setor; o administrador vê a de todos os setores, com o nome do setor em cada item.
+- Atendentes e supervisores veem a fila do próprio setor.
+- O administrador não recebe notificação de chamados, porque tem acesso a todos os setores: não há item, contador, aviso, som nem notificação do navegador. O sino dele mostra só número desconectado. Ele acompanha o atendimento pelo dashboard e continua vendo e assumindo chamados pelo painel, ao escolher o setor.
 - Ao entrar um chamado na fila, além do contador, aparece um aviso breve, sem botão, para evitar assumir sem querer ao digitar. Abrir a tela ou recuperar a conexão não avisa dos chamados que já estavam na fila.
 - **Número desconectado:** item fixo no topo da lista, só para supervisores e administradores, que leva à tela de conexão do setor. Fica até o número conectar, inclusive enquanto a conexão está em andamento e na própria tela de conexão. Enquanto houver número desconectado, o contador fica na cor de alerta.
-- **Fora da tela:** quem ativar recebe a notificação do navegador quando a aba está em segundo plano, com o nome do contato e sem o texto da mensagem, e um som curto ao entrar um chamado na fila. O título da aba mostra o contador. Cada pessoa liga ou desliga no menu Configurações, e a escolha fica no navegador. Com tudo fechado, não há aviso.
+- **Fora da tela:** quem ativar recebe a notificação do navegador quando a aba está em segundo plano, com o nome do contato e sem o texto da mensagem, e um som curto ao entrar um chamado na fila. O título da aba mostra o contador. Cada pessoa liga ou desliga no menu Configurações, e a escolha fica no navegador. As opções não aparecem para o administrador. Com tudo fechado, não há aviso.
 
 ## Conversa
 
 - Apenas o responsável envia mensagens e arquivos ao cliente, com o chamado aberto; supervisores e administradores também precisam ser o responsável. O backend confere o responsável a cada envio.
+- Toda mensagem enviada pelo sistema, inclusive a primeira de uma nova conversa, leva o apelido de quem enviou no início: "Ana Souza: bom dia". Anexo com legenda leva o prefixo na legenda, e anexo sem legenda tem só "Ana Souza:" como legenda. O áudio sai sem prefixo, porque é enviado como mensagem de voz, sem legenda. Mensagem enviada direto pelo celular do setor também fica sem, porque não passa pelo sistema.
+- O painel mostra o mesmo texto que o cliente recebeu, com o prefixo. Ele é gravado no envio: "Reenviar" repete o mesmo texto, e trocar o apelido depois não altera as mensagens já gravadas.
 - Arquivos enviados pelo painel têm até 16 MB. Imagens JPEG e PNG vão como imagem, vídeos MP4 como vídeo e os demais arquivos como documento, com o nome original. O envio de áudio gravado como mensagem de voz é tratado à parte.
 - O responsável grava áudio no próprio painel, pode ouvi-lo ou descartá-lo antes de enviar, e o envia como mensagem de voz do WhatsApp, sem legenda e com até 16 MB. Uma gravação que não pode ser lida como áudio é recusada com aviso para gravar de novo. O navegador só libera o microfone com o painel acessado por HTTPS (ou em `localhost`); fora disso, a tela avisa que a gravação está indisponível.
 - Imagens e vídeos, recebidos ou enviados, aparecem com pré-visualização na conversa (a imagem abre em tamanho real numa nova aba) e áudios tocam num player no próprio painel. Os demais arquivos abrem ou são baixados pelo link.
@@ -228,6 +234,7 @@ Mostra a situação e o desempenho do atendimento, com filtros. Só leitura.
 - **Filtros:** período (hoje, 7 dias, 30 dias ou datas à escolha), setor (só para o administrador), atendente, módulo e órgão. Abre em "Hoje" e, para o administrador, em todos os setores. "7 dias" e "30 dias" contam o dia de hoje. Os dias seguem o horário de Brasília.
 - Atendente e módulo pertencem a um setor: para o administrador, ficam desabilitados até ele escolher um setor, e trocar de setor limpa os dois.
 - Os números refletem os dados atuais do chamado, inclusive depois de uma correção.
+- As seções "Agora" e "No período" podem ser recolhidas, para dar mais espaço à tabela. Cada uma começa aberta, e a escolha fica no navegador. Recolhida, a seção mantém o título e, em "No período", as datas. Recolher não muda os filtros nem os números.
 
 | Número | Conta | Data que entra no período |
 | --- | --- | --- |
