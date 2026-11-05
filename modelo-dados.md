@@ -68,6 +68,7 @@ erDiagram
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `name` | text | Obrigatório, único |
+| `email` | text | Opcional; único quando preenchido, sem diferenciar maiúsculas (`sectors_email_key`); vazio é gravado como nulo. Só cadastro: o sistema não envia e-mails |
 | `phone` | text | Opcional; único quando preenchido, somente dígitos com DDI (ex.: `5511999990000`); vem do número lido no QR code e é apagado ao desvincular; a migração apagou o digitado em setores sem conta vinculada |
 | `provider` | text | Obrigatório; provedor de mensageria do setor: `whatsmeow` (piloto) ou `cloud_api` (futuro) |
 | `external_account_id` | text | Identificador da conta no provedor (no Whatsmeow, o JID do aparelho vinculado após o QR code) |
@@ -94,6 +95,7 @@ Módulos não são excluídos, apenas desativados, porque encerramentos antigos 
 | --- | --- | --- |
 | `name` | text | Obrigatório |
 | `email` | text | Obrigatório, único (sem diferenciar maiúsculas) |
+| `nickname` | text | Obrigatório no banco, não vazio, único sem diferenciar maiúsculas (`users_nickname_key`), inclusive entre inativos. Vazio no formulário ou na API grava o primeiro e o último nome de `name`. A migração preenche os existentes da mesma forma; em caso de repetição, o usuário de menor `id` fica com o apelido, e os demais recebem " 2", " 3"... |
 | `password_hash` | text | bcrypt |
 | `role` | user_role | Obrigatório |
 | `sector_id` | bigint → `sectors` | Obrigatório para `agent` e `supervisor`; vazio para `admin` |
@@ -329,7 +331,7 @@ Chamados não são reabertos. O destino de uma transferência entre setores vê 
 | `origin` | message_origin | Obrigatório |
 | `author_id` | bigint → `users` | Obrigatório quando `origin = 'agent'`; vazio nos demais |
 | `type` | message_type | Obrigatório |
-| `body` | text | Texto ou legenda |
+| `body` | text | Texto ou legenda. Com `origin = 'agent'`, guarda o texto como foi enviado, com o prefixo do apelido (`nickname`), exceto em `audio` |
 | `media_id` | bigint → `media_files` | Anexo, quando houver |
 | `external_message_id` | text | Identificador da mensagem no provedor; preenchido na recepção ou após o envio aceito |
 | `client_request_id` | uuid | Gerado pela interface a cada envio; impede envio duplicado em clique duplo ou nova tentativa |
