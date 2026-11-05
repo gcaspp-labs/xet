@@ -483,6 +483,84 @@ test('o aviso sobre o botão não bloqueia o clique nem espera o cursor sair', a
   await expect(notice).toBeHidden()
 })
 
+test('o link do aviso não troca de chamado com a janela aberta', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  // Tela baixa: a janela ocupa toda a altura e o rodapé fica no mesmo lugar do aviso.
+  await page.setViewportSize({ width: 1280, height: 560 })
+  const { sector, agent } = await seedSector(baseURL!)
+  await prepare(baseURL!, sector.id)
+  const receive = async (name: string) => {
+    const { id, phone } = unique()
+    expect(
+      (
+        await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+          data: { externalMessageId: `E2E-${id}`, phone, contactName: name, body: 'Bom dia' },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  }
+  const first = `Primeiro ${unique().id}`
+  const second = `Segundo ${unique().id}`
+  await receive(first)
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: first }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  const firstUrl = page.url()
+  // O aviso de assumir o primeiro sai antes: o segundo fica sozinho, no lugar de sempre.
+  await expect(page.locator('[data-sonner-toast]')).toHaveCount(0)
+  await receive(second)
+
+  const bell = page.getByRole('banner').getByRole('button', { name: /^Notificações/ })
+  await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+  await bell.click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: `Assumir chamado de ${second}` })
+    .click()
+  const notice = page.locator('[data-sonner-toast]', { hasText: 'Chamado assumido' })
+  const link = notice.getByRole('link', { name: 'Abrir conversa' })
+  // Sem janela aberta, o link do aviso continua disponível.
+  await expect(link).toBeVisible()
+  await bell.click()
+
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await sheet.getByLabel('Assunto').fill('Contracheque')
+
+  // Ponto em que o link fica sobre o botão: é ali que a pessoa tenta clicar.
+  const close = sheet.getByRole('button', { name: 'Encerrar' })
+  // Busca pelo elemento, não pelo papel: o link oculto segue no lugar, mas sai da árvore de acessibilidade.
+  const linkElement = notice.locator('a', { hasText: 'Abrir conversa' })
+  const overlap = async () => {
+    const [a, b] = [await close.boundingBox(), await linkElement.boundingBox()]
+    if (!a || !b) return null
+    const [left, right] = [Math.max(a.x, b.x), Math.min(a.x + a.width, b.x + b.width)]
+    const [top, bottom] = [Math.max(a.y, b.y), Math.min(a.y + a.height, b.y + b.height)]
+    return right > left && bottom > top ? { x: (left + right) / 2, y: (top + bottom) / 2 } : null
+  }
+  await expect
+    .poll(overlap, { message: 'o link precisa estar sobre o botão para o teste valer' })
+    .not.toBeNull()
+  const point = (await overlap())!
+
+  await page.mouse.move(point.x, point.y)
+  await expect(notice).toBeVisible()
+  await page.mouse.click(point.x, point.y)
+
+  // O clique chegou ao Encerrar, que recusou o formulário incompleto; nada mudou de chamado.
+  await expect(sheet).toContainText('Informe a resolução.')
+  expect(page.url()).toBe(firstUrl)
+  await expect(sheet).toContainText(first)
+  await expect(sheet.getByLabel('Assunto')).toHaveValue('Contracheque')
+
+  // Com o cursor parado no mesmo lugar, o aviso some no tempo normal.
+  await expect(notice).toBeHidden()
+})
+
 test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request, baseURL }) => {
   const { sector, agent } = await seedSector(baseURL!)
   await prepare(baseURL!, sector.id)

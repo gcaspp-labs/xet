@@ -30,9 +30,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          // O aviso pode ficar sobre um botão: só o link de ação dele recebe o cursor.
+          // O aviso pode ficar sobre um botão: só o link de ação dele recebe o cursor, e
+          // com uma janela aberta o link some, para não tirar a pessoa do que está preenchendo.
           toast:
-            "cn-toast body text-[calc(13px*var(--text-scale))]! pointer-events-none [&_a]:pointer-events-auto",
+            "cn-toast body text-[calc(13px*var(--text-scale))]! pointer-events-none [&_a]:pointer-events-auto [body:has([data-slot=dialog-content])_&_a]:invisible",
         },
       }}
       {...props}
