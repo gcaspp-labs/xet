@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Tags } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, Fragment, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormDialog } from '@/components/FormDialog'
+import { SearchBox } from '@/components/SearchBox'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -26,9 +27,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import {
+  filterSubjects,
+  type Solution,
   type Subject,
+  useDeleteSolution,
   useDeleteSubject,
+  useSaveSolution,
   useSaveSubject,
   useSectors,
   useSubjects,
@@ -101,6 +107,9 @@ function SubjectSheet({
   )
 }
 
+const solutionCount = (count: number) =>
+  count === 0 ? 'Nenhuma solução' : count === 1 ? '1 solução' : `${count} soluções`
+
 // Quantas soluções saem junto com o assunto, para a confirmação avisar.
 const solutionsWarning = (count: number) =>
   count === 0
@@ -161,6 +170,137 @@ function DeleteSubjectSheet({
   )
 }
 
+const solutionSchema = z.object({
+  body: z.string().trim().min(1, 'Informe a solução.'),
+})
+
+type SolutionValues = z.infer<typeof solutionSchema>
+
+// Começo do texto da solução, para os botões dizerem de qual se trata sem
+// repetir um texto de até 10.000 caracteres.
+const preview = (body: string) => (body.length > 60 ? `${body.slice(0, 60)}…` : body)
+
+function SolutionSheet({
+  sectorId,
+  subject,
+  solution,
+  open,
+  onOpenChange,
+}: {
+  sectorId: number
+  subject: Subject
+  solution: Solution | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const save = useSaveSolution(sectorId)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<SolutionValues>({
+    resolver: zodResolver(solutionSchema),
+    defaultValues: { body: solution?.body ?? '' },
+  })
+
+  const onSubmit = handleSubmit((values) => {
+    if (save.isPending) {
+      return
+    }
+    save.mutate(
+      { subjectId: subject.id, id: solution?.id, body: values.body },
+      {
+        onSuccess: () => {
+          toast.success('Solução salva')
+          onOpenChange(false)
+        },
+      },
+    )
+  })
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={solution ? 'Editar solução' : 'Nova solução'}
+      description={`Assunto: ${subject.name}`}
+      submitLabel={solution ? 'Salvar' : 'Cadastrar solução'}
+      pending={save.isPending}
+      error={save.error?.message}
+      onSubmit={onSubmit}
+    >
+      <Field data-invalid={!!errors.body}>
+        <FieldLabel htmlFor="solution-body">Solução</FieldLabel>
+        <Textarea
+          id="solution-body"
+          maxLength={10000}
+          aria-invalid={!!errors.body}
+          {...register('body')}
+        />
+        <FieldError errors={[errors.body]} />
+      </Field>
+    </FormDialog>
+  )
+}
+
+// Confirmação da exclusão da solução: apaga de verdade, e os chamados guardam o
+// próprio texto (spec.md, Assuntos e soluções).
+function DeleteSolutionSheet({
+  sectorId,
+  subject,
+  solution,
+  open,
+  onOpenChange,
+}: {
+  sectorId: number
+  subject: Subject
+  solution: Solution
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const remove = useDeleteSolution(sectorId)
+
+  const changeOpen = (next: boolean) => {
+    if (!next) {
+      remove.reset()
+    }
+    onOpenChange(next)
+  }
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (remove.isPending) {
+      return
+    }
+    remove.mutate(
+      { subjectId: subject.id, id: solution.id },
+      {
+        onSuccess: () => {
+          toast.success('Solução excluída')
+          changeOpen(false)
+        },
+      },
+    )
+  }
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={changeOpen}
+      title="Excluir solução"
+      description={`A solução sai da lista do assunto "${subject.name}". A exclusão não pode ser desfeita, e os chamados que usaram esse texto continuam como estão.`}
+      submitLabel="Excluir solução"
+      pending={remove.isPending}
+      error={remove.error?.message}
+      onSubmit={submit}
+    >
+      <p className="body-sm whitespace-pre-wrap text-ink-soft [overflow-wrap:anywhere]">
+        {solution.body}
+      </p>
+    </FormDialog>
+  )
+}
+
 export default function SubjectsPage() {
   const { data: user } = useCurrentUser()
   const { data: sectors = [] } = useSectors()
@@ -169,18 +309,42 @@ export default function SubjectsPage() {
   const sectorId = user?.sectorId ?? chosen ?? sectors[0]?.id
   const sector = sectors.find((s) => s.id === sectorId)
   const { data: subjects, isPending } = useSubjects(sectorId)
+  const [query, setQuery] = useState('')
+  const shown = subjects && filterSubjects(subjects, query)
   const [editing, setEditing] = useState<Subject | null>(null)
   const [open, setOpen] = useState(false)
   const [deleting, setDeleting] = useState<Subject | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
   const [sheetKey, setSheetKey] = useState(0)
+  // Solução aberta para criar, editar ou excluir, com o assunto dela.
+  const [solutionTarget, setSolutionTarget] = useState<{
+    subject: Subject
+    solution: Solution | null
+  } | null>(null)
+  const [solutionOpen, setSolutionOpen] = useState(false)
+  const [solutionDelete, setSolutionDelete] = useState<{
+    subject: Subject
+    solution: Solution
+  } | null>(null)
+  const [solutionDeleteOpen, setSolutionDeleteOpen] = useState(false)
   const sectorItems = sectors.map((s) => ({ value: s.id.toString(), label: s.name }))
 
   const openSheet = (subject: Subject | null) => {
     setEditing(subject)
     setSheetKey((key) => key + 1)
     setOpen(true)
+  }
+
+  const openSolution = (subject: Subject, solution: Solution | null) => {
+    setSolutionTarget({ subject, solution })
+    setSheetKey((key) => key + 1)
+    setSolutionOpen(true)
+  }
+
+  const openSolutionDelete = (subject: Subject, solution: Solution) => {
+    setSolutionDelete({ subject, solution })
+    setSolutionDeleteOpen(true)
   }
 
   const openDelete = (subject: Subject) => {
@@ -224,44 +388,102 @@ export default function SubjectsPage() {
             </Select>
           </Field>
         )}
+        {subjects && subjects.length > 0 && (
+          <SearchBox
+            value={query}
+            onChange={setQuery}
+            label="Buscar assuntos"
+            placeholder="Assunto ou solução"
+          />
+        )}
         <Card>
-          {subjects && subjects.length > 0 ? (
+          {shown && shown.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Assunto</TableHead>
+                  <TableHead>Assunto e soluções</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {subjects.map((subject) => (
-                  <TableRow key={subject.id}>
-                    <TableCell className="body-strong break-words whitespace-normal">
-                      {subject.name}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Editar ${subject.name}`}
-                          onClick={() => openSheet(subject)}
-                        >
-                          Editar
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Excluir ${subject.name}`}
-                          onClick={() => openDelete(subject)}
-                        >
-                          Excluir
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                {shown.map((subject) => (
+                  <Fragment key={subject.id}>
+                    <TableRow data-subject={subject.name}>
+                      <TableCell className="w-full max-w-0 whitespace-normal">
+                        <div className="body-strong [overflow-wrap:anywhere]">{subject.name}</div>
+                        <div className="caption text-ink-soft">
+                          {solutionCount(
+                            subjects!.find((item) => item.id === subject.id)!.solutions.length,
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-normal sm:whitespace-nowrap">
+                        <div className="flex flex-wrap justify-end gap-1 sm:flex-nowrap">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Nova solução para ${subject.name}`}
+                            onClick={() => openSolution(subject, null)}
+                          >
+                            Nova solução
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Editar ${subject.name}`}
+                            onClick={() => openSheet(subject)}
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Excluir ${subject.name}`}
+                            onClick={() =>
+                              openDelete(subjects!.find((item) => item.id === subject.id)!)
+                            }
+                          >
+                            Excluir
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {subject.solutions.map((solution) => (
+                      <TableRow key={`solution-${solution.id}`} data-solution-of={subject.name}>
+                        <TableCell className="w-full max-w-0 whitespace-normal">
+                          {/* Texto longo fica em até 3 linhas; o inteiro aparece ao editar. */}
+                          <p
+                            className="line-clamp-3 border-l-2 border-line pl-3 text-ink-soft [overflow-wrap:anywhere]"
+                            title={solution.body}
+                          >
+                            {solution.body}
+                          </p>
+                        </TableCell>
+                        <TableCell className="whitespace-normal sm:whitespace-nowrap">
+                          <div className="flex flex-wrap justify-end gap-1 sm:flex-nowrap">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Editar solução: ${preview(solution.body)}`}
+                              onClick={() => openSolution(subject, solution)}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Excluir solução: ${preview(solution.body)}`}
+                              onClick={() => openSolutionDelete(subject, solution)}
+                            >
+                              Excluir
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -274,7 +496,9 @@ export default function SubjectsPage() {
                 <EmptyDescription>
                   {sectorId === undefined
                     ? 'Cadastre um setor para gerenciar assuntos.'
-                    : 'Nenhum assunto cadastrado.'}
+                    : subjects && subjects.length > 0
+                      ? 'Nenhum assunto encontrado.'
+                      : 'Nenhum assunto cadastrado.'}
                 </EmptyDescription>
               </Empty>
             )
@@ -288,6 +512,26 @@ export default function SubjectsPage() {
           subject={editing}
           open={open}
           onOpenChange={setOpen}
+        />
+      )}
+      {sectorId !== undefined && solutionTarget && (
+        <SolutionSheet
+          key={`solution-${sheetKey}`}
+          sectorId={sectorId}
+          subject={solutionTarget.subject}
+          solution={solutionTarget.solution}
+          open={solutionOpen}
+          onOpenChange={setSolutionOpen}
+        />
+      )}
+      {sectorId !== undefined && solutionDelete && (
+        <DeleteSolutionSheet
+          key={`solution-delete-${solutionDelete.solution.id}`}
+          sectorId={sectorId}
+          subject={solutionDelete.subject}
+          solution={solutionDelete.solution}
+          open={solutionDeleteOpen}
+          onOpenChange={setSolutionDeleteOpen}
         />
       )}
       {sectorId !== undefined && deleting && (

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Role, User } from '@/lib/auth'
+import { normalizeSearch } from '@/lib/format'
 
 export type Sector = {
   id: number
@@ -138,5 +139,54 @@ export function useDeleteSubject(sectorId: number) {
     mutationFn: (id: number) =>
       api<void>(`/sectors/${sectorId}/subjects/${id}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
+  })
+}
+
+export type Solution = Subject['solutions'][number]
+
+export function useSaveSolution(sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ subjectId, id, body }: { subjectId: number; id?: number; body: string }) =>
+      id === undefined
+        ? api<Solution>(`/sectors/${sectorId}/subjects/${subjectId}/solutions`, {
+            method: 'POST',
+            body: { body },
+          })
+        : api<Solution>(`/sectors/${sectorId}/subjects/${subjectId}/solutions/${id}`, {
+            method: 'PUT',
+            body: { body },
+          }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
+  })
+}
+
+export function useDeleteSolution(sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ subjectId, id }: { subjectId: number; id: number }) =>
+      api<void>(`/sectors/${sectorId}/subjects/${subjectId}/solutions/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
+  })
+}
+
+// Busca da tela Assuntos (spec.md, Assuntos e soluções), sem diferenciar acentos
+// nem maiúsculas: o assunto encontrado pelo nome vem com todas as soluções; o
+// encontrado por uma solução vem só com as soluções que batem.
+export function filterSubjects(subjects: Subject[], query: string) {
+  const typed = normalizeSearch(query.trim())
+  if (!typed) {
+    return subjects
+  }
+  return subjects.flatMap((subject) => {
+    if (normalizeSearch(subject.name).includes(typed)) {
+      return [subject]
+    }
+    const solutions = subject.solutions.filter((solution) =>
+      normalizeSearch(solution.body).includes(typed),
+    )
+    return solutions.length > 0 ? [{ ...subject, solutions }] : []
   })
 }
