@@ -1,5 +1,14 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  clearSession,
+  expectClosableDialog,
+  seedDirectory,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 type Response = { ok(): boolean; json(): Promise<unknown> }
 
@@ -589,3 +598,259 @@ test('a correção só pergunta sobre a solução quando a resolução é altera
     Contracheque: ['Enviada a segunda via por e-mail.'],
   })
 })
+
+// Setor com os assuntos dados, cada um com as suas soluções, criados pela API.
+async function seedSubjects(baseURL: string, sectorId: number, list: Record<string, string[]>) {
+  const api = await adminApi(baseURL)
+  for (const name of Object.keys(list)) {
+    expect(
+      (await api.post(`/api/sectors/${sectorId}/subjects`, { data: { name } })).ok(),
+    ).toBeTruthy()
+  }
+  await api.dispose()
+  for (const [name, bodies] of Object.entries(list)) {
+    await addSolutions(baseURL, sectorId, name, bodies)
+  }
+}
+
+// Textos da tabela na ordem: assunto em uma linha, soluções nas seguintes.
+async function tableRows(page: import('@playwright/test').Page) {
+  return page
+    .getByRole('table')
+    .locator('tbody tr')
+    .evaluateAll((rows) =>
+      rows.map((row) =>
+        row.hasAttribute('data-subject')
+          ? `# ${row.getAttribute('data-subject')}`
+          : (row.querySelector('p')?.textContent ?? ''),
+      ),
+    )
+}
+
+test('o supervisor adiciona, edita e exclui uma solução, e a repetida é recusada no formulário', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  await seedSubjects(baseURL!, sector.id, { Contracheque: [] })
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/assuntos')
+  await expect(page.getByRole('table')).toContainText('Nenhuma solução')
+
+  const sheet = page.getByRole('dialog', { name: 'Nova solução' })
+  // Janela de fechamento normal: X, Esc e clique fora fecham.
+  await expectClosableDialog(page, sheet, () =>
+    page.getByRole('button', { name: 'Nova solução para Contracheque' }).click(),
+  )
+  await page.getByRole('button', { name: 'Nova solução para Contracheque' }).click()
+  await expect(sheet).toContainText('Assunto: Contracheque')
+  await sheet.getByRole('button', { name: 'Cadastrar solução' }).click()
+  await expect(sheet).toContainText('Informe a solução.')
+  await sheet.getByLabel('Solução').fill('Enviada a segunda via.')
+  await sheet.getByRole('button', { name: 'Cadastrar solução' }).click()
+  await expect(page.getByText('Solução salva')).toBeVisible()
+  await expect(sheet).toHaveCount(0)
+  await expect(page.getByRole('table')).toContainText('1 solução')
+
+  // Repetida, com outras maiúsculas e espaços, é recusada com aviso no formulário.
+  await page.getByRole('button', { name: 'Nova solução para Contracheque' }).click()
+  await sheet.getByLabel('Solução').fill('  ENVIADA A SEGUNDA VIA. ')
+  await sheet.getByRole('button', { name: 'Cadastrar solução' }).click()
+  await expect(sheet).toContainText('Esta solução já está na lista deste assunto.')
+  await sheet.getByLabel('Solução').fill('Orientado a consultar o portal.')
+  await sheet.getByRole('button', { name: 'Cadastrar solução' }).click()
+  await expect(sheet).toHaveCount(0)
+
+  // Editar mostra o texto inteiro e grava a troca.
+  await page
+    .getByRole('button', { name: 'Editar solução: Orientado a consultar o portal.' })
+    .click()
+  const edit = page.getByRole('dialog', { name: 'Editar solução' })
+  await expect(edit.getByLabel('Solução')).toHaveValue('Orientado a consultar o portal.')
+  // Trocar para o texto de outra solução do assunto também é recusado.
+  await edit.getByLabel('Solução').fill('enviada a segunda via.')
+  await edit.getByRole('button', { name: 'Salvar' }).click()
+  await expect(edit).toContainText('Esta solução já está na lista deste assunto.')
+  await edit.getByLabel('Solução').fill('Orientado a consultar o portal do servidor.')
+  await edit.getByRole('button', { name: 'Salvar' }).click()
+  await expect(edit).toHaveCount(0)
+  await expect(page.getByRole('table')).toContainText('Orientado a consultar o portal do servidor.')
+
+  // Excluir pede confirmação; Cancelar mantém a solução.
+  const confirm = page.getByRole('dialog', { name: 'Excluir solução' })
+  await page.getByRole('button', { name: 'Excluir solução: Enviada a segunda via.' }).click()
+  await expect(confirm).toContainText('A exclusão não pode ser desfeita')
+  await expect(confirm).toContainText('Enviada a segunda via.')
+  await confirm.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(confirm).toBeHidden()
+  await page.getByRole('button', { name: 'Excluir solução: Enviada a segunda via.' }).click()
+  await confirm.getByRole('button', { name: 'Excluir solução' }).click()
+  await expect(page.getByText('Solução excluída')).toBeVisible()
+  await expect(page.getByRole('table')).not.toContainText('Enviada a segunda via.')
+
+  expect(await solutionBodies(baseURL!, sector.id)).toEqual({
+    Contracheque: ['Orientado a consultar o portal do servidor.'],
+  })
+})
+
+test('a busca filtra assuntos e soluções sem diferenciar acentos nem maiúsculas', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  await seedSubjects(baseURL!, sector.id, {
+    Contracheque: ['Enviada a segunda via.', 'Orientado a consultar o portal.'],
+    Férias: ['Agendadas pelo portal.', 'Período confirmado.'],
+    Admissão: ['Documentos conferidos.'],
+  })
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/assuntos')
+  const search = page.getByRole('searchbox', { name: 'Buscar assuntos' })
+  await expect(page.getByRole('table')).toContainText('Documentos conferidos.')
+
+  // Pelo nome, sem acento e em maiúsculas: o assunto vem com todas as soluções.
+  await search.fill('FERIAS')
+  await expect
+    .poll(() => tableRows(page))
+    .toEqual(['# Férias', 'Agendadas pelo portal.', 'Período confirmado.'])
+
+  // Por uma solução: só as soluções que batem, em cada assunto encontrado.
+  await search.fill('PORTAL')
+  await expect
+    .poll(() => tableRows(page))
+    .toEqual([
+      '# Contracheque',
+      'Orientado a consultar o portal.',
+      '# Férias',
+      'Agendadas pelo portal.',
+    ])
+  // A contagem do assunto continua a da lista inteira.
+  await expect(page.locator('[data-subject=Contracheque]')).toContainText('2 soluções')
+
+  // Acento na busca encontra o texto sem acento, e o contrário.
+  await search.fill('periodo')
+  await expect.poll(() => tableRows(page)).toEqual(['# Férias', 'Período confirmado.'])
+  await search.fill('admissao')
+  await expect.poll(() => tableRows(page)).toEqual(['# Admissão', 'Documentos conferidos.'])
+
+  // Sem resultado: EmptyState.
+  await search.fill('rescisão')
+  await expect(page.getByRole('table')).toHaveCount(0)
+  await expect(page.getByText('Nenhum assunto encontrado.')).toBeVisible()
+
+  await search.fill('')
+  await expect.poll(() => tableRows(page)).toHaveLength(8)
+})
+
+test('o supervisor vê só o próprio setor, e o administrador troca de setor e vê a lista dele com as soluções', async ({
+  page,
+  baseURL,
+}) => {
+  const first = await seedSector(baseURL!)
+  const second = await seedSector(baseURL!)
+  await seedSubjects(baseURL!, first.sector.id, { 'Assunto do primeiro': ['Solução do primeiro.'] })
+  await seedSubjects(baseURL!, second.sector.id, { 'Assunto do segundo': ['Solução do segundo.'] })
+
+  await signIn(page, first.supervisor, userPassword)
+  await page.goto('/assuntos')
+  await expect
+    .poll(() => tableRows(page))
+    .toEqual(['# Assunto do primeiro', 'Solução do primeiro.'])
+  await expect(page.getByLabel('Setor')).toHaveCount(0)
+  await page.getByRole('searchbox', { name: 'Buscar assuntos' }).fill('segundo')
+  await expect(page.getByText('Nenhum assunto encontrado.')).toBeVisible()
+
+  await clearSession(page)
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/assuntos')
+  await page.getByLabel('Setor').click()
+  await page.getByRole('option', { name: first.sector.name }).click()
+  await expect
+    .poll(() => tableRows(page))
+    .toEqual(['# Assunto do primeiro', 'Solução do primeiro.'])
+  await page.getByLabel('Setor').click()
+  await page.getByRole('option', { name: second.sector.name }).click()
+  await expect(page.getByRole('table')).toContainText('Solução do segundo.')
+  await expect.poll(() => tableRows(page)).toEqual(['# Assunto do segundo', 'Solução do segundo.'])
+
+  // Nova solução entra no assunto do setor escolhido.
+  await page.getByRole('button', { name: 'Nova solução para Assunto do segundo' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Nova solução' })
+  await sheet.getByLabel('Solução').fill('Outra do segundo.')
+  await sheet.getByRole('button', { name: 'Cadastrar solução' }).click()
+  await expect(sheet).toHaveCount(0)
+  expect(await solutionBodies(baseURL!, second.sector.id)).toEqual({
+    'Assunto do segundo': ['Outra do segundo.', 'Solução do segundo.'],
+  })
+  expect(await solutionBodies(baseURL!, first.sector.id)).toEqual({
+    'Assunto do primeiro': ['Solução do primeiro.'],
+  })
+})
+
+// Solução com texto longo, com e sem espaços, não alarga a tabela nem a tela; o
+// texto inteiro aparece ao editar. Capturas para a revisão visual.
+for (const theme of ['light', 'dark'] as const) {
+  for (const [device, width, height] of [
+    ['desktop', 1280, 800],
+    ['celular', 375, 667],
+  ] as const) {
+    test(`solução longa sem quebrar a tabela, tema ${theme}, ${device}`, async ({
+      browser,
+      baseURL,
+    }, testInfo) => {
+      const { sector, supervisor } = await seedSector(baseURL!)
+      const long = `Orientado sobre o procedimento completo. ${'Conferidos os dados do cadastro e enviada a orientação por escrito. '.repeat(60)}Fim do texto.`
+      const unbroken = `Protocolo${'0123456789'.repeat(30)}`
+      await seedSubjects(baseURL!, sector.id, {
+        'Contracheque e informe de rendimentos do exercício anterior': [
+          'Enviada a segunda via.',
+          long,
+          unbroken,
+        ],
+        Férias: ['Agendadas pelo portal.'],
+      })
+      const context = await browser.newContext({ viewport: { width, height } })
+      const page = await context.newPage()
+      await page.addInitScript((stored) => localStorage.setItem('theme', stored), theme)
+      await signIn(page, supervisor, userPassword)
+      await page.goto('/assuntos')
+      const table = page.getByRole('table')
+      await expect(table).toContainText('Fim do texto.')
+      const name = `${theme === 'light' ? 'claro' : 'escuro'}-${device}`
+
+      const overflow = () =>
+        page.evaluate(() => {
+          const container = document.querySelector('[data-slot=table-container]')!
+          return [
+            document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            container.scrollWidth - container.clientWidth,
+          ]
+        })
+      expect(await overflow()).toEqual([0, 0])
+      // O texto longo fica em poucas linhas na tabela.
+      const cell = table.locator('p', { hasText: 'Fim do texto.' })
+      expect((await cell.boundingBox())!.height).toBeLessThan(100)
+      await page.screenshot({ path: testInfo.outputPath(`assuntos-${name}.png`), fullPage: true })
+
+      await page.getByRole('searchbox', { name: 'Buscar assuntos' }).fill('PROCEDIMENTO')
+      await expect
+        .poll(() => tableRows(page))
+        .toEqual(['# Contracheque e informe de rendimentos do exercício anterior', long])
+      expect(await overflow()).toEqual([0, 0])
+      await page.screenshot({ path: testInfo.outputPath(`busca-${name}.png`) })
+
+      await page.getByRole('button', { name: /^Editar solução: Orientado sobre/ }).click()
+      const edit = page.getByRole('dialog', { name: 'Editar solução' })
+      await expect(edit.getByLabel('Solução')).toHaveValue(long)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: testInfo.outputPath(`editar-${name}.png`) })
+      await page.keyboard.press('Escape')
+      await expect(edit).toBeHidden()
+
+      await page.getByRole('searchbox', { name: 'Buscar assuntos' }).fill('xyz')
+      await expect(page.getByText('Nenhum assunto encontrado.')).toBeVisible()
+      await page.screenshot({ path: testInfo.outputPath(`vazia-${name}.png`) })
+      await context.close()
+    })
+  }
+}
