@@ -106,7 +106,8 @@ func (s *Service) DeleteSubject(ctx context.Context, actorID, sectorID, id int64
 // the list stays as it is, and a text over the limit does not enter, without
 // stopping the form from being saved (spec.md, Assuntos e soluções).
 func addFormSubject(ctx context.Context, q *db.Queries, actorID, sectorID int64, name string) error {
-	if utf8.RuneCountInString(name) > maxSubjectLength {
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > maxSubjectLength {
 		return nil
 	}
 	added, err := q.AddSubjectIfMissing(ctx, db.AddSubjectIfMissingParams{SectorID: sectorID, Name: name})
