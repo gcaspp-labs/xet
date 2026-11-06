@@ -19,7 +19,8 @@ import (
 
 // Correction is the full closing data of a closed ticket after the
 // correction, with the reason for it. AddSubject also adds the subject to the
-// list of the sector, with the correction.
+// list of the sector, and AddSolution the resolution to the list of the
+// subject, with the correction.
 type Correction struct {
 	Subject        string
 	Resolution     string
@@ -30,6 +31,7 @@ type Correction struct {
 	SpokeWith      string
 	Reason         string
 	AddSubject     bool
+	AddSolution    bool
 }
 
 // Correct changes the closing data of a closed ticket. Whoever closed it,
@@ -139,10 +141,8 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 		if changes.Empty() {
 			return ErrNoChanges
 		}
-		if in.AddSubject {
-			if err := addFormSubject(ctx, q, actor.ID, ticket.SectorID, in.Subject); err != nil {
-				return err
-			}
+		if err := addFormItems(ctx, q, actor.ID, ticket.SectorID, in.Subject, in.Resolution, in.AddSubject, in.AddSolution); err != nil {
+			return err
 		}
 		raw, err := changes.JSON()
 		if err != nil {

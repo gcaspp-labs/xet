@@ -67,10 +67,8 @@ func (s *Service) TransferSector(ctx context.Context, actor auth.User, ticketID,
 		if err := directory.LinkSector(ctx, q, closed.ContactID, target.ID, &actor.ID); err != nil {
 			return err
 		}
-		if in.AddSubject {
-			if err := addFormSubject(ctx, q, actor.ID, closed.SectorID, in.Subject); err != nil {
-				return err
-			}
+		if err := addFormItems(ctx, q, actor.ID, closed.SectorID, in.Subject, in.Resolution, in.AddSubject, in.AddSolution); err != nil {
+			return err
 		}
 		changes["sector_id"] = audit.Change{From: closed.SectorID, To: target.ID}
 		changes["next_ticket_id"] = audit.Change{From: nil, To: next.ID}

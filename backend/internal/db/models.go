@@ -662,6 +662,14 @@ type Subject struct {
 	UpdatedAt time.Time
 }
 
+type SubjectSolution struct {
+	ID        int64
+	SubjectID int64
+	Body      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type Ticket struct {
 	ID               int64
 	Protocol         string

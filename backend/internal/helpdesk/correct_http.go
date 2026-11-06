@@ -20,6 +20,7 @@ type correctRequest struct {
 	SpokeWith      string    `json:"spokeWith" validate:"max=200"`
 	Reason         string    `json:"reason" validate:"max=2000"`
 	AddSubject     bool      `json:"addSubject"`
+	AddSolution    bool      `json:"addSolution"`
 }
 
 // correctTicket corrects the closing data of a closed ticket, with a reason.
