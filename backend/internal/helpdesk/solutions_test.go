@@ -724,3 +724,79 @@ func TestEditingOrDeletingASolutionDoesNotChangeTickets(t *testing.T) {
 	}
 	wantResolutionOnTicket("after deleting")
 }
+
+func TestResolutionOverTheLimitDoesNotEnterAndTheFormIsSaved(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("é", 10001)
+	exact := strings.Repeat("é", 10000)
+	wantResolution := func(t *testing.T, e *testEnv, ticketID int64, want string) {
+		t.Helper()
+		ticket, err := e.Q.GetTicket(t.Context(), ticketID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ticket.Status != db.TicketStatusClosed || ticket.Resolution == nil || *ticket.Resolution != want {
+			t.Fatalf("ticket = %s, resolution of %d runes", ticket.Status, len([]rune(deref(ticket.Resolution))))
+		}
+	}
+
+	t.Run("closing", func(t *testing.T) {
+		t.Parallel()
+		c := newClosing(t)
+		c.register()
+		c.e.createSubject(c.sector.ID, c.supToken, "Contracheque")
+		form := with(with(c.form(c.org), "resolution", long), "addSolution", true)
+		if resp := c.e.closeForm(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusOK {
+			t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
+		}
+		if n := c.e.Count("subject_solutions"); n != 0 {
+			t.Fatalf("solutions = %d", n)
+		}
+		wantResolution(t, c.e, c.ticket.ID, long)
+	})
+	t.Run("transfer", func(t *testing.T) {
+		t.Parallel()
+		c := newSectorTransfer(t)
+		c.e.createSubject(c.sector.ID, c.supToken, "Contracheque")
+		form := with(with(c.transferForm(c.rh), "resolution", long), "addSolution", true)
+		if resp := c.e.transferSector(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusOK {
+			t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+		}
+		if n := c.e.Count("subject_solutions"); n != 0 {
+			t.Fatalf("solutions = %d", n)
+		}
+		wantResolution(t, c.e, c.ticket.ID, long)
+	})
+	t.Run("correction", func(t *testing.T) {
+		t.Parallel()
+		c := newCorrection(t)
+		c.e.createSubject(c.sector.ID, c.supToken, "Contracheque")
+		body := with(with(c.data("Resolução incompleta."), "resolution", long), "addSolution", true)
+		if resp := c.e.correct(c.ticket.ID, c.anaToken, body); resp.Status != http.StatusOK {
+			t.Fatalf("correct: status %d, body %v", resp.Status, resp.Body)
+		}
+		if n := c.e.Count("subject_solutions"); n != 0 {
+			t.Fatalf("solutions = %d", n)
+		}
+		wantResolution(t, c.e, c.ticket.ID, long)
+	})
+	t.Run("exactly at the limit enters", func(t *testing.T) {
+		t.Parallel()
+		c := newClosing(t)
+		c.register()
+		subject := c.e.createSubject(c.sector.ID, c.supToken, "Contracheque")
+		form := with(with(c.form(c.org), "resolution", exact), "addSolution", true)
+		if resp := c.e.closeForm(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusOK {
+			t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
+		}
+		wantSolutions(t, c.e.solutionBodies(subject), exact)
+		wantResolution(t, c.e, c.ticket.ID, exact)
+	})
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

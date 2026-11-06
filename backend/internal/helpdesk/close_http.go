@@ -62,7 +62,7 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 // does not enter it, and the form is still saved (spec.md, Assuntos e soluções).
 type closeRequest struct {
 	Subject        string     `json:"subject" validate:"required"`
-	Resolution     string     `json:"resolution" validate:"required,max=10000"`
+	Resolution     string     `json:"resolution" validate:"required"`
 	ModuleIDs      []int64    `json:"moduleIds" validate:"required,min=1,max=100"`
 	OrganizationID int64      `json:"organizationId" validate:"required"`
 	StartedAt      *time.Time `json:"startedAt"`
