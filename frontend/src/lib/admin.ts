@@ -107,6 +107,8 @@ export type Subject = {
   id: number
   sectorId: number
   name: string
+  // Soluções do assunto, apagadas junto com ele.
+  solutions: { id: number; subjectId: number; body: string }[]
 }
 
 const subjectsKey = (sectorId: number) => ['sectors', sectorId, 'subjects']

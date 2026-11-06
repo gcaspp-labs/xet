@@ -9,6 +9,46 @@ import (
 	"context"
 )
 
+const addSolutionIfMissing = `-- name: AddSolutionIfMissing :many
+insert into subject_solutions (subject_id, body)
+values ($1, $2)
+on conflict (subject_id, md5(lower(body))) do nothing
+returning id, subject_id, body, created_at, updated_at
+`
+
+type AddSolutionIfMissingParams struct {
+	SubjectID int64
+	Body      string
+}
+
+// From the closing form: a solution someone else already added stays as it is,
+// and no row comes back.
+func (q *Queries) AddSolutionIfMissing(ctx context.Context, arg AddSolutionIfMissingParams) ([]SubjectSolution, error) {
+	rows, err := q.db.Query(ctx, addSolutionIfMissing, arg.SubjectID, arg.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SubjectSolution
+	for rows.Next() {
+		var i SubjectSolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const addSubjectIfMissing = `-- name: AddSubjectIfMissing :many
 insert into subjects (sector_id, name)
 values ($1, $2)
@@ -49,6 +89,30 @@ func (q *Queries) AddSubjectIfMissing(ctx context.Context, arg AddSubjectIfMissi
 	return items, nil
 }
 
+const createSolution = `-- name: CreateSolution :one
+insert into subject_solutions (subject_id, body)
+values ($1, $2)
+returning id, subject_id, body, created_at, updated_at
+`
+
+type CreateSolutionParams struct {
+	SubjectID int64
+	Body      string
+}
+
+func (q *Queries) CreateSolution(ctx context.Context, arg CreateSolutionParams) (SubjectSolution, error) {
+	row := q.db.QueryRow(ctx, createSolution, arg.SubjectID, arg.Body)
+	var i SubjectSolution
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createSubject = `-- name: CreateSubject :one
 insert into subjects (sector_id, name)
 values ($1, $2)
@@ -73,6 +137,16 @@ func (q *Queries) CreateSubject(ctx context.Context, arg CreateSubjectParams) (S
 	return i, err
 }
 
+const deleteSolution = `-- name: DeleteSolution :exec
+delete from subject_solutions
+where id = $1
+`
+
+func (q *Queries) DeleteSolution(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteSolution, id)
+	return err
+}
+
 const deleteSubject = `-- name: DeleteSubject :exec
 delete from subjects
 where id = $1
@@ -81,6 +155,82 @@ where id = $1
 func (q *Queries) DeleteSubject(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteSubject, id)
 	return err
+}
+
+const getSolutionForUpdate = `-- name: GetSolutionForUpdate :one
+select id, subject_id, body, created_at, updated_at from subject_solutions
+where id = $1 and subject_id = $2
+for update
+`
+
+type GetSolutionForUpdateParams struct {
+	ID        int64
+	SubjectID int64
+}
+
+func (q *Queries) GetSolutionForUpdate(ctx context.Context, arg GetSolutionForUpdateParams) (SubjectSolution, error) {
+	row := q.db.QueryRow(ctx, getSolutionForUpdate, arg.ID, arg.SubjectID)
+	var i SubjectSolution
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSubjectByNameForShare = `-- name: GetSubjectByNameForShare :one
+select id, sector_id, name, created_at, updated_at from subjects
+where sector_id = $1 and lower(name) = lower($2)
+for share
+`
+
+type GetSubjectByNameForShareParams struct {
+	SectorID int64
+	Name     string
+}
+
+// From the closing form: the subject of the list with the name of the form,
+// held while the solution is added.
+func (q *Queries) GetSubjectByNameForShare(ctx context.Context, arg GetSubjectByNameForShareParams) (Subject, error) {
+	row := q.db.QueryRow(ctx, getSubjectByNameForShare, arg.SectorID, arg.Name)
+	var i Subject
+	err := row.Scan(
+		&i.ID,
+		&i.SectorID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSubjectForShare = `-- name: GetSubjectForShare :one
+select id, sector_id, name, created_at, updated_at from subjects
+where id = $1 and sector_id = $2
+for share
+`
+
+type GetSubjectForShareParams struct {
+	ID       int64
+	SectorID int64
+}
+
+// Holds the subject while one of its solutions is written, so it is not
+// deleted meanwhile.
+func (q *Queries) GetSubjectForShare(ctx context.Context, arg GetSubjectForShareParams) (Subject, error) {
+	row := q.db.QueryRow(ctx, getSubjectForShare, arg.ID, arg.SectorID)
+	var i Subject
+	err := row.Scan(
+		&i.ID,
+		&i.SectorID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getSubjectForUpdate = `-- name: GetSubjectForUpdate :one
@@ -105,6 +255,98 @@ func (q *Queries) GetSubjectForUpdate(ctx context.Context, arg GetSubjectForUpda
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listSectorSolutions = `-- name: ListSectorSolutions :many
+select ss.id, ss.subject_id, ss.body, ss.created_at, ss.updated_at from subject_solutions ss
+join subjects s on s.id = ss.subject_id
+where s.sector_id = $1
+order by ss.subject_id, lower(ss.body), ss.id
+`
+
+// The solutions of every subject of the sector.
+func (q *Queries) ListSectorSolutions(ctx context.Context, sectorID int64) ([]SubjectSolution, error) {
+	rows, err := q.db.Query(ctx, listSectorSolutions, sectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SubjectSolution
+	for rows.Next() {
+		var i SubjectSolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSolutionBodies = `-- name: ListSolutionBodies :many
+select body from subject_solutions
+where subject_id = $1
+order by lower(body), id
+`
+
+func (q *Queries) ListSolutionBodies(ctx context.Context, subjectID int64) ([]string, error) {
+	rows, err := q.db.Query(ctx, listSolutionBodies, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var body string
+		if err := rows.Scan(&body); err != nil {
+			return nil, err
+		}
+		items = append(items, body)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubjectSolutions = `-- name: ListSubjectSolutions :many
+select id, subject_id, body, created_at, updated_at from subject_solutions
+where subject_id = $1
+order by lower(body), id
+`
+
+func (q *Queries) ListSubjectSolutions(ctx context.Context, subjectID int64) ([]SubjectSolution, error) {
+	rows, err := q.db.Query(ctx, listSubjectSolutions, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SubjectSolution
+	for rows.Next() {
+		var i SubjectSolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSubjects = `-- name: ListSubjects :many
@@ -137,6 +379,31 @@ func (q *Queries) ListSubjects(ctx context.Context, sectorID int64) ([]Subject, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateSolution = `-- name: UpdateSolution :one
+update subject_solutions
+set body = $1
+where id = $2
+returning id, subject_id, body, created_at, updated_at
+`
+
+type UpdateSolutionParams struct {
+	Body string
+	ID   int64
+}
+
+func (q *Queries) UpdateSolution(ctx context.Context, arg UpdateSolutionParams) (SubjectSolution, error) {
+	row := q.db.QueryRow(ctx, updateSolution, arg.Body, arg.ID)
+	var i SubjectSolution
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectID,
+		&i.Body,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateSubject = `-- name: UpdateSubject :one

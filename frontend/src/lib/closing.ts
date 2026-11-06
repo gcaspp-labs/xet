@@ -33,6 +33,20 @@ export const sameText = (a: string, b: string) =>
 export const inList = (text: string, list: { name: string }[]) =>
   list.some((item) => sameText(item.name, text))
 
+// Assunto da lista do setor, com as soluções dele (closing-form).
+export type FormSubject = {
+  id: number
+  name: string
+  solutions: { id: number; body: string }[]
+}
+
+// O assunto da lista igual ao texto, se houver.
+export const findSubject = (list: FormSubject[], text: string) =>
+  list.find((item) => sameText(item.name, text))
+
+export const hasSolution = (subject: FormSubject, text: string) =>
+  subject.solutions.some((solution) => sameText(solution.body, text))
+
 // O fim não pode estar no futuro nem antes do início; o backend confere de novo.
 export function checkPeriod(values: { startedAt: string; endedAt: string }, ctx: z.RefinementCtx) {
   if (new Date(values.endedAt) > new Date()) {

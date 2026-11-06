@@ -9,17 +9,24 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
 
+// formSubjectResponse is a subject of the closing form with its solutions.
+type formSubjectResponse struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Solutions []solutionResponse `json:"solutions"`
+}
+
 type closingFormResponse struct {
 	Modules          []httpx.Ref            `json:"modules"`
-	Subjects         []httpx.Ref            `json:"subjects"`
+	Subjects         []formSubjectResponse  `json:"subjects"`
 	ContactModuleIDs []int64                `json:"contactModuleIds"`
 	Organization     *httpx.OrganizationRef `json:"organization"`
 	StartedAt        time.Time              `json:"startedAt"`
 }
 
 // closingForm returns what the closing form starts with: the active modules
-// and the subjects of the sector, the modules of the contact among them, the
-// suggested organization and the automatic start.
+// and the subjects of the sector with their solutions, the modules of the
+// contact among them, the suggested organization and the automatic start.
 func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 	ticketID, ok := urlTicketID(w, r)
 	if !ok {
@@ -32,7 +39,7 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 	}
 	out := closingFormResponse{
 		Modules:          make([]httpx.Ref, len(form.Modules)),
-		Subjects:         make([]httpx.Ref, len(form.Subjects)),
+		Subjects:         make([]formSubjectResponse, len(form.Subjects)),
 		ContactModuleIDs: append([]int64{}, form.ContactModuleIDs...),
 		StartedAt:        form.StartedAt,
 	}
@@ -40,7 +47,7 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 		out.Modules[i] = httpx.Ref{ID: m.ID, Name: m.Name}
 	}
 	for i, s := range form.Subjects {
-		out.Subjects[i] = httpx.Ref{ID: s.ID, Name: s.Name}
+		out.Subjects[i] = formSubjectResponse{ID: s.ID, Name: s.Name, Solutions: toSolutionResponses(s.Solutions)}
 	}
 	if o := form.Organization; o != nil {
 		out.Organization = &httpx.OrganizationRef{
@@ -55,12 +62,13 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 // does not enter it, and the form is still saved (spec.md, Assuntos e soluções).
 type closeRequest struct {
 	Subject        string     `json:"subject" validate:"required"`
-	Resolution     string     `json:"resolution" validate:"required,max=10000"`
+	Resolution     string     `json:"resolution" validate:"required"`
 	ModuleIDs      []int64    `json:"moduleIds" validate:"required,min=1,max=100"`
 	OrganizationID int64      `json:"organizationId" validate:"required"`
 	StartedAt      *time.Time `json:"startedAt"`
 	EndedAt        *time.Time `json:"endedAt"`
 	AddSubject     bool       `json:"addSubject"`
+	AddSolution    bool       `json:"addSolution"`
 }
 
 func (req closeRequest) closing() Closing {

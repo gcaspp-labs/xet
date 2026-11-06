@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Controller, useController, useFormContext } from 'react-hook-form'
+import { Controller, useController, useFormContext, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { OrganizationPicker } from '@/components/ContactSheet'
 import {
@@ -19,8 +19,15 @@ import {
   FieldSet,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { closingSchema } from '@/lib/closing'
+import { closingSchema, type FormSubject, findSubject } from '@/lib/closing'
 import type { Organization } from '@/lib/directory'
 import { normalizeSearch } from '@/lib/format'
 
@@ -36,16 +43,20 @@ export function ClosingFields({
 }: {
   idPrefix: string
   modules: { id: number; name: string }[]
-  // Assuntos da lista do setor, sugeridos enquanto a pessoa digita.
-  subjects: { id: number; name: string }[]
+  // Assuntos da lista do setor, sugeridos enquanto a pessoa digita, com as
+  // soluções de cada um.
+  subjects: FormSubject[]
   // Aviso quando não há módulo para escolher.
   emptyModules?: string
 }) {
   const {
     register,
     control,
+    setValue,
     formState: { errors },
   } = useFormContext<ClosingValues>()
+  const subject = useWatch<ClosingValues, 'subject'>({ name: 'subject' })
+  const solutions = findSubject(subjects, subject)?.solutions ?? []
 
   return (
     <>
@@ -54,6 +65,35 @@ export function ClosingFields({
         <SubjectInput id={`${idPrefix}-subject`} subjects={subjects} invalid={!!errors.subject} />
         <FieldError errors={[errors.subject]} />
       </Field>
+      {solutions.length > 0 && (
+        <Field>
+          <FieldLabel htmlFor={`${idPrefix}-solutions`}>Soluções sugeridas</FieldLabel>
+          {/* Escolher substitui o texto da Resolução, que continua editável;
+              a escolha não fica marcada, porque o texto pode mudar depois. */}
+          <Select
+            items={solutions.map((solution) => ({ value: solution.body, label: solution.body }))}
+            value={null}
+            onValueChange={(body) => {
+              if (body) {
+                setValue('resolution', body as string, { shouldDirty: true, shouldValidate: true })
+              }
+            }}
+          >
+            <SelectTrigger id={`${idPrefix}-solutions`} className="w-full">
+              <SelectValue placeholder="Escolha para preencher a resolução" />
+            </SelectTrigger>
+            <SelectContent>
+              {solutions.map((solution) => (
+                <SelectItem key={solution.id} value={solution.body}>
+                  <span className="line-clamp-3 min-w-0 flex-1 break-words whitespace-normal">
+                    {solution.body}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
       <Field data-invalid={!!errors.resolution}>
         <FieldLabel htmlFor={`${idPrefix}-resolution`}>Resolução</FieldLabel>
         <Textarea
@@ -150,7 +190,7 @@ function SubjectInput({
   invalid,
 }: {
   id: string
-  subjects: { id: number; name: string }[]
+  subjects: FormSubject[]
   invalid: boolean
 }) {
   const {
@@ -205,6 +245,20 @@ export function SubjectQuestion({ subject }: { subject: string }) {
     <div className="flex flex-col gap-2" role="group" aria-label="Adicionar assunto">
       <p>Este assunto não está na lista do setor. Deseja adicioná-lo?</p>
       <p className="body-strong break-words">{subject.trim()}</p>
+    </div>
+  )
+}
+
+// Pergunta ao salvar, depois da do assunto: a resolução não está na lista de
+// soluções do assunto (spec.md, Assuntos e soluções).
+export function SolutionQuestion({ subject, resolution }: { subject: string; resolution: string }) {
+  return (
+    <div className="flex flex-col gap-2" role="group" aria-label="Adicionar solução">
+      <p>
+        Esta resolução não está na lista de soluções do assunto{' '}
+        <span className="body-strong break-words">{subject.trim()}</span>. Deseja adicioná-la?
+      </p>
+      <p className="body-strong break-words whitespace-pre-wrap">{resolution.trim()}</p>
     </div>
   )
 }

@@ -56,6 +56,11 @@ var (
 	ErrSubjectTooLong   = errors.New("subject name over the limit")
 	ErrSubjectNameTaken = errors.New("subject name already in use in the sector")
 	ErrSubjectNotFound  = errors.New("subject not found")
+
+	ErrInvalidSolution  = errors.New("solution text missing")
+	ErrSolutionTooLong  = errors.New("solution text over the limit")
+	ErrSolutionTaken    = errors.New("solution already on the list of the subject")
+	ErrSolutionNotFound = errors.New("solution not found")
 )
 
 // ErrCannotCancel refuses an agent who is not the assignee of a ticket in progress.
