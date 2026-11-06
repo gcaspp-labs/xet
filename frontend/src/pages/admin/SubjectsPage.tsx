@@ -101,8 +101,17 @@ function SubjectSheet({
   )
 }
 
+// Quantas soluções saem junto com o assunto, para a confirmação avisar.
+const solutionsWarning = (count: number) =>
+  count === 0
+    ? ''
+    : count === 1
+      ? ' A solução dele também será apagada.'
+      : ` As ${count} soluções dele também serão apagadas.`
+
 // Confirmação da exclusão, como a de desvincular número: apaga de verdade e não
-// pode ser desfeita; os chamados guardam o próprio texto (spec.md, Assuntos e soluções).
+// pode ser desfeita, junto com as soluções do assunto; os chamados guardam o
+// próprio texto (spec.md, Assuntos e soluções).
 function DeleteSubjectSheet({
   sectorId,
   subject,
@@ -141,7 +150,7 @@ function DeleteSubjectSheet({
       open={open}
       onOpenChange={changeOpen}
       title="Excluir assunto"
-      description={`O assunto "${subject.name}" sai da lista do setor. A exclusão não pode ser desfeita, e os chamados que usaram esse texto continuam como estão.`}
+      description={`O assunto "${subject.name}" sai da lista do setor.${solutionsWarning(subject.solutions.length)} A exclusão não pode ser desfeita, e os chamados que usaram esse texto continuam como estão.`}
       submitLabel="Excluir assunto"
       pending={remove.isPending}
       error={remove.error?.message}

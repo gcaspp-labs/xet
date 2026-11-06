@@ -3,12 +3,13 @@ import { useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { ClosingFields, SubjectQuestion } from '@/components/ClosingFields'
+import { ClosingFields } from '@/components/ClosingFields'
 import { FormDialog } from '@/components/FormDialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { checkPeriod, closingShape, inList, localInput, sameText } from '@/lib/closing'
+import { useClosingQuestions } from '@/hooks/use-closing-questions'
+import { checkPeriod, closingShape, localInput, sameText } from '@/lib/closing'
 import { type TicketDetail, useClosingForm, useCorrectTicket } from '@/lib/conversation'
 
 const schema = z
@@ -66,10 +67,7 @@ export function CorrectionSheet({
     formState: { errors },
   } = methods
 
-  // Valores já válidos que aguardam a resposta da pergunta sobre o assunto.
-  const [asking, setAsking] = useState<Values | null>(null)
-
-  const saveCorrection = (values: Values, addSubject: boolean) => {
+  const saveCorrection = (values: Values, addSubject: boolean, addSolution: boolean) => {
     if (correct.isPending) {
       return
     }
@@ -90,6 +88,7 @@ export function CorrectionSheet({
         spokeWith: values.spokeWith,
         reason: values.reason,
         addSubject,
+        addSolution,
       },
       {
         onSuccess: () => {
@@ -97,22 +96,25 @@ export function CorrectionSheet({
           onOpenChange(false)
         },
         // Se o servidor recusar, o aviso aparece no formulário.
-        onError: () => setAsking(null),
+        onError: () => questions.reset(),
       },
     )
   }
+
+  // Só pergunta sobre o assunto e a resolução alterados nesta correção, para
+  // não perguntar sobre textos que já estavam no chamado.
+  const questions = useClosingQuestions<Values>({
+    subjects: form?.subjects ?? [],
+    askSubject: (values) => !sameText(values.subject, ticket.subject ?? ''),
+    askSolution: (values) => !sameText(values.resolution, ticket.resolution ?? ''),
+    save: saveCorrection,
+  })
 
   const onSubmit = handleSubmit((values) => {
     if (correct.isPending) {
       return
     }
-    // Só pergunta sobre o assunto alterado nesta correção, e fora da lista do setor.
-    const changed = !sameText(values.subject, ticket.subject ?? '')
-    if (changed && !inList(values.subject, form?.subjects ?? [])) {
-      setAsking(values)
-      return
-    }
-    saveCorrection(values, false)
+    questions.start(values)
   })
 
   return (
@@ -126,14 +128,7 @@ export function CorrectionSheet({
       pending={correct.isPending}
       error={correct.error?.message}
       onSubmit={onSubmit}
-      question={
-        asking && {
-          body: <SubjectQuestion subject={asking.subject} />,
-          onBack: () => setAsking(null),
-          onSkip: () => saveCorrection(asking, false),
-          onConfirm: () => saveCorrection(asking, true),
-        }
-      }
+      question={questions.question}
     >
       <FormProvider {...methods}>
         <ClosingFields idPrefix="correction" modules={modules} subjects={form?.subjects ?? []} />

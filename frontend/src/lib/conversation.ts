@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import type { FormSubject } from '@/lib/closing'
 import { closedTodayKey, type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
@@ -303,8 +304,9 @@ export function useReturnTicket(ticketId: number, sectorId: number) {
 // do setor, órgão sugerido (do chamado ou do contato) e início automático.
 export type ClosingForm = {
   modules: { id: number; name: string }[]
-  // Assuntos da lista do setor do chamado, sugeridos no campo Assunto.
-  subjects: { id: number; name: string }[]
+  // Assuntos da lista do setor do chamado, sugeridos no campo Assunto, cada um
+  // com as soluções sugeridas para a Resolução.
+  subjects: FormSubject[]
   // Módulos do contato entre os ativos do setor: já vêm marcados.
   contactModuleIds: number[]
   organization: { id: number; name: string; municipality: { id: number; name: string } } | null
@@ -319,8 +321,10 @@ export type ClosingInput = {
   organizationId: number
   startedAt?: string
   endedAt?: string
-  // Resposta "adicionar" à pergunta ao salvar: o assunto entra na lista do setor.
+  // Respostas "adicionar" às perguntas ao salvar: o assunto entra na lista do
+  // setor, e a resolução, na lista do assunto.
   addSubject?: boolean
+  addSolution?: boolean
 }
 
 export function useClosingForm(ticketId: number, enabled: boolean) {
@@ -386,6 +390,7 @@ export type CorrectionInput = {
   spokeWith: string
   reason: string
   addSubject?: boolean
+  addSolution?: boolean
 }
 
 // Campo corrigido com o valor anterior e o novo: órgão pelo nome, módulos

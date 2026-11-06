@@ -23,6 +23,8 @@ import { FieldGroup } from '@/components/ui/field'
 // formulário, sem salvar nada (design.md, Assunto do formulário). O formulário
 // continua montado, escondido, para não perder o que foi preenchido.
 export type FormQuestion = {
+  // Identifica a pergunta: ao passar de uma para outra, o foco vai para a nova.
+  id?: string
   body: ReactNode
   onBack: () => void
   onSkip: () => void
@@ -64,11 +66,12 @@ export function FormDialog({
   // A pergunta recebe o foco, para o leitor de tela anunciá-la.
   const questionRef = useRef<HTMLDivElement>(null)
   const asking = !!question
+  const questionId = question ? (question.id ?? 'question') : null
   useEffect(() => {
-    if (asking) {
+    if (questionId) {
       questionRef.current?.focus()
     }
-  }, [asking])
+  }, [questionId])
   return (
     <Dialog
       open={open}

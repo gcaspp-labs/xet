@@ -6,7 +6,7 @@ import { FormProvider, useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { ClosingFields, SubjectQuestion } from '@/components/ClosingFields'
+import { ClosingFields } from '@/components/ClosingFields'
 import { RegisterContactSheet } from '@/components/ContactSheet'
 import { FormDialog } from '@/components/FormDialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -19,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { checkPeriod, closingShape, inList, localInput } from '@/lib/closing'
+import { useClosingQuestions } from '@/hooks/use-closing-questions'
+import { checkPeriod, closingShape, localInput } from '@/lib/closing'
 import {
   type TicketDetail,
   ticketKey,
@@ -99,10 +100,7 @@ export function ClosingSheet({
     }
   }, [form?.contactModuleIds, getValues, setValue])
 
-  // Valores já válidos que aguardam a resposta da pergunta sobre o assunto.
-  const [asking, setAsking] = useState<Values | null>(null)
-
-  const saveForm = (values: Values, addSubject: boolean) => {
+  const saveForm = (values: Values, addSubject: boolean, addSolution: boolean) => {
     if (save.isPending || (transfer && !sectorId)) {
       return
     }
@@ -118,6 +116,7 @@ export function ClosingSheet({
       endedAt:
         values.endedAt !== suggested.endedAt ? new Date(values.endedAt).toISOString() : undefined,
       addSubject,
+      addSolution,
     }
     const onSuccess = () => {
       toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
@@ -126,7 +125,7 @@ export function ClosingSheet({
       void navigate('/')
     }
     // Se o servidor recusar, o aviso aparece no formulário.
-    const onError = () => setAsking(null)
+    const onError = () => questions.reset()
     if (transfer) {
       transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess, onError })
     } else {
@@ -134,17 +133,16 @@ export function ClosingSheet({
     }
   }
 
+  // Assunto fora da lista do setor e resolução fora da lista do assunto:
+  // pergunta antes de gravar.
+  const questions = useClosingQuestions<Values>({ subjects: form?.subjects ?? [], save: saveForm })
+
   const onSubmit = handleSubmit(
     (values) => {
       if (save.isPending || (transfer && !sectorId)) {
         return
       }
-      // Assunto fora da lista do setor: pergunta antes de gravar.
-      if (!inList(values.subject, form?.subjects ?? [])) {
-        setAsking(values)
-        return
-      }
-      saveForm(values, false)
+      questions.start(values)
     },
     () => undefined,
   )
@@ -183,14 +181,7 @@ export function ClosingSheet({
         pending={save.isPending}
         error={save.error?.message}
         onSubmit={submit}
-        question={
-          asking && {
-            body: <SubjectQuestion subject={asking.subject} />,
-            onBack: () => setAsking(null),
-            onSkip: () => saveForm(asking, false),
-            onConfirm: () => saveForm(asking, true),
-          }
-        }
+        question={questions.question}
       >
         {!ticket.contact.registered && (
           <Alert variant="warning">
