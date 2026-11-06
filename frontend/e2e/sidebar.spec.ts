@@ -122,7 +122,7 @@ test('atendente vê só os itens do seu papel, sem Usuários em Configurações'
   await expect(page.getByRole('menuitem', { name: 'Usuários' })).toHaveCount(0)
 })
 
-test('supervisor vê também Conexão e Módulos, com o breadcrumb do grupo', async ({
+test('supervisor vê também Conexão, Módulos e Assuntos, com o breadcrumb do grupo', async ({
   page,
   baseURL,
 }) => {
@@ -133,7 +133,7 @@ test('supervisor vê também Conexão e Módulos, com o breadcrumb do grupo', as
     .poll(() => menuGroups(page))
     .toEqual([
       ['Helpdesk', 'Atendimento', 'Dashboard', 'Contatos', 'Conexão'],
-      ['Cadastro', 'Órgãos', 'Módulos'],
+      ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos'],
     ])
   await page.getByRole('button', { name: 'Configurações' }).click()
   await expect(page.getByRole('menuitem', { name: 'Sair' })).toBeVisible()
@@ -144,6 +144,9 @@ test('supervisor vê também Conexão e Módulos, com o breadcrumb do grupo', as
   await page.getByRole('link', { name: 'Conexão' }).click()
   await expect(content.getByText(`Helpdesk · ${sector.name}`, { exact: true })).toBeVisible()
   await page.getByRole('link', { name: 'Módulos' }).click()
+  await expect(content.getByText(`Cadastro · ${sector.name}`, { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'Assuntos' }).click()
+  await expect(page.getByRole('heading', { name: 'Assuntos' })).toBeVisible()
   await expect(content.getByText(`Cadastro · ${sector.name}`, { exact: true })).toBeVisible()
 })
 
@@ -156,7 +159,7 @@ test('administrador vê tudo, com Usuários só em Configurações, e o breadcru
     .poll(() => menuGroups(page))
     .toEqual([
       ['Helpdesk', 'Atendimento', 'Dashboard', 'Contatos', 'Conexão'],
-      ['Cadastro', 'Órgãos', 'Módulos', 'Setores'],
+      ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos', 'Setores'],
     ])
   await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0)
 

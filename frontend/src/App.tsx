@@ -5,6 +5,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import PanelPage from '@/pages/PanelPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
+import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
 import UsersPage from '@/pages/admin/UsersPage'
 import ConnectionPage from '@/pages/connection/ConnectionPage'
@@ -46,6 +47,7 @@ export default function App() {
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/modulos" element={<ModulesPage />} />
+            <Route path="/assuntos" element={<SubjectsPage />} />
             <Route path="/conexao" element={<ConnectionPage />} />
           </Route>
           <Route element={<RequireRole roles={['admin']} />}>

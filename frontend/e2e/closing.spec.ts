@@ -83,6 +83,8 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await sheet.getByLabel('Órgão').fill(organization)
   await page.getByRole('option', { name: organization }).click()
   await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  // O assunto não está na lista do setor: a janela pergunta antes de gravar.
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(sheet).toContainText('Cadastre o contato e vincule-o a um órgão antes de encerrar.')
 
   // Cadastra o contato pelo próprio formulário e encerra.
@@ -110,6 +112,8 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await sheet.getByLabel('Início').fill(local(120))
   await sheet.getByLabel('Fim').fill(local(60))
   await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  // O assunto não está na lista do setor: a janela pergunta antes de gravar.
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
 
   // Volta ao painel, com o atendimento nos realizados, marcado como próprio.
@@ -323,6 +327,8 @@ test('os módulos do contato vêm marcados no encerramento e podem ser alterados
   await sheet.getByLabel('Assunto').fill('Consulta')
   await sheet.getByLabel('Resolução').fill('Respondida.')
   await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  // O assunto não está na lista do setor: a janela pergunta antes de gravar.
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
 })
 
@@ -477,6 +483,8 @@ test('o aviso sobre o botão não bloqueia o clique nem espera o cursor sair', a
 
   await page.mouse.move(point!.x, point!.y)
   await page.mouse.click(point!.x, point!.y)
+  // O assunto não está na lista do setor: a janela pergunta antes de gravar.
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
 
   // Com o cursor parado no mesmo lugar, o aviso some no tempo normal.

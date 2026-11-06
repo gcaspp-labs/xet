@@ -51,6 +51,13 @@ var (
 	ErrCancelled      = errors.New("ticket cancelled")
 )
 
+var (
+	ErrInvalidSubject   = errors.New("subject name missing")
+	ErrSubjectTooLong   = errors.New("subject name over the limit")
+	ErrSubjectNameTaken = errors.New("subject name already in use in the sector")
+	ErrSubjectNotFound  = errors.New("subject not found")
+)
+
 // ErrCannotCancel refuses an agent who is not the assignee of a ticket in progress.
 var ErrCannotCancel = errors.New("user may not cancel the ticket")
 

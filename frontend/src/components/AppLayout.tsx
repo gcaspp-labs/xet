@@ -17,6 +17,7 @@ import {
   QrCode,
   Settings,
   Sun,
+  Tags,
   Users,
   Volume2,
   type LucideIcon,
@@ -75,6 +76,7 @@ const helpdeskItems: NavItem[] = [
 const registryItems: NavItem[] = [
   { to: '/orgaos', label: 'Órgãos', icon: Landmark, roles: ['agent', 'supervisor', 'admin'] },
   { to: '/modulos', label: 'Módulos', icon: Boxes, roles: ['supervisor', 'admin'] },
+  { to: '/assuntos', label: 'Assuntos', icon: Tags, roles: ['supervisor', 'admin'] },
   { to: '/admin/setores', label: 'Setores', icon: Building2, roles: ['admin'] },
 ]
 

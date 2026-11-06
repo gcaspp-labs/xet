@@ -1,6 +1,14 @@
-import { Controller, useFormContext } from 'react-hook-form'
+import { useState } from 'react'
+import { Controller, useController, useFormContext } from 'react-hook-form'
 import { z } from 'zod'
 import { OrganizationPicker } from '@/components/ContactSheet'
+import {
+  Autocomplete,
+  AutocompleteContent,
+  AutocompleteInput,
+  AutocompleteItem,
+  AutocompleteList,
+} from '@/components/ui/autocomplete'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Field,
@@ -14,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { closingSchema } from '@/lib/closing'
 import type { Organization } from '@/lib/directory'
+import { normalizeSearch } from '@/lib/format'
 
 type ClosingValues = z.input<typeof closingSchema>
 
@@ -22,10 +31,13 @@ type ClosingValues = z.input<typeof closingSchema>
 export function ClosingFields({
   idPrefix,
   modules,
+  subjects,
   emptyModules,
 }: {
   idPrefix: string
   modules: { id: number; name: string }[]
+  // Assuntos da lista do setor, sugeridos enquanto a pessoa digita.
+  subjects: { id: number; name: string }[]
   // Aviso quando não há módulo para escolher.
   emptyModules?: string
 }) {
@@ -39,12 +51,7 @@ export function ClosingFields({
     <>
       <Field data-invalid={!!errors.subject}>
         <FieldLabel htmlFor={`${idPrefix}-subject`}>Assunto</FieldLabel>
-        <Input
-          id={`${idPrefix}-subject`}
-          maxLength={500}
-          aria-invalid={!!errors.subject}
-          {...register('subject')}
-        />
+        <SubjectInput id={`${idPrefix}-subject`} subjects={subjects} invalid={!!errors.subject} />
         <FieldError errors={[errors.subject]} />
       </Field>
       <Field data-invalid={!!errors.resolution}>
@@ -131,5 +138,73 @@ export function ClosingFields({
         </Field>
       </div>
     </>
+  )
+}
+
+// Campo Assunto: sugere os assuntos do setor que contêm o texto digitado e
+// aceita outro texto; nenhum vem marcado (spec.md, Assuntos e soluções). A
+// lista só abre quando há sugestão, para não cobrir o formulário vazia.
+function SubjectInput({
+  id,
+  subjects,
+  invalid,
+}: {
+  id: string
+  subjects: { id: number; name: string }[]
+  invalid: boolean
+}) {
+  const {
+    field: { ref, name, value, onChange, onBlur },
+  } = useController<ClosingValues, 'subject'>({ name: 'subject' })
+  const [open, setOpen] = useState(false)
+  const typed = normalizeSearch(value.trim())
+  const matches = subjects
+    .map((subject) => subject.name)
+    .filter((item) => normalizeSearch(item).includes(typed))
+  return (
+    <Autocomplete
+      items={subjects.map((subject) => subject.name)}
+      filteredItems={matches}
+      value={value}
+      onValueChange={(next) => onChange(next)}
+      open={open && matches.length > 0}
+      onOpenChange={setOpen}
+    >
+      <AutocompleteInput
+        id={id}
+        ref={ref}
+        name={name}
+        onBlur={onBlur}
+        // Esc só fecha a lista: sem ela aberta, não apaga o texto digitado, e a
+        // janela com bloqueio continua aberta (spec.md, Janelas de formulário).
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !(open && matches.length > 0)) {
+            event.preventBaseUIHandler()
+          }
+        }}
+        maxLength={500}
+        aria-invalid={invalid}
+      />
+      <AutocompleteContent>
+        <AutocompleteList>
+          {(name: string) => (
+            <AutocompleteItem key={name} value={name}>
+              <span className="min-w-0 flex-1 break-words">{name}</span>
+            </AutocompleteItem>
+          )}
+        </AutocompleteList>
+      </AutocompleteContent>
+    </Autocomplete>
+  )
+}
+
+// Pergunta ao salvar, na mesma janela do formulário (design.md): o assunto
+// digitado não está na lista do setor (spec.md, Assuntos e soluções).
+export function SubjectQuestion({ subject }: { subject: string }) {
+  return (
+    <div className="flex flex-col gap-2" role="group" aria-label="Adicionar assunto">
+      <p>Este assunto não está na lista do setor. Deseja adicioná-lo?</p>
+      <p className="body-strong break-words">{subject.trim()}</p>
+    </div>
   )
 }

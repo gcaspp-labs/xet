@@ -6,7 +6,7 @@ import { FormProvider, useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { ClosingFields } from '@/components/ClosingFields'
+import { ClosingFields, SubjectQuestion } from '@/components/ClosingFields'
 import { RegisterContactSheet } from '@/components/ContactSheet'
 import { FormDialog } from '@/components/FormDialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { checkPeriod, closingShape, localInput } from '@/lib/closing'
+import { checkPeriod, closingShape, inList, localInput } from '@/lib/closing'
 import {
   type TicketDetail,
   ticketKey,
@@ -33,6 +33,7 @@ import { formatPhone } from '@/lib/format'
 const schema = z.object(closingShape).superRefine(checkPeriod)
 
 type FormValues = z.input<typeof schema>
+type Values = z.output<typeof schema>
 
 // Janela de encerramento (spec.md, Formulário de encerramento): assunto,
 // resolução e módulos obrigatórios; contato, atendente e setor automáticos;
@@ -66,7 +67,7 @@ export function ClosingSheet({
     endedAt: localInput(new Date()),
   }))
 
-  const methods = useForm<FormValues, unknown, z.output<typeof schema>>({
+  const methods = useForm<FormValues, unknown, Values>({
     resolver: zodResolver(schema),
     defaultValues: {
       subject: '',
@@ -98,34 +99,52 @@ export function ClosingSheet({
     }
   }, [form?.contactModuleIds, getValues, setValue])
 
+  // Valores já válidos que aguardam a resposta da pergunta sobre o assunto.
+  const [asking, setAsking] = useState<Values | null>(null)
+
+  const saveForm = (values: Values, addSubject: boolean) => {
+    if (save.isPending || (transfer && !sectorId)) {
+      return
+    }
+    const body = {
+      subject: values.subject,
+      resolution: values.resolution,
+      moduleIds: values.moduleIds,
+      organizationId: values.organization!.id,
+      startedAt:
+        values.startedAt !== suggested.startedAt
+          ? new Date(values.startedAt).toISOString()
+          : undefined,
+      endedAt:
+        values.endedAt !== suggested.endedAt ? new Date(values.endedAt).toISOString() : undefined,
+      addSubject,
+    }
+    const onSuccess = () => {
+      toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
+      onOpenChange(false)
+      // A próxima ação depois de encerrar ou transferir está no painel.
+      void navigate('/')
+    }
+    // Se o servidor recusar, o aviso aparece no formulário.
+    const onError = () => setAsking(null)
+    if (transfer) {
+      transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess, onError })
+    } else {
+      close.mutate(body, { onSuccess, onError })
+    }
+  }
+
   const onSubmit = handleSubmit(
     (values) => {
       if (save.isPending || (transfer && !sectorId)) {
         return
       }
-      const body = {
-        subject: values.subject,
-        resolution: values.resolution,
-        moduleIds: values.moduleIds,
-        organizationId: values.organization!.id,
-        startedAt:
-          values.startedAt !== suggested.startedAt
-            ? new Date(values.startedAt).toISOString()
-            : undefined,
-        endedAt:
-          values.endedAt !== suggested.endedAt ? new Date(values.endedAt).toISOString() : undefined,
+      // Assunto fora da lista do setor: pergunta antes de gravar.
+      if (!inList(values.subject, form?.subjects ?? [])) {
+        setAsking(values)
+        return
       }
-      const onSuccess = () => {
-        toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
-        onOpenChange(false)
-        // A próxima ação depois de encerrar ou transferir está no painel.
-        void navigate('/')
-      }
-      if (transfer) {
-        transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess })
-      } else {
-        close.mutate(body, { onSuccess })
-      }
+      saveForm(values, false)
     },
     () => undefined,
   )
@@ -164,6 +183,14 @@ export function ClosingSheet({
         pending={save.isPending}
         error={save.error?.message}
         onSubmit={submit}
+        question={
+          asking && {
+            body: <SubjectQuestion subject={asking.subject} />,
+            onBack: () => setAsking(null),
+            onSkip: () => saveForm(asking, false),
+            onConfirm: () => saveForm(asking, true),
+          }
+        }
       >
         {!ticket.contact.registered && (
           <Alert variant="warning">
@@ -221,6 +248,7 @@ export function ClosingSheet({
           <ClosingFields
             idPrefix="closing"
             modules={form?.modules ?? []}
+            subjects={form?.subjects ?? []}
             emptyModules={
               form
                 ? 'O setor não tem módulos ativos. Peça a um supervisor para cadastrá-los.'

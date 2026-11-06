@@ -25,6 +25,14 @@ export const closingShape = {
 
 export const closingSchema = z.object(closingShape)
 
+// Um texto é igual a um item da lista quando coincidem sem os espaços das
+// pontas e sem diferenciar maiúsculas (spec.md, Assuntos e soluções).
+export const sameText = (a: string, b: string) =>
+  a.trim().toLocaleLowerCase('pt-BR') === b.trim().toLocaleLowerCase('pt-BR')
+
+export const inList = (text: string, list: { name: string }[]) =>
+  list.some((item) => sameText(item.name, text))
+
 // O fim não pode estar no futuro nem antes do início; o backend confere de novo.
 export function checkPeriod(values: { startedAt: string; endedAt: string }, ctx: z.RefinementCtx) {
   if (new Date(values.endedAt) > new Date()) {

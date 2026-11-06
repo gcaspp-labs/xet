@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react'
-import { type FormEventHandler, type ReactNode, useId } from 'react'
+import { type FormEventHandler, type ReactNode, useEffect, useId, useRef } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,6 +17,18 @@ import { FieldGroup } from '@/components/ui/field'
 // Erros do servidor aparecem como Note, no topo do formulário. Com `locked`, a saída é
 // concluir ou usar o botão do rodapé: sem X, e Esc e clique fora não fecham
 // (spec.md, Janelas de formulário).
+//
+// Com `question`, a janela mostra uma pergunta antes de gravar, como uma etapa
+// no lugar do formulário, sem abrir outra janela por cima: Voltar volta ao
+// formulário, sem salvar nada (design.md, Assunto do formulário). O formulário
+// continua montado, escondido, para não perder o que foi preenchido.
+export type FormQuestion = {
+  body: ReactNode
+  onBack: () => void
+  onSkip: () => void
+  onConfirm: () => void
+}
+
 export function FormDialog({
   open,
   onOpenChange,
@@ -30,6 +42,7 @@ export function FormDialog({
   children,
   extra,
   locked = false,
+  question,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -44,9 +57,18 @@ export function FormDialog({
   children: ReactNode
   extra?: ReactNode
   locked?: boolean
+  question?: FormQuestion | null
 }) {
   // Id próprio: duas janelas abertas (uma sobre a outra) não enviam o formulário errado.
   const formId = useId()
+  // A pergunta recebe o foco, para o leitor de tela anunciá-la.
+  const questionRef = useRef<HTMLDivElement>(null)
+  const asking = !!question
+  useEffect(() => {
+    if (asking) {
+      questionRef.current?.focus()
+    }
+  }, [asking])
   return (
     <Dialog
       open={open}
@@ -69,7 +91,23 @@ export function FormDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <div data-slot="dialog-body" className="min-h-0 flex-1 overflow-y-auto">
-          <form id={formId} onSubmit={onSubmit} noValidate className="px-5 py-[18px]">
+          {question && (
+            <div
+              ref={questionRef}
+              tabIndex={-1}
+              data-slot="form-question"
+              className="flex flex-col gap-3 px-5 py-[18px] outline-none"
+            >
+              {question.body}
+            </div>
+          )}
+          <form
+            id={formId}
+            onSubmit={onSubmit}
+            noValidate
+            hidden={asking}
+            className="px-5 py-[18px]"
+          >
             <FieldGroup className="gap-[15px]">
               {error && (
                 <Alert variant="warning">
@@ -80,16 +118,30 @@ export function FormDialog({
               {children}
             </FieldGroup>
           </form>
-          {extra}
+          {!asking && extra}
         </div>
-        <DialogFooter>
-          <DialogClose render={<Button variant="ghost" />}>{cancelLabel}</DialogClose>
-          {submitLabel && (
-            <Button type="submit" form={formId} disabled={pending}>
-              {submitLabel}
+        {question ? (
+          <DialogFooter>
+            <Button variant="ghost" disabled={pending} onClick={question.onBack}>
+              Voltar
             </Button>
-          )}
-        </DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={question.onSkip}>
+              Não adicionar
+            </Button>
+            <Button disabled={pending} onClick={question.onConfirm}>
+              Adicionar
+            </Button>
+          </DialogFooter>
+        ) : (
+          <DialogFooter>
+            <DialogClose render={<Button variant="ghost" />}>{cancelLabel}</DialogClose>
+            {submitLabel && (
+              <Button type="submit" form={formId} disabled={pending}>
+                {submitLabel}
+              </Button>
+            )}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )

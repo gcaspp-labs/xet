@@ -11,14 +11,15 @@ import (
 
 type closingFormResponse struct {
 	Modules          []httpx.Ref            `json:"modules"`
+	Subjects         []httpx.Ref            `json:"subjects"`
 	ContactModuleIDs []int64                `json:"contactModuleIds"`
 	Organization     *httpx.OrganizationRef `json:"organization"`
 	StartedAt        time.Time              `json:"startedAt"`
 }
 
 // closingForm returns what the closing form starts with: the active modules
-// of the sector, those of the contact among them, the suggested organization
-// and the automatic start.
+// and the subjects of the sector, the modules of the contact among them, the
+// suggested organization and the automatic start.
 func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 	ticketID, ok := urlTicketID(w, r)
 	if !ok {
@@ -31,11 +32,15 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 	}
 	out := closingFormResponse{
 		Modules:          make([]httpx.Ref, len(form.Modules)),
+		Subjects:         make([]httpx.Ref, len(form.Subjects)),
 		ContactModuleIDs: append([]int64{}, form.ContactModuleIDs...),
 		StartedAt:        form.StartedAt,
 	}
 	for i, m := range form.Modules {
 		out.Modules[i] = httpx.Ref{ID: m.ID, Name: m.Name}
+	}
+	for i, s := range form.Subjects {
+		out.Subjects[i] = httpx.Ref{ID: s.ID, Name: s.Name}
 	}
 	if o := form.Organization; o != nil {
 		out.Organization = &httpx.OrganizationRef{
@@ -46,13 +51,16 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
+// closeRequest has no limit on the subject: a text over the limit of the list
+// does not enter it, and the form is still saved (spec.md, Assuntos e soluções).
 type closeRequest struct {
-	Subject        string     `json:"subject" validate:"required,max=500"`
+	Subject        string     `json:"subject" validate:"required"`
 	Resolution     string     `json:"resolution" validate:"required,max=10000"`
 	ModuleIDs      []int64    `json:"moduleIds" validate:"required,min=1,max=100"`
 	OrganizationID int64      `json:"organizationId" validate:"required"`
 	StartedAt      *time.Time `json:"startedAt"`
 	EndedAt        *time.Time `json:"endedAt"`
+	AddSubject     bool       `json:"addSubject"`
 }
 
 func (req closeRequest) closing() Closing {
