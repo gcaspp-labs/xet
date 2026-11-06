@@ -299,10 +299,12 @@ export function useReturnTicket(ticketId: number, sectorId: number) {
   })
 }
 
-// Ponto de partida do formulário de encerramento: módulos ativos do setor,
-// órgão sugerido (do chamado ou do contato) e início automático.
+// Ponto de partida do formulário de encerramento: módulos ativos e assuntos
+// do setor, órgão sugerido (do chamado ou do contato) e início automático.
 export type ClosingForm = {
   modules: { id: number; name: string }[]
+  // Assuntos da lista do setor do chamado, sugeridos no campo Assunto.
+  subjects: { id: number; name: string }[]
   // Módulos do contato entre os ativos do setor: já vêm marcados.
   contactModuleIds: number[]
   organization: { id: number; name: string; municipality: { id: number; name: string } } | null
@@ -317,6 +319,8 @@ export type ClosingInput = {
   organizationId: number
   startedAt?: string
   endedAt?: string
+  // Resposta "adicionar" à pergunta ao salvar: o assunto entra na lista do setor.
+  addSubject?: boolean
 }
 
 export function useClosingForm(ticketId: number, enabled: boolean) {
@@ -381,6 +385,7 @@ export type CorrectionInput = {
   endedAt: string
   spokeWith: string
   reason: string
+  addSubject?: boolean
 }
 
 // Campo corrigido com o valor anterior e o novo: órgão pelo nome, módulos

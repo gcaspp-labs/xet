@@ -121,6 +121,8 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
 
   await sheet.getByLabel('Motivo da correção').fill('Assunto registrado errado.')
   await sheet.getByRole('button', { name: 'Salvar correção' }).click()
+  // O assunto alterado não está na lista do setor: a janela pergunta antes de gravar.
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Atendimento corrigido')).toBeVisible()
   await expect(sheet).toHaveCount(0)
 

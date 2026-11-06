@@ -100,3 +100,41 @@ export function useSaveModule(sectorId: number) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: modulesKey(sectorId) }),
   })
 }
+
+// Assuntos da lista do setor (spec.md, Assuntos e soluções): supervisor do
+// setor e administrador. O atendente lê a lista pelo formulário de encerramento.
+export type Subject = {
+  id: number
+  sectorId: number
+  name: string
+}
+
+const subjectsKey = (sectorId: number) => ['sectors', sectorId, 'subjects']
+
+export function useSubjects(sectorId: number | undefined) {
+  return useQuery({
+    queryKey: subjectsKey(sectorId ?? 0),
+    queryFn: () => api<Subject[]>(`/sectors/${sectorId}/subjects`),
+    enabled: sectorId !== undefined,
+  })
+}
+
+export function useSaveSubject(sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name }: { id?: number; name: string }) =>
+      id === undefined
+        ? api<Subject>(`/sectors/${sectorId}/subjects`, { method: 'POST', body: { name } })
+        : api<Subject>(`/sectors/${sectorId}/subjects/${id}`, { method: 'PUT', body: { name } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
+  })
+}
+
+export function useDeleteSubject(sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      api<void>(`/sectors/${sectorId}/subjects/${id}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
+  })
+}

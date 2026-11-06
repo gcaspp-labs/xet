@@ -3,12 +3,12 @@ import { useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { ClosingFields } from '@/components/ClosingFields'
+import { ClosingFields, SubjectQuestion } from '@/components/ClosingFields'
 import { FormDialog } from '@/components/FormDialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { checkPeriod, closingShape, localInput } from '@/lib/closing'
+import { checkPeriod, closingShape, inList, localInput, sameText } from '@/lib/closing'
 import { type TicketDetail, useClosingForm, useCorrectTicket } from '@/lib/conversation'
 
 const schema = z
@@ -20,6 +20,7 @@ const schema = z
   .superRefine(checkPeriod)
 
 type FormValues = z.input<typeof schema>
+type Values = z.output<typeof schema>
 
 // Janela de correção do atendimento encerrado (spec.md, Encerramento, retorno
 // e correções): os dados do encerramento e o "falou com", com motivo
@@ -47,7 +48,7 @@ export function CorrectionSheet({
     ...(form?.modules ?? []).filter((module) => !recorded.some((r) => r.id === module.id)),
   ].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 
-  const methods = useForm<FormValues, unknown, z.output<typeof schema>>({
+  const methods = useForm<FormValues, unknown, Values>({
     resolver: zodResolver(schema),
     defaultValues: {
       subject: ticket.subject ?? '',
@@ -65,7 +66,10 @@ export function CorrectionSheet({
     formState: { errors },
   } = methods
 
-  const onSubmit = handleSubmit((values) => {
+  // Valores já válidos que aguardam a resposta da pergunta sobre o assunto.
+  const [asking, setAsking] = useState<Values | null>(null)
+
+  const saveCorrection = (values: Values, addSubject: boolean) => {
     if (correct.isPending) {
       return
     }
@@ -85,14 +89,30 @@ export function CorrectionSheet({
             : (ticket.endedAt ?? new Date(values.endedAt).toISOString()),
         spokeWith: values.spokeWith,
         reason: values.reason,
+        addSubject,
       },
       {
         onSuccess: () => {
           toast.success('Atendimento corrigido')
           onOpenChange(false)
         },
+        // Se o servidor recusar, o aviso aparece no formulário.
+        onError: () => setAsking(null),
       },
     )
+  }
+
+  const onSubmit = handleSubmit((values) => {
+    if (correct.isPending) {
+      return
+    }
+    // Só pergunta sobre o assunto alterado nesta correção, e fora da lista do setor.
+    const changed = !sameText(values.subject, ticket.subject ?? '')
+    if (changed && !inList(values.subject, form?.subjects ?? [])) {
+      setAsking(values)
+      return
+    }
+    saveCorrection(values, false)
   })
 
   return (
@@ -106,9 +126,17 @@ export function CorrectionSheet({
       pending={correct.isPending}
       error={correct.error?.message}
       onSubmit={onSubmit}
+      question={
+        asking && {
+          body: <SubjectQuestion subject={asking.subject} />,
+          onBack: () => setAsking(null),
+          onSkip: () => saveCorrection(asking, false),
+          onConfirm: () => saveCorrection(asking, true),
+        }
+      }
     >
       <FormProvider {...methods}>
-        <ClosingFields idPrefix="correction" modules={modules} />
+        <ClosingFields idPrefix="correction" modules={modules} subjects={form?.subjects ?? []} />
       </FormProvider>
       <Field>
         <FieldLabel htmlFor="correction-spoke-with">Falou com</FieldLabel>

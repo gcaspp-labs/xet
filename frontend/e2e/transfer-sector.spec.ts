@@ -71,6 +71,8 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await sheet.getByLabel('Setor de destino').click()
   await page.getByRole('option', { name: destination.sector.name }).click()
   await sheet.getByRole('button', { name: 'Transferir' }).click()
+  // O assunto não está na lista do setor: a janela pergunta antes de gravar.
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado transferido para outro setor')).toBeVisible()
 
   // Volta ao painel, com o atendimento identificado nos realizados.
