@@ -370,7 +370,7 @@ test('filtra contatos por setor e módulo, e o atendente altera só o próprio s
   await api.post(`/api/sectors/${own.sector.id}/modules`, { data: { name: `Folha ${id}` } })
   await api.dispose()
   await signIn(page, own.agent, userPassword)
-  await page.goto('/contatos')
+  await page.goto(`/contatos?busca=${id}`)
   const rows = page.getByRole('row').filter({ hasText: id })
 
   // Abre em "Meu setor", com opção de ver todos.
@@ -497,7 +497,8 @@ test('filtra contatos por município e órgão, junto com setor, módulo e texto
   await expect(rows).toHaveCount(1)
   await search.fill(`Gina ${id}`)
   await expect(rows).toHaveCount(0)
-  await search.fill('')
+  // O banco é compartilhado: em todos os setores, a busca fica nos contatos deste teste.
+  await search.fill(id)
   await page.getByRole('combobox', { name: 'Filtrar por setor' }).click()
   await page.getByRole('option', { name: 'Todos os setores' }).click()
   await expect(rows).toHaveCount(3)
@@ -546,7 +547,7 @@ test('o administrador abre os contatos em todos os setores e escolhe o setor', a
     ],
   )
   await signIn(page, admin.email, admin.password)
-  await page.goto('/contatos')
+  await page.goto(`/contatos?busca=${id}`)
   const rows = page.getByRole('row').filter({ hasText: id })
   const sectorFilter = page.getByRole('combobox', { name: 'Filtrar por setor' })
   await expect(sectorFilter).toContainText('Todos os setores')
@@ -714,4 +715,81 @@ test('administrador escolhe o setor; número desconectado mostra o aviso', async
   await drawer.getByRole('checkbox', { name: new RegExp(`Dora ${id}`) }).click()
   await drawer.getByRole('button', { name: 'Importar contatos' }).click()
   await expect(drawer.getByText('1 contato criado.')).toBeVisible()
+})
+
+test('contatos em páginas de 20, ordenados pela coluna, com página e ordem no endereço', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const { id } = unique()
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Pessoa ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Câmara ${id}` }, { name: `Autarquia ${id}` }],
+    names.map((name, i) => ({
+      name,
+      phone: `55${String(11 + i)}${id}`,
+      // A última pessoa fica no órgão que vem primeiro na ordem por órgão.
+      organization: i === 22 ? 1 : 0,
+      sector: own.sector.id,
+    })),
+  )
+  await signIn(page, own.agent, userPassword)
+  await page.goto('/contatos')
+  const rows = page.getByRole('row').filter({ hasText: id })
+  const pagination = page.getByRole('navigation', { name: 'Paginação' })
+
+  // Primeira página por nome, crescente.
+  await expect(rows).toHaveCount(20)
+  await expect(rows.first()).toContainText(names[0])
+  await expect(page.getByText('Página 1 de 2 · 23 contatos')).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Contato' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+
+  // Próxima página: o endereço guarda a página.
+  await pagination.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/\?pagina=2$/)
+  await expect(rows).toHaveCount(3)
+  await expect(rows.last()).toContainText(names[22])
+  await expect(pagination.getByRole('button', { name: 'Próxima' })).toBeDisabled()
+
+  // Clicar na coluna ativa inverte a direção e volta à página 1.
+  await page.getByRole('button', { name: 'Contato', exact: true }).click()
+  await expect(page).toHaveURL(/\?direcao=desc$/)
+  await expect(rows.first()).toContainText(names[22])
+  await expect(page.getByRole('columnheader', { name: 'Contato' })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  )
+
+  // Outra coluna começa crescente: a Autarquia vem antes da Câmara.
+  await page.getByRole('button', { name: 'Órgão', exact: true }).click()
+  await expect(page).toHaveURL(/\?ordem=orgao$/)
+  await expect(rows.first()).toContainText(names[22])
+  await expect(page.getByRole('columnheader', { name: 'Contato' })).toHaveAttribute(
+    'aria-sort',
+    'none',
+  )
+
+  // O endereço reabre a mesma lista; página além da última vira a última.
+  await page.goto('/contatos?ordem=orgao&pagina=9')
+  await expect(page).toHaveURL(/pagina=2/)
+  await expect(rows).toHaveCount(3)
+  await expect(page.getByText('Página 2 de 2 · 23 contatos')).toBeVisible()
+
+  // A busca vai para o endereço e volta à página 1; com tudo numa página, a faixa some.
+  await page.getByLabel('Buscar contatos').fill(`${id} 1`)
+  await expect(page).toHaveURL(/busca=/)
+  await expect(page).not.toHaveURL(/pagina=/)
+  await expect(rows).toHaveCount(10)
+  await expect(pagination).toBeHidden()
+  await page.reload()
+  await expect(page.getByLabel('Buscar contatos')).toHaveValue(`${id} 1`)
+  await expect(rows).toHaveCount(10)
 })

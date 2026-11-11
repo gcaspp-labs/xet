@@ -9,6 +9,7 @@ import { useState } from 'react'
 import type { Module } from '@/lib/admin'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
+import { type Page, type PageRequest, pageParams, useQueryState } from '@/lib/paging'
 
 export type MunicipalityRef = { id: number; name: string }
 
@@ -55,14 +56,19 @@ export type ContactFilter = {
   organizationId?: number
 }
 
-// O backend devolve no máximo este número de resultados por busca.
+// A busca de órgãos devolve no máximo este número de resultados.
 export const searchLimit = 50
 
 const organizationsKey = ['organizations']
 export const contactsKey = ['contacts']
 
-function searchPath(path: string, query: string, filters: Record<string, number | undefined>) {
-  const params = new URLSearchParams()
+function searchPath(
+  path: string,
+  query: string,
+  filters: Record<string, number | undefined>,
+  extra: Record<string, string> = {},
+) {
+  const params = new URLSearchParams(extra)
   if (query.trim() !== '') {
     params.set('q', query.trim())
   }
@@ -126,9 +132,33 @@ export function useSaveOrganization() {
   })
 }
 
+// O que os filtros de contatos mostram e mudam (ver ContactFilters).
+export type ContactFilterState = {
+  ownSector: number | undefined
+  sector: string
+  module: string
+  municipality: MunicipalityRef | null
+  organization: Organization | null
+  filter: ContactFilter
+  setSector: (value: string) => void
+  setModule: (value: string) => void
+  setMunicipality: (value: MunicipalityRef | null) => void
+  setOrganization: (value: Organization | null) => void
+}
+
+// Colunas pelas quais a lista de contatos ordena, com o nome no endereço da tela.
+export type ContactSort = 'name' | 'organization'
+export const contactColumns: Record<string, ContactSort> = { nome: 'name', orgao: 'organization' }
+export const defaultContactColumn = 'nome'
+
 // Busca por nome do contato, do órgão ou do município, telefone ou CNPJ, dentro do
-// filtro; sem termo, lista por nome.
-export function useContacts(query: string, filter: ContactFilter = {}) {
+// filtro, em páginas de 20 feitas no servidor; sem página nem ordem, a primeira
+// página por nome.
+export function useContacts(
+  query: string,
+  filter: ContactFilter = {},
+  request: PageRequest<ContactSort> = { page: 1, sort: 'name', direction: 'asc' },
+) {
   return useQuery({
     queryKey: [
       ...contactsKey,
@@ -137,8 +167,11 @@ export function useContacts(query: string, filter: ContactFilter = {}) {
       filter.moduleId,
       filter.municipalityId,
       filter.organizationId,
+      request.page,
+      request.sort,
+      request.direction,
     ],
-    queryFn: () => api<Contact[]>(searchPath('/contacts', query, filter)),
+    queryFn: () => api<Page<Contact>>(searchPath('/contacts', query, filter, pageParams(request))),
     placeholderData: keepPreviousData,
   })
 }
@@ -157,7 +190,7 @@ export const allContacts = 'all'
 // Filtro da busca de contatos (spec.md, Setores e módulos do contato): abre em
 // "Meu setor", com opção de ver todos; o administrador abre em todos e escolhe
 // entre os setores.
-export function useContactFilter() {
+export function useContactFilter(): ContactFilterState {
   const { data: user } = useCurrentUser()
   const ownSector = user?.role === 'admin' ? undefined : (user?.sectorId ?? undefined)
   const [chosenSector, setChosenSector] = useState<string | null>(null)
@@ -189,6 +222,62 @@ export function useContactFilter() {
       if (value && organization?.municipality.id !== value.id) {
         setOrganization(null)
       }
+    },
+    setOrganization,
+  }
+}
+
+function idParam(value: string | null) {
+  const id = Number(value)
+  return Number.isInteger(id) && id > 0 ? id : undefined
+}
+
+// O mesmo filtro e a busca, guardados no endereço da tela (?busca=, ?setor=, ?modulo=,
+// ?municipio=, ?orgao=) para voltar ao mesmo lugar; mudar a busca ou um filtro volta
+// à página 1. O órgão vem do endereço só pelo id: o nome no campo é o do órgão
+// escolhido nesta tela ou o dos contatos encontrados (ver ContactsPage).
+export function useContactFilterInAddress() {
+  const { data: user } = useCurrentUser()
+  const ownSector = user?.role === 'admin' ? undefined : (user?.sectorId ?? undefined)
+  const { params, update } = useQueryState()
+  const { data: municipalities = [] } = useOrganizationMunicipalities()
+  const [chosenOrganization, setChosenOrganization] = useState<Organization | null>(null)
+  const sector = params.get('setor') ?? (ownSector !== undefined ? String(ownSector) : allContacts)
+  const module = params.get('modulo') ?? allContacts
+  const municipalityId = idParam(params.get('municipio'))
+  const organizationId = idParam(params.get('orgao'))
+  const municipality = municipalities.find((item) => item.id === municipalityId) ?? null
+  const organization = chosenOrganization?.id === organizationId ? chosenOrganization : null
+  const filter: ContactFilter = {
+    sectorId: sector === allContacts ? undefined : idParam(sector),
+    moduleId: module === allContacts ? undefined : idParam(module),
+    municipalityId,
+    organizationId,
+  }
+  const setOrganization = (value: Organization | null) => {
+    setChosenOrganization(value)
+    update({ orgao: value ? String(value.id) : null, pagina: null })
+  }
+  return {
+    query: params.get('busca') ?? '',
+    setQuery: (value: string) => update({ busca: value === '' ? null : value, pagina: null }, true),
+    ownSector,
+    sector,
+    module,
+    municipality,
+    organization,
+    filter,
+    setSector: (value: string) => update({ setor: value, modulo: null, pagina: null }),
+    setModule: (value: string) =>
+      update({ modulo: value === allContacts ? null : value, pagina: null }),
+    // O órgão acompanha o município: o de outra cidade sai do filtro.
+    setMunicipality: (value: MunicipalityRef | null) => {
+      const keepOrganization = !value || organization?.municipality.id === value.id
+      update({
+        municipio: value ? String(value.id) : null,
+        ...(keepOrganization ? {} : { orgao: null }),
+        pagina: null,
+      })
     },
     setOrganization,
   }

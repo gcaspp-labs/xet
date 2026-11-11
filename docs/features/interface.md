@@ -1,6 +1,6 @@
 # Interface geral
 
-Regras que valem para todas as telas: acessibilidade e o comportamento das janelas de formulário.
+Regras que valem para todas as telas: acessibilidade, o comportamento das janelas de formulário e as listas paginadas.
 
 ## Regras
 
@@ -10,6 +10,9 @@ Regras que valem para todas as telas: acessibilidade e o comportamento das janel
 4. Abrem com bloqueio: encerrar, transferir para atendente ou setor, devolver à fila, cancelar chamado, corrigir atendimento, nova conversa e o cadastro de contato aberto durante um atendimento ou pela nova conversa. Não há X, e Esc ou clique fora não fecham: a saída é concluir ou usar o botão Cancelar/Voltar.
 5. Abrem com fechamento normal: usuários, setores, módulos, assuntos, soluções e a confirmação de exclusão deles, órgãos, contatos e importação pelo menu, desvincular número e histórico. X, Esc e clique fora fecham.
 6. Cancelar o cadastro de contato volta à janela de onde ele foi aberto, sem perder o que já estava nela.
+7. As listas paginadas mostram 20 itens por página, montadas no servidor, com a faixa "Página X de Y · N itens" e os botões Anterior, os números e Próxima no rodapé. Com tudo numa página, a faixa some.
+8. O título de uma coluna ordenável ordena a lista por ela, uma coluna por vez, com uma seta na direção. Clicar de novo inverte a direção; outra coluna começa crescente. A ordem não diferencia maiúsculas nem acentos, e mudar a ordem, a busca ou um filtro volta à página 1.
+9. A página e a ordem ficam no endereço da tela (`?pagina=`, `?ordem=`, `?direcao=desc`): recarregar, voltar de outra tela ou abrir o link devolve a mesma lista. Página além da última mostra a última, e o endereço é corrigido.
 
 ## Fora do escopo / limites conhecidos
 
@@ -21,4 +24,5 @@ Regras que valem para todas as telas: acessibilidade e o comportamento das janel
 
 ## Histórico
 
+- 2026-11-11: listas paginadas e ordenáveis (#126).
 - 2026-11-11: regras migradas do `spec.md` (Acessibilidade; Janelas de formulário).

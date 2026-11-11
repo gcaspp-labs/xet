@@ -11,7 +11,7 @@ import { useSectors } from '@/lib/admin'
 import {
   allContacts,
   useActiveModules,
-  useContactFilter,
+  type ContactFilterState,
   useOrganizationMunicipalities,
 } from '@/lib/directory'
 
@@ -26,7 +26,7 @@ export function ContactFilters({
   setModule,
   setMunicipality,
   setOrganization,
-}: ReturnType<typeof useContactFilter>) {
+}: ContactFilterState) {
   const { data: sectors = [] } = useSectors()
   // Sem setor escolhido, atendente e supervisor filtram pelos módulos do próprio setor.
   const { data: modules = [] } = useActiveModules(filter.sectorId ?? ownSector)
