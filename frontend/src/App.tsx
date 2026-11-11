@@ -9,7 +9,8 @@ import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
 import UsersPage from '@/pages/admin/UsersPage'
 import ConnectionPage from '@/pages/connection/ConnectionPage'
-import ContactsPage from '@/pages/directory/ContactsPage'
+// PROTÓTIPO #126: a rota /contatos mostra o protótipo de paginação.
+import ContactsPage from '@/pages/directory/ContactsPage.prototype'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
 import TicketPage from '@/pages/ticket/TicketPage'
 
