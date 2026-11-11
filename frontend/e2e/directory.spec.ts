@@ -833,24 +833,24 @@ test('reabrir o endereço com órgão restaura o filtro, mesmo sem contatos enco
       { name: `Hugo ${id}`, phone: `5521${id}`, organization: 1, sector: own.sector.id },
     ],
   )
-  const prefeitura = organizations[1].id
+  const cityHallId = organizations[1].id
   await signIn(page, own.agent, userPassword)
   const rows = page.getByRole('row').filter({ hasText: id })
   const organizationFilter = page.getByRole('combobox', { name: 'Filtrar por órgão' })
   const municipalityFilter = page.getByRole('combobox', { name: 'Filtrar por município' })
 
   // Lista vazia: o órgão do endereço continua no campo.
-  await page.goto(`/contatos?orgao=${prefeitura}&busca=${encodeURIComponent(`${id} ninguém`)}`)
+  await page.goto(`/contatos?orgao=${cityHallId}&busca=${encodeURIComponent(`${id} ninguém`)}`)
   await expect(page.getByText('Nenhum contato encontrado')).toBeVisible()
   await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
 
   // Escolher o município do órgão restaurado mantém o órgão no filtro.
-  await page.goto(`/contatos?orgao=${prefeitura}&busca=${id}`)
+  await page.goto(`/contatos?orgao=${cityHallId}&busca=${id}`)
   await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
   await municipalityFilter.fill('ibiuna')
   await page.getByRole('option', { name: 'Ibiúna', exact: true }).click()
   await expect(page).toHaveURL(/municipio=/)
-  await expect(page).toHaveURL(new RegExp(`orgao=${prefeitura}`))
+  await expect(page).toHaveURL(new RegExp(`orgao=${cityHallId}`))
   await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(`Hugo ${id}`)
