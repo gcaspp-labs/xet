@@ -274,6 +274,9 @@ func TestDirectorySearch(t *testing.T) {
 
 	search := func(path, q string) []string {
 		t.Helper()
+		if path == "/api/contacts" {
+			return names(e.DoPageItems(path+"?q="+url.QueryEscape(q), token))
+		}
 		return names(e.DoList(http.MethodGet, path+"?q="+url.QueryEscape(q), token))
 	}
 	contactCases := []struct {
@@ -549,7 +552,7 @@ func TestOrganizationShowsMunicipality(t *testing.T) {
 	if organization == nil || municipalityOf(organization) != "Jaboticabal" {
 		t.Errorf("contact: %v", contact.Body)
 	}
-	contacts := e.DoList(http.MethodGet, "/api/contacts", agent)
+	contacts := e.DoPageItems("/api/contacts", agent)
 	organization, _ = contacts[0]["organization"].(map[string]any)
 	if organization == nil || municipalityOf(organization) != "Jaboticabal" {
 		t.Errorf("contact list: %v", contacts)
@@ -786,7 +789,7 @@ func TestContactSearchFilters(t *testing.T) {
 		// O filtro vale junto com todas as chaves da busca, não só com a última.
 		{fmt.Sprintf("?q=prefeitura&sectorId=%d", rh.ID), []string{"Bia", "Cris"}},
 	} {
-		if got := names(e.DoList(http.MethodGet, "/api/contacts"+tc.query, sup)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+		if got := names(e.DoPageItems("/api/contacts"+tc.query, sup)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
 			t.Errorf("contacts%s: got %v, want %v", tc.query, got, tc.want)
 		}
 	}
@@ -860,7 +863,7 @@ func TestContactSearchByMunicipalityAndOrganization(t *testing.T) {
 		{"?q=itu", []string{"Ana", "Bia", "Cris"}},
 		{fmt.Sprintf("?q=itu&sectorId=%d", rh.ID), []string{"Bia"}},
 	} {
-		if got := names(e.DoList(http.MethodGet, "/api/contacts"+tc.query, agent)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+		if got := names(e.DoPageItems("/api/contacts"+tc.query, agent)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
 			t.Errorf("contacts%s: got %v, want %v", tc.query, got, tc.want)
 		}
 	}

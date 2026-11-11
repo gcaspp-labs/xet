@@ -18,10 +18,11 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
-// MaxResults caps each search; the user refines the query to find others.
+// MaxResults caps the organization search; the user refines the query to find others.
 const MaxResults = 50
 
 var (
@@ -393,11 +394,35 @@ type ContactFilter struct {
 	OrganizationID int64
 }
 
-// SearchContacts finds contacts by the name of the contact, organization or
-// municipality, phone or organization CNPJ, within the filter; an empty query
-// lists them by name.
-func (s *Service) SearchContacts(ctx context.Context, filter ContactFilter) ([]Contact, error) {
+// Columns the contact list sorts by: the contact name (the default) and the
+// organization name.
+const (
+	SortContactName  = "name"
+	SortOrganization = "organization"
+)
+
+// ContactSortColumns are the columns the contact list accepts in ?sort=.
+var ContactSortColumns = []string{SortContactName, SortOrganization}
+
+// SearchContacts finds a page of the contacts by the name of the contact,
+// organization or municipality, phone or organization CNPJ, within the filter;
+// an empty query lists them all. It returns the total the filter finds and the
+// page actually returned: the last one when the request goes past it.
+func (s *Service) SearchContacts(ctx context.Context, filter ContactFilter, page paging.Request) ([]Contact, int64, paging.Request, error) {
 	p := newSearchPatterns(filter.Query)
+	total, err := s.q.CountContacts(ctx, db.CountContactsParams{
+		NamePattern:    p.name,
+		PhonePattern:   p.phone,
+		CnpjPattern:    p.cnpj,
+		SectorID:       filter.SectorID,
+		ModuleID:       filter.ModuleID,
+		MunicipalityID: filter.MunicipalityID,
+		OrganizationID: filter.OrganizationID,
+	})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("count contacts: %w", err)
+	}
+	page = page.Clamp(total)
 	rows, err := s.q.SearchContacts(ctx, db.SearchContactsParams{
 		NamePattern:    p.name,
 		PhonePattern:   p.phone,
@@ -406,10 +431,13 @@ func (s *Service) SearchContacts(ctx context.Context, filter ContactFilter) ([]C
 		ModuleID:       filter.ModuleID,
 		MunicipalityID: filter.MunicipalityID,
 		OrganizationID: filter.OrganizationID,
-		MaxResults:     MaxResults,
+		SortColumn:     page.Sort,
+		Descending:     page.Descending,
+		PageOffset:     page.Offset(),
+		PageSize:       paging.PageSize,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("search contacts: %w", err)
+		return nil, 0, page, fmt.Errorf("search contacts: %w", err)
 	}
 	out := make([]Contact, len(rows))
 	for i, r := range rows {
@@ -419,9 +447,9 @@ func (s *Service) SearchContacts(ctx context.Context, filter ContactFilter) ([]C
 		}
 	}
 	if err := loadLinks(ctx, s.q, out); err != nil {
-		return nil, err
+		return nil, 0, page, err
 	}
-	return out, nil
+	return out, total, page, nil
 }
 
 // GetContact returns the contact with its organization, sectors and modules.

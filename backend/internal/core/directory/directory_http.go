@@ -10,6 +10,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -244,9 +245,11 @@ func filterID(r *http.Request, name string) (int64, bool) {
 	return id, err == nil && id > 0
 }
 
-// listContacts searches contacts by the name of the contact, organization or
-// municipality, phone or CNPJ (?q=), in a sector (?sectorId=), module
-// (?moduleId=), municipality (?municipalityId=) and organization (?organizationId=).
+// listContacts returns a page of the contacts (?page=, ?sort=name|organization,
+// ?direction=asc|desc; by name by default) found by the name of the contact,
+// organization or municipality, phone or CNPJ (?q=), in a sector (?sectorId=),
+// module (?moduleId=), municipality (?municipalityId=) and organization
+// (?organizationId=).
 func (h *Handler) listContacts(w http.ResponseWriter, r *http.Request) {
 	sectorID, okSector := filterID(r, "sectorId")
 	moduleID, okModule := filterID(r, "moduleId")
@@ -256,10 +259,10 @@ func (h *Handler) listContacts(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Filtro inválido.")
 		return
 	}
-	contacts, err := h.service.SearchContacts(r.Context(), ContactFilter{
+	contacts, total, page, err := h.service.SearchContacts(r.Context(), ContactFilter{
 		Query: r.URL.Query().Get("q"), SectorID: sectorID, ModuleID: moduleID,
 		MunicipalityID: municipalityID, OrganizationID: organizationID,
-	})
+	}, paging.Parse(r, ContactSortColumns, SortContactName, false))
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return
@@ -268,7 +271,7 @@ func (h *Handler) listContacts(w http.ResponseWriter, r *http.Request) {
 	for i, c := range contacts {
 		out[i] = ToContactResponse(c)
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, paging.NewPage(out, total, page))
 }
 
 func (h *Handler) getContact(w http.ResponseWriter, r *http.Request) {

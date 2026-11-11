@@ -41,6 +41,51 @@ func (q *Queries) AddContactSectors(ctx context.Context, arg AddContactSectorsPa
 	return err
 }
 
+const countContacts = `-- name: CountContacts :one
+select count(*)
+from contacts c
+left join organizations o on o.id = c.organization_id
+left join municipalities m on m.id = o.municipality_id
+where ($1::text = ''
+       or immutable_unaccent(c.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(o.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(m.name) ilike immutable_unaccent($1)
+       or ($2::text <> '' and c.phone like $2)
+       or ($3::text <> '' and o.cnpj like $3))
+  and ($4::bigint = 0 or exists (
+       select 1 from contact_sectors cs where cs.contact_id = c.id and cs.sector_id = $4))
+  and ($5::bigint = 0 or exists (
+       select 1 from contact_modules cm where cm.contact_id = c.id and cm.module_id = $5))
+  and ($6::bigint = 0 or o.municipality_id = $6)
+  and ($7::bigint = 0 or c.organization_id = $7)
+`
+
+type CountContactsParams struct {
+	NamePattern    string
+	PhonePattern   string
+	CnpjPattern    string
+	SectorID       int64
+	ModuleID       int64
+	MunicipalityID int64
+	OrganizationID int64
+}
+
+// Counts the contacts SearchContacts finds, with the same filter.
+func (q *Queries) CountContacts(ctx context.Context, arg CountContactsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countContacts,
+		arg.NamePattern,
+		arg.PhonePattern,
+		arg.CnpjPattern,
+		arg.SectorID,
+		arg.ModuleID,
+		arg.MunicipalityID,
+		arg.OrganizationID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createContact = `-- name: CreateContact :one
 insert into contacts (name, phone, organization_id, registered)
 values ($1, $2, $3, true)
@@ -418,8 +463,16 @@ where ($1::text = ''
        select 1 from contact_modules cm where cm.contact_id = c.id and cm.module_id = $5))
   and ($6::bigint = 0 or o.municipality_id = $6)
   and ($7::bigint = 0 or c.organization_id = $7)
-order by lower(c.name), c.id
-limit $8
+order by
+  case when $8::text = 'organization' and not $9::bool
+       then lower(immutable_unaccent(o.name)) end asc nulls last,
+  case when $8::text = 'organization' and $9::bool
+       then lower(immutable_unaccent(o.name)) end desc nulls last,
+  case when not $9::bool then lower(immutable_unaccent(c.name)) end asc,
+  case when $9::bool then lower(immutable_unaccent(c.name)) end desc,
+  case when not $9::bool then c.id end asc,
+  case when $9::bool then c.id end desc
+limit $11 offset $10
 `
 
 type SearchContactsParams struct {
@@ -430,7 +483,10 @@ type SearchContactsParams struct {
 	ModuleID       int64
 	MunicipalityID int64
 	OrganizationID int64
-	MaxResults     int32
+	SortColumn     string
+	Descending     bool
+	PageOffset     int32
+	PageSize       int32
 }
 
 type SearchContactsRow struct {
@@ -444,7 +500,9 @@ type SearchContactsRow struct {
 // Matches the name of the contact, organization or municipality (ignoring case
 // and accents), the phone digits or the organization CNPJ. Empty patterns disable
 // the phone and CNPJ keys; a zero sector, module, municipality or organization
-// disables that filter.
+// disables that filter. Keep the filter equal to CountContacts. Sorts by the
+// contact name or by the organization name (contacts without one last), ignoring
+// case and accents, then by the contact name and the id, in the same direction.
 func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) ([]SearchContactsRow, error) {
 	rows, err := q.db.Query(ctx, searchContacts,
 		arg.NamePattern,
@@ -454,7 +512,10 @@ func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) 
 		arg.ModuleID,
 		arg.MunicipalityID,
 		arg.OrganizationID,
-		arg.MaxResults,
+		arg.SortColumn,
+		arg.Descending,
+		arg.PageOffset,
+		arg.PageSize,
 	)
 	if err != nil {
 		return nil, err

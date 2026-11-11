@@ -49,7 +49,7 @@ func TestContactNameIsSavedWithoutRegistering(t *testing.T) {
 	if len(panel) != 1 || panel[0]["contact"].(map[string]any)["name"] != "Maria Souza" {
 		t.Fatalf("panel = %v", panel)
 	}
-	list := e.DoList(http.MethodGet, "/api/contacts?q=Maria%20Souza", c.biaToken)
+	list := e.DoPageItems("/api/contacts?q=Maria%20Souza", c.biaToken)
 	if len(list) != 1 || list[0]["registered"] != false {
 		t.Fatalf("contacts = %v", list)
 	}
