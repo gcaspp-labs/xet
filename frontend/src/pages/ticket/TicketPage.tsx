@@ -27,7 +27,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { CancelSheet } from '@/components/CancelSheet'
@@ -38,6 +38,7 @@ import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { TicketHistoryList } from '@/components/TicketHistory'
 import { Topbar } from '@/components/Topbar'
+import { cn } from '@/lib/utils'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +48,14 @@ import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+// PROTÓTIPO #135
+import {
+  PrototypeSwitcher,
+  SubjectsTab,
+  useTicketView,
+  useVariant,
+  variants,
+} from '@/pages/ticket/SubjectsTab.prototype'
 import { Textarea } from '@/components/ui/textarea'
 import { type User, useCurrentUser } from '@/lib/auth'
 import {
@@ -998,6 +1007,10 @@ export default function TicketPage() {
   const [registering, setRegistering] = useState(false)
   const openRegistration = () => setRegistering(true)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
+  // PROTÓTIPO #135: aba e busca por chamado, só neste navegador.
+  const [view, setView] = useTicketView(ticketId)
+  const variant = useVariant()
+  const [params] = useSearchParams()
 
   if (error) {
     return (
@@ -1015,6 +1028,8 @@ export default function TicketPage() {
   if (!ticket || !user) {
     return null
   }
+  const showSubjects = canClose(ticket, user)
+  const subjectsOpen = showSubjects && view.tab === 'subjects'
 
   return (
     <>
@@ -1114,7 +1129,14 @@ export default function TicketPage() {
         />
       )}
       {/* A tela de conversas usa a largura toda (design.md). */}
-      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]">
+      <div
+        className={cn(
+          'grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px]',
+          subjectsOpen
+            ? variants[variant].width
+            : 'lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]',
+        )}
+      >
         {assign.error && (
           <Alert variant="warning" className="lg:col-span-2 xl:col-span-3">
             <CircleAlert strokeWidth={1.7} aria-hidden />
@@ -1132,16 +1154,35 @@ export default function TicketPage() {
           />
         </div>
         <ConversationCard ticket={ticket} user={user} onRegister={openRegistration} />
-        <Card role="region" aria-labelledby="ticket-info-title">
+        <Card
+          role="region"
+          aria-labelledby="ticket-info-title"
+          className={cn(subjectsOpen && 'lg:h-[calc(100dvh-150px-var(--header-height))]')}
+        >
           <CardHeader>
             <CardTitle id="ticket-info-title">Chamado</CardTitle>
           </CardHeader>
-          <Tabs defaultValue="details" className="px-5 pb-5">
+          <Tabs
+            value={view.tab === 'subjects' && !showSubjects ? 'details' : view.tab}
+            onValueChange={(tab) => setView({ tab: String(tab) })}
+            className="min-h-0 flex-1 px-5 pb-5"
+          >
             <TabsList>
               <TabsTrigger value="details">Detalhes</TabsTrigger>
               <TabsTrigger value="notes">Notas</TabsTrigger>
               <TabsTrigger value="history">Histórico</TabsTrigger>
+              {showSubjects && <TabsTrigger value="subjects">Assuntos</TabsTrigger>}
             </TabsList>
+            {showSubjects && (
+              <TabsContent value="subjects" className="flex min-h-0 flex-col overflow-y-auto">
+                <SubjectsTab
+                  ticketId={ticket.id}
+                  view={view}
+                  set={setView}
+                  emptySector={params.get('vazio') === '1'}
+                />
+              </TabsContent>
+            )}
             <TabsContent value="details">
               <DetailsTab ticket={ticket} user={user} onRegister={openRegistration} />
             </TabsContent>
@@ -1154,6 +1195,7 @@ export default function TicketPage() {
           </Tabs>
         </Card>
       </div>
+      <PrototypeSwitcher />
     </>
   )
 }
