@@ -56,9 +56,6 @@ export type ContactFilter = {
   organizationId?: number
 }
 
-// A busca de órgãos devolve no máximo este número de resultados.
-export const searchLimit = 50
-
 const organizationsKey = ['organizations']
 export const contactsKey = ['contacts']
 
@@ -99,12 +96,36 @@ export function useOrganizationMunicipalities() {
   })
 }
 
-// Busca por nome, município ou CNPJ, só nos órgãos do município, se informado;
-// sem termo, lista por nome.
-export function useOrganizations(query: string, municipalityId?: number) {
+// Colunas pelas quais a lista de órgãos ordena, com o nome no endereço da tela.
+export type OrganizationSort = 'name' | 'municipality' | 'cnpj'
+export const organizationColumns: Record<string, OrganizationSort> = {
+  nome: 'name',
+  municipio: 'municipality',
+  cnpj: 'cnpj',
+}
+export const defaultOrganizationColumn = 'nome'
+
+// Busca por nome, município ou CNPJ, só nos órgãos do município, se informado, em
+// páginas de 20 feitas no servidor; sem termo, lista todos; sem página nem ordem, a
+// primeira página por nome.
+export function useOrganizations(
+  query: string,
+  municipalityId?: number,
+  request: PageRequest<OrganizationSort> = { page: 1, sort: 'name', direction: 'asc' },
+) {
   return useQuery({
-    queryKey: [...organizationsKey, query.trim(), municipalityId],
-    queryFn: () => api<Organization[]>(searchPath('/organizations', query, { municipalityId })),
+    queryKey: [
+      ...organizationsKey,
+      query.trim(),
+      municipalityId,
+      request.page,
+      request.sort,
+      request.direction,
+    ],
+    queryFn: () =>
+      api<Page<Organization>>(
+        searchPath('/organizations', query, { municipalityId }, pageParams(request)),
+      ),
     placeholderData: keepPreviousData,
   })
 }

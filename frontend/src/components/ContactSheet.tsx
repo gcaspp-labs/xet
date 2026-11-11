@@ -100,10 +100,13 @@ export function OrganizationPicker({
   const [input, setInput] = useState(value ? label(value) : '')
   const deferredInput = useDeferredValue(input)
   // Com um órgão escolhido, o campo mostra o nome dele; a lista volta a ter todos.
-  const { data: organizations = [] } = useOrganizations(
+  const { data } = useOrganizations(
     value && deferredInput === label(value) ? '' : deferredInput,
     municipalityId,
   )
+  const organizations = data?.items ?? []
+  // A lista traz só a primeira página: o aviso diz que há mais e como chegar a eles.
+  const more = data && data.total > organizations.length ? data.total : undefined
 
   return (
     <Combobox
@@ -137,6 +140,12 @@ export function OrganizationPicker({
             </ComboboxItem>
           )}
         </ComboboxList>
+        {more !== undefined && (
+          <p className="caption border-t border-line px-3 py-2 text-ink-faint">
+            Mostrando <span className="mono-num">{organizations.length}</span> de{' '}
+            <span className="mono-num">{more}</span> órgãos. Digite para refinar a busca.
+          </p>
+        )}
       </ComboboxContent>
     </Combobox>
   )

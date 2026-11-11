@@ -1,12 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CircleAlert, Landmark, Plus } from 'lucide-react'
-import { useDeferredValue, useState } from 'react'
+import { useDeferredValue, useEffect, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormDialog } from '@/components/FormDialog'
 import { MunicipalityPicker } from '@/components/MunicipalityPicker'
+import { Pagination } from '@/components/Pagination'
 import { SearchBox } from '@/components/SearchBox'
+import { SortableTableHead } from '@/components/SortableTableHead'
 import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -25,14 +27,16 @@ import {
 } from '@/components/ui/table'
 import { useCurrentUser } from '@/lib/auth'
 import {
+  defaultOrganizationColumn,
   type Organization,
-  searchLimit,
+  organizationColumns,
   useLookupCnpj,
   useMunicipalities,
   useOrganizations,
   useSaveOrganization,
 } from '@/lib/directory'
 import { formatCnpj, isValidCnpj, normalizeCnpj, organizationLabel } from '@/lib/format'
+import { usePagedList, useQueryState } from '@/lib/paging'
 
 const invalidCnpjMessage = 'CNPJ inválido. Confira os 14 caracteres.'
 
@@ -188,9 +192,28 @@ export default function OrganizationsPage() {
   const { data: user } = useCurrentUser()
   // Órgãos são cadastrados por supervisores e administradores; o backend também recusa.
   const canEdit = user?.role === 'supervisor' || user?.role === 'admin'
-  const [query, setQuery] = useState('')
+  // Busca, página e ordem ficam no endereço (?busca=, ?pagina=, ?ordem=, ?direcao=):
+  // reabrir o link devolve a mesma lista; mudar a busca volta à página 1.
+  const { params, update } = useQueryState()
+  const query = params.get('busca') ?? ''
+  const setQuery = (value: string) =>
+    update({ busca: value === '' ? null : value, pagina: null }, true)
   const deferredQuery = useDeferredValue(query)
-  const { data: organizations, isPending } = useOrganizations(deferredQuery)
+  const list = usePagedList(organizationColumns, defaultOrganizationColumn)
+  const { data, isPending, isPlaceholderData } = useOrganizations(
+    deferredQuery,
+    undefined,
+    list.request,
+  )
+  const organizations = data?.items
+  const served = data && !isPlaceholderData ? data.page : undefined
+  const { correctPage } = list
+  // Página além da última: o servidor devolve a última, e o endereço acompanha.
+  useEffect(() => {
+    if (served !== undefined) {
+      correctPage(served)
+    }
+  }, [served, correctPage])
   const [editing, setEditing] = useState<Organization | null>(null)
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
@@ -224,14 +247,14 @@ export default function OrganizationsPage() {
           label="Buscar órgãos"
           placeholder="Nome, município ou CNPJ"
         />
-        <Card>
+        <Card className="gap-0 py-0">
           {organizations && organizations.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Órgão</TableHead>
-                  <TableHead>Município</TableHead>
-                  <TableHead>CNPJ</TableHead>
+                  <SortableTableHead label="Órgão" column="nome" list={list} />
+                  <SortableTableHead label="Município" column="municipio" list={list} />
+                  <SortableTableHead label="CNPJ" column="cnpj" list={list} />
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -281,12 +304,16 @@ export default function OrganizationsPage() {
               </Empty>
             )
           )}
+          {data && (
+            <Pagination
+              page={data.page}
+              pageSize={data.pageSize}
+              total={data.total}
+              noun={['órgão', 'órgãos']}
+              onPage={list.setPage}
+            />
+          )}
         </Card>
-        {organizations?.length === searchLimit && (
-          <p className="caption text-ink-faint">
-            Mostrando os {searchLimit} primeiros resultados. Refine a busca para encontrar outros.
-          </p>
-        )}
       </PageContent>
       <OrganizationSheet key={sheetKey} organization={editing} open={open} onOpenChange={setOpen} />
       <HistorySheet
