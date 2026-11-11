@@ -46,15 +46,17 @@ export function useQueryState() {
 
 // Página e ordem da lista guardadas no endereço (?pagina=, ?ordem=, ?direcao=), com o
 // nome da coluna na tela ligado ao nome na API. Sem parâmetro, a ordem padrão
-// crescente e a página 1; valor desconhecido também cai nelas.
+// crescente e a página 1; valor desconhecido também cai nelas, e coluna desconhecida
+// volta à ordem padrão inteira, crescente, como na API.
 export function usePagedList<Sort extends string>(
   columns: Record<string, Sort>,
   defaultColumn: string,
 ) {
   const { params, update } = useQueryState()
   const chosen = params.get('ordem') ?? defaultColumn
-  const column = chosen in columns ? chosen : defaultColumn
-  const direction: SortDirection = params.get('direcao') === 'desc' ? 'desc' : 'asc'
+  const known = Object.hasOwn(columns, chosen)
+  const column = known ? chosen : defaultColumn
+  const direction: SortDirection = known && params.get('direcao') === 'desc' ? 'desc' : 'asc'
   const page = Math.max(1, Math.trunc(Number(params.get('pagina'))) || 1)
   return {
     column,
