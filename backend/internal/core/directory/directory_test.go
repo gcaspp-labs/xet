@@ -42,8 +42,18 @@ func TestOrganizationsRequireSupervisorOrAdmin(t *testing.T) {
 	if list := e.DoList(http.MethodGet, "/api/organizations", agent); len(list) != 2 {
 		t.Errorf("agent list: %v", list)
 	}
+	// Também abrem um órgão pelo id, como o filtro de contatos guardado no endereço.
+	got := e.Do(http.MethodGet, fmt.Sprintf("/api/organizations/%d", orgID), agent, nil)
+	municipality, _ := got.Body["municipality"].(map[string]any)
+	if got.Status != http.StatusOK || got.Body["name"] != "Prefeitura de Itu" || municipality["name"] != "Itu" {
+		t.Errorf("agent get: status %d, body %v", got.Status, got.Body)
+	}
+	if resp := e.Do(http.MethodGet, fmt.Sprintf("/api/organizations/%d", orgID+1000), agent, nil); resp.Status != http.StatusNotFound {
+		t.Errorf("unknown organization: status %d, want 404", resp.Status)
+	}
 	for _, req := range []struct{ method, path string }{
 		{http.MethodGet, "/api/organizations"},
+		{http.MethodGet, fmt.Sprintf("/api/organizations/%d", orgID)},
 		{http.MethodPost, "/api/organizations"},
 		{http.MethodPut, fmt.Sprintf("/api/organizations/%d", orgID)},
 		{http.MethodGet, "/api/contacts"},

@@ -31,6 +31,7 @@ func (h *Handler) Routes(r chi.Router) {
 	// órgão servem ao filtro de contatos, aberto a todos os papéis.
 	r.Get("/organizations", h.listOrganizations)
 	r.Get("/organizations/municipalities", h.listOrganizationMunicipalities)
+	r.Get("/organizations/{organizationID}", h.getOrganization)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
 		r.Get("/municipalities", h.listMunicipalities)
@@ -113,6 +114,19 @@ func (h *Handler) listOrganizations(w http.ResponseWriter, r *http.Request) {
 		out[i] = toOrganizationResponse(o)
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+func (h *Handler) getOrganization(w http.ResponseWriter, r *http.Request) {
+	id, ok := httpx.URLID(w, r, "organizationID", "Órgão não encontrado.")
+	if !ok {
+		return
+	}
+	org, err := h.service.GetOrganization(r.Context(), id)
+	if err != nil {
+		WriteError(h.logger, w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, toOrganizationResponse(org))
 }
 
 type organizationRequest struct {

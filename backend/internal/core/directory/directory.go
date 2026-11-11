@@ -333,6 +333,18 @@ func (s *Service) UpdateOrganization(ctx context.Context, actorID, id int64, in 
 	return org, nil
 }
 
+// GetOrganization returns one organization with its municipality.
+func (s *Service) GetOrganization(ctx context.Context, id int64) (Organization, error) {
+	org, err := s.q.GetOrganization(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Organization{}, ErrOrganizationNotFound
+	}
+	if err != nil {
+		return Organization{}, fmt.Errorf("get organization: %w", err)
+	}
+	return org, nil
+}
+
 func getOrganization(ctx context.Context, q *db.Queries, id int64) (Organization, error) {
 	org, err := q.GetOrganization(ctx, id)
 	if err != nil {
