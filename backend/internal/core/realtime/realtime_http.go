@@ -39,7 +39,7 @@ const eventsCheckInterval = time.Minute
 const eventsWriteTimeout = 10 * time.Second
 
 // events streams the realtime events of the sectors the user can access
-// (arquitetura.md, Tempo real). The client sends nothing; the session is
+// (docs/architecture.md, Tempo real). The client sends nothing; the session is
 // checked periodically without renewing it, and the connection closes when
 // the session ends.
 

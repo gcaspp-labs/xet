@@ -46,4 +46,4 @@ Como a `verify-app` prova que uma mudança funciona no app em execução.
 
 ## Teste manual
 
-Para a pessoa testar um PR: `make dev-restart` na branch e a tela em `http://localhost:5173`, ou pelo celular via Tailscale em `http://<máquina>.<tailnet>.ts.net:5173`. As credenciais de desenvolvimento ficam em `.dev-credentials`, que só a pessoa lê. Testes com o WhatsApp real usam número de teste e ficam registrados em `validacao-piloto.md`.
+Para a pessoa testar um PR: `make dev-restart` na branch e a tela em `http://localhost:5173`, ou pelo celular via Tailscale em `http://<máquina>.<tailnet>.ts.net:5173`. As credenciais de desenvolvimento ficam em `.dev-credentials`, que só a pessoa lê. Testes com o WhatsApp real usam número de teste e ficam registrados em `docs/pilot-validation.md`.

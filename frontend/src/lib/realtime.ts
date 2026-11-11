@@ -7,7 +7,7 @@ import { contactsKey } from '@/lib/directory'
 import { resetQueueBaseline } from '@/lib/notifications'
 import { closedTodayKey, ticketsKey, workloadKey } from '@/lib/tickets'
 
-// Avisos do backend (arquitetura.md, Tempo real): dizem o que mudou, e os dados
+// Avisos do backend (docs/architecture.md, Tempo real): dizem o que mudou, e os dados
 // são recarregados pela API.
 type RealtimeEvent =
   { type: 'ticket'; sectorId: number; ticketId: number } | { type: 'connection'; sectorId: number }

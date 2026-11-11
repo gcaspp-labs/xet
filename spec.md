@@ -32,7 +32,7 @@ Nesta etapa, todos os registros ficarão no novo sistema. Não haverá integraç
 - A sessão expira após 12 horas sem uso; cada acesso renova o prazo. Sair encerra a sessão imediatamente. Sessões expiradas são apagadas periodicamente, mesmo de quem não volta a entrar.
 - Cada usuário pertence a um único setor, como atendente ou supervisor, e visualiza apenas as filas e os atendimentos do próprio setor.
 - O administrador funciona como supervisor global: acessa todos os setores, além da administração do sistema.
-- A tabela completa de permissões está em [modelo-dados.md](modelo-dados.md).
+- A tabela completa de permissões está em [docs/data-model.md](docs/data-model.md).
 - Cada chamado terá um único responsável por vez.
 - Apenas o responsável poderá responder ao cliente; outro atendente precisará receber o chamado por transferência.
 - Um atendente poderá assumir vários chamados simultaneamente, sem limite.
@@ -354,7 +354,7 @@ Fora do piloto: etiquetas, importação por planilha, grupos, exibição de rea�
 
 ## Arquitetura técnica
 
-As decisões técnicas estão em [arquitetura.md](arquitetura.md).
+As decisões técnicas estão em [docs/architecture.md](docs/architecture.md).
 
 ## Antes da expansão
 

@@ -86,7 +86,7 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		sentAt = time.Now()
 	}
 
-	// The file is saved before the message is committed (modelo-dados.md). If
+	// The file is saved before the message is committed (docs/data-model.md). If
 	// the transaction fails or loses to a concurrent delivery, the file is
 	// left without a message.
 	media, err := s.saveMedia(ctx, msg, sentAt)

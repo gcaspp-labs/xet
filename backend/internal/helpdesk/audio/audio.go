@@ -1,6 +1,6 @@
 // Package audio converts the audio recorded in the browser (WebM/Opus, or
 // MP4/AAC in Safari) to what WhatsApp plays as a voice message: OGG/Opus,
-// mono. The conversion runs the ffmpeg binary (arquitetura.md).
+// mono. The conversion runs the ffmpeg binary (docs/architecture.md).
 package audio
 
 import (

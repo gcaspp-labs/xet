@@ -1,6 +1,6 @@
 // Package storage keeps the attachments of the messages. The pilot writes to
 // the local disk; a move to a VPS may swap it for object storage (S3 or
-// similar) with another implementation of Storage (arquitetura.md).
+// similar) with another implementation of Storage (docs/architecture.md).
 package storage
 
 import (

@@ -1,7 +1,7 @@
 // Package messaging defines the contract between the service and a WhatsApp
 // provider. Providers live in subpackages (whatsmeow, later cloudapi) and are
 // the only code that imports provider libraries; the rest of the system sees
-// only the neutral types below (arquitetura.md).
+// only the neutral types below (docs/architecture.md).
 //
 // This package knows no other domain: providers emit events and the
 // application decides what to do with them.
