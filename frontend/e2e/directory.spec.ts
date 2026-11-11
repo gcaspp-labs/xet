@@ -855,3 +855,123 @@ test('reabrir o endereço com órgão restaura o filtro, mesmo sem contatos enco
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(`Hugo ${id}`)
 })
+
+test('órgãos em páginas de 20, ordenados pela coluna, com busca, página e ordem no endereço', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const { id } = unique()
+  // 23 órgãos com o mesmo marcador; o último fica no município que vem primeiro.
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Órgão ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  await seedDirectory(
+    baseURL!,
+    names.map((name, i) => ({ name, municipality: i === 22 ? 'Águas de Lindóia' : 'Itu' })),
+    [],
+  )
+  await signIn(page, own.supervisor, userPassword)
+  // A busca isola os órgãos deste teste dos criados pelos outros.
+  await page.goto(`/orgaos?busca=${id}`)
+  const rows = page.getByRole('row').filter({ hasText: id })
+  const pagination = page.getByRole('navigation', { name: 'Paginação' })
+
+  // Primeira página por nome, crescente.
+  await expect(rows).toHaveCount(20)
+  await expect(rows.first()).toContainText(names[0])
+  await expect(page.getByText('Página 1 de 2 · 23 órgãos')).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Órgão' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+
+  // Próxima página: o endereço guarda a página.
+  await pagination.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/pagina=2/)
+  await expect(rows).toHaveCount(3)
+  await expect(rows.last()).toContainText(names[22])
+  await expect(pagination.getByRole('button', { name: 'Próxima' })).toBeDisabled()
+
+  // Clicar na coluna ativa inverte a direção e volta à página 1.
+  await page.getByRole('button', { name: 'Órgão', exact: true }).click()
+  await expect(page).toHaveURL(/direcao=desc/)
+  await expect(page).not.toHaveURL(/pagina=/)
+  await expect(rows.first()).toContainText(names[22])
+  await expect(page.getByRole('columnheader', { name: 'Órgão' })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  )
+
+  // Outra coluna começa crescente: Águas de Lindóia vem antes de Itu.
+  await page.getByRole('button', { name: 'Município', exact: true }).click()
+  await expect(page).toHaveURL(/ordem=municipio/)
+  await expect(page).not.toHaveURL(/direcao=/)
+  await expect(rows.first()).toContainText(names[22])
+  await expect(page.getByRole('columnheader', { name: 'Órgão' })).toHaveAttribute(
+    'aria-sort',
+    'none',
+  )
+
+  // O endereço reabre a mesma lista; página além da última vira a última.
+  await page.goto(`/orgaos?busca=${id}&ordem=municipio&pagina=9`)
+  await expect(page).toHaveURL(/pagina=2/)
+  await expect(rows).toHaveCount(3)
+  await expect(page.getByText('Página 2 de 2 · 23 órgãos')).toBeVisible()
+
+  // Ir a outra tela e voltar conserva busca, página e ordem.
+  await page.getByRole('link', { name: 'Contatos' }).click()
+  await expect(page).toHaveURL(/\/contatos/)
+  await page.goBack()
+  await expect(page).toHaveURL(/ordem=municipio/)
+  await expect(page).toHaveURL(/pagina=2/)
+  await expect(page.getByLabel('Buscar órgãos')).toHaveValue(id)
+  await expect(rows).toHaveCount(3)
+
+  // Mudar a busca volta à página 1; com tudo numa página, a faixa some.
+  await page.getByLabel('Buscar órgãos').fill(`${id} 1`)
+  await expect(page).not.toHaveURL(/pagina=/)
+  await expect(rows).toHaveCount(10)
+  await expect(pagination).toBeHidden()
+
+  // Coluna desconhecida no endereço volta à ordem padrão: nome, crescente.
+  await page.goto(`/orgaos?busca=${id}&ordem=inexistente&direcao=desc`)
+  await expect(rows.first()).toContainText(names[0])
+  await expect(page.getByRole('columnheader', { name: 'Órgão' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+})
+
+test('o seletor de órgão avisa quando há mais resultados que os mostrados', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const { id } = unique()
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Órgão ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  await seedDirectory(
+    baseURL!,
+    names.map((name) => ({ name })),
+    [],
+  )
+  await signIn(page, own.agent, userPassword)
+  await page.goto('/contatos')
+  const picker = page.getByRole('combobox', { name: 'Filtrar por órgão' })
+
+  // A busca mostra os 20 primeiros e avisa quantos há.
+  await picker.fill(id)
+  await expect(page.getByRole('option').filter({ hasText: id })).toHaveCount(20)
+  await expect(
+    page.getByText('Mostrando 20 de 23 órgãos. Digite para refinar a busca.'),
+  ).toBeVisible()
+
+  // Refinar chega ao que estava fora da primeira página, e o aviso some.
+  await picker.fill(`${id} 23`)
+  await expect(page.getByRole('option', { name: new RegExp(`${names[22]}`) })).toBeVisible()
+  await expect(page.getByText(/Mostrando \d+ de/)).toBeHidden()
+})

@@ -22,9 +22,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
-// MaxResults caps the organization search; the user refines the query to find others.
-const MaxResults = 50
-
 var (
 	ErrInvalidName           = errors.New("invalid name")
 	ErrInvalidPhone          = errors.New("invalid phone")
@@ -242,24 +239,49 @@ func (s *Service) ListMunicipalitiesWithOrganizations(ctx context.Context) ([]db
 	return rows, nil
 }
 
-// SearchOrganizations finds organizations by name, municipality or CNPJ, in the
-// given municipality (zero means all); an empty query lists them by name.
-func (s *Service) SearchOrganizations(ctx context.Context, query string, municipalityID int64) ([]Organization, error) {
+// Columns the organization list sorts by: the name (the default), the
+// municipality and the CNPJ.
+const (
+	SortOrganizationName = "name"
+	SortMunicipality     = "municipality"
+	SortCNPJ             = "cnpj"
+)
+
+// OrganizationSortColumns are the columns the organization list accepts in ?sort=.
+var OrganizationSortColumns = []string{SortOrganizationName, SortMunicipality, SortCNPJ}
+
+// SearchOrganizations finds a page of the organizations by name, municipality or
+// CNPJ, in the municipality, if any; an empty query lists them all. It returns
+// the total the filter finds and the page actually returned: the last one when
+// the request goes past it.
+func (s *Service) SearchOrganizations(ctx context.Context, query string, municipalityID int64, page paging.Request) ([]Organization, int64, paging.Request, error) {
 	p := newSearchPatterns(query)
+	total, err := s.q.CountOrganizations(ctx, db.CountOrganizationsParams{
+		NamePattern:    p.name,
+		CnpjPattern:    p.cnpj,
+		MunicipalityID: municipalityID,
+	})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("count organizations: %w", err)
+	}
+	page = page.Clamp(total)
 	rows, err := s.q.SearchOrganizations(ctx, db.SearchOrganizationsParams{
 		NamePattern:    p.name,
 		CnpjPattern:    p.cnpj,
 		MunicipalityID: municipalityID,
-		MaxResults:     MaxResults,
+		SortColumn:     page.Sort,
+		Descending:     page.Descending,
+		PageOffset:     page.Offset(),
+		PageSize:       paging.PageSize,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("search organizations: %w", err)
+		return nil, 0, page, fmt.Errorf("search organizations: %w", err)
 	}
 	orgs := make([]Organization, len(rows))
 	for i, r := range rows {
 		orgs[i] = Organization(r)
 	}
-	return orgs, nil
+	return orgs, total, page, nil
 }
 
 // CreateOrganization registers an organization and its audit log in one transaction.
