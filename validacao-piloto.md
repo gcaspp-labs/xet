@@ -2,7 +2,7 @@
 
 Acompanha a [T79](https://github.com/gcaspp-labs/xet/issues/79), antiga T34. Cruza cada critério de validação da `spec.md` com os testes automatizados e com o que ainda precisa do servidor e do número real da Contabilidade.
 
-A T79 só termina quando a última coluna da matriz estiver toda como **Atendido**. Até lá, a issue fica aberta, com o rótulo `em-andamento`.
+A T79 só termina quando a última coluna da matriz estiver toda como **Atendido**. Até lá, a issue fica aberta, com o rótulo `in-progress`.
 
 ## Situação
 
