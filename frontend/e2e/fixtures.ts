@@ -100,6 +100,31 @@ export const test = base.extend<{ onlySectors: (...ids: number[]) => Promise<voi
   },
 })
 
+declare global {
+  interface Window {
+    __toasts: string[]
+  }
+}
+
+// Os avisos (toasts) somem em 2,5 s. Com o swap cheio, o processo dos testes pode parar por mais
+// tempo que isso, e o aviso some antes de ser conferido. Registra no navegador o texto de cada aviso
+// mostrado; a função devolvida lê o registro, para o teste conferir o que apareceu sem precisar
+// estar olhando na hora. Chame antes de abrir a página.
+export async function recordToasts(page: Page) {
+  await page.addInitScript(() => {
+    window.__toasts = []
+    new MutationObserver(() => {
+      for (const toast of document.querySelectorAll('[data-sonner-toast]')) {
+        const text = toast.textContent ?? ''
+        if (!window.__toasts.includes(text)) {
+          window.__toasts.push(text)
+        }
+      }
+    }).observe(document, { childList: true, subtree: true })
+  })
+  return () => page.evaluate(() => window.__toasts)
+}
+
 // Dígito verificador do CNPJ (módulo 11, cada caractere vale o código ASCII menos 48).
 function cnpjCheckDigit(prefix: string) {
   let sum = 0

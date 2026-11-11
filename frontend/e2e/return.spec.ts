@@ -1,5 +1,5 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, recordToasts, seedSector, signIn, unique, userPassword } from './fixtures'
 
 test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   page,
@@ -44,6 +44,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   expect(received.ok()).toBeTruthy()
 
   // Na fila, a ação não aparece: o chamado é assumido.
+  const toasts = await recordToasts(page)
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Joana Devolvida' }).click()
   const url = page.url()
@@ -76,7 +77,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   await page.getByRole('button', { name: 'Devolver à fila' }).click()
   const sheet = page.getByRole('dialog', { name: 'Devolver à fila' })
   await sheet.getByRole('button', { name: 'Devolver à fila' }).click()
-  await expect(page.getByText('Chamado devolvido à fila')).toBeVisible()
+  await expect.poll(toasts).toContain('Chamado devolvido à fila')
   await expect(page).toHaveURL(/\/$/)
   const queue = page.getByRole('region', { name: 'Fila do setor' })
   await expect(queue.getByRole('link', { name: 'Joana Devolvida' })).toHaveCount(1)
@@ -102,12 +103,13 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   // O supervisor devolve o chamado de outro atendente.
   const supContext = await browser.newContext()
   const sup = await supContext.newPage()
+  const supToasts = await recordToasts(sup)
   await signIn(sup, supervisor, userPassword)
   await sup.goto(url)
   await sup.getByRole('button', { name: 'Devolver à fila' }).click()
   const supSheet = sup.getByRole('dialog', { name: 'Devolver à fila' })
   await supSheet.getByRole('button', { name: 'Devolver à fila' }).click()
-  await expect(sup.getByText('Chamado devolvido à fila')).toBeVisible()
+  await expect.poll(supToasts).toContain('Chamado devolvido à fila')
   await expect(sup).toHaveURL(/\/$/)
   await expect(colleagueConversation).toContainText(
     `${supName} devolveu à fila o chamado de ${colleagueName}`,
