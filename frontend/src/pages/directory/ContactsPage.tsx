@@ -50,14 +50,6 @@ export default function ContactsPage() {
       correctPage(served)
     }
   }, [served, correctPage])
-  // Filtrando por órgão, todos os contatos encontrados são dele: o nome do campo vem deles
-  // quando o endereço traz só o id.
-  const organization =
-    contactFilter.organization ??
-    (contactFilter.filter.organizationId !== undefined
-      ? (contacts?.find((c) => c.organization?.id === contactFilter.filter.organizationId)
-          ?.organization ?? null)
-      : null)
   const [editing, setEditing] = useState<Contact | null>(null)
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
@@ -103,7 +95,7 @@ export default function ContactsPage() {
           label="Buscar contatos"
           placeholder="Nome, município, telefone ou CNPJ"
         />
-        <ContactFilters {...contactFilter} organization={organization} />
+        <ContactFilters {...contactFilter} />
         <Card className="gap-0 py-0">
           {contacts && contacts.length > 0 ? (
             <Table>

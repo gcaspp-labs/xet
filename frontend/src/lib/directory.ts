@@ -109,6 +109,15 @@ export function useOrganizations(query: string, municipalityId?: number) {
   })
 }
 
+// Um órgão pelo id, para o filtro de contatos guardado no endereço.
+export function useOrganization(id: number | undefined) {
+  return useQuery({
+    queryKey: [...organizationsKey, 'detail', id],
+    queryFn: () => api<Organization>(`/organizations/${id}`),
+    enabled: id !== undefined,
+  })
+}
+
 // Parte de um clique e não salva nada: é uma mutação só para não repetir a chamada à API externa.
 export function useLookupCnpj() {
   return useMutation({
@@ -234,8 +243,8 @@ function idParam(value: string | null) {
 
 // O mesmo filtro e a busca, guardados no endereço da tela (?busca=, ?setor=, ?modulo=,
 // ?municipio=, ?orgao=) para voltar ao mesmo lugar; mudar a busca ou um filtro volta
-// à página 1. O órgão vem do endereço só pelo id: o nome no campo é o do órgão
-// escolhido nesta tela ou o dos contatos encontrados (ver ContactsPage).
+// à página 1. O órgão vem do endereço só pelo id: o escolhido nesta tela já está à
+// mão; ao reabrir o endereço, é lido da API, com ou sem contatos encontrados.
 export function useContactFilterInAddress() {
   const { data: user } = useCurrentUser()
   const ownSector = user?.role === 'admin' ? undefined : (user?.sectorId ?? undefined)
@@ -247,7 +256,11 @@ export function useContactFilterInAddress() {
   const municipalityId = idParam(params.get('municipio'))
   const organizationId = idParam(params.get('orgao'))
   const municipality = municipalities.find((item) => item.id === municipalityId) ?? null
-  const organization = chosenOrganization?.id === organizationId ? chosenOrganization : null
+  const { data: storedOrganization } = useOrganization(
+    chosenOrganization?.id === organizationId ? undefined : organizationId,
+  )
+  const organization =
+    [chosenOrganization, storedOrganization].find((item) => item?.id === organizationId) ?? null
   const filter: ContactFilter = {
     sectorId: sector === allContacts ? undefined : idParam(sector),
     moduleId: module === allContacts ? undefined : idParam(module),
