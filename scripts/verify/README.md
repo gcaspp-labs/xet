@@ -1,9 +1,7 @@
----
-name: verify-app
-description: Prova com evidências que uma mudança funciona no xet, a central de atendimento via WhatsApp (Go, React e PostgreSQL), sem usar o WhatsApp real. Sobe uma instância isolada, conduz o navegador como um usuário, guarda capturas de tela e o estado final do banco, e deixa a máquina como estava. Use quando pedirem para verificar, conferir ou provar uma mudança ou um PR no app em execução, além dos testes automatizados.
----
-
 # Verificar o xet em execução
+
+> [!note] Kit de verificação do xet
+> Esta pasta não é uma skill. A skill é a `verify-app` genérica, de [agents-and-skills](https://github.com/thiagoCalazans-dev/agents-and-skills/tree/main/skills/verify-app), que lê os comandos na seção Evidence de `docs/agents/commands.md` e roda os scripts daqui. Este README descreve as jornadas, o objeto `t` e os scripts do xet. Onde ele diz "esta skill", leia "este kit".
 
 O xet é uma central de atendimento: cada setor tem um número de WhatsApp, as mensagens viram **chamados**, os **atendentes** assumem e respondem, os **supervisores** acompanham o setor, e o chamado termina com um formulário de encerramento. As regras estão em `docs/features/`; o mapa do que dá para percorrer está em [features/README.md](features/README.md).
 
@@ -24,7 +22,7 @@ Todos os comandos abaixo saem da raiz do repositório.
 ## Launch
 
 ```bash
-.claude/skills/verify-app/scripts/launch.sh
+scripts/verify/scripts/launch.sh
 ```
 
 Parte do zero e leva menos de 1 minuto, ou mais se precisar baixar dependências. Pronto quando imprimir `Execução run-... no ar` e terminar com saída 0.
@@ -46,7 +44,7 @@ Parte do zero e leva menos de 1 minuto, ou mais se precisar baixar dependências
 ## Doctor
 
 ```bash
-.claude/skills/verify-app/scripts/doctor.sh
+scripts/verify/scripts/doctor.sh
 ```
 
 Só lê. Confere banco, migrações, administrador, backend, adaptador falso em uso, proxy, Chromium e memória. Saída 0 quer dizer que vale a pena conduzir; saída 1 quer dizer que não. Nesse caso, corrija a causa ou recomece, sem conduzir.
@@ -60,11 +58,11 @@ Leve a sério os avisos:
 ## Drive
 
 ```bash
-.claude/skills/verify-app/scripts/drive.sh receive-and-assign reply
+scripts/verify/scripts/drive.sh receive-and-assign reply
 ```
 
 ```bash
-.claude/skills/verify-app/scripts/drive.sh all
+scripts/verify/scripts/drive.sh all
 ```
 
 Conduz uma jornada de cada vez, com um Chromium só e sem workers em paralelo, porque a máquina tem 15 GB e o swap costuma estar cheio. Cada jornada é um script Node em `journeys/`. Sessões de pessoas diferentes são contextos do mesmo navegador. Saída 1 quer dizer que alguma falhou.
@@ -120,7 +118,7 @@ Uma falha que você não consiga explicar é o resultado da verificação. Relat
 ## Evidence
 
 ```bash
-.claude/skills/verify-app/scripts/evidence.sh
+scripts/verify/scripts/evidence.sh
 ```
 
 Gera e imprime `evidence/SUMMARY.md`, com o commit, o resultado de cada fluxo do mapa, o que ficou como verificação manual ou sem cobertura, as linhas de erro no log do backend e o detalhe das jornadas.
@@ -143,7 +141,7 @@ A evidência fica nesta cópia do repositório: apagar o worktree apaga a evidê
 **Para levar a evidência a um PR:** só com capturas geradas pelas jornadas desta skill, com os dados falsos delas. Qualquer outra captura, por exemplo de um ambiente com dados reais, precisa de autorização do usuário.
 
 ```bash
-.claude/skills/verify-app/scripts/publish-evidence.sh <número-do-PR>
+scripts/verify/scripts/publish-evidence.sh <número-do-PR>
 ```
 
 O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit solto, apontado por `refs/verify-app/<execução>`, e comenta no PR com as imagens. Assim, nada entra na `main` nem em branch: o clone normal não baixa essa referência e o CI não roda nela. Ele não publica os rastros, que guardam requisições e cookies. **O repositório é público:** as imagens abrem para qualquer pessoa, sem login, e apagar a referência depois não garante que sumiram de cópias. Olhe as capturas antes de publicar. Cada execução publicada ocupa alguns megabytes, e a referência continua no repositório até ser apagada. O comando para apagar está no fim do comentário: rode depois do merge.
@@ -151,7 +149,7 @@ O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit
 ## Cleanup
 
 ```bash
-.claude/skills/verify-app/scripts/cleanup.sh
+scripts/verify/scripts/cleanup.sh
 ```
 
 Encerra só o que a execução iniciou: os processos que herdaram a marca `VERIFY_APP_RUN_ID=<execução>`, inclusive filhos como o Chromium, nunca por nome, e o contêiner registrado, depois de conferir o rótulo. Apaga senhas, binário, build e anexos. Preserva `evidence/` e `logs/`.
@@ -162,7 +160,7 @@ Rode `evidence.sh` de novo depois do Cleanup para o resultado dele entrar no res
 
 ## Helpers
 
-Todos em `.claude/skills/verify-app/scripts/`, executáveis, sem depender de ferramentas de um agente específico.
+Todos em `scripts/verify/scripts/`, executáveis, sem depender de ferramentas de um agente específico.
 
 | Script | Uso | O que faz |
 | --- | --- | --- |

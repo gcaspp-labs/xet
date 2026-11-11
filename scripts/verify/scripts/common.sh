@@ -1,10 +1,10 @@
-# Definições comuns dos scripts da skill verify-app. Carregado com `source`, não é executado.
+# Definições comuns dos scripts do kit de verificação (scripts/verify). Carregado com `source`, não é executado.
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPTS_DIR")"
-ROOT="$(cd "$SKILL_DIR/../../.." && pwd)"
+ROOT="$(cd "$SKILL_DIR/../.." && pwd)"
 
-# Fica fora de .claude/skills, que pode ser protegido contra escrita, e é ignorado pelo git.
+# Fica fora de scripts/verify e é ignorado pelo git.
 WORK_DIR="$ROOT/.verify-app"
 RUNS_DIR="$WORK_DIR/runs"
 CURRENT_FILE="$WORK_DIR/current"

@@ -24,12 +24,12 @@ main
 Como a `verify-app` prova que uma mudança funciona no app em execução.
 
 - **Nível:** `journeys`
-- **Start:** `.claude/skills/verify-app/scripts/launch.sh` (instância isolada: banco em `127.0.0.1:25440`, API de CNPJ falsa em `:28091`, backend em `127.0.0.1:28090` com `MESSAGING_PROVIDER=fake`, frontend em `127.0.0.1:25173`). Saída 3: o Docker não responde; avise a pessoa e pare.
-- **Check:** `.claude/skills/verify-app/scripts/doctor.sh` (só lê; saída 1 quer dizer que não vale conduzir).
-- **Run:** `.claude/skills/verify-app/scripts/drive.sh <jornada...>` ou `drive.sh all`. As jornadas ficam em `.claude/skills/verify-app/journeys/`; o objeto `t` delas está descrito em `.claude/skills/verify-app/SKILL.md`. Depois, `.claude/skills/verify-app/scripts/evidence.sh` gera o resumo.
-- **Clean up:** `.claude/skills/verify-app/scripts/cleanup.sh` (encerra só o que a execução iniciou; nunca por nome de processo).
+- **Start:** `scripts/verify/scripts/launch.sh` (instância isolada: banco em `127.0.0.1:25440`, API de CNPJ falsa em `:28091`, backend em `127.0.0.1:28090` com `MESSAGING_PROVIDER=fake`, frontend em `127.0.0.1:25173`). Saída 3: o Docker não responde; avise a pessoa e pare.
+- **Check:** `scripts/verify/scripts/doctor.sh` (só lê; saída 1 quer dizer que não vale conduzir).
+- **Run:** `scripts/verify/scripts/drive.sh <jornada...>` ou `drive.sh all`. As jornadas ficam em `scripts/verify/journeys/`; o objeto `t` delas está descrito em `scripts/verify/README.md`. Depois, `scripts/verify/scripts/evidence.sh` gera o resumo.
+- **Clean up:** `scripts/verify/scripts/cleanup.sh` (encerra só o que a execução iniciou; nunca por nome de processo).
 - **Pasta de evidência:** `.verify-app/runs/<execução>/evidence/`, ignorada pelo git.
-- **Mapa de fluxos:** `.claude/skills/verify-app/features/README.md`.
+- **Mapa de fluxos:** `scripts/verify/features/README.md`.
 - **Dados de teste:** o `launch.sh` cria o próprio administrador, e as jornadas criam setores, pessoas e contatos pela API (`t.seedSector`, `t.customer`), com senhas que morrem com o banco da execução. Nunca use o WhatsApp real: o número é simulado pelo adaptador falso, e o que depende do real fica como verificação manual. Nunca leia `.dev-credentials`.
 
 ## Ao rodar

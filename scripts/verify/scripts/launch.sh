@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sobe uma instância isolada do xet, com banco vazio e WhatsApp simulado.
-# Uso: .claude/skills/verify-app/scripts/launch.sh
+# Uso: scripts/verify/scripts/launch.sh
 # Termina com o sistema pronto para o Doctor; em qualquer falha, desfaz o que iniciou.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -156,4 +156,4 @@ launched=true
 echo
 echo "Execução $RUN_ID no ar: $FRONTEND_URL"
 echo "Evidências em $EVIDENCE_DIR"
-echo "Próximo passo: .claude/skills/verify-app/scripts/doctor.sh"
+echo "Próximo passo: scripts/verify/scripts/doctor.sh"

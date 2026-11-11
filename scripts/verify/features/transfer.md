@@ -35,7 +35,7 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 ## Driving it
 
 ```bash
-.claude/skills/verify-app/scripts/drive.sh transfer
+scripts/verify/scripts/drive.sh transfer
 ```
 
 - Mesmo setor: `getByRole('dialog', { name: 'Transferir chamado' })`, com `getByRole('combobox', { name: 'Transferir para' })` e `getByRole('option', { name: /^Nome · Atendente/ })`.

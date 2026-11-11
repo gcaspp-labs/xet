@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Confere, sem alterar nada, se a instância vale a pena ser conduzida.
-# Uso: .claude/skills/verify-app/scripts/doctor.sh
+# Uso: scripts/verify/scripts/doctor.sh
 # Saída 0: tudo certo. Saída 1: não conduza; corrija ou recomece.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"

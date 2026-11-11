@@ -30,7 +30,7 @@ O supervisor liga o número do setor por QR code e é avisado quando a ligação
 ## Driving it
 
 ```bash
-.claude/skills/verify-app/scripts/drive.sh connection
+scripts/verify/scripts/drive.sh connection
 ```
 
 | Ação do celular | Chamada | Rota |

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Monta o resumo da execução: o que foi provado, o que falhou e o que ficou de fora.
-# Uso: .claude/skills/verify-app/scripts/evidence.sh [id-da-execução]
+# Uso: scripts/verify/scripts/evidence.sh [id-da-execução]
 # Pode rodar antes ou depois do Cleanup. Escreve evidence/SUMMARY.md e o imprime.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
