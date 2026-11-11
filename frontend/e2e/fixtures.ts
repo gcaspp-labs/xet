@@ -1,4 +1,11 @@
-import { type APIRequestContext, expect, type Locator, request, type Page } from '@playwright/test'
+import {
+  type APIRequestContext,
+  test as base,
+  expect,
+  type Locator,
+  request,
+  type Page,
+} from '@playwright/test'
 
 // Administrador de teste criado no banco próprio dos testes ponta a ponta.
 export const admin = {
@@ -69,15 +76,29 @@ export async function seedSector(baseURL: string) {
 }
 
 // O banco é compartilhado entre os testes, que rodam em paralelo e deixam números desconectados.
-// Limita a lista de setores da página aos do teste, para a contagem do sino do administrador ser
-// exata. O restante, inclusive a fila e o tempo real, continua vindo do backend.
-export async function onlySectors(page: Page, ...ids: number[]) {
-  await page.route('**/api/sectors', async (route) => {
-    const response = await route.fetch()
-    const sectors = (await response.json()) as SectorData[]
-    await route.fulfill({ response, json: sectors.filter((s) => ids.includes(s.id)) })
-  })
-}
+// `onlySectors(...ids)` limita a lista de setores da página aos do teste, para a contagem do sino do
+// administrador ser exata. O restante, inclusive a fila e o tempo real, continua vindo do backend.
+// Um aviso em tempo real no fim do teste refaz a busca de setores, e a interceptação dessa busca
+// pode continuar depois do teste, com o navegador fechando: a resposta já foi descartada ("Response
+// has been disposed") ou a requisição já foi liberada ("Route is already handled"). Ao terminar, o
+// teste encerra a interceptação e ignora só os erros dessas buscas tardias, que nenhuma conferência
+// espera mais.
+export const test = base.extend<{ onlySectors: (...ids: number[]) => Promise<void> }>({
+  onlySectors: async ({ page }, provide) => {
+    let routed = false
+    await provide(async (...ids) => {
+      routed = true
+      await page.route('**/api/sectors', async (route) => {
+        const response = await route.fetch()
+        const sectors = (await response.json()) as SectorData[]
+        await route.fulfill({ response, json: sectors.filter((s) => ids.includes(s.id)) })
+      })
+    })
+    if (routed) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
+    }
+  },
+})
 
 // Dígito verificador do CNPJ (módulo 11, cada caractere vale o código ASCII menos 48).
 function cnpjCheckDigit(prefix: string) {

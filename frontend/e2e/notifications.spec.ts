@@ -1,12 +1,11 @@
 import {
   expect,
   request as apiRequest,
-  test,
   type APIRequestContext,
   type Page,
   type WebSocketRoute,
 } from '@playwright/test'
-import { admin, onlySectors, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, seedSector, signIn, test, unique, userPassword } from './fixtures'
 
 async function connectSector(baseURL: string, sectorId: number) {
   const api = await apiRequest.newContext({ baseURL })
@@ -355,9 +354,10 @@ test('administrador não vê os chamados no sino, mas os vê e assume pelo paine
   browser,
   request,
   baseURL,
+  onlySectors,
 }) => {
   const { sector, supervisor } = await connectedSector(baseURL!, request)
-  await onlySectors(page, sector.id)
+  await onlySectors(sector.id)
   await receive(request, sector.id, 'Julia Antiga')
   await signIn(page, admin.email, admin.password)
   const bell = bellOf(page)
@@ -409,10 +409,11 @@ test('administrador só conta o número desconectado, no sino e no título da ab
   page,
   request,
   baseURL,
+  onlySectors,
 }) => {
   const connected = await connectedSector(baseURL!, request)
   const { sector: down } = await seedSector(baseURL!)
-  await onlySectors(page, connected.sector.id, down.id)
+  await onlySectors(connected.sector.id, down.id)
   await receive(request, connected.sector.id, 'Lucas Fila')
   await signIn(page, admin.email, admin.password)
   const bell = bellOf(page)
