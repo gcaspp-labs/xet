@@ -2,7 +2,8 @@
 
 Documentos do projeto:
 
-- [spec.md](spec.md): regras de negócio. É a fonte da verdade sobre o comportamento do sistema, até a migração para `docs/features/` (ver `docs/agents/domain.md`).
+- [docs/features/](docs/features/): as regras de cada funcionalidade, como o sistema funciona hoje. São a fonte da verdade sobre o comportamento do sistema.
+- [spec.md](spec.md): o que vale para o sistema todo (objetivo, estrutura e implantação, armazenamento, critérios do piloto, antes da expansão) e o índice das funcionalidades.
 - [docs/architecture.md](docs/architecture.md): estado técnico atual: componentes, contrato da mensageria, bibliotecas padrão e estrutura do repositório.
 - [docs/adr/](docs/adr/): decisões técnicas difíceis de reverter, com o motivo.
 - [docs/data-model.md](docs/data-model.md): domínios, entidades, ligações, restrições e permissões. Migrações seguem este documento; mudanças no modelo são registradas nele antes da migração. As migrações antigas o citam pelo nome anterior, `modelo-dados.md`.
@@ -85,7 +86,7 @@ Configuração do fluxo com agentes, um arquivo por assunto em `docs/agents/`:
 
 - Issues: GitHub `gcaspp-labs/xet`, pelo `gh`, com sub-issues e bloqueios nativos. `docs/agents/issue-tracker.md`
 - Rótulos: categoria, triagem, `spec`, `in-progress`, `to-docs` e risco. `docs/agents/labels.md`
-- Domínio e regras das funcionalidades: um contexto só; `spec.md` até a migração para `docs/features/`, modelo em `docs/data-model.md`. `docs/agents/domain.md`
+- Domínio e regras das funcionalidades: um contexto só; regras em `docs/features/`, globais em `spec.md`, modelo em `docs/data-model.md`. `docs/agents/domain.md`
 - Design: `design.md` na raiz (GCASPP LAB com shadcn/ui); capturas só em desktop. `docs/agents/design.md`
 - Comandos: main; `make dev`, `make test`, `make lint`, `make check-generated`; uma task por vez; evidência: `journeys`. `docs/agents/commands.md`
 - Trava do merge: os 4 jobs do CI verdes; sem a pessoa, só `risk:low` sem área sensível. `docs/agents/merge-gate.md`
