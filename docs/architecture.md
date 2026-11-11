@@ -1,6 +1,6 @@
 # Arquitetura técnica — Central de atendimento via WhatsApp
 
-O estado técnico atual do xet. As regras de negócio estão em [spec.md](../spec.md), o modelo de dados em [data-model.md](data-model.md) e as decisões difíceis de reverter, com o motivo, em [adr/](adr/).
+O estado técnico atual do xet. As regras de negócio estão em [features/](features/) e as globais em [spec.md](../spec.md), o modelo de dados em [data-model.md](data-model.md) e as decisões difíceis de reverter, com o motivo, em [adr/](adr/).
 
 ## Componentes
 

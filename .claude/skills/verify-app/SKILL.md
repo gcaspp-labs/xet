@@ -5,7 +5,7 @@ description: Prova com evidências que uma mudança funciona no xet, a central d
 
 # Verificar o xet em execução
 
-O xet é uma central de atendimento: cada setor tem um número de WhatsApp, as mensagens viram **chamados**, os **atendentes** assumem e respondem, os **supervisores** acompanham o setor, e o chamado termina com um formulário de encerramento. As regras estão em `spec.md`; o mapa do que dá para percorrer está em [features/README.md](features/README.md).
+O xet é uma central de atendimento: cada setor tem um número de WhatsApp, as mensagens viram **chamados**, os **atendentes** assumem e respondem, os **supervisores** acompanham o setor, e o chamado termina com um formulário de encerramento. As regras estão em `docs/features/`; o mapa do que dá para percorrer está em [features/README.md](features/README.md).
 
 Esta skill não substitui `make test`. Os testes dizem que as regras continuam valendo; a verificação mostra a mudança funcionando como o usuário a vê, com evidência que outra pessoa pode conferir.
 

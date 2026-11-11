@@ -1,6 +1,6 @@
 # Mapa de fluxos do xet
 
-O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regra de negócio está em `spec.md`; aqui está o caminho para ver a regra funcionando.
+O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regra de negócio está em `docs/features/`; aqui está o caminho para ver a regra funcionando.
 
 ## Quem é quem
 
@@ -13,13 +13,13 @@ O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regr
 
 ## Fluxos
 
-| Fluxo | Arquivo | Jornada | Regras em `spec.md` | Testes parecidos em `frontend/e2e` | Rode quando a mudança tocar em |
+| Fluxo | Arquivo | Jornada | Regras em `docs/features/` | Testes parecidos em `frontend/e2e` | Rode quando a mudança tocar em |
 | --- | --- | --- | --- | --- | --- |
-| Receber e assumir | [receive-and-assign.md](receive-and-assign.md) | `receive-and-assign` | "Recebimento e distribuição" | `panel.spec.ts`, `conversation.spec.ts` | fila, painel, assumir, tempo real, recepção de mensagens |
-| Responder | [reply.md](reply.md) | `reply` | "Conversa" | `conversation.spec.ts`, `media.spec.ts` | tela da conversa, envio, situação da mensagem, anexos |
-| Transferir | [transfer.md](transfer.md) | `transfer` | "Transferências" | `transfer.spec.ts`, `transfer-sector.spec.ts`, `return.spec.ts` | transferência, responsável, auditoria do chamado |
-| Encerrar | [close.md](close.md) | `close` | "Formulário de encerramento", "Encerramento, retorno e correções", "Cancelamento" | `closing.spec.ts`, `correction.spec.ts` | formulário, realizados, cancelamento, cadastro de contato no encerramento |
-| Conexão | [connection.md](connection.md) | `connection` | "Estrutura e implantação", "Administração", "Notificações" | `connection.spec.ts` | tela de conexão, QR code, avisos de desconexão, adaptador de mensageria |
+| Receber e assumir | [receive-and-assign.md](receive-and-assign.md) | `receive-and-assign` | `queue.md` | `panel.spec.ts`, `conversation.spec.ts` | fila, painel, assumir, tempo real, recepção de mensagens |
+| Responder | [reply.md](reply.md) | `reply` | `conversation.md` | `conversation.spec.ts`, `media.spec.ts` | tela da conversa, envio, situação da mensagem, anexos |
+| Transferir | [transfer.md](transfer.md) | `transfer` | `transfers.md` | `transfer.spec.ts`, `transfer-sector.spec.ts`, `return.spec.ts` | transferência, responsável, auditoria do chamado |
+| Encerrar | [close.md](close.md) | `close` | `closing.md`, `subjects.md`, `cancellation.md` | `closing.spec.ts`, `correction.spec.ts` | formulário, realizados, cancelamento, cadastro de contato no encerramento |
+| Conexão | [connection.md](connection.md) | `connection` | `connection.md`, `notifications.md` | `connection.spec.ts` | tela de conexão, QR code, avisos de desconexão, adaptador de mensageria |
 
 ## Como ler o estado de uma sub-feature
 

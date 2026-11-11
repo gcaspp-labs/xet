@@ -6,9 +6,8 @@ Como as skills usam a documentação de domínio do xet ao explorar o código. O
 
 - **`GLOSSARY.md`** na raiz: os termos do domínio (chamado, setor, atendente, supervisor, contato, órgão…).
 - **`docs/adr/`**: as ADRs da área em que você vai mexer.
-- **Regras das funcionalidades: hoje, `spec.md` na raiz.** Ele ainda é a fonte atual das regras, por seções (Usuários e acesso, Órgãos e contatos, Recebimento e distribuição, Conversa, Transferências, Encerramento…). A migração para `docs/features/<funcionalidade>.md` está decidida e será feita pela `to-docs` no modo de migração. Depois dela:
-  - **`docs/features/<funcionalidade>.md`** traz as regras atuais de cada funcionalidade que a mudança toca. É a referência do que o sistema faz hoje.
-  - **`spec.md`** fica só com o que é global (objetivo, estrutura e implantação, arquitetura técnica, critérios de validação do piloto, referências) e aponta para os arquivos de `docs/features/`. Uma regra global vale para todas as funcionalidades; em conflito, a regra da funcionalidade é a específica e prevalece só no que ela diz.
+- **`docs/features/<funcionalidade>.md`**: as regras atuais de cada funcionalidade que a mudança toca. É a referência do que o sistema faz hoje. O índice está em `spec.md`, "Funcionalidades".
+- **`spec.md`** na raiz: só o que é global (objetivo, estrutura e implantação, armazenamento, critérios de validação do piloto, antes da expansão). Uma regra global vale para todas as funcionalidades; em conflito, a regra da funcionalidade é a específica e prevalece só no que ela diz. Comentários no código citam seções antigas do `spec.md`; a tabela "Onde foram as seções antigas" diz em que arquivo cada uma está.
 - **`docs/data-model.md`**, quando a mudança mexe em dados: domínios, entidades, ligações, restrições e permissões. Mudanças no modelo são registradas nele antes da migração do banco. As migrações antigas o citam como `modelo-dados.md`.
 - **`docs/architecture.md`**: o estado técnico atual e as bibliotecas permitidas. Biblioteca nova exige justificativa registrada lá antes do uso.
 - **`docs/pilot-validation.md`**, quando a mudança mexe na implantação ou em algo que só o WhatsApp real prova: critérios do piloto e roteiros manuais.
@@ -22,7 +21,7 @@ O plano de evolução modular (Contratos, bot e novos módulos) fica só na issu
 ```
 /
 ├── GLOSSARY.md
-├── spec.md                  ← regras globais (e, até a migração, todas as regras)
+├── spec.md                  ← regras globais e índice das funcionalidades
 ├── design.md
 ├── docs/
 │   ├── architecture.md

@@ -1,6 +1,6 @@
 # Modelo de dados — Central de atendimento via WhatsApp
 
-Domínios, entidades, ligações e regras de integridade. As regras de negócio estão em [spec.md](../spec.md) e as decisões técnicas em [architecture.md](architecture.md).
+Domínios, entidades, ligações e regras de integridade. As regras de negócio estão em [features/](features/), as globais em [spec.md](../spec.md) e as decisões técnicas em [architecture.md](architecture.md).
 
 Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as tabelas usam `id bigint generated always as identity` como chave primária e registram `created_at timestamptz not null default now()`; tabelas editáveis também têm `updated_at`. Horários são sempre `timestamptz`.
 
@@ -109,29 +109,7 @@ Usuários não são excluídos, apenas desativados, porque continuam como autore
 
 #### Permissões
 
-| Ação | Atendente | Supervisor | Administrador |
-| --- | --- | --- | --- |
-| Ver fila e chamados | Próprio setor | Próprio setor | Todos os setores |
-| Assumir, responder, transferir, encerrar | Próprio setor | Próprio setor | Todos os setores |
-| Cancelar chamado na fila | Próprio setor | Próprio setor | Todos os setores |
-| Cancelar ou devolver à fila chamado em atendimento | Só sendo o responsável | Próprio setor | Todos os setores |
-| Corrigir chamado encerrado | Só os que encerrou | Próprio setor | Todos os setores |
-| Ver o dashboard do atendimento | — | Próprio setor | Todos os setores |
-| Gerenciar módulos | — | Próprio setor | Todos os setores |
-| Gerenciar assuntos e soluções pela tela | — | Próprio setor | Todos os setores |
-| Adicionar assunto ou solução ao salvar o formulário | Quem pode salvar o formulário | Quem pode salvar o formulário | Quem pode salvar o formulário |
-| Redefinir senha | — | Usuários do próprio setor | Todos |
-| Conectar e desvincular número (QR code) e ver status | — | Próprio setor | Todos os setores |
-| Cadastrar setores e usuários | — | — | Sim |
-| Cadastrar contatos e vinculá-los a um órgão | Sim | Sim | Sim |
-| Alterar setores e módulos do contato | Próprio setor | Próprio setor | Todos os setores |
-| Importar contatos do WhatsApp do setor | Próprio setor | Próprio setor | Todos os setores |
-| Cadastrar e editar órgãos | — | Sim | Sim |
-| Consultar CNPJ no cadastro de órgão | — | Sim | Sim |
-
-Transferir entre atendentes: o responsável transfere o próprio chamado; supervisor (do setor) e administrador transferem qualquer chamado em atendimento. O destino é um usuário ativo do setor do chamado (atendente ou supervisor).
-
-Encerrar: somente o responsável pelo chamado em atendimento, inclusive quando é supervisor ou administrador.
+As permissões de cada papel são regra de negócio e ficam em [features/access.md](features/access.md).
 
 ### `sessions` — Sessão de login
 
