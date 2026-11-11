@@ -48,7 +48,8 @@ function ContactSearch({
 }) {
   const [query, setQuery] = useState('')
   const contactFilter = useContactFilter()
-  const { data: contacts = [] } = useContacts(useDeferredValue(query), contactFilter.filter)
+  const { data } = useContacts(useDeferredValue(query), contactFilter.filter)
+  const contacts = data?.items ?? []
 
   return (
     <div className="flex flex-col gap-3">

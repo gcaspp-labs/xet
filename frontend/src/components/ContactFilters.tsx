@@ -11,7 +11,7 @@ import { useSectors } from '@/lib/admin'
 import {
   allContacts,
   useActiveModules,
-  useContactFilter,
+  type ContactFilterState,
   useOrganizationMunicipalities,
 } from '@/lib/directory'
 
@@ -26,7 +26,7 @@ export function ContactFilters({
   setModule,
   setMunicipality,
   setOrganization,
-}: ReturnType<typeof useContactFilter>) {
+}: ContactFilterState) {
   const { data: sectors = [] } = useSectors()
   // Sem setor escolhido, atendente e supervisor filtram pelos módulos do próprio setor.
   const { data: modules = [] } = useActiveModules(filter.sectorId ?? ownSector)
@@ -90,9 +90,10 @@ export function ContactFilters({
         />
       </div>
       <div className="w-[260px] max-w-full">
-        {/* Nova chave a cada município: o texto do campo acompanha o órgão que restou. */}
+        {/* Nova chave a cada município e órgão: o texto do campo acompanha o órgão que
+            restou ou o que chegou do endereço depois de a tela abrir. */}
         <OrganizationPicker
-          key={filter.municipalityId ?? allContacts}
+          key={`${filter.municipalityId ?? allContacts}-${organization?.id ?? allContacts}`}
           label="Filtrar por órgão"
           placeholder="Todos os órgãos"
           clearLabel="Limpar órgão"

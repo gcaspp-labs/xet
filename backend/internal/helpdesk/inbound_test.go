@@ -473,7 +473,7 @@ func TestContactKnownOnlyByLID(t *testing.T) {
 	// A busca de contatos continua funcionando com contatos sem telefone.
 	e.User("ana@exemplo.com", db.UserRoleAgent, &contab.ID)
 	token := e.Login("ana@exemplo.com", testPassword)
-	list := e.DoList(http.MethodGet, "/api/contacts?q=carla", token)
+	list := e.DoPageItems("/api/contacts?q=carla", token)
 	if len(list) != 1 || list[0]["phone"] != nil || list[0]["registered"] != false {
 		t.Fatalf("contacts search = %v", list)
 	}

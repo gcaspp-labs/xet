@@ -35,9 +35,12 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 29. O módulo no contato é opcional, e o contato tem no máximo um em cada setor. Os módulos filtram a lista, e o do setor do chamado vem marcado no formulário de encerramento.
 30. A lista de contatos mostra os setores do contato e o módulo em cada um.
 31. As alterações de setores e módulos do contato, inclusive as automáticas, ficam registradas na auditoria.
+32. A lista de contatos é paginada e ordena por Contato (padrão) ou por Órgão, como em [interface.md](interface.md). Nomes iguais mantêm sempre a mesma ordem, e contatos sem órgão ficam no fim da ordem por órgão. O total conta cada contato uma vez, mesmo em vários setores.
+33. Na tela Contatos, a busca e os filtros também ficam no endereço (`?busca=`, `?setor=`, `?modulo=`, `?municipio=`, `?orgao=`). A busca de "Nova conversa" mostra os 20 primeiros resultados.
 
 ## Fora do escopo / limites conhecidos
 
+- A lista de órgãos ainda mostra só os 50 primeiros resultados, até ser paginada como a de contatos (spec #125).
 - A importação de contatos por planilha (CSV) fica para uma etapa posterior.
 
 ## Relacionado
@@ -46,4 +49,5 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 
 ## Histórico
 
+- 2026-11-11: lista de contatos paginada e ordenável (#126).
 - 2026-11-11: regras migradas do `spec.md` (Órgãos e contatos; Órgãos e contatos › Setores e módulos do contato).

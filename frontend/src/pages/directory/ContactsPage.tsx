@@ -1,9 +1,11 @@
 import { BookUser, Download, Plus } from 'lucide-react'
-import { useDeferredValue, useState } from 'react'
+import { useDeferredValue, useEffect, useState } from 'react'
 import { ContactFilters } from '@/components/ContactFilters'
 import { ContactSheet } from '@/components/ContactSheet'
 import { ImportContactsSheet } from '@/components/ImportContactsSheet'
+import { Pagination } from '@/components/Pagination'
 import { SearchBox } from '@/components/SearchBox'
+import { SortableTableHead } from '@/components/SortableTableHead'
 import { HistorySheet } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Badge } from '@/components/ui/badge'
@@ -18,14 +20,36 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { type Contact, searchLimit, useContactFilter, useContacts } from '@/lib/directory'
+import {
+  type Contact,
+  contactColumns,
+  defaultContactColumn,
+  useContactFilterInAddress,
+  useContacts,
+} from '@/lib/directory'
 import { formatCnpj, formatPhone, organizationLabel } from '@/lib/format'
+import { usePagedList } from '@/lib/paging'
 
 export default function ContactsPage() {
-  const [query, setQuery] = useState('')
+  // Busca, filtros, página e ordem ficam no endereço: voltar de um chamado ou reabrir
+  // o link devolve a mesma lista.
+  const { query, setQuery, ...contactFilter } = useContactFilterInAddress()
   const deferredQuery = useDeferredValue(query)
-  const contactFilter = useContactFilter()
-  const { data: contacts, isPending } = useContacts(deferredQuery, contactFilter.filter)
+  const list = usePagedList(contactColumns, defaultContactColumn)
+  const { data, isPending, isPlaceholderData } = useContacts(
+    deferredQuery,
+    contactFilter.filter,
+    list.request,
+  )
+  const contacts = data?.items
+  const served = data && !isPlaceholderData ? data.page : undefined
+  const { correctPage } = list
+  // Página além da última: o servidor devolve a última, e o endereço acompanha.
+  useEffect(() => {
+    if (served !== undefined) {
+      correctPage(served)
+    }
+  }, [served, correctPage])
   const [editing, setEditing] = useState<Contact | null>(null)
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
@@ -72,13 +96,13 @@ export default function ContactsPage() {
           placeholder="Nome, município, telefone ou CNPJ"
         />
         <ContactFilters {...contactFilter} />
-        <Card>
+        <Card className="gap-0 py-0">
           {contacts && contacts.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Contato</TableHead>
-                  <TableHead>Órgão</TableHead>
+                  <SortableTableHead label="Contato" column="nome" list={list} />
+                  <SortableTableHead label="Órgão" column="orgao" list={list} />
                   <TableHead>Setores e módulos</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
@@ -166,12 +190,16 @@ export default function ContactsPage() {
               </Empty>
             )
           )}
+          {data && (
+            <Pagination
+              page={data.page}
+              pageSize={data.pageSize}
+              total={data.total}
+              noun={['contato', 'contatos']}
+              onPage={list.setPage}
+            />
+          )}
         </Card>
-        {contacts?.length === searchLimit && (
-          <p className="caption text-ink-faint">
-            Mostrando os {searchLimit} primeiros resultados. Refine a busca para encontrar outros.
-          </p>
-        )}
       </PageContent>
       <ContactSheet key={sheetKey} contact={editing} open={open} onOpenChange={setOpen} />
       <ImportContactsSheet

@@ -208,6 +208,32 @@ func (e *Env) DoList(method, path, token string) []map[string]any {
 	return out
 }
 
+// DoPage performs a GET on a paged list and returns the items of the page with
+// the whole response, for the total and the page returned.
+func (e *Env) DoPage(path, token string) ([]map[string]any, Response) {
+	e.T.Helper()
+	resp := e.Do(http.MethodGet, path, token, nil)
+	if resp.Status != http.StatusOK {
+		e.T.Fatalf("GET %s: status %d, body %v", path, resp.Status, resp.Body)
+	}
+	raw, ok := resp.Body["items"].([]any)
+	if !ok {
+		e.T.Fatalf("GET %s: no items in %v", path, resp.Body)
+	}
+	items := make([]map[string]any, len(raw))
+	for i, item := range raw {
+		items[i], _ = item.(map[string]any)
+	}
+	return items, resp
+}
+
+// DoPageItems performs a GET on a paged list and returns the items of the page.
+func (e *Env) DoPageItems(path, token string) []map[string]any {
+	e.T.Helper()
+	items, _ := e.DoPage(path, token)
+	return items
+}
+
 // Municipality returns the ID of a municipality loaded by the migration.
 func (e *Env) Municipality(name string) int64 {
 	e.T.Helper()

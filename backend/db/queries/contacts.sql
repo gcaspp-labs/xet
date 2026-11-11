@@ -30,7 +30,9 @@ where c.id = @id;
 -- Matches the name of the contact, organization or municipality (ignoring case
 -- and accents), the phone digits or the organization CNPJ. Empty patterns disable
 -- the phone and CNPJ keys; a zero sector, module, municipality or organization
--- disables that filter.
+-- disables that filter. Keep the filter equal to CountContacts. Sorts by the
+-- contact name or by the organization name (contacts without one last), ignoring
+-- case and accents, then by the contact name and the id, in the same direction.
 select sqlc.embed(c), o.name as organization_name, o.cnpj as organization_cnpj,
     o.municipality_id, m.name as municipality_name
 from contacts c
@@ -48,8 +50,35 @@ where (@name_pattern::text = ''
        select 1 from contact_modules cm where cm.contact_id = c.id and cm.module_id = @module_id))
   and (@municipality_id::bigint = 0 or o.municipality_id = @municipality_id)
   and (@organization_id::bigint = 0 or c.organization_id = @organization_id)
-order by lower(c.name), c.id
-limit @max_results;
+order by
+  case when @sort_column::text = 'organization' and not @descending::bool
+       then lower(immutable_unaccent(o.name)) end asc nulls last,
+  case when @sort_column::text = 'organization' and @descending::bool
+       then lower(immutable_unaccent(o.name)) end desc nulls last,
+  case when not @descending::bool then lower(immutable_unaccent(c.name)) end asc,
+  case when @descending::bool then lower(immutable_unaccent(c.name)) end desc,
+  case when not @descending::bool then c.id end asc,
+  case when @descending::bool then c.id end desc
+limit @page_size offset @page_offset;
+
+-- name: CountContacts :one
+-- Counts the contacts SearchContacts finds, with the same filter.
+select count(*)
+from contacts c
+left join organizations o on o.id = c.organization_id
+left join municipalities m on m.id = o.municipality_id
+where (@name_pattern::text = ''
+       or immutable_unaccent(c.name) ilike immutable_unaccent(@name_pattern)
+       or immutable_unaccent(o.name) ilike immutable_unaccent(@name_pattern)
+       or immutable_unaccent(m.name) ilike immutable_unaccent(@name_pattern)
+       or (@phone_pattern::text <> '' and c.phone like @phone_pattern)
+       or (@cnpj_pattern::text <> '' and o.cnpj like @cnpj_pattern))
+  and (@sector_id::bigint = 0 or exists (
+       select 1 from contact_sectors cs where cs.contact_id = c.id and cs.sector_id = @sector_id))
+  and (@module_id::bigint = 0 or exists (
+       select 1 from contact_modules cm where cm.contact_id = c.id and cm.module_id = @module_id))
+  and (@municipality_id::bigint = 0 or o.municipality_id = @municipality_id)
+  and (@organization_id::bigint = 0 or c.organization_id = @organization_id);
 
 -- name: ListSectorsOfContacts :many
 select cs.contact_id, s.id, s.name
