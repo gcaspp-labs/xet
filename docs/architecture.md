@@ -1,6 +1,6 @@
 # Arquitetura técnica — Central de atendimento via WhatsApp
 
-Decisões técnicas do piloto. As regras de negócio estão em [spec.md](spec.md).
+O estado técnico atual do xet. As regras de negócio estão em [spec.md](../spec.md), o modelo de dados em [data-model.md](data-model.md) e as decisões difíceis de reverter, com o motivo, em [adr/](adr/).
 
 ## Componentes
 
@@ -12,12 +12,12 @@ Decisões técnicas do piloto. As regras de negócio estão em [spec.md](spec.md
 | Banco de dados | PostgreSQL | Dados do atendimento, auditoria e sessões do Whatsmeow |
 | Arquivos | Disco local (volume) | Anexos, áudios, imagens e vídeos |
 | Proxy | Caddy | Entrega da interface e repasse da API, em HTTP dentro do Compose |
-| Publicação | Cloudflare Tunnel e Access (`cloudflared`) | HTTPS, conexão só de saída, sem porta aberta no servidor, e controle de acesso antes do login |
+| Publicação | Cloudflare Tunnel e Access (`cloudflared`) | HTTPS, conexão só de saída, sem porta aberta no servidor, e controle de acesso antes do login ([ADR 0004](adr/0004-cloudflare-tunnel-access.md)) |
 | Implantação | Docker Compose | Mesmo arquivo para servidor local ou VPS |
 
 ## Princípios
 
-- **Adaptadores só onde há troca prevista:** a mensageria (Whatsmeow → API oficial) e o armazenamento de arquivos (disco → S3 ou similar). O restante do sistema usa as bibliotecas diretamente, sem camadas de abstração extras.
+- **Adaptadores só onde há troca prevista:** a mensageria ([ADR 0001](adr/0001-messaging-adapter-whatsmeow.md)) e o armazenamento de arquivos. A regra está no `AGENTS.md`.
 - **Armazenamento de arquivos substituível:** anexos são gravados por uma interface de armazenamento; no piloto, disco local. Pode passar para armazenamento de objetos (S3 ou similar) numa migração para VPS.
 - **Mensagens idempotentes:** cada mensagem é gravada com o identificador externo do provedor, evitando duplicidade em reconexões.
 - **Mídia baixada na chegada:** anexos recebidos são baixados e salvos imediatamente, pois os links do WhatsApp expiram.
@@ -25,7 +25,7 @@ Decisões técnicas do piloto. As regras de negócio estão em [spec.md](spec.md
 
 ## Adaptador de mensageria
 
-A migração futura para a API oficial do WhatsApp (Cloud API) deve consistir em escrever um novo adaptador, sem alterar regras de atendimento nem dados.
+A migração futura para a API oficial do WhatsApp (Cloud API) deve consistir em escrever um novo adaptador, sem alterar regras de atendimento nem dados ([ADR 0001](adr/0001-messaging-adapter-whatsmeow.md)).
 
 ### Contrato
 
@@ -66,18 +66,11 @@ O pacote `internal/helpdesk/messaging` define a interface e os tipos neutros; ca
 
 ## Regras críticas no banco
 
-- **Assumir chamado:** atualização condicional (só assume se ainda não tiver responsável), garantindo que apenas um atendente vença quando houver cliques simultâneos.
-- **Um chamado aberto por contato e setor:** índice único parcial no banco, impedindo chamados abertos duplicados.
-- **Responder:** o backend verifica o responsável a cada envio; a interface apenas reflete a regra.
-- **Auditoria:** transferências, alterações de horários, correções (com motivo) e trocas de órgão gravadas em tabela própria, com autor, data, valores anteriores e novos.
-
-## Modelo de dados
-
-Entidades, ligações, restrições e permissões estão em [modelo-dados.md](modelo-dados.md).
+As regras de concorrência, idempotência e auditoria estão no `AGENTS.md` (Idempotência, concorrência e consistência), e as restrições que as garantem, em [data-model.md](data-model.md).
 
 ## Tempo real
 
-- O painel recebe novas mensagens, mudanças de fila, responsáveis e status da conexão por WebSocket, filtrados pelo setor do usuário (todos, para o administrador).
+- O painel recebe novas mensagens, mudanças de fila, responsáveis e status da conexão por WebSocket, filtrados pelo setor do usuário (todos, para o administrador). Os eventos são avisos, e os dados vêm sempre pela API ([ADR 0003](adr/0003-realtime-notices-not-data.md)).
 - Um único endpoint, `GET /api/ws`, autenticado pelo cookie de sessão. O servidor mantém em memória apenas as conexões abertas (pacote `internal/core/realtime`), protegidas por mutex; cada conexão guarda o usuário e só recebe eventos dos setores a que ele tem acesso.
 - Os eventos são avisos, não dados: `{"type": "ticket", "sectorId": 1, "ticketId": 10}` quando um chamado é criado, recebe ou envia mensagem, muda a situação de entrega de uma mensagem, ganha nota interna ou "falou com", é assumido ou transferido, ou quando o nome ou o cadastro do contato muda (um aviso por chamado aberto dele), e `{"type": "connection", "sectorId": 1}` quando muda a conexão do número. A interface recarrega pela API o que mudou (TanStack Query), que continua sendo a única fonte dos dados e das permissões.
 - Os eventos são publicados somente depois do commit da transação. A publicação não bloqueia: uma conexão lenta, com a fila de saída cheia, é encerrada, e a interface reconecta e recarrega tudo.
@@ -110,14 +103,7 @@ Entidades, ligações, restrições e permissões estão em [modelo-dados.md](mo
 
 O formulário de órgão consulta o CNPJ na [BrasilAPI](https://brasilapi.com.br/docs) (`GET /api/cnpj/v1/{cnpj}`), pelo backend e fora de qualquer transação. Não há adaptador, porque não há segunda implementação prevista: o pacote `directory` chama a API com `net/http`, na URL de `CNPJ_API_URL`, que aponta para um servidor falso nos testes.
 
-Opções testadas em novembro de 2026, com CNPJ existente, inexistente e alfanumérico:
-
-| | BrasilAPI | CNPJá (API pública) | ReceitaWS |
-| --- | --- | --- | --- |
-| Custo e chave | Gratuita, sem chave | Gratuita, sem chave | Rota testada sem chave |
-| Limite | Nenhum publicado encontrado | 5 consultas por minuto por IP | Não confirmado |
-| Código IBGE do município | Sim | Sim | Não |
-| CNPJ alfanumérico de exemplo, não registrado | 404, com o formato reconhecido | 404 | HTTP 200 com `status: ERROR` |
+A comparação com CNPJá e ReceitaWS está em [research/cnpj-lookup.md](research/cnpj-lookup.md).
 
 - **Escolha:** a BrasilAPI devolve o código IBGE e responde com 404 claro quando não encontra o CNPJ. O cadastro de órgãos tem pouco volume, então a falta de limite publicado pesa pouco, e um limite ou uma queda só levam ao aviso.
 - **CNPJ alfanumérico:** a chamada é aceita, mas ainda não foi testada com um CNPJ alfanumérico registrado.
@@ -139,7 +125,7 @@ Opções testadas em novembro de 2026, com CNPJ existente, inexistente e alfanum
 - No CI o `ffmpeg` vem do binário estático da imagem `mwader/static-ffmpeg`, fixada por digest no `Makefile` (`make ci-ffmpeg`), em vez do `apt-get`, que levava mais de um minuto e chegou a travar.
 - O lint do backend monta no container os caches do Go e do golangci-lint (`LINT_CACHE_DIR`, padrão `~/.cache/xet-lint`), guardados no CI com `actions/cache`.
 - Quando os testes ponta a ponta falham, o relatório e os traces do Playwright ficam como artefato por 7 dias.
-- Os testes ponta a ponta rodam contra o build de produção do frontend (`vite build` + `vite preview`, com o mesmo proxy de `/api`), não contra o servidor de desenvolvimento. O servidor de desenvolvimento compila cada módulo no primeiro acesso: com vários navegadores em paralelo e o cache vazio, como no CI, os primeiros carregamentos estouravam os tempos de espera e os testes falhavam ao acaso.
+- Os testes ponta a ponta rodam contra o build de produção do frontend (`vite build` + `vite preview`, com o mesmo proxy de `/api`), não contra o servidor de desenvolvimento ([ADR 0006](adr/0006-e2e-against-production-build.md)).
 
 ## Bibliotecas padrão
 
@@ -184,7 +170,7 @@ Ferramentas de desenvolvimento (não entram no binário, executadas via Docker c
 | Dados do servidor | TanStack Query |
 | Formulários | React Hook Form + Zod (validação), ligados por `@hookform/resolvers` |
 | Estilo | Tailwind CSS |
-| Design system | `github:gcaspp-labs/glab-design-system` (tokens, logos), fixado por commit; aplicação em [design.md](design.md) |
+| Design system | `github:gcaspp-labs/glab-design-system` (tokens, logos), fixado por commit; aplicação em [design.md](../design.md) |
 | Componentes | shadcn/ui (estilo `base-nova`, sobre Base UI; padrão atual do shadcn), adaptado ao design system |
 | Tema | Preferência guardada no `localStorage` do navegador, por aparelho, e aplicada em `data-theme` antes de pintar a tela. Não vai para o banco |
 | Fontes | `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-serif`, `@fontsource/ibm-plex-mono` (servidas localmente) |
@@ -197,7 +183,7 @@ Ferramentas de desenvolvimento (não entram no binário, executadas via Docker c
 | Lint | oxlint |
 | Formatação | Prettier |
 
-O oxlint substitui o ESLint: é o padrão do template atual do Vite e o projeto usa TypeScript 7, ainda não suportado pelo typescript-eslint.
+O oxlint substitui o ESLint ([ADR 0005](adr/0005-oxlint-instead-of-eslint.md)).
 
 ## Estrutura do repositório
 
@@ -227,7 +213,7 @@ frontend/                Aplicação React
 deploy/                  Docker Compose, Caddyfile
 ```
 
-`internal/core` não importa módulos, e um módulo importa só o `core` e os pacotes de apoio (`db`, `testdb`, `testapi`), nunca outro módulo. As duas regras são garantidas pelo `depguard`, em `backend/.golangci.yml`: o `make lint` falha se forem quebradas. Módulo novo ganha pasta própria em `internal/`, uma regra no `depguard` e uma linha em `internal/server`.
+`internal/core` não importa módulos, e um módulo importa só o `core` e os pacotes de apoio (`db`, `testdb`, `testapi`), nunca outro módulo ([ADR 0002](adr/0002-modular-monolith.md)). Dentro de `core`, `users`, `sectors`, `directory` e `realtime` usam `auth`, e todos podem usar `audit` e `httpx`; `helpdesk/messaging` não conhece nenhum outro domínio e só emite eventos. As regras entre módulos são garantidas pelo `depguard`, em `backend/.golangci.yml`: o `make lint` falha se forem quebradas. Módulo novo ganha pasta própria em `internal/`, uma regra no `depguard` e uma linha em `internal/server`.
 
 Cada pacote com rotas expõe um `Handler` com `Routes(r chi.Router)`; `internal/server` só os monta. As rotas de `auth` ficam fora da exigência de sessão, porque incluem o login, e as dos demais já chegam com ela.
 

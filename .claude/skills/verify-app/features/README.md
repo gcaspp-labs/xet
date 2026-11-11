@@ -26,7 +26,7 @@ O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regr
 Cada arquivo lista as sub-features com uma destas marcas, e o `evidence.sh` copia as duas últimas para o resumo:
 
 - `[jornada]`: a jornada percorre e confere. Só vale como provado se ela tiver passado **nesta** execução.
-- `[manual]`: depende do WhatsApp real. Fica para a verificação manual, com número de teste, e nunca conta como provado aqui. A situação geral está em `validacao-piloto.md`.
+- `[manual]`: depende do WhatsApp real. Fica para a verificação manual, com número de teste, e nunca conta como provado aqui. A situação geral está em `docs/pilot-validation.md`.
 - `[não coberto]`: dá para percorrer com o adaptador falso, mas a jornada ainda não faz. Hoje só os testes automatizados citados cobrem.
 
 ## Partes do app fora deste mapa

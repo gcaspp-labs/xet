@@ -3,12 +3,12 @@
 Documentos do projeto:
 
 - [spec.md](spec.md): regras de negócio. É a fonte da verdade sobre o comportamento do sistema, até a migração para `docs/features/` (ver `docs/agents/domain.md`).
-- [arquitetura.md](arquitetura.md): decisões técnicas, bibliotecas padrão e estrutura do repositório.
-- [modelo-dados.md](modelo-dados.md): domínios, entidades, ligações, restrições e permissões. Migrações seguem este documento; mudanças no modelo são registradas nele antes da migração.
+- [docs/architecture.md](docs/architecture.md): estado técnico atual: componentes, contrato da mensageria, bibliotecas padrão e estrutura do repositório.
+- [docs/adr/](docs/adr/): decisões técnicas difíceis de reverter, com o motivo.
+- [docs/data-model.md](docs/data-model.md): domínios, entidades, ligações, restrições e permissões. Migrações seguem este documento; mudanças no modelo são registradas nele antes da migração. As migrações antigas o citam pelo nome anterior, `modelo-dados.md`.
 - [design.md](design.md): aplicação do design system da GCASPP LAB com shadcn/ui: tokens, tema, tipografia, componentes, ícones, marca e tom dos textos.
-- Issues do GitHub: specs (rótulo `spec`) e os tickets delas como sub-issues. Rótulos em `docs/agents/labels.md`.
-- [tasks.md](tasks.md): histórico das tasks concluídas até a T49 e ideias em avaliação. As issues até a #103 com o rótulo `ready-for-agent` são tasks do fluxo antigo (a issue #80 era a T80).
-- [validacao-piloto.md](validacao-piloto.md): situação dos critérios de validação do piloto, roteiro de implantação e teste de reconexão.
+- Issues do GitHub: specs (rótulo `spec`) e os tickets delas como sub-issues; ideias e problemas com `needs-triage`. Rótulos em `docs/agents/labels.md`. As issues fechadas até a #103 com `ready-for-agent` são tasks do fluxo antigo (a issue #80 era a T80); as tasks T01 a T49 ficam só no histórico do git.
+- [docs/pilot-validation.md](docs/pilot-validation.md): situação dos critérios de validação do piloto, roteiro de implantação e teste de reconexão.
 
 ## Fluxo de trabalho
 
@@ -48,14 +48,14 @@ O fluxo segue as skills de agente configuradas em `docs/agents/` (ver "Agent ski
 
 ## Adaptadores
 
-- Usar adaptador apenas onde há troca prevista: mensageria (Whatsmeow → API oficial) e armazenamento de arquivos. Ver `arquitetura.md`.
+- Usar adaptador apenas onde há troca prevista: mensageria (Whatsmeow → API oficial) e armazenamento de arquivos. Ver `docs/architecture.md`.
 - Não criar interfaces, camadas ou repositórios genéricos sem uma segunda implementação prevista. O código de domínio usa sqlc e as bibliotecas diretamente.
 
 ## Código
 
 - Nomes de código, banco, rotas e variáveis em inglês. Textos de interface, mensagens ao usuário e documentação em português.
 - Toda tela segue o `design.md`: cores somente por tokens (nunca cores fixas ou a paleta padrão do Tailwind), componentes do shadcn adaptados ao design system e textos no tom do brand book.
-- Usar somente as bibliotecas listadas em `arquitetura.md`. Uma nova biblioteca exige justificativa registrada lá antes do uso.
+- Usar somente as bibliotecas listadas em `docs/architecture.md`. Uma nova biblioteca exige justificativa registrada lá antes do uso.
 - As regras de negócio nunca importam o Whatsmeow diretamente; passam pela interface de mensageria.
 - Toda validação de permissão acontece no backend. A interface apenas reflete as regras.
 - SQL escrito em `backend/db/queries` e gerado com `make sqlc` (o código gerado em `internal/db` não é editado à mão); mudanças de esquema somente por nova migração goose em `backend/db/migrations`, nunca alterando uma migração já mergeada.
@@ -85,7 +85,7 @@ Configuração do fluxo com agentes, um arquivo por assunto em `docs/agents/`:
 
 - Issues: GitHub `gcaspp-labs/xet`, pelo `gh`, com sub-issues e bloqueios nativos. `docs/agents/issue-tracker.md`
 - Rótulos: categoria, triagem, `spec`, `in-progress`, `to-docs` e risco. `docs/agents/labels.md`
-- Domínio e regras das funcionalidades: um contexto só; `spec.md` até a migração para `docs/features/`, modelo em `modelo-dados.md`. `docs/agents/domain.md`
+- Domínio e regras das funcionalidades: um contexto só; `spec.md` até a migração para `docs/features/`, modelo em `docs/data-model.md`. `docs/agents/domain.md`
 - Design: `design.md` na raiz (GCASPP LAB com shadcn/ui); capturas só em desktop. `docs/agents/design.md`
 - Comandos: main; `make dev`, `make test`, `make lint`, `make check-generated`; uma task por vez; evidência: `journeys`. `docs/agents/commands.md`
 - Trava do merge: os 4 jobs do CI verdes; sem a pessoa, só `risk:low` sem área sensível. `docs/agents/merge-gate.md`

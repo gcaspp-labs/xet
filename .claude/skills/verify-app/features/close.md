@@ -17,7 +17,7 @@ O responsável encerra o chamado com o formulário completo, ou cancela o que n�
 - [não coberto] Cancelamento de chamado em atendimento e as permissões do cancelamento (`closing.spec.ts`).
 - [não coberto] Trocar o órgão só para este chamado, no formulário (`closing.spec.ts`).
 
-Encerrar não depende do WhatsApp real: a matriz de `validacao-piloto.md` marca esses critérios como "Não depende".
+Encerrar não depende do WhatsApp real: a matriz de `docs/pilot-validation.md` marca esses critérios como "Não depende".
 
 ## How to get to it
 

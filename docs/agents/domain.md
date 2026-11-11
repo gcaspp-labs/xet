@@ -9,22 +9,25 @@ Como as skills usam a documentação de domínio do xet ao explorar o código. O
 - **Regras das funcionalidades: hoje, `spec.md` na raiz.** Ele ainda é a fonte atual das regras, por seções (Usuários e acesso, Órgãos e contatos, Recebimento e distribuição, Conversa, Transferências, Encerramento…). A migração para `docs/features/<funcionalidade>.md` está decidida e será feita pela `to-docs` no modo de migração. Depois dela:
   - **`docs/features/<funcionalidade>.md`** traz as regras atuais de cada funcionalidade que a mudança toca. É a referência do que o sistema faz hoje.
   - **`spec.md`** fica só com o que é global (objetivo, estrutura e implantação, arquitetura técnica, critérios de validação do piloto, referências) e aponta para os arquivos de `docs/features/`. Uma regra global vale para todas as funcionalidades; em conflito, a regra da funcionalidade é a específica e prevalece só no que ela diz.
-- **`modelo-dados.md`** na raiz, quando a mudança mexe em dados: domínios, entidades, ligações, restrições e permissões. Ocupa o lugar de `docs/data-model.md`. Mudanças no modelo são registradas nele antes da migração do banco.
-- **`arquitetura.md`** na raiz: decisões técnicas e as bibliotecas permitidas. Biblioteca nova exige justificativa registrada lá antes do uso.
+- **`docs/data-model.md`**, quando a mudança mexe em dados: domínios, entidades, ligações, restrições e permissões. Mudanças no modelo são registradas nele antes da migração do banco. As migrações antigas o citam como `modelo-dados.md`.
+- **`docs/architecture.md`**: o estado técnico atual e as bibliotecas permitidas. Biblioteca nova exige justificativa registrada lá antes do uso.
+- **`docs/pilot-validation.md`**, quando a mudança mexe na implantação ou em algo que só o WhatsApp real prova: critérios do piloto e roteiros manuais.
 
 Se algum desses arquivos não existir, **siga em silêncio**. Não aponte a ausência nem sugira criá-los antes da hora: a `domain-modeling` cria o glossário e as ADRs quando um termo ou decisão é resolvido, e a `to-docs` cria as regras das funcionalidades.
 
-Não leia nem use `evolucao-modular.md`: é um plano em construção, parado até ordem da pessoa.
+O plano de evolução modular (Contratos, bot e novos módulos) fica só na issue #121, fora do repositório e parado até ordem da pessoa. Não o use como referência.
 
 ## Estrutura
 
 ```
 /
 ├── GLOSSARY.md
-├── spec.md              ← regras globais (e, até a migração, todas as regras)
-├── modelo-dados.md
-├── arquitetura.md
+├── spec.md                  ← regras globais (e, até a migração, todas as regras)
+├── design.md
 ├── docs/
+│   ├── architecture.md
+│   ├── data-model.md
+│   ├── pilot-validation.md
 │   ├── adr/
 │   ├── features/
 │   └── research/

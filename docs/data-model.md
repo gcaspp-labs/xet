@@ -1,6 +1,6 @@
 # Modelo de dados — Central de atendimento via WhatsApp
 
-Domínios, entidades, ligações e regras de integridade. As regras de negócio estão em [spec.md](spec.md) e as decisões técnicas em [arquitetura.md](arquitetura.md).
+Domínios, entidades, ligações e regras de integridade. As regras de negócio estão em [spec.md](../spec.md) e as decisões técnicas em [architecture.md](architecture.md).
 
 Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as tabelas usam `id bigint generated always as identity` como chave primária e registram `created_at timestamptz not null default now()`; tabelas editáveis também têm `updated_at`. Horários são sempre `timestamptz`.
 
@@ -17,7 +17,7 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 | Mensageria | `internal/helpdesk/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
 | Auditoria | `internal/core/audit` | Registro de auditoria | Histórico de alterações relevantes |
 
-Dependências permitidas: `helpdesk` usa os pacotes de `core`, além de `helpdesk/messaging` e `helpdesk/audio`; `core` não usa `helpdesk`, garantido pelo `depguard`. Dentro de `core`, `users`, `sectors`, `directory` e `realtime` usam `auth`, e todos podem usar `audit` e `httpx`. `messaging` não conhece nenhum outro domínio e só emite eventos. Os pacotes gravam pelo código gerado em `db`, e `internal/server` monta as rotas de cada um.
+As dependências entre os pacotes estão em [architecture.md](architecture.md), Estrutura do repositório.
 
 ## Diagrama
 
@@ -409,7 +409,7 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 
 Restrição: `action in ('ticket_corrected', 'ticket_cancelled')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o cancelamento).
 
-A tabela é criada na T03 (primeira ação auditada: redefinição de senha), antes de existir `tickets`; a chave estrangeira de `ticket_id` é adicionada na migração que cria `tickets`.
+A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabela, na migração que cria `tickets`.
 
 | Ação | Quando |
 | --- | --- |

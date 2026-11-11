@@ -94,7 +94,7 @@ var cnpjPattern = regexp.MustCompile(`^[0-9A-Z]{12}[0-9]{2}$`)
 
 // NormalizeCNPJ removes the formatting, upper-cases the letters and checks
 // the format and check digits. It accepts the numeric CNPJ and the
-// alphanumeric one issued since July 2026 (modelo-dados.md).
+// alphanumeric one issued since July 2026 (docs/data-model.md).
 func NormalizeCNPJ(raw string) (string, error) {
 	cnpj := strings.ToUpper(cnpjFormatting.Replace(raw))
 	if !cnpjPattern.MatchString(cnpj) || strings.Count(cnpj, cnpj[:1]) == len(cnpj) {

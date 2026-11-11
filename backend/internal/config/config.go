@@ -20,7 +20,7 @@ type Config struct {
 	MessagingProvider string
 	// StorageDir is the directory of the message attachments.
 	StorageDir string
-	// CNPJAPIURL is the base URL of the CNPJ lookup API (arquitetura.md).
+	// CNPJAPIURL is the base URL of the CNPJ lookup API (docs/architecture.md).
 	CNPJAPIURL string
 }
 

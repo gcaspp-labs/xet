@@ -12,7 +12,7 @@ linters:
     - sqlclosecheck
     - unconvert
   settings:
-    # Fronteiras entre módulos (arquitetura.md, Estrutura do repositório): tudo em
+    # Fronteiras entre módulos (docs/architecture.md, Estrutura do repositório): tudo em
     # internal é proibido, exceto o que cada regra libera. Módulo novo ganha a sua.
     depguard:
       rules:

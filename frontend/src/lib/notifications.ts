@@ -10,7 +10,7 @@ import { type TicketSummary, ticketsQuery } from '@/lib/tickets'
 export type QueuedTicket = TicketSummary & { sectorId: number }
 
 // Chamados que o sino já conhece na fila, por setor. A comparação com a fila recarregada
-// diz o que entrou (arquitetura.md, Tempo real). Sem registro do setor, a carga é a
+// diz o que entrou (docs/architecture.md, Tempo real). Sem registro do setor, a carga é a
 // primeira: só guarda, sem avisar.
 const knownQueue = new Map<number, Set<number>>()
 
