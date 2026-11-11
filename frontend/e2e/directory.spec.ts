@@ -806,4 +806,52 @@ test('contatos em páginas de 20, ordenados pela coluna, com página e ordem no 
   await page.reload()
   await expect(page.getByLabel('Buscar contatos')).toHaveValue(`${id} 1`)
   await expect(rows).toHaveCount(10)
+
+  // Coluna desconhecida no endereço volta à ordem padrão inteira: nome, crescente.
+  await page.goto('/contatos?ordem=inexistente&direcao=desc')
+  await expect(rows.first()).toContainText(names[0])
+  await expect(page.getByRole('columnheader', { name: 'Contato' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+})
+
+test('reabrir o endereço com órgão restaura o filtro, mesmo sem contatos encontrados', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const { id } = unique()
+  const organizations = await seedDirectory(
+    baseURL!,
+    [
+      { name: `Câmara ${id}`, municipality: 'Ibiúna' },
+      { name: `Prefeitura ${id}`, municipality: 'Ibiúna' },
+    ],
+    [
+      { name: `Gina ${id}`, phone: `5511${id}`, organization: 0, sector: own.sector.id },
+      { name: `Hugo ${id}`, phone: `5521${id}`, organization: 1, sector: own.sector.id },
+    ],
+  )
+  const prefeitura = organizations[1].id
+  await signIn(page, own.agent, userPassword)
+  const rows = page.getByRole('row').filter({ hasText: id })
+  const organizationFilter = page.getByRole('combobox', { name: 'Filtrar por órgão' })
+  const municipalityFilter = page.getByRole('combobox', { name: 'Filtrar por município' })
+
+  // Lista vazia: o órgão do endereço continua no campo.
+  await page.goto(`/contatos?orgao=${prefeitura}&busca=${encodeURIComponent(`${id} ninguém`)}`)
+  await expect(page.getByText('Nenhum contato encontrado')).toBeVisible()
+  await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
+
+  // Escolher o município do órgão restaurado mantém o órgão no filtro.
+  await page.goto(`/contatos?orgao=${prefeitura}&busca=${id}`)
+  await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
+  await municipalityFilter.fill('ibiuna')
+  await page.getByRole('option', { name: 'Ibiúna', exact: true }).click()
+  await expect(page).toHaveURL(/municipio=/)
+  await expect(page).toHaveURL(new RegExp(`orgao=${prefeitura}`))
+  await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(`Hugo ${id}`)
 })
