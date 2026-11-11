@@ -36,7 +36,7 @@ Encerrar não depende do WhatsApp real: a matriz de `docs/pilot-validation.md` m
 ## Driving it
 
 ```bash
-.claude/skills/verify-app/scripts/drive.sh close
+scripts/verify/scripts/drive.sh close
 ```
 
 - Formulário: `getByRole('dialog', { name: 'Encerrar chamado' })`, com `getByLabel('Assunto')`, `getByLabel('Resolução')`, `getByRole('checkbox', { name: 'Folha' })`, `getByLabel('Órgão')`, seguido de `getByRole('option', { name })`, `getByLabel('Início')` e `getByLabel('Fim')`.

@@ -28,6 +28,7 @@ Um PR que toca qualquer um destes caminhos nunca entra sem a pessoa. Uma express
 ^deploy/
 ^\.github/
 ^\.claude/
+^scripts/verify/
 ^AGENTS\.md$
 ^CLAUDE\.md$
 ^docs/agents/
@@ -35,7 +36,7 @@ Um PR que toca qualquer um destes caminhos nunca entra sem a pessoa. Uma express
 ^frontend/playwright\.config\.ts$
 ```
 
-São as migrações, o login e as permissões, a integração com o WhatsApp (Whatsmeow), a implantação, o CI, as regras dos agentes e a configuração dos testes.
+São as migrações, o login e as permissões, a integração com o WhatsApp (Whatsmeow), a implantação, o CI, as regras dos agentes, a configuração dos testes e o kit de verificação (`scripts/verify/`), para uma jornada não ser enfraquecida no mesmo PR que ela prova.
 
 ## Regra de risco
 

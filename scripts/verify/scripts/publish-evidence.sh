@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Leva as evidências para um PR, sem commit em nenhuma branch.
-# Uso: .claude/skills/verify-app/scripts/publish-evidence.sh <número-do-PR> [id-da-execução]
+# Uso: scripts/verify/scripts/publish-evidence.sh <número-do-PR> [id-da-execução]
 # Grava imagens e resumos num commit solto, apontado por refs/verify-app/<execução>: o clone normal
 # não baixa essa referência e o CI não roda nela. Depois comenta no PR com as imagens.
 # O repositório é público: tudo o que for publicado fica aberto a qualquer pessoa. Só publique

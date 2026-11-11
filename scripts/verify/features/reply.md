@@ -32,7 +32,7 @@ O responsável pelo chamado conversa com o contato pela tela da conversa, e ning
 ## Driving it
 
 ```bash
-.claude/skills/verify-app/scripts/drive.sh reply
+scripts/verify/scripts/drive.sh reply
 ```
 
 - Área da conversa: `getByRole('region', { name: 'Conversa', exact: true })`.

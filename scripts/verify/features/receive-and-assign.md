@@ -29,7 +29,7 @@ Mensagem de um contato vira chamado na fila do setor, e uma pessoa do setor assu
 ## Driving it
 
 ```bash
-.claude/skills/verify-app/scripts/drive.sh receive-and-assign
+scripts/verify/scripts/drive.sh receive-and-assign
 ```
 
 - A mensagem do contato vem do adaptador falso: `t.phone(setor).receive(contato, texto)`, que chama `POST /api/test/messaging/sectors/{id}/receive` e devolve o identificador, para repetir a entrega.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Encerra só o que a execução iniciou e preserva as evidências.
-# Uso: .claude/skills/verify-app/scripts/cleanup.sh [id-da-execução]
+# Uso: scripts/verify/scripts/cleanup.sh [id-da-execução]
 # Pode ser repetido sem efeito. Saída 1 se sobrar porta, processo ou contêiner da execução.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"

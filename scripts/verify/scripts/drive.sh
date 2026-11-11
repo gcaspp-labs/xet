@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Conduz jornadas, uma de cada vez, com um navegador só.
-# Uso: .claude/skills/verify-app/scripts/drive.sh [--video] <jornada|caminho/arquivo.mjs|all> ...
+# Uso: scripts/verify/scripts/drive.sh [--video] <jornada|caminho/arquivo.mjs|all> ...
 # Exemplos: drive.sh receive-and-assign reply
 #           drive.sh --video close
 #           drive.sh all
