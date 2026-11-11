@@ -1,7 +1,7 @@
 // PROTÓTIPO #135 — descartável, não vai para a main.
-// Três versões da aba Assuntos no cartão Chamado, trocadas por `?variant=` (A, B, C),
+// Versão aprovada (C, soluções em cartões) da aba Assuntos no cartão Chamado,
 // na rota /chamados/:ticketId. Dados fictícios (src/prototype/fakeApi.ts).
-import { BookOpen, ChevronDown, ChevronRight, Copy, SearchX } from 'lucide-react'
+import { BookOpen, Copy, SearchX } from 'lucide-react'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -15,14 +15,6 @@ import { useClosingForm } from '@/lib/conversation'
 import { cn } from '@/lib/utils'
 
 export const variants = {
-  A: {
-    label: 'A (lista expansível)',
-    width: 'lg:grid-cols-[minmax(0,1fr)_460px] xl:grid-cols-[280px_minmax(0,1fr)_460px]',
-  },
-  B: {
-    label: 'B (assuntos | soluções)',
-    width: 'lg:grid-cols-[minmax(0,1fr)_560px] xl:grid-cols-[280px_minmax(0,1fr)_560px]',
-  },
   C: {
     label: 'C (soluções em cartões)',
     width: 'lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[280px_minmax(0,1fr)_420px]',
@@ -34,7 +26,7 @@ const keys = Object.keys(variants) as VariantKey[]
 export function useVariant(): VariantKey {
   const [params] = useSearchParams()
   const v = params.get('variant') as VariantKey | null
-  return v && v in variants ? v : 'A'
+  return v && v in variants ? v : 'C'
 }
 
 // Estado por chamado, só na memória deste navegador: aba, busca e assunto aberto.
@@ -94,101 +86,6 @@ function NoResults() {
 }
 
 type Props = { list: FormSubject[]; view: View; set: (p: Partial<View>) => void }
-
-// A: assuntos fechados com o número de soluções; abre um ou vários. Com busca, tudo aberto.
-function VariantA({ list, view, set }: Props) {
-  const searching = view.query.trim() !== ''
-  return (
-    <ul className="flex flex-col divide-y divide-line-soft rounded-(--radius-8) border border-line">
-      {list.map((subject) => {
-        const open = searching || view.open.includes(subject.id)
-        return (
-          <li key={subject.id}>
-            <button
-              type="button"
-              aria-expanded={open}
-              onClick={() =>
-                set({
-                  open: open
-                    ? view.open.filter((id) => id !== subject.id)
-                    : [...view.open, subject.id],
-                })
-              }
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-surface-2"
-            >
-              {open ? (
-                <ChevronDown strokeWidth={1.7} className="size-[15px] text-ink-soft" aria-hidden />
-              ) : (
-                <ChevronRight strokeWidth={1.7} className="size-[15px] text-ink-soft" aria-hidden />
-              )}
-              <span className="body-strong flex-1">{subject.name}</span>
-              <span className="caption text-ink-faint">
-                {subject.solutions.length} {subject.solutions.length === 1 ? 'solução' : 'soluções'}
-              </span>
-            </button>
-            {open && (
-              <ul className="flex flex-col gap-2 px-3 pb-3">
-                {subject.solutions.map((solution) => (
-                  <li key={solution.id} className="rounded-(--radius-7) bg-surface-2 p-3">
-                    <p className="body whitespace-pre-line">{solution.body}</p>
-                    <div className="mt-2 flex justify-end">
-                      <CopyButton text={solution.body} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-// B: lista de assuntos à esquerda, soluções do escolhido à direita.
-function VariantB({ list, view, set }: Props) {
-  const selected = list.find((s) => s.id === view.open[0]) ?? list[0]
-  return (
-    <div className="grid min-h-0 flex-1 grid-cols-[170px_minmax(0,1fr)] gap-3">
-      <nav
-        aria-label="Assuntos do setor"
-        className="flex flex-col gap-0.5 overflow-y-auto border-r border-line-soft pr-3"
-      >
-        {list.map((subject) => (
-          <button
-            key={subject.id}
-            type="button"
-            aria-current={subject.id === selected.id}
-            onClick={() => set({ open: [subject.id] })}
-            className={cn(
-              'flex items-center justify-between gap-2 rounded-(--radius-7) px-2.5 py-2 text-left',
-              subject.id === selected.id
-                ? 'bg-accent-soft text-accent-strong'
-                : 'text-ink-soft hover:bg-surface-2',
-            )}
-          >
-            <span className="body-strong">{subject.name}</span>
-            <span className="caption">{subject.solutions.length}</span>
-          </button>
-        ))}
-      </nav>
-      <section
-        aria-label={`Soluções de ${selected.name}`}
-        className="flex flex-col gap-2 overflow-y-auto"
-      >
-        <h3 className="overline text-ink-soft">{selected.name}</h3>
-        {selected.solutions.map((solution) => (
-          <article key={solution.id} className="rounded-(--radius-8) border border-line p-3">
-            <p className="body whitespace-pre-line">{solution.body}</p>
-            <div className="mt-2 flex justify-end">
-              <CopyButton text={solution.body} />
-            </div>
-          </article>
-        ))}
-      </section>
-    </div>
-  )
-}
 
 // C: lista corrida de soluções, cada uma com a etiqueta do assunto; texto longo recolhido.
 function VariantC({ list }: Props) {
@@ -254,7 +151,7 @@ export function SubjectsTab({
     })),
     view.query,
   )
-  const Variant = { A: VariantA, B: VariantB, C: VariantC }[variant]
+  const Variant = { C: VariantC }[variant]
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <p className="caption text-ink-soft">
