@@ -1,4 +1,11 @@
-import { type APIRequestContext, expect, type Locator, request, type Page } from '@playwright/test'
+import {
+  type APIRequestContext,
+  test as base,
+  expect,
+  type Locator,
+  request,
+  type Page,
+} from '@playwright/test'
 
 // Administrador de teste criado no banco próprio dos testes ponta a ponta.
 export const admin = {
@@ -69,14 +76,66 @@ export async function seedSector(baseURL: string) {
 }
 
 // O banco é compartilhado entre os testes, que rodam em paralelo e deixam números desconectados.
-// Limita a lista de setores da página aos do teste, para a contagem do sino do administrador ser
-// exata. O restante, inclusive a fila e o tempo real, continua vindo do backend.
-export async function onlySectors(page: Page, ...ids: number[]) {
-  await page.route('**/api/sectors', async (route) => {
-    const response = await route.fetch()
-    const sectors = (await response.json()) as SectorData[]
-    await route.fulfill({ response, json: sectors.filter((s) => ids.includes(s.id)) })
+// `onlySectors(...ids)` limita a lista de setores da página aos do teste, para a contagem do sino do
+// administrador ser exata. O restante, inclusive a fila e o tempo real, continua vindo do backend.
+// Um aviso em tempo real no fim do teste refaz a busca de setores, e a interceptação dessa busca
+// pode continuar depois do teste, com o navegador fechando: a resposta já foi descartada ("Response
+// has been disposed") ou a requisição já foi liberada ("Route is already handled"). Ao terminar, o
+// teste encerra a interceptação e ignora só os erros dessas buscas tardias, que nenhuma conferência
+// espera mais.
+export const test = base.extend<{ onlySectors: (...ids: number[]) => Promise<void> }>({
+  onlySectors: async ({ page }, provide) => {
+    let routed = false
+    await provide(async (...ids) => {
+      routed = true
+      await page.route('**/api/sectors', async (route) => {
+        const response = await route.fetch()
+        const sectors = (await response.json()) as SectorData[]
+        await route.fulfill({ response, json: sectors.filter((s) => ids.includes(s.id)) })
+      })
+    })
+    if (routed) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
+    }
+  },
+})
+
+declare global {
+  interface Window {
+    __toasts: string[]
+  }
+}
+
+// Os avisos (toasts) somem em 2,5 s. Com o swap cheio, o processo dos testes pode parar por mais
+// tempo que isso, e o aviso some antes de ser conferido. Registra no navegador o texto de cada aviso
+// que ficou visível; a função devolvida lê o registro, para o teste conferir o que apareceu sem
+// precisar estar olhando na hora. Chame antes de abrir a página.
+// Visível tem o mesmo critério do toBeVisible() do Playwright: caixa com tamanho e sem
+// visibility:hidden nem display:none (no próprio aviso ou num ancestral). Um aviso presente no DOM
+// mas oculto não entra no registro. A conferência roda a cada mudança no DOM (inclusive de atributo
+// e estilo) e a cada 50 ms, para pegar também o aviso que fica visível só por uma transição de CSS.
+export async function recordToasts(page: Page) {
+  await page.addInitScript(() => {
+    window.__toasts = []
+    const check = () => {
+      for (const toast of document.querySelectorAll('[data-sonner-toast]')) {
+        const box = toast.getBoundingClientRect()
+        const visible =
+          box.width > 0 && box.height > 0 && toast.checkVisibility({ visibilityProperty: true })
+        const text = toast.textContent ?? ''
+        if (visible && !window.__toasts.includes(text)) {
+          window.__toasts.push(text)
+        }
+      }
+    }
+    new MutationObserver(check).observe(document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    })
+    setInterval(check, 50)
   })
+  return () => page.evaluate(() => window.__toasts)
 }
 
 // Dígito verificador do CNPJ (módulo 11, cada caractere vale o código ASCII menos 48).

@@ -1,12 +1,11 @@
 import {
   expect,
   request as apiRequest,
-  test,
   type APIRequestContext,
   type Page,
   type WebSocketRoute,
 } from '@playwright/test'
-import { admin, onlySectors, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, seedSector, signIn, test, unique, userPassword } from './fixtures'
 
 declare global {
   interface Window {
@@ -483,6 +482,7 @@ test('administrador não recebe notificação nem som, mesmo com a escolha salva
   context,
   request,
   baseURL,
+  onlySectors,
 }) => {
   const { sector, supervisor } = await connectedSector(baseURL!, request)
   await context.grantPermissions(['notifications'])
@@ -492,7 +492,7 @@ test('administrador não recebe notificação nem som, mesmo com a escolha salva
     localStorage.setItem('alerts.browser', 'on')
     localStorage.setItem('alerts.sound', 'on')
   })
-  await onlySectors(page, sector.id)
+  await onlySectors(sector.id)
   await signIn(page, admin.email, admin.password)
   await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
   await setHidden(page, true)
