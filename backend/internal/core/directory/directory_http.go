@@ -96,15 +96,17 @@ func (h *Handler) listOrganizationMunicipalities(w http.ResponseWriter, r *http.
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-// listOrganizations searches organizations by name, municipality or CNPJ (?q=),
-// in a municipality (?municipalityId=).
+// listOrganizations returns a page of the organizations (?page=,
+// ?sort=name|municipality|cnpj, ?direction=asc|desc; by name by default) found by
+// name, municipality or CNPJ (?q=), in a municipality (?municipalityId=).
 func (h *Handler) listOrganizations(w http.ResponseWriter, r *http.Request) {
 	municipalityID, ok := filterID(r, "municipalityId")
 	if !ok {
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Filtro inválido.")
 		return
 	}
-	orgs, err := h.service.SearchOrganizations(r.Context(), r.URL.Query().Get("q"), municipalityID)
+	orgs, total, page, err := h.service.SearchOrganizations(r.Context(), r.URL.Query().Get("q"), municipalityID,
+		paging.Parse(r, OrganizationSortColumns, SortOrganizationName, false))
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return
@@ -113,7 +115,7 @@ func (h *Handler) listOrganizations(w http.ResponseWriter, r *http.Request) {
 	for i, o := range orgs {
 		out[i] = toOrganizationResponse(o)
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, paging.NewPage(out, total, page))
 }
 
 func (h *Handler) getOrganization(w http.ResponseWriter, r *http.Request) {

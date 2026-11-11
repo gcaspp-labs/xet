@@ -39,7 +39,7 @@ func TestOrganizationsRequireSupervisorOrAdmin(t *testing.T) {
 		t.Errorf("agent update: status %d, want 403", resp.Status)
 	}
 	// Atendentes consultam os órgãos para vincular contatos.
-	if list := e.DoList(http.MethodGet, "/api/organizations", agent); len(list) != 2 {
+	if list := e.DoPageItems("/api/organizations", agent); len(list) != 2 {
 		t.Errorf("agent list: %v", list)
 	}
 	// Também abrem um órgão pelo id, como o filtro de contatos guardado no endereço.
@@ -284,10 +284,7 @@ func TestDirectorySearch(t *testing.T) {
 
 	search := func(path, q string) []string {
 		t.Helper()
-		if path == "/api/contacts" {
-			return names(e.DoPageItems(path+"?q="+url.QueryEscape(q), token))
-		}
-		return names(e.DoList(http.MethodGet, path+"?q="+url.QueryEscape(q), token))
+		return names(e.DoPageItems(path+"?q="+url.QueryEscape(q), token))
 	}
 	contactCases := []struct {
 		q    string
@@ -545,12 +542,12 @@ func TestOrganizationShowsMunicipality(t *testing.T) {
 		return m["name"]
 	}
 	// Mesmo nome: a cidade desempata a ordem e aparece para o atendente, que não lê a lista de municípios.
-	list := e.DoList(http.MethodGet, "/api/organizations?q="+url.QueryEscape("câmara"), agent)
+	list := e.DoPageItems("/api/organizations?q="+url.QueryEscape("câmara"), agent)
 	if len(list) != 2 || municipalityOf(list[0]) != "Jaboticabal" || municipalityOf(list[1]) != "São José do Rio Preto" {
 		t.Fatalf("list: %v", list)
 	}
 	for q, want := range map[string]any{"sao jose do rio": "São José do Rio Preto", "PERUIBE": "Peruíbe", "Peruíbe": "Peruíbe"} {
-		found := e.DoList(http.MethodGet, "/api/organizations?q="+url.QueryEscape(q), agent)
+		found := e.DoPageItems("/api/organizations?q="+url.QueryEscape(q), agent)
 		if len(found) != 1 || municipalityOf(found[0]) != want {
 			t.Errorf("search %q: %v", q, found)
 		}
@@ -566,22 +563,6 @@ func TestOrganizationShowsMunicipality(t *testing.T) {
 	organization, _ = contacts[0]["organization"].(map[string]any)
 	if organization == nil || municipalityOf(organization) != "Jaboticabal" {
 		t.Errorf("contact list: %v", contacts)
-	}
-}
-
-func TestDirectorySearchIsLimited(t *testing.T) {
-	t.Parallel()
-	e := newTestEnv(t, nil)
-	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
-	token := e.Login("admin@exemplo.com", testPassword)
-	if _, err := e.Pool.Exec(t.Context(),
-		`insert into organizations (name, municipality_id)
-		 select 'Órgão ' || lpad(n::text, 3, '0'), (select id from municipalities where name = 'Itu') from generate_series(1, 60) n`); err != nil {
-		t.Fatal(err)
-	}
-	list := e.DoList(http.MethodGet, "/api/organizations?q=ORGAO", token)
-	if len(list) != 50 || list[0]["name"] != "Órgão 001" {
-		t.Fatalf("got %d results starting at %v, want the first 50 by name", len(list), list[0]["name"])
 	}
 }
 
@@ -892,7 +873,7 @@ func TestContactSearchByMunicipalityAndOrganization(t *testing.T) {
 		{fmt.Sprintf("?q=peruibe&municipalityId=%d", itu), nil},
 		{fmt.Sprintf("?q=prefeitura&municipalityId=%d", itu), []string{"Prefeitura"}},
 	} {
-		if got := names(e.DoList(http.MethodGet, "/api/organizations"+tc.query, agent)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+		if got := names(e.DoPageItems("/api/organizations"+tc.query, agent)); fmt.Sprint(got) != fmt.Sprint(tc.want) {
 			t.Errorf("organizations%s: got %v, want %v", tc.query, got, tc.want)
 		}
 	}

@@ -9,6 +9,31 @@ import (
 	"context"
 )
 
+const countOrganizations = `-- name: CountOrganizations :one
+select count(*)
+from organizations o
+join municipalities m on m.id = o.municipality_id
+where ($1::text = ''
+       or immutable_unaccent(o.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(m.name) ilike immutable_unaccent($1)
+       or ($2::text <> '' and o.cnpj like $2))
+  and ($3::bigint = 0 or o.municipality_id = $3)
+`
+
+type CountOrganizationsParams struct {
+	NamePattern    string
+	CnpjPattern    string
+	MunicipalityID int64
+}
+
+// Counts the organizations SearchOrganizations finds, with the same filter.
+func (q *Queries) CountOrganizations(ctx context.Context, arg CountOrganizationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizations, arg.NamePattern, arg.CnpjPattern, arg.MunicipalityID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrganization = `-- name: CreateOrganization :one
 insert into organizations (name, cnpj, municipality_id)
 values ($1, $2, $3)
@@ -124,15 +149,32 @@ where ($1::text = ''
        or immutable_unaccent(m.name) ilike immutable_unaccent($1)
        or ($2::text <> '' and o.cnpj like $2))
   and ($3::bigint = 0 or o.municipality_id = $3)
-order by lower(o.name), lower(m.name), o.id
-limit $4
+order by
+  case when $4::text = 'municipality' and not $5::bool
+       then lower(immutable_unaccent(m.name)) end asc,
+  case when $4::text = 'municipality' and $5::bool
+       then lower(immutable_unaccent(m.name)) end desc,
+  case when $4::text = 'cnpj' and not $5::bool
+       then o.cnpj end asc nulls last,
+  case when $4::text = 'cnpj' and $5::bool
+       then o.cnpj end desc nulls last,
+  case when not $5::bool then lower(immutable_unaccent(o.name)) end asc,
+  case when $5::bool then lower(immutable_unaccent(o.name)) end desc,
+  case when not $5::bool then lower(immutable_unaccent(m.name)) end asc,
+  case when $5::bool then lower(immutable_unaccent(m.name)) end desc,
+  case when not $5::bool then o.id end asc,
+  case when $5::bool then o.id end desc
+limit $7 offset $6
 `
 
 type SearchOrganizationsParams struct {
 	NamePattern    string
 	CnpjPattern    string
 	MunicipalityID int64
-	MaxResults     int32
+	SortColumn     string
+	Descending     bool
+	PageOffset     int32
+	PageSize       int32
 }
 
 type SearchOrganizationsRow struct {
@@ -140,16 +182,22 @@ type SearchOrganizationsRow struct {
 	MunicipalityName string
 }
 
-// An empty query lists by name. name_pattern is an ILIKE pattern compared
+// An empty query lists them all. name_pattern is an ILIKE pattern compared
 // without accents with the names of the organization and its municipality;
 // cnpj_pattern is a LIKE pattern, empty when the query cannot be part of a CNPJ.
-// A zero municipality disables that filter.
+// A zero municipality disables that filter. Keep the filter equal to
+// CountOrganizations. Sorts by the name (default), the municipality or the CNPJ
+// (organizations without one last), ignoring case and accents, then by the
+// name, the municipality and the id, in the same direction.
 func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizationsParams) ([]SearchOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, searchOrganizations,
 		arg.NamePattern,
 		arg.CnpjPattern,
 		arg.MunicipalityID,
-		arg.MaxResults,
+		arg.SortColumn,
+		arg.Descending,
+		arg.PageOffset,
+		arg.PageSize,
 	)
 	if err != nil {
 		return nil, err
