@@ -108,19 +108,32 @@ declare global {
 
 // Os avisos (toasts) somem em 2,5 s. Com o swap cheio, o processo dos testes pode parar por mais
 // tempo que isso, e o aviso some antes de ser conferido. Registra no navegador o texto de cada aviso
-// mostrado; a função devolvida lê o registro, para o teste conferir o que apareceu sem precisar
-// estar olhando na hora. Chame antes de abrir a página.
+// que ficou visível; a função devolvida lê o registro, para o teste conferir o que apareceu sem
+// precisar estar olhando na hora. Chame antes de abrir a página.
+// Visível tem o mesmo critério do toBeVisible() do Playwright: caixa com tamanho e sem
+// visibility:hidden nem display:none (no próprio aviso ou num ancestral). Um aviso presente no DOM
+// mas oculto não entra no registro. A conferência roda a cada mudança no DOM (inclusive de atributo
+// e estilo) e a cada 50 ms, para pegar também o aviso que fica visível só por uma transição de CSS.
 export async function recordToasts(page: Page) {
   await page.addInitScript(() => {
     window.__toasts = []
-    new MutationObserver(() => {
+    const check = () => {
       for (const toast of document.querySelectorAll('[data-sonner-toast]')) {
+        const box = toast.getBoundingClientRect()
+        const visible =
+          box.width > 0 && box.height > 0 && toast.checkVisibility({ visibilityProperty: true })
         const text = toast.textContent ?? ''
-        if (!window.__toasts.includes(text)) {
+        if (visible && !window.__toasts.includes(text)) {
           window.__toasts.push(text)
         }
       }
-    }).observe(document, { childList: true, subtree: true })
+    }
+    new MutationObserver(check).observe(document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    })
+    setInterval(check, 50)
   })
   return () => page.evaluate(() => window.__toasts)
 }
