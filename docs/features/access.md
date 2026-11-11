@@ -5,29 +5,17 @@ Como cada funcionário entra no sistema e o que cada papel pode fazer. Vale para
 ## Regras
 
 1. Cada funcionário tem login individual, com e-mail e senha.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 2. Não há recuperação automática de senha: administradores e supervisores redefinem a senha quando necessário. Quem redefine digita a nova senha e a repassa ao usuário, e as sessões abertas dele são encerradas.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 3. A senha tem no mínimo 8 caracteres, com ao menos uma letra maiúscula, uma minúscula, um número e um caractere especial. É a regra de complexidade adotada pela empresa, como recomenda o guia de segurança da ANPD para agentes de pequeno porte (item 41).
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 4. A senha não pode ser comum ou fácil de adivinhar (NIST SP 800-63B-4): o sistema recusa senhas de uma lista própria, inclusive com variações de maiúsculas, com números e símbolos no começo ou no fim, ou com letras trocadas por símbolos (`Senha@123`, `P@ssw0rd1!`).
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 5. As regras de senha valem ao cadastrar e ao redefinir; senhas já gravadas continuam valendo.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 6. Depois de 5 tentativas de login erradas seguidas com o mesmo e-mail, ou 30 vindas do mesmo IP, o login fica bloqueado por 15 minutos, mesmo com a senha certa. O limite por IP é maior porque um escritório costuma sair por um único IP.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 7. Tentativas erradas com mais de 15 minutos deixam de contar, e o login certo zera a contagem do e-mail. E-mail não cadastrado conta da mesma forma, para a resposta não revelar quais e-mails existem.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 8. Não há botão de desbloqueio: redefinir a senha do usuário libera o e-mail dele na hora.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 9. A sessão expira após 12 horas sem uso, e cada acesso renova o prazo. Sair encerra a sessão imediatamente. Sessões expiradas são apagadas periodicamente, mesmo de quem não volta a entrar.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 10. Cada usuário pertence a um único setor, como atendente ou supervisor, e vê apenas as filas e os atendimentos do próprio setor.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 11. O administrador funciona como supervisor global: acessa todos os setores, além da administração do sistema.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) em 2026-11-11._
 12. As permissões de cada papel seguem a tabela abaixo. Toda permissão é conferida no backend; a tela só reflete a regra.
-   _Fonte: migrada do `spec.md` (Usuários e acesso) e da tabela de permissões de `docs/data-model.md` em 2026-11-11._
 
 ## Permissões
 
@@ -65,4 +53,4 @@ Encerrar: somente o responsável pelo chamado em atendimento, inclusive quando �
 
 ## Histórico
 
-- Nenhuma mudança desde a migração.
+- 2026-11-11: regras migradas do `spec.md` (Usuários e acesso). A tabela de permissões veio de `docs/data-model.md`.

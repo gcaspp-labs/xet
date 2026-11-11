@@ -5,19 +5,12 @@ Cada setor tem um número de WhatsApp, ligado ao sistema pelo QR code. Superviso
 ## Regras
 
 1. Cada setor tem o próprio número de WhatsApp, vinculado pelo QR code.
-   _Fonte: migrada do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração) em 2026-11-11._
 2. O telefone do setor não é digitado: vem do número lido no QR code ao conectar.
-   _Fonte: migrada do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração) em 2026-11-11._
 3. Número já ligado a outro setor é recusado: o aparelho é desvinculado e a tela de conexão mostra o motivo.
-   _Fonte: migrada do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração) em 2026-11-11._
 4. O telefone é apagado quando o número é desvinculado e continua na tela durante quedas temporárias da conexão.
-   _Fonte: migrada do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração) em 2026-11-11._
 5. Os supervisores do setor e os administradores desvinculam o número pela tela de conexão, com confirmação, além de poder desvincular pelo celular.
-   _Fonte: migrada do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração) em 2026-11-11._
 6. Com o número desvinculado, os chamados abertos continuam no sistema, e as respostas falham até um número ser conectado de novo.
-   _Fonte: migrada do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração) em 2026-11-11._
 7. Quando o número de um setor desconecta, o sistema avisa os supervisores e administradores no sino de notificações, sem enviar e-mail, e oferece a tela para reconectar por QR code (ver [notifications.md](notifications.md)).
-   _Fonte: migrada do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração) em 2026-11-11._
 
 ## Fora do escopo / limites conhecidos
 
@@ -29,4 +22,4 @@ Cada setor tem um número de WhatsApp, ligado ao sistema pelo QR code. Superviso
 
 ## Histórico
 
-- Nenhuma mudança desde a migração.
+- 2026-11-11: regras migradas do `spec.md` (Estrutura e implantação; Usuários e acesso › Administração).

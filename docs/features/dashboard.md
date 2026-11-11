@@ -5,41 +5,23 @@ Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, 
 ## Regras
 
 1. O administrador vê todos os setores, e o supervisor, só o próprio. O atendente não vê: não tem o item no menu, e a API recusa.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 2. Os filtros são período (hoje, 7 dias, 30 dias ou datas à escolha), setor (só para o administrador), atendente, módulo e órgão. Abre em "Hoje" e, para o administrador, em todos os setores.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 3. "7 dias" e "30 dias" contam o dia de hoje. Os dias seguem o horário de Brasília.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 4. Atendente e módulo pertencem a um setor: para o administrador, ficam desabilitados até ele escolher um setor, e trocar de setor limpa os dois.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 5. Os números refletem os dados atuais do chamado, inclusive depois de uma correção.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 6. As seções "Agora" e "No período" podem ser recolhidas. Cada uma começa aberta, e a escolha fica no navegador. Recolhida, a seção mantém o título e, em "No período", as datas. Recolher não muda os filtros nem os números.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 7. Os números são os da tabela "Números" abaixo, cada um contado na data indicada.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 8. Na visão de todos os setores, uma transferência conta como transferido na origem e recebido no destino. Um chamado recebido do cliente e depois transferido soma dois recebidos, um em cada setor.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 9. A espera conta só a primeira vez na fila de cada chamado: o tempo depois de devolver à fila não entra. O chamado transferido tem a espera contada no destino, a partir da transferência.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 10. Se a chegada for posterior ao momento em que o chamado foi assumido, por causa do relógio de quem enviou a mensagem, a espera conta como zero.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 11. O tempo de atendimento ignora o "Início" editado no formulário, mas respeita o "Fim" editado. Se o "Fim" for anterior ao momento em que o chamado foi assumido, o chamado fica fora da média. Cancelados também ficam fora.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 12. Sem chamados para calcular, a média aparece como "—".
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 13. Cada filtro vale só para os números em que faz sentido, conforme a tabela "Filtros" abaixo. Nos demais, com aquele filtro ativo, aparece "—" com a indicação "Não se aplica ao filtro".
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 14. O filtro de órgão usa o órgão atual do chamado: chamados sem órgão ficam de fora. Um chamado com vários módulos conta uma vez em cada módulo.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 15. A tabela por atendente mostra nome, em atendimento, iniciados, encerrados, transferidos, cancelados e tempo médio de atendimento, com as mesmas regras e filtros. Lista só quem tem algum número diferente de zero.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 16. Na visão de todos os setores, cada linha da tabela por atendente é uma pessoa em um setor e mostra o setor.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 17. O atendimento é atribuído ao responsável final do chamado, mesmo que ele tenha passado por outras pessoas ou que outra pessoa o tenha cancelado.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 18. Os números se atualizam sozinhos quando um chamado muda, sem recarregar a tela.
-   _Fonte: migrada do `spec.md` (Dashboard do atendimento) em 2026-11-11._
 
 ## Números
 
@@ -79,4 +61,4 @@ Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, 
 
 ## Histórico
 
-- Nenhuma mudança desde a migração.
+- 2026-11-11: regras migradas do `spec.md` (Dashboard do atendimento).
