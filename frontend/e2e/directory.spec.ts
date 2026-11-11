@@ -783,6 +783,20 @@ test('contatos em páginas de 20, ordenados pela coluna, com página e ordem no 
   await expect(rows).toHaveCount(3)
   await expect(page.getByText('Página 2 de 2 · 23 contatos')).toBeVisible()
 
+  // Abrir a consulta do histórico, ir a outra tela e voltar conserva página e ordem.
+  await page.getByRole('button', { name: `Histórico de ${names[19]}` }).click()
+  const history = page.getByRole('dialog', { name: 'Histórico' })
+  await expect(history).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(history).toBeHidden()
+  await page.getByRole('link', { name: 'Órgãos' }).click()
+  await expect(page).toHaveURL(/\/orgaos/)
+  await page.goBack()
+  await expect(page).toHaveURL(/ordem=orgao/)
+  await expect(page).toHaveURL(/pagina=2/)
+  await expect(rows).toHaveCount(3)
+  await expect(rows.first()).toContainText(names[19])
+
   // A busca vai para o endereço e volta à página 1; com tudo numa página, a faixa some.
   await page.getByLabel('Buscar contatos').fill(`${id} 1`)
   await expect(page).toHaveURL(/busca=/)
