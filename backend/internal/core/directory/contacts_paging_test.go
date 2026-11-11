@@ -32,8 +32,8 @@ func TestContactListPages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// contato lists "Contato <from>" to "Contato <to>", up or down.
-	contato := func(from, to int) []string {
+	// numbered lists "Contato <from>" to "Contato <to>", up or down.
+	numbered := func(from, to int) []string {
 		step := 1
 		if to < from {
 			step = -1
@@ -49,25 +49,25 @@ func TestContactListPages(t *testing.T) {
 		want        []string
 		total, page float64
 	}{
-		{"", contato(1, 20), 45, 1},
-		{"?page=2", contato(21, 40), 45, 2},
-		{"?page=3", contato(41, 45), 45, 3},
+		{"", numbered(1, 20), 45, 1},
+		{"?page=2", numbered(21, 40), 45, 2},
+		{"?page=3", numbered(41, 45), 45, 3},
 		// Página além da última devolve a última; página inválida, a primeira.
-		{"?page=9", contato(41, 45), 45, 3},
-		{"?page=abc", contato(1, 20), 45, 1},
-		{"?page=0", contato(1, 20), 45, 1},
-		{"?page=-2", contato(1, 20), 45, 1},
-		{"?direction=desc", contato(45, 26), 45, 1},
-		{"?sort=name&direction=desc&page=3", contato(5, 1), 45, 3},
+		{"?page=9", numbered(41, 45), 45, 3},
+		{"?page=abc", numbered(1, 20), 45, 1},
+		{"?page=0", numbered(1, 20), 45, 1},
+		{"?page=-2", numbered(1, 20), 45, 1},
+		{"?direction=desc", numbered(45, 26), 45, 1},
+		{"?sort=name&direction=desc&page=3", numbered(5, 1), 45, 3},
 		// Coluna desconhecida cai na ordem padrão, com a direção padrão.
-		{"?sort=phone&direction=desc", contato(1, 20), 45, 1},
-		{"?sort=name&direction=sideways", contato(1, 20), 45, 1},
+		{"?sort=phone&direction=desc", numbered(1, 20), 45, 1},
+		{"?sort=name&direction=sideways", numbered(1, 20), 45, 1},
 		// Busca e filtros valem para a lista inteira antes de contar e paginar.
-		{fmt.Sprintf("?sectorId=%d", rh.ID), contato(1, 5), 5, 1},
-		{fmt.Sprintf("?sectorId=%d", contab.ID), contato(1, 20), 45, 1},
-		{"?q=" + url.QueryEscape("contato 3"), contato(30, 39), 10, 1},
-		{fmt.Sprintf("?q=prefeitura&sectorId=%d&sort=name&direction=desc&page=2", contab.ID), contato(25, 6), 45, 2},
-		{fmt.Sprintf("?q=prefeitura&sectorId=%d&page=5", rh.ID), contato(1, 5), 5, 1},
+		{fmt.Sprintf("?sectorId=%d", rh.ID), numbered(1, 5), 5, 1},
+		{fmt.Sprintf("?sectorId=%d", contab.ID), numbered(1, 20), 45, 1},
+		{"?q=" + url.QueryEscape("contato 3"), numbered(30, 39), 10, 1},
+		{fmt.Sprintf("?q=prefeitura&sectorId=%d&sort=name&direction=desc&page=2", contab.ID), numbered(25, 6), 45, 2},
+		{fmt.Sprintf("?q=prefeitura&sectorId=%d&page=5", rh.ID), numbered(1, 5), 5, 1},
 		{"?q=inexistente&page=3", nil, 0, 1},
 	} {
 		items, resp := e.DoPage("/api/contacts"+tc.query, admin)
@@ -89,14 +89,14 @@ func TestContactListSorts(t *testing.T) {
 	contab := e.Sector("Contabilidade")
 	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
 	admin := e.Login("admin@exemplo.com", testPassword)
-	prefeitura := e.Organization(admin, "Prefeitura de Itu", "")
-	camara := e.Organization(admin, "câmara de Salto", "")
-	orgao := e.Organization(admin, "Órgão Central", "")
-	e.Contact(admin, "Érica", "5511988880001", prefeitura, contab.ID)
-	e.Contact(admin, "bruno", "5511988880002", camara, contab.ID)
-	e.Contact(admin, "ana", "5511988880003", camara, contab.ID)
-	e.Contact(admin, "Bruno", "5511988880004", orgao, contab.ID)
-	e.Contact(admin, "Álvaro", "5511988880005", prefeitura, contab.ID)
+	ituHall := e.Organization(admin, "Prefeitura de Itu", "")
+	saltoChamber := e.Organization(admin, "câmara de Salto", "")
+	central := e.Organization(admin, "Órgão Central", "")
+	e.Contact(admin, "Érica", "5511988880001", ituHall, contab.ID)
+	e.Contact(admin, "bruno", "5511988880002", saltoChamber, contab.ID)
+	e.Contact(admin, "ana", "5511988880003", saltoChamber, contab.ID)
+	e.Contact(admin, "Bruno", "5511988880004", central, contab.ID)
+	e.Contact(admin, "Álvaro", "5511988880005", ituHall, contab.ID)
 	// Contato que escreveu e ainda não foi cadastrado: sem órgão, vai para o fim.
 	if _, err := e.Pool.Exec(t.Context(),
 		`insert into contacts (name, phone, registered) values ('Zeca', '5511988880006', false)`); err != nil {
