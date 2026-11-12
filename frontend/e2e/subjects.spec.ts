@@ -168,6 +168,32 @@ test('busca e copia soluções sem interromper a conversa', async ({ page, conte
   await expect(card).toContainText('Nenhum assunto ou solução encontrado.')
 })
 
+test('a aba e a busca não passam para outra pessoa depois de sair', async ({ page, baseURL }) => {
+  const { agent, supervisor, contacts } = await prepare(baseURL!, ['Férias'], 1)
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  const card = page.getByRole('region', { name: 'Chamado', exact: true })
+  await card.getByRole('tab', { name: 'Assuntos' }).click()
+  await card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' }).fill('ferias')
+
+  await page.getByRole('button', { name: 'Transferir' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Transferir chamado' })
+  await sheet.getByRole('combobox', { name: 'Transferir para' }).click()
+  await page.getByRole('option', { name: /Supervisor/ }).click()
+  await sheet.getByRole('button', { name: 'Transferir' }).click()
+  await expect(page.getByText('Chamado transferido')).toBeVisible()
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await page.getByRole('menuitem', { name: 'Sair' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await page.getByLabel('E-mail').fill(supervisor)
+  await page.getByLabel('Senha').fill(userPassword)
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await expect(card.getByRole('tab', { name: 'Detalhes' })).toHaveAttribute('aria-selected', 'true')
+  await card.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })).toHaveValue('')
+})
+
 test('aba respeita responsável, setor e tela estreita', async ({ page, browser, baseURL }) => {
   const first = await prepare(baseURL!, ['Folha'], 1)
   const second = await prepare(baseURL!, [], 1)

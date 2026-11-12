@@ -5,6 +5,11 @@ const views = new Map<number, View>()
 const listeners = new Set<() => void>()
 const defaultView: View = { tab: 'details', query: '' }
 
+export function clearTicketViews() {
+  views.clear()
+  listeners.forEach((listener) => listener())
+}
+
 // As escolhas vivem somente na memória da página, separadas por chamado.
 export function useTicketView(ticketId: number) {
   const view = useSyncExternalStore(
