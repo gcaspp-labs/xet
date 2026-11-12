@@ -1,12 +1,12 @@
 // PROTÓTIPO #128 — descartável, não vai para a main.
 // Histórico do contato e do órgão em páginas de 20 e ordenável. A janela dos
 // cadastros vira tabela (padrão de Contatos, #126). A aba Histórico do chamado
-// tem três versões, trocadas por ?variant= (A, B ou C) ou pela barra amarela.
+// ficou só na versão C aprovada: 5 recentes e o resto na janela grande.
 // Página e ordem ficam em memória aqui; na implementação vão para o endereço.
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, History } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { History } from 'lucide-react'
+import { useState } from 'react'
+import { Link } from 'react-router'
 import { Pagination } from '@/components/Pagination'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/dialog'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api } from '@/lib/api'
 import type { HistoryEntry } from '@/lib/conversation'
 import { formatDateTime, organizationLabel, ticketStatusLabel } from '@/lib/format'
@@ -104,52 +103,6 @@ function ProtocolLink({ entry, onOpen }: { entry: HistoryEntry; onOpen?: () => v
     </Link>
   )
 }
-
-// Paginação curta para a coluna estreita do chamado: setas e "X de Y".
-function CompactPagination({
-  page,
-  total,
-  pageSize,
-  onPage,
-}: {
-  page: number
-  total: number
-  pageSize: number
-  onPage: (page: number) => void
-}) {
-  if (total <= pageSize) {
-    return null
-  }
-  const pages = Math.ceil(total / pageSize)
-  return (
-    <nav aria-label="Paginação" className="flex items-center justify-between gap-2 pt-2">
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label="Página anterior"
-        disabled={page <= 1}
-        onClick={() => onPage(page - 1)}
-      >
-        <ChevronLeft strokeWidth={1.7} aria-hidden />
-      </Button>
-      <p className="caption text-ink-soft">
-        Página <span className="mono-num">{page}</span> de <span className="mono-num">{pages}</span>{' '}
-        · <span className="mono-num">{total}</span> chamados
-      </p>
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label="Próxima página"
-        disabled={page >= pages}
-        onClick={() => onPage(page + 1)}
-      >
-        <ChevronRight strokeWidth={1.7} aria-hidden />
-      </Button>
-    </nav>
-  )
-}
-
-// ---------- Janela dos cadastros (todas as versões) ----------
 
 function HistoryTable({
   kind,
@@ -281,147 +234,6 @@ function EntryCard({ entry, currentTicketId }: { entry: HistoryEntry; currentTic
   )
 }
 
-// A: a lista de hoje, com uma linha "Ordenar por" e paginação curta.
-function SortChips({ list }: { list: HistoryList }) {
-  const options = [
-    ['chegada', 'Chegada'],
-    ['protocolo', 'Protocolo'],
-    ['situacao', 'Situação'],
-  ] as const
-  return (
-    <div className="flex items-center gap-0.5 pb-1">
-      <span className="caption mr-1 text-ink-faint">Ordenar</span>
-      {options.map(([column, label]) => {
-        const active = list.column === column
-        const Icon = list.direction === 'asc' ? ArrowUp : ArrowDown
-        return (
-          <Button
-            key={column}
-            variant={active ? 'outline' : 'ghost'}
-            size="sm"
-            className="h-7 px-2"
-            aria-pressed={active}
-            onClick={() => list.toggleSort(column)}
-          >
-            {label}
-            {active && <Icon strokeWidth={1.7} aria-hidden className="text-accent-strong" />}
-          </Button>
-        )
-      })}
-    </div>
-  )
-}
-
-function SectionA({
-  title,
-  kind,
-  id,
-  ticketId,
-}: {
-  title: string
-  kind: Kind
-  id: number
-  ticketId: number
-}) {
-  const list = useHistoryList()
-  const { data } = useHistoryPage(kind, id, list)
-  return (
-    <section>
-      <h3 className="overline text-ink-soft">{title}</h3>
-      {data && data.total === 0 && <EmptyHistory />}
-      {data && data.total > 0 && (
-        <>
-          <SortChips list={list} />
-          <ul className="flex flex-col divide-y divide-line-soft">
-            {data.items.map((entry) => (
-              <EntryCard key={entry.id} entry={entry} currentTicketId={ticketId} />
-            ))}
-          </ul>
-          <CompactPagination {...data} onPage={list.setPage} />
-        </>
-      )}
-    </section>
-  )
-}
-
-function VariantA({ ticketId, contactId, organization }: TabProps) {
-  return (
-    <div className="flex flex-col gap-6">
-      <SectionA title="Do contato" kind="contact" id={contactId} ticketId={ticketId} />
-      {organization && (
-        <SectionA title="Do órgão" kind="organization" id={organization.id} ticketId={ticketId} />
-      )}
-    </div>
-  )
-}
-
-// B: tabela compacta, com contato/órgão num seletor, uma lista por vez.
-function VariantB({ ticketId, contactId, organization }: TabProps) {
-  const [kind, setKind] = useState<Kind>('contact')
-  return (
-    <div className="flex flex-col gap-3">
-      {organization && (
-        <Tabs value={kind} onValueChange={(value) => setKind(value as Kind)}>
-          <TabsList>
-            <TabsTrigger value="contact">Do contato</TabsTrigger>
-            <TabsTrigger value="organization">Do órgão</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
-      <CompactTable
-        key={kind}
-        kind={kind}
-        id={kind === 'contact' ? contactId : (organization?.id ?? contactId)}
-        ticketId={ticketId}
-      />
-    </div>
-  )
-}
-
-function CompactTable({ kind, id, ticketId }: { kind: Kind; id: number; ticketId: number }) {
-  const list = useHistoryList()
-  const { data } = useHistoryPage(kind, id, list)
-  if (!data) {
-    return null
-  }
-  if (data.total === 0) {
-    return <EmptyHistory />
-  }
-  return (
-    <div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableTableHead label="Protocolo" column="protocolo" list={list} />
-            <SortableTableHead label="Chegada" column="chegada" list={list} />
-            <SortableTableHead label="Situação" column="situacao" list={list} />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.items.map((entry) => (
-            <TableRow key={entry.id}>
-              <TableCell className="whitespace-normal">
-                <ProtocolLink entry={entry} />
-                <p className="caption text-ink-faint">
-                  {entry.id === ticketId
-                    ? 'Este chamado'
-                    : [entry.subject, entry.assigneeName].filter(Boolean).join(' · ') ||
-                      entry.sectorName}
-                </p>
-              </TableCell>
-              <TableCell className="mono-num caption">{formatDateTime(entry.arrivedAt)}</TableCell>
-              <TableCell>
-                <StatusBadge entry={entry} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <CompactPagination {...data} onPage={list.setPage} />
-    </div>
-  )
-}
-
 // C: só os 5 mais recentes na aba; o histórico inteiro abre na janela grande.
 function RecentSection({
   title,
@@ -488,52 +300,12 @@ function VariantC({ ticketId, contactId, organization, contactName }: TabProps) 
   )
 }
 
-const variants = [
-  ['A', 'A (lista + ordenar por)'],
-  ['B', 'B (tabela compacta)'],
-  ['C', 'C (5 recentes + janela)'],
-] as const
-
-export function useHistoryVariant() {
-  const [params] = useSearchParams()
-  const v = params.get('variant')
-  return v === 'B' || v === 'C' ? v : 'A'
-}
-
 export function HistoryTabPrototype(props: TabProps) {
-  const variant = useHistoryVariant()
-  return (
-    <>
-      {variant === 'A' && <VariantA {...props} />}
-      {variant === 'B' && <VariantB {...props} />}
-      {variant === 'C' && <VariantC {...props} />}
-    </>
-  )
+  return <VariantC {...props} />
 }
 
-// Barra de troca de versão: fixa embaixo, amarela, só em desenvolvimento.
+// Barra do protótipo: fixa embaixo, amarela, só em desenvolvimento.
 export function PrototypeSwitcher() {
-  const [, setParams] = useSearchParams()
-  const current = useHistoryVariant()
-  const index = variants.findIndex(([v]) => v === current)
-  const go = (step: number) => {
-    const next = variants[(index + step + variants.length) % variants.length][0]
-    setParams((p) => {
-      const copy = new URLSearchParams(p)
-      copy.set('variant', next)
-      return copy
-    })
-  }
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const el = document.activeElement
-      if (el && (el.matches('input, textarea') || (el as HTMLElement).isContentEditable)) return
-      if (event.key === 'ArrowLeft') go(-1)
-      if (event.key === 'ArrowRight') go(1)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
   if (!import.meta.env.DEV) return null
   return (
     <div
@@ -542,13 +314,7 @@ export function PrototypeSwitcher() {
         'border-2 border-dashed border-black bg-yellow-300 px-3 py-1.5 font-mono text-sm text-black shadow-lg',
       )}
     >
-      <button type="button" aria-label="Versão anterior" onClick={() => go(-1)}>
-        ←
-      </button>
-      <span>Protótipo #128 · {variants[index][1]}</span>
-      <button type="button" aria-label="Próxima versão" onClick={() => go(1)}>
-        →
-      </button>
+      <span>Protótipo #128 · C (5 recentes + janela) — aprovada</span>
     </div>
   )
 }

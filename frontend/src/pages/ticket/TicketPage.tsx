@@ -37,11 +37,7 @@ import { ConversationList } from '@/components/ConversationList'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { TicketHistoryList } from '@/components/TicketHistory'
-import {
-  HistoryTabPrototype,
-  PrototypeSwitcher,
-  useHistoryVariant,
-} from '@/components/TicketHistory.prototype'
+import { HistoryTabPrototype, PrototypeSwitcher } from '@/components/TicketHistory.prototype'
 import { Topbar } from '@/components/Topbar'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -1007,7 +1003,6 @@ export default function TicketPage() {
   const openRegistration = () => setRegistering(true)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
   const [view, setView] = useTicketView(ticketId)
-  const historyVariant = useHistoryVariant() // PROTÓTIPO #128
 
   if (error) {
     return (
@@ -1130,11 +1125,9 @@ export default function TicketPage() {
       <div
         className={cn(
           'grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px]',
-          historyVariant === 'B' && view.tab === 'history'
-            ? 'lg:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[280px_minmax(0,1fr)_480px]'
-            : subjectsOpen
-              ? 'lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[280px_minmax(0,1fr)_420px]'
-              : 'lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]',
+          subjectsOpen
+            ? 'lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[280px_minmax(0,1fr)_420px]'
+            : 'lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]',
         )}
       >
         {assign.error && (
