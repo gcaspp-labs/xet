@@ -1,16 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Tags } from 'lucide-react'
+import { CircleAlert, Plus, Tags } from 'lucide-react'
 import { type FormEvent, Fragment, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormDialog } from '@/components/FormDialog'
 import { SearchBox } from '@/components/SearchBox'
 import { PageContent, Topbar } from '@/components/Topbar'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -30,10 +32,12 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import {
   filterSubjects,
+  type Module,
   type Solution,
   type Subject,
   useDeleteSolution,
   useDeleteSubject,
+  useModules,
   useSaveSolution,
   useSaveSubject,
   useSectors,
@@ -41,7 +45,9 @@ import {
 } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
 
+// PROTÓTIPO #150: o módulo vem antes do nome e é obrigatório.
 const schema = z.object({
+  moduleId: z.string({ error: 'Escolha o módulo.' }).min(1, 'Escolha o módulo.'),
   name: z.string().trim().min(1, 'Informe o nome do assunto.'),
 })
 
@@ -50,30 +56,40 @@ type FormValues = z.infer<typeof schema>
 function SubjectSheet({
   sectorId,
   subject,
+  modules,
   open,
   onOpenChange,
 }: {
   sectorId: number
   subject: Subject | null
+  modules: Module[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const save = useSaveSubject(sectorId)
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: subject?.name ?? '' },
+    defaultValues: { name: subject?.name ?? '', moduleId: subject?.module?.id.toString() ?? '' },
   })
+  // Só os módulos ativos; ao editar, o módulo atual continua mesmo desativado.
+  const moduleItems = modules
+    .filter((m) => m.active || m.id === subject?.module?.id)
+    .map((m) => ({
+      value: m.id.toString(),
+      label: m.active ? m.name : `${m.name} (desativado)`,
+    }))
 
   const onSubmit = handleSubmit((values) => {
     if (save.isPending) {
       return
     }
     save.mutate(
-      { id: subject?.id, name: values.name },
+      { id: subject?.id, name: values.name, moduleId: Number(values.moduleId) },
       {
         onSuccess: () => {
           toast.success('Assunto salvo')
@@ -93,6 +109,43 @@ function SubjectSheet({
       error={save.error?.message}
       onSubmit={onSubmit}
     >
+      <Field data-invalid={!!errors.moduleId}>
+        <FieldLabel htmlFor="subject-module">Módulo</FieldLabel>
+        <Controller
+          control={control}
+          name="moduleId"
+          render={({ field }) => (
+            <Select
+              items={moduleItems}
+              value={field.value || null}
+              onValueChange={(value) => field.onChange(value ?? '')}
+            >
+              <SelectTrigger
+                id="subject-module"
+                className="w-full"
+                aria-invalid={!!errors.moduleId}
+              >
+                <SelectValue placeholder="Escolha o módulo" />
+              </SelectTrigger>
+              <SelectContent>
+                {moduleItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+        <FieldDescription>
+          {subject?.module
+            ? 'Trocar o módulo leva as soluções junto.'
+            : subject
+              ? 'Escolha o módulo para o assunto voltar a aparecer no atendimento.'
+              : 'O assunto aparece no atendimento quando este módulo for marcado.'}
+        </FieldDescription>
+        <FieldError errors={[errors.moduleId]} />
+      </Field>
       <Field data-invalid={!!errors.name}>
         <FieldLabel htmlFor="subject-name">Nome</FieldLabel>
         <Input
@@ -308,8 +361,27 @@ export default function SubjectsPage() {
   const [chosen, setChosen] = useState<number | null>(null)
   const sectorId = user?.sectorId ?? chosen ?? sectors[0]?.id
   const sector = sectors.find((s) => s.id === sectorId)
-  const { data: subjects, isPending } = useSubjects(sectorId)
+  const { data: all, isPending } = useSubjects(sectorId)
+  const { data: modules = [] } = useModules(sectorId)
   const [query, setQuery] = useState('')
+  // PROTÓTIPO #150: filtro por módulo; 'all', o id do módulo ou 'none'.
+  const [moduleFilter, setModuleFilter] = useState('all')
+  const subjects = all?.filter((s) =>
+    moduleFilter === 'all'
+      ? true
+      : moduleFilter === 'none'
+        ? s.module === null
+        : s.module?.id === Number(moduleFilter),
+  )
+  const unclassified = all?.filter((s) => s.module === null).length ?? 0
+  const filterItems = [
+    { value: 'all', label: 'Todos os módulos' },
+    ...modules.map((m) => ({
+      value: m.id.toString(),
+      label: m.active ? m.name : `${m.name} (desativado)`,
+    })),
+    { value: 'none', label: 'Sem módulo' },
+  ]
   const shown = subjects && filterSubjects(subjects, query)
   const [editing, setEditing] = useState<Subject | null>(null)
   const [open, setOpen] = useState(false)
@@ -388,13 +460,56 @@ export default function SubjectsPage() {
             </Select>
           </Field>
         )}
-        {subjects && subjects.length > 0 && (
-          <SearchBox
-            value={query}
-            onChange={setQuery}
-            label="Buscar assuntos"
-            placeholder="Assunto ou solução"
-          />
+        {unclassified > 0 && moduleFilter !== 'none' && (
+          <Alert variant="warning">
+            <CircleAlert strokeWidth={1.7} aria-hidden />
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {unclassified === 1
+                  ? '1 assunto sem módulo não aparece no atendimento.'
+                  : `${unclassified} assuntos sem módulo não aparecem no atendimento.`}{' '}
+                Escolha o módulo de cada um em Editar.
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setModuleFilter('none')}>
+                Ver assuntos sem módulo
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        {all && all.length > 0 && (
+          <div className="flex flex-wrap items-end gap-3">
+            <SearchBox
+              value={query}
+              onChange={setQuery}
+              label="Buscar assuntos"
+              placeholder="Assunto ou solução"
+            />
+            <Field className="w-[220px]">
+              <FieldLabel htmlFor="subjects-module" className="sr-only">
+                Módulo
+              </FieldLabel>
+              <Select
+                items={filterItems}
+                value={moduleFilter}
+                onValueChange={(value) => value && setModuleFilter(value as string)}
+              >
+                <SelectTrigger
+                  id="subjects-module"
+                  className="w-full"
+                  aria-label="Filtrar por módulo"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {filterItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
         )}
         <Card>
           {shown && shown.length > 0 ? (
@@ -402,6 +517,7 @@ export default function SubjectsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Assunto e soluções</TableHead>
+                  <TableHead className="w-0">Módulo</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -418,6 +534,20 @@ export default function SubjectsPage() {
                             subjects!.find((item) => item.id === subject.id)!.solutions.length,
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {subject.module ? (
+                          <div className="flex flex-col items-start gap-0.5">
+                            <Badge variant="tag">{subject.module.name}</Badge>
+                            {!subject.module.active && (
+                              <span className="caption text-ink-soft">Módulo desativado</span>
+                            )}
+                          </div>
+                        ) : (
+                          <Badge variant="status" tone="warning">
+                            Sem módulo
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-normal sm:whitespace-nowrap">
                         <div className="flex flex-wrap justify-end gap-1 sm:flex-nowrap">
@@ -461,6 +591,7 @@ export default function SubjectsPage() {
                             {solution.body}
                           </p>
                         </TableCell>
+                        <TableCell />
                         <TableCell className="whitespace-normal sm:whitespace-nowrap">
                           <div className="flex flex-wrap justify-end gap-1 sm:flex-nowrap">
                             <Button
@@ -496,7 +627,7 @@ export default function SubjectsPage() {
                 <EmptyDescription>
                   {sectorId === undefined
                     ? 'Cadastre um setor para gerenciar assuntos.'
-                    : subjects && subjects.length > 0
+                    : all && all.length > 0
                       ? 'Nenhum assunto encontrado.'
                       : 'Nenhum assunto cadastrado.'}
                 </EmptyDescription>
@@ -510,6 +641,7 @@ export default function SubjectsPage() {
           key={sheetKey}
           sectorId={sectorId}
           subject={editing}
+          modules={modules}
           open={open}
           onOpenChange={setOpen}
         />

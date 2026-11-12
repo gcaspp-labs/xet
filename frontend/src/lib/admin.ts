@@ -108,16 +108,20 @@ export type Subject = {
   id: number
   sectorId: number
   name: string
+  // PROTÓTIPO #150: módulo do assunto; vazio nos assuntos antigos.
+  module: { id: number; name: string; active: boolean } | null
   // Soluções do assunto, apagadas junto com ele.
   solutions: { id: number; subjectId: number; body: string }[]
 }
 
 const subjectsKey = (sectorId: number) => ['sectors', sectorId, 'subjects']
 
-export function useSubjects(sectorId: number | undefined) {
+// PROTÓTIPO #150: filtro por módulo ('none' = sem módulo).
+export function useSubjects(sectorId: number | undefined, module: string | null = null) {
   return useQuery({
-    queryKey: subjectsKey(sectorId ?? 0),
-    queryFn: () => api<Subject[]>(`/sectors/${sectorId}/subjects`),
+    queryKey: [...subjectsKey(sectorId ?? 0), module],
+    queryFn: () =>
+      api<Subject[]>(`/sectors/${sectorId}/subjects${module ? `?module=${module}` : ''}`),
     enabled: sectorId !== undefined,
   })
 }
@@ -125,10 +129,16 @@ export function useSubjects(sectorId: number | undefined) {
 export function useSaveSubject(sectorId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, name }: { id?: number; name: string }) =>
+    mutationFn: ({ id, name, moduleId }: { id?: number; name: string; moduleId: number }) =>
       id === undefined
-        ? api<Subject>(`/sectors/${sectorId}/subjects`, { method: 'POST', body: { name } })
-        : api<Subject>(`/sectors/${sectorId}/subjects/${id}`, { method: 'PUT', body: { name } }),
+        ? api<Subject>(`/sectors/${sectorId}/subjects`, {
+            method: 'POST',
+            body: { name, moduleId },
+          })
+        : api<Subject>(`/sectors/${sectorId}/subjects/${id}`, {
+            method: 'PUT',
+            body: { name, moduleId },
+          }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
   })
 }

@@ -36,6 +36,9 @@ export const inList = (text: string, list: { name: string }[]) =>
 // Assunto da lista do setor, com as soluções dele (closing-form).
 export type FormSubject = {
   id: number
+  // PROTÓTIPO #150: módulo do assunto (os sem módulo não vêm no formulário).
+  moduleId: number
+  moduleName: string
   name: string
   solutions: { id: number; body: string }[]
 }

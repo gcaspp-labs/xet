@@ -105,6 +105,8 @@ export function CorrectionSheet({
   // não perguntar sobre textos que já estavam no chamado.
   const questions = useClosingQuestions<Values>({
     subjects: form?.subjects ?? [],
+    // Só os ativos recebem assunto novo; o desativado marcado só filtra as sugestões.
+    modules: form?.modules ?? [],
     askSubject: (values) => !sameText(values.subject, ticket.subject ?? ''),
     askSolution: (values) => !sameText(values.resolution, ticket.resolution ?? ''),
     save: saveCorrection,

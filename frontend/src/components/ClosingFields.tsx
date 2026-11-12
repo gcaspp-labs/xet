@@ -27,11 +27,29 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { closingSchema, type FormSubject, findSubject } from '@/lib/closing'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { closingSchema, type FormSubject, sameText } from '@/lib/closing'
 import type { Organization } from '@/lib/directory'
 import { normalizeSearch } from '@/lib/format'
 
 type ClosingValues = z.input<typeof closingSchema>
+
+// PROTÓTIPO #150: assuntos dos módulos marcados no chamado.
+export const markedSubjects = (subjects: FormSubject[], moduleIds: number[]) =>
+  subjects.filter((subject) => moduleIds.includes(subject.moduleId))
+
+// Os assuntos com esse nome nos módulos marcados (o mesmo nome pode estar em vários).
+export const subjectsNamed = (visible: FormSubject[], text: string) =>
+  visible.filter((subject) => sameText(subject.name, text))
+
+// Soluções do assunto em todos os módulos marcados em que ele existe, sem repetir.
+export const mergedSolutions = (visible: FormSubject[], text: string) =>
+  subjectsNamed(visible, text)
+    .flatMap((subject) => subject.solutions)
+    .filter(
+      (solution, index, all) =>
+        all.findIndex((other) => sameText(other.body, solution.body)) === index,
+    )
 
 // Assunto, resolução, módulos, órgão, início e fim, dentro de um FormProvider
 // cujo formulário tem ao menos os campos de `closingShape`.
@@ -56,13 +74,49 @@ export function ClosingFields({
     formState: { errors },
   } = useFormContext<ClosingValues>()
   const subject = useWatch<ClosingValues, 'subject'>({ name: 'subject' })
-  const solutions = findSubject(subjects, subject)?.solutions ?? []
+  const moduleIds = useWatch<ClosingValues, 'moduleIds'>({ name: 'moduleIds' })
+  // PROTÓTIPO #150: só os assuntos dos módulos marcados.
+  const visible = markedSubjects(subjects, moduleIds)
+  const solutions = mergedSolutions(visible, subject)
 
   return (
     <>
+      <Controller
+        control={control}
+        name="moduleIds"
+        render={({ field }) => (
+          <FieldSet data-invalid={!!errors.moduleIds}>
+            <FieldLegend variant="label">Módulos</FieldLegend>
+            {emptyModules && modules.length === 0 && (
+              <FieldDescription>{emptyModules}</FieldDescription>
+            )}
+            <div className="flex flex-col gap-2">
+              {modules.map((module) => (
+                <label key={module.id} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={field.value.includes(module.id)}
+                    onCheckedChange={(checked) =>
+                      field.onChange(
+                        checked
+                          ? [...field.value, module.id]
+                          : field.value.filter((id) => id !== module.id),
+                      )
+                    }
+                  />
+                  {module.name}
+                </label>
+              ))}
+            </div>
+            <FieldError errors={[errors.moduleIds]} />
+          </FieldSet>
+        )}
+      />
       <Field data-invalid={!!errors.subject}>
         <FieldLabel htmlFor={`${idPrefix}-subject`}>Assunto</FieldLabel>
-        <SubjectInput id={`${idPrefix}-subject`} subjects={subjects} invalid={!!errors.subject} />
+        <SubjectInput id={`${idPrefix}-subject`} subjects={visible} invalid={!!errors.subject} />
+        {moduleIds.length === 0 && (
+          <FieldDescription>Marque um módulo para ver os assuntos.</FieldDescription>
+        )}
         <FieldError errors={[errors.subject]} />
       </Field>
       {solutions.length > 0 && (
@@ -104,36 +158,6 @@ export function ClosingFields({
         />
         <FieldError errors={[errors.resolution]} />
       </Field>
-      <Controller
-        control={control}
-        name="moduleIds"
-        render={({ field }) => (
-          <FieldSet data-invalid={!!errors.moduleIds}>
-            <FieldLegend variant="label">Módulos</FieldLegend>
-            {emptyModules && modules.length === 0 && (
-              <FieldDescription>{emptyModules}</FieldDescription>
-            )}
-            <div className="flex flex-col gap-2">
-              {modules.map((module) => (
-                <label key={module.id} className="flex items-center gap-2">
-                  <Checkbox
-                    checked={field.value.includes(module.id)}
-                    onCheckedChange={(checked) =>
-                      field.onChange(
-                        checked
-                          ? [...field.value, module.id]
-                          : field.value.filter((id) => id !== module.id),
-                      )
-                    }
-                  />
-                  {module.name}
-                </label>
-              ))}
-            </div>
-            <FieldError errors={[errors.moduleIds]} />
-          </FieldSet>
-        )}
-      />
       <Field data-invalid={!!errors.organization}>
         <FieldLabel htmlFor={`${idPrefix}-organization`}>Órgão</FieldLabel>
         <Controller
@@ -198,12 +222,17 @@ function SubjectInput({
   } = useController<ClosingValues, 'subject'>({ name: 'subject' })
   const [open, setOpen] = useState(false)
   const typed = normalizeSearch(value.trim())
-  const matches = subjects
-    .map((subject) => subject.name)
-    .filter((item) => normalizeSearch(item).includes(typed))
+  // PROTÓTIPO #150: um nome só uma vez, com os módulos em que ele está.
+  const names = [...new Set(subjects.map((subject) => subject.name))]
+  const modulesOf = (name: string) =>
+    subjects
+      .filter((subject) => subject.name === name)
+      .map((subject) => subject.moduleName)
+      .join(', ')
+  const matches = names.filter((item) => normalizeSearch(item).includes(typed))
   return (
     <Autocomplete
-      items={subjects.map((subject) => subject.name)}
+      items={names}
       filteredItems={matches}
       value={value}
       onValueChange={(next) => onChange(next)}
@@ -230,6 +259,7 @@ function SubjectInput({
           {(name: string) => (
             <AutocompleteItem key={name} value={name}>
               <span className="min-w-0 flex-1 break-words">{name}</span>
+              <span className="caption shrink-0 text-ink-soft">{modulesOf(name)}</span>
             </AutocompleteItem>
           )}
         </AutocompleteList>
@@ -238,27 +268,94 @@ function SubjectInput({
   )
 }
 
-// Pergunta ao salvar, na mesma janela do formulário (design.md): o assunto
-// digitado não está na lista do setor (spec.md, Assuntos e soluções).
-export function SubjectQuestion({ subject }: { subject: string }) {
+// PROTÓTIPO #150: escolha do módulo dentro da pergunta, sem nenhum marcado no
+// começo; "Adicionar" sem escolha mostra o erro.
+export type ModuleChoice = {
+  modules: { id: number; name: string }[]
+  value: number | null
+  onChange: (id: number | null) => void
+  error: boolean
+}
+
+function ModuleChooser({ choice, legend }: { choice: ModuleChoice; legend: string }) {
   return (
-    <div className="flex flex-col gap-2" role="group" aria-label="Adicionar assunto">
-      <p>Este assunto não está na lista do setor. Deseja adicioná-lo?</p>
+    <FieldSet data-invalid={choice.error}>
+      <FieldLegend variant="label">{legend}</FieldLegend>
+      <ToggleGroup
+        aria-label={legend}
+        value={choice.value === null ? [] : [choice.value.toString()]}
+        onValueChange={(value) => choice.onChange(value[0] ? Number(value[0]) : null)}
+      >
+        {choice.modules.map((module) => (
+          <ToggleGroupItem key={module.id} value={module.id.toString()}>
+            {module.name}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      {choice.error && <FieldError>Escolha o módulo.</FieldError>}
+    </FieldSet>
+  )
+}
+
+// Pergunta ao salvar, na mesma janela do formulário (design.md): o assunto
+// digitado não está na lista dos módulos marcados. Com um módulo, entra nele;
+// com mais de um, a pessoa escolhe.
+export function SubjectQuestion({
+  subject,
+  module,
+  choice,
+}: {
+  subject: string
+  module?: string
+  choice?: ModuleChoice
+}) {
+  return (
+    <div className="flex flex-col gap-3" role="group" aria-label="Adicionar assunto">
+      <p>
+        {module ? (
+          <>
+            Este assunto não está na lista do módulo <span className="body-strong">{module}</span>.
+            Deseja adicioná-lo?
+          </>
+        ) : (
+          'Este assunto não está na lista dos módulos marcados. Deseja adicioná-lo?'
+        )}
+      </p>
       <p className="body-strong break-words">{subject.trim()}</p>
+      {choice && <ModuleChooser choice={choice} legend="Adicionar em qual módulo?" />}
     </div>
   )
 }
 
 // Pergunta ao salvar, depois da do assunto: a resolução não está na lista de
-// soluções do assunto (spec.md, Assuntos e soluções).
-export function SolutionQuestion({ subject, resolution }: { subject: string; resolution: string }) {
+// soluções do assunto. Se o assunto está em mais de um módulo marcado, a
+// pessoa escolhe em qual deles a solução entra.
+export function SolutionQuestion({
+  subject,
+  resolution,
+  module,
+  choice,
+}: {
+  subject: string
+  resolution: string
+  module?: string
+  choice?: ModuleChoice
+}) {
   return (
-    <div className="flex flex-col gap-2" role="group" aria-label="Adicionar solução">
+    <div className="flex flex-col gap-3" role="group" aria-label="Adicionar solução">
       <p>
         Esta resolução não está na lista de soluções do assunto{' '}
-        <span className="body-strong break-words">{subject.trim()}</span>. Deseja adicioná-la?
+        <span className="body-strong break-words">{subject.trim()}</span>
+        {module && (
+          <>
+            {' '}
+            do módulo <span className="body-strong">{module}</span>
+          </>
+        )}
+        . Deseja adicioná-la?
       </p>
       <p className="body-strong break-words whitespace-pre-wrap">{resolution.trim()}</p>
+      {choice && <ModuleChooser choice={choice} legend="Adicionar ao assunto de qual módulo?" />}
     </div>
   )
 }

@@ -135,7 +135,11 @@ export function ClosingSheet({
 
   // Assunto fora da lista do setor e resolução fora da lista do assunto:
   // pergunta antes de gravar.
-  const questions = useClosingQuestions<Values>({ subjects: form?.subjects ?? [], save: saveForm })
+  const questions = useClosingQuestions<Values>({
+    subjects: form?.subjects ?? [],
+    modules: form?.modules ?? [],
+    save: saveForm,
+  })
 
   const onSubmit = handleSubmit(
     (values) => {

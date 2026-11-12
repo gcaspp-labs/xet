@@ -82,9 +82,13 @@ export function SubjectsTab({
                 return (
                   <li key={solution.id} className="rounded-(--radius-8) border border-line p-3">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <Badge variant="tag" className="min-w-0 break-words">
-                        {subject.name}
-                      </Badge>
+                      {/* PROTÓTIPO #150: o módulo ao lado do assunto. */}
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <Badge variant="tag" className="min-w-0 break-words">
+                          {subject.name}
+                        </Badge>
+                        <span className="caption text-ink-soft">{subject.moduleName}</span>
+                      </div>
                       <Button variant="outline" size="sm" onClick={() => void copy(solution.body)}>
                         <Copy strokeWidth={1.7} aria-hidden />
                         Copiar
@@ -122,7 +126,10 @@ export function SubjectsTab({
                   key={`subject-${subject.id}`}
                   className="rounded-(--radius-8) border border-line p-3"
                 >
-                  <Badge variant="tag">{subject.name}</Badge>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Badge variant="tag">{subject.name}</Badge>
+                    <span className="caption text-ink-soft">{subject.moduleName}</span>
+                  </div>
                   <p className="caption text-ink-soft">Nenhuma solução cadastrada.</p>
                 </li>,
               ],
