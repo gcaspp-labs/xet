@@ -64,10 +64,14 @@ import { type Theme, useTheme } from '@/lib/theme'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 
+// PROTÓTIPO #109: uma versão (ajuste de tela existente): Dashboard sai de Helpdesk e vira item próprio no topo, sem rótulo de grupo.
+const homeItems: NavItem[] = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['supervisor', 'admin'] },
+]
+
 // A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
 const helpdeskItems: NavItem[] = [
   { to: '/', label: 'Atendimento', icon: MessagesSquare, roles: ['agent', 'supervisor', 'admin'] },
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['supervisor', 'admin'] },
   { to: '/contatos', label: 'Contatos', icon: BookUser, roles: ['agent', 'supervisor', 'admin'] },
   { to: '/conexao', label: 'Conexão', icon: QrCode, roles: ['supervisor', 'admin'] },
 ]
@@ -80,7 +84,7 @@ const registryItems: NavItem[] = [
   { to: '/admin/setores', label: 'Setores', icon: Building2, roles: ['admin'] },
 ]
 
-function NavGroup({ label, items, role }: { label: string; items: NavItem[]; role: Role }) {
+function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; role: Role }) {
   const { pathname } = useLocation()
   const { setOpenMobile } = useSidebar()
   const visible = items.filter((item) => item.roles.includes(role))
@@ -89,9 +93,11 @@ function NavGroup({ label, items, role }: { label: string; items: NavItem[]; rol
   }
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="overline whitespace-nowrap text-ink-faint group-data-[collapsible=icon]:mt-0">
-        {label}
-      </SidebarGroupLabel>
+      {label && (
+        <SidebarGroupLabel className="overline whitespace-nowrap text-ink-faint group-data-[collapsible=icon]:mt-0">
+          {label}
+        </SidebarGroupLabel>
+      )}
       <SidebarGroupContent>
         <SidebarMenu>
           {visible.map((item) => (
@@ -280,6 +286,7 @@ export default function AppLayout() {
             <SidebarTrigger />
           </SidebarHeader>
           <SidebarContent>
+            <NavGroup items={homeItems} role={user.role} />
             <NavGroup label="Helpdesk" items={helpdeskItems} role={user.role} />
             <NavGroup label="Cadastro" items={registryItems} role={user.role} />
           </SidebarContent>
