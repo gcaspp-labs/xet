@@ -1,16 +1,12 @@
 // PROTÓTIPO #145 — descartável, não vai para a main.
-// Plano: uma versão (ajuste de telas existentes), comparável com a tela de hoje,
-// trocada por `?variant=proposta|atual` em /, /conversas e /chamados/:id.
+// Plano: uma proposta da tela nova Conversas, em /conversas e /conversas/:id,
+// com os estados trocados pela barra rosa (ou ← →). `?variant=atual` mostra a main.
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect } from 'react'
-import { useSearchParams } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 
 const variants = ['proposta', 'atual'] as const
 type Variant = (typeof variants)[number]
-const labels: Record<Variant, string> = {
-  proposta: 'Proposta (#145)',
-  atual: 'Atual (main)',
-}
 
 export function useVariant(): Variant {
   const [params] = useSearchParams()
@@ -22,14 +18,22 @@ export function useIsProposal() {
 }
 
 // Barra do protótipo: fica fora do design avaliado, de propósito.
+// Uma proposta só (o layout veio do desenho de Laboratório); a barra troca os estados da tela.
+const states = [
+  { label: 'Conversa aberta · aba Fila', url: '/conversas/101' },
+  { label: 'Conversa aberta · aba Assuntos (contador na Fila)', url: '/conversas/101?aba=assuntos' },
+  { label: 'Sem conversa · Selecione um atendimento', url: '/conversas' },
+  { label: 'Sem conversa · Sem atendimentos disponíveis', url: '/conversas?vazio=1' },
+]
+
 export function PrototypeSwitcher() {
-  const [params, setParams] = useSearchParams()
-  const current = useVariant()
+  const { pathname, search } = useLocation()
+  const here = pathname + search
+  const current = states.findIndex((s) => s.url === here)
   const go = (step: number) => {
-    const i = (variants.indexOf(current) + step + variants.length) % variants.length
-    const next = new URLSearchParams(params)
-    next.set('variant', variants[i])
-    setParams(next, { replace: true })
+    const i = ((current < 0 ? 0 : current) + step + states.length) % states.length
+    // Recarrega: a API falsa lê ?vazio=1 ao abrir.
+    window.location.assign(states[i].url)
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -41,7 +45,7 @@ export function PrototypeSwitcher() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
-  if (import.meta.env.PROD) return null
+  if (import.meta.env.PROD || !pathname.startsWith('/conversas')) return null
   return (
     <div
       data-prototype-switcher
@@ -62,11 +66,11 @@ export function PrototypeSwitcher() {
         boxShadow: '0 4px 16px rgba(0,0,0,.35)',
       }}
     >
-      <button type="button" onClick={() => go(-1)} aria-label="Versão anterior" style={{ color: '#fff' }}>
+      <button type="button" onClick={() => go(-1)} aria-label="Estado anterior" style={{ color: '#fff' }}>
         <ChevronLeft size={16} />
       </button>
-      <span>PROTÓTIPO · {labels[current]}</span>
-      <button type="button" onClick={() => go(1)} aria-label="Próxima versão" style={{ color: '#fff' }}>
+      <span>PROTÓTIPO #145 · {current < 0 ? 'navegando' : states[current].label}</span>
+      <button type="button" onClick={() => go(1)} aria-label="Próximo estado" style={{ color: '#fff' }}>
         <ChevronRight size={16} />
       </button>
     </div>

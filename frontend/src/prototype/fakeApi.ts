@@ -96,6 +96,32 @@ const seeds: Seed[] = [
   },
 ]
 
+// Estado "Sem atendimentos disponíveis": ?vazio=1 tira as conversas da Marina.
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vazio')) {
+  for (const s of seeds) if (s.assignee === 1) s.assignee = 2
+}
+
+const subjects = [
+  {
+    id: 1,
+    name: 'Certidão negativa',
+    solutions: [
+      { id: 11, body: 'Menu Tributos > Certidões > Emitir certidão. Informar o CNPJ só com números.' },
+      { id: 12, body: 'Se a certidão sair positiva, conferir débitos em Tributos > Extrato.' },
+    ],
+  },
+  {
+    id: 2,
+    name: 'Usuário bloqueado',
+    solutions: [{ id: 21, body: 'Em Usuários, localizar o login e clicar em Desbloquear acesso.' }],
+  },
+  {
+    id: 3,
+    name: 'Relatório em branco',
+    solutions: [{ id: 31, body: 'Conferir o período do filtro e o exercício selecionado.' }],
+  },
+]
+
 type Msg = Record<string, unknown>
 let nextId = 1000
 const messages: Record<number, Msg[]> = {}
@@ -225,7 +251,7 @@ export function fakeApi(
   if (path.match(/^\/tickets\/\d+\/(notes|corrections|modules)$/)) return { data: [] }
   if (path.match(/^\/tickets\/\d+\/closing-form$/))
     return {
-      data: { modules: [], subjects: [], contactModuleIds: [], organization: null, startedAt: ago(20) },
+      data: { modules: [], subjects, contactModuleIds: [], organization: null, startedAt: ago(20) },
     }
   return { data: method === 'GET' ? [] : undefined }
 }

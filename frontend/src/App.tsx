@@ -1,3 +1,4 @@
+import ConversasPage from '@/prototype/ConversasPage'
 import { Navigate, Outlet, Route, Routes } from 'react-router'
 import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
@@ -42,8 +43,9 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<PanelPage />} />
           <Route path="/chamados/:ticketId" element={<TicketPage />} />
-          {/* PROTÓTIPO #145: só a tela do chat; Conversas leva a uma conversa aberta. */}
-          <Route path="/conversas" element={<Navigate to="/chamados/101?variant=proposta" replace />} />
+          {/* PROTÓTIPO #145: tela Conversas, com e sem conversa aberta. */}
+          <Route path="/conversas" element={<ConversasPage />} />
+          <Route path="/conversas/:ticketId" element={<ConversasPage />} />
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>

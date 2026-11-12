@@ -593,7 +593,7 @@ function Composer({ ticketId }: { ticketId: number }) {
   )
 }
 
-function ConversationCard({
+export function ConversationCard({
   ticket,
   user,
   onRegister,

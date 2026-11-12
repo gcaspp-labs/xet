@@ -59,7 +59,7 @@ function ContactCell({ ticket }: { ticket: TicketSummary | ClosedTicket }) {
   return (
     <TableCell>
       <Link
-        to={`/chamados/${ticket.id}`}
+        to={`/conversas/${ticket.id}`}
         className="body-strong underline-offset-2 after:absolute after:inset-0 hover:text-accent-strong hover:underline"
       >
         {contact.name}
@@ -141,7 +141,7 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
                         {
                           onSuccess: () => {
                             toast.success('Chamado assumido')
-                            void navigate(`/chamados/${ticket.id}`)
+                            void navigate(`/conversas/${ticket.id}`)
                           },
                         },
                       )

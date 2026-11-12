@@ -94,7 +94,9 @@ function NavGroup({ label, items, role }: { label: string; items: NavItem[]; rol
     .filter((item) => proposal || item.to !== '/conversas')
   const active = (to: string) =>
     proposal
-      ? pathname === to || (to === '/conversas' && pathname.startsWith('/chamados/'))
+      ? pathname === to ||
+        (to === '/conversas' && pathname.startsWith('/conversas/')) ||
+        (to === '/' && pathname.startsWith('/chamados/'))
       : pathname === to || (to === '/' && pathname.startsWith('/chamados/'))
   if (visible.length === 0) {
     return null
