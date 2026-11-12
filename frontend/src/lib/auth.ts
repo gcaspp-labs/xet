@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { api, ApiError } from '@/lib/api'
+import { clearTicketViews } from '@/pages/ticket/useTicketView'
 
 export type Role = 'agent' | 'supervisor' | 'admin'
 
@@ -47,6 +48,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api<void>('/auth/logout', { method: 'POST' }),
     onSuccess: () => {
+      clearTicketViews()
       queryClient.clear()
       queryClient.setQueryData(meKey, null)
     },

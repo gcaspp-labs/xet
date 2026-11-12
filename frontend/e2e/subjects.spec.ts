@@ -123,6 +123,147 @@ async function prepare(baseURL: string, subjects: string[], tickets: number) {
   return { sector, agent, supervisor, contacts: contacts.map((contact) => contact.name) }
 }
 
+test('o responsável consulta soluções durante o atendimento', async ({ page, baseURL }) => {
+  const { sector, agent, contacts } = await prepare(baseURL!, ['Folha de pagamento'], 1)
+  await addSolutions(baseURL!, sector.id, 'Folha de pagamento', ['Confira o contracheque.'])
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  const card = page.getByRole('region', { name: 'Chamado', exact: true })
+  await card.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(card).toContainText('Confira o contracheque.')
+})
+
+test('busca e copia soluções sem interromper a conversa', async ({ page, context, baseURL }) => {
+  const { sector, agent, contacts } = await prepare(baseURL!, ['Férias', 'Admissão'], 2)
+  const long = `Período confirmado. ${'x'.repeat(9980)}`
+  await addSolutions(baseURL!, sector.id, 'Férias', ['Agendadas pelo portal.', long])
+  await addSolutions(baseURL!, sector.id, 'Admissão', ['Documentos conferidos.'])
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  const card = page.getByRole('region', { name: 'Chamado', exact: true })
+  await card.getByRole('tab', { name: 'Assuntos' }).click()
+  await page.getByRole('textbox', { name: 'Mensagem' }).fill('Mensagem durante a consulta')
+  await page.getByRole('textbox', { name: 'Mensagem' }).press('Enter')
+  await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
+    'Mensagem durante a consulta',
+  )
+  const search = card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })
+  await search.fill('FERIAS')
+  await expect(card).toContainText('Agendadas pelo portal.')
+  await expect(card).toContainText('Período confirmado.')
+  await expect(card).not.toContainText('Documentos conferidos.')
+  await search.fill('periodo')
+  await expect(card).not.toContainText('Agendadas pelo portal.')
+  await card.getByRole('button', { name: 'Copiar' }).click()
+  await expect(page.getByText('Solução copiada')).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(long)
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+  await page.getByRole('link', { name: contacts[1] }).click()
+  await expect(card.getByRole('tab', { name: 'Detalhes' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await expect(card.getByRole('tab', { name: 'Assuntos' })).toHaveAttribute('aria-selected', 'true')
+  await expect(search).toHaveValue('periodo')
+  await search.fill('inexistente')
+  await expect(card).toContainText('Nenhum assunto ou solução encontrado.')
+})
+
+test('a aba e a busca não passam para outra pessoa depois de sair', async ({ page, baseURL }) => {
+  const { agent, supervisor, contacts } = await prepare(baseURL!, ['Férias'], 1)
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  const card = page.getByRole('region', { name: 'Chamado', exact: true })
+  await card.getByRole('tab', { name: 'Assuntos' }).click()
+  await card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' }).fill('ferias')
+
+  await page.getByRole('button', { name: 'Transferir' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Transferir chamado' })
+  await sheet.getByRole('combobox', { name: 'Transferir para' }).click()
+  await page.getByRole('option', { name: /Supervisor/ }).click()
+  await sheet.getByRole('button', { name: 'Transferir' }).click()
+  await expect(page.getByText('Chamado transferido')).toBeVisible()
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await page.getByRole('menuitem', { name: 'Sair' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await page.getByLabel('E-mail').fill(supervisor)
+  await page.getByLabel('Senha').fill(userPassword)
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await expect(card.getByRole('tab', { name: 'Detalhes' })).toHaveAttribute('aria-selected', 'true')
+  await card.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })).toHaveValue('')
+})
+
+test('aba respeita responsável, setor e tela estreita', async ({ page, browser, baseURL }) => {
+  const first = await prepare(baseURL!, ['Folha'], 1)
+  const second = await prepare(baseURL!, [], 1)
+  await addSolutions(baseURL!, first.sector.id, 'Folha', ['Solução exclusiva do primeiro setor.'])
+  await signIn(page, first.agent, userPassword)
+  await page.getByRole('link', { name: first.contacts[0] }).click()
+  const firstUrl = page.url()
+  const card = page.getByRole('region', { name: 'Chamado', exact: true })
+  await card.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(card).toContainText('Solução exclusiva do primeiro setor.')
+  await page.setViewportSize({ width: 375, height: 812 })
+  const chatBox = await page.getByRole('region', { name: 'Conversa', exact: true }).boundingBox()
+  const cardBox = await card.boundingBox()
+  expect(cardBox!.y).toBeGreaterThan(chatBox!.y + chatBox!.height - 1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await signIn(other, first.supervisor, userPassword)
+  await other.goto(firstUrl)
+  await expect(other.getByRole('tab', { name: 'Assuntos' })).toHaveCount(0)
+  await otherContext.close()
+  await clearSession(page)
+  await signIn(page, second.agent, userPassword)
+  await page.getByRole('link', { name: second.contacts[0] }).click()
+  await page.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(page.getByText('Este setor ainda não tem assuntos cadastrados.')).toBeVisible()
+  await expect(page.getByText('Solução exclusiva do primeiro setor.')).toHaveCount(0)
+})
+
+test('supervisor e administrador consultam quando são responsáveis', async ({ page, baseURL }) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  const api = await adminApi(baseURL!)
+  expect((await api.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
+  expect((await api.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
+  expect(
+    (await api.post(`/api/sectors/${sector.id}/subjects`, { data: { name: 'Orientações' } })).ok(),
+  ).toBeTruthy()
+  for (const name of ['Cliente Supervisor', 'Cliente Administrador']) {
+    expect(
+      (
+        await api.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+          data: {
+            externalMessageId: `E2E-${unique().id}`,
+            phone: unique().phone,
+            contactName: name,
+            body: 'Ajuda',
+          },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  }
+  await api.dispose()
+  await addSolutions(baseURL!, sector.id, 'Orientações', ['Resposta do setor.'])
+  await signIn(page, supervisor, userPassword)
+  const adminTicketUrl = await page
+    .getByRole('link', { name: 'Cliente Administrador' })
+    .getAttribute('href')
+  expect(adminTicketUrl).toBeTruthy()
+  await page.getByRole('link', { name: 'Cliente Supervisor' }).click()
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await page.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(page.getByText('Resposta do setor.')).toBeVisible()
+  await clearSession(page)
+  await signIn(page, admin.email, admin.password)
+  await page.goto(adminTicketUrl!)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await page.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(page.getByText('Resposta do setor.')).toBeVisible()
+})
+
 test('o campo Assunto sugere a lista do setor, sem nenhum marcado, e um assunto da lista não tem a pergunta do assunto', async ({
   page,
   baseURL,
