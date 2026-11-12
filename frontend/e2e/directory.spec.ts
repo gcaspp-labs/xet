@@ -12,6 +12,26 @@ import {
   userPassword,
 } from './fixtures'
 
+async function expectOrganizationFieldOrder(page: Page, dialog: Locator) {
+  const cnpj = dialog.getByLabel('CNPJ')
+  const name = dialog.getByLabel('Nome')
+  const municipality = dialog.getByLabel('Município')
+  const boxes = await Promise.all([
+    cnpj.boundingBox(),
+    name.boundingBox(),
+    municipality.boundingBox(),
+  ])
+  expect(boxes[0]!.y).toBeLessThan(boxes[1]!.y)
+  expect(boxes[1]!.y).toBeLessThan(boxes[2]!.y)
+  await cnpj.focus()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Consultar' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(name).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(municipality).toBeFocused()
+}
+
 // Escolhe o município no seletor com busca do formulário de órgão.
 async function chooseMunicipality(page: Page, drawer: Locator, query: string, name: string) {
   await drawer.getByLabel('Município').fill(query)
@@ -30,6 +50,7 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
 
   await page.getByRole('button', { name: 'Novo órgão' }).click()
   const drawer = page.getByRole('dialog', { name: 'Novo órgão' })
+  await expectOrganizationFieldOrder(page, drawer)
   await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
   await expect(drawer.getByText('Informe o nome do órgão.')).toBeVisible()
   await expect(drawer.getByText('Selecione o município do órgão.')).toBeVisible()
@@ -92,6 +113,7 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
 
   await page.getByRole('button', { name: `Editar Prefeitura ${id}` }).click()
   const edit = page.getByRole('dialog', { name: 'Editar órgão' })
+  await expectOrganizationFieldOrder(page, edit)
   await expect(edit.getByLabel('CNPJ')).toHaveValue(formatCnpj(numeric))
   await expect(edit.getByLabel('Município')).toHaveValue('Peruíbe')
   await edit.getByLabel('Nome').fill(`Prefeitura Municipal ${id}`)
