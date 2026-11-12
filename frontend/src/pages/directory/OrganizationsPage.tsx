@@ -54,6 +54,7 @@ const schema = z.object({
 
 type FormValues = z.input<typeof schema>
 
+// PROTÓTIPO #107: uma versão (ajuste de tela existente): CNPJ e a consulta sobem para o topo do formulário de órgão.
 function OrganizationSheet({
   organization,
   open,
@@ -132,28 +133,6 @@ function OrganizationSheet({
       error={save.error?.message}
       onSubmit={onSubmit}
     >
-      <Field data-invalid={!!errors.name}>
-        <FieldLabel htmlFor="organization-name">Nome</FieldLabel>
-        <Input id="organization-name" aria-invalid={!!errors.name} {...register('name')} />
-        <FieldError errors={[errors.name]} />
-      </Field>
-      <Field data-invalid={!!errors.municipality}>
-        <FieldLabel htmlFor="organization-municipality">Município</FieldLabel>
-        <Controller
-          control={control}
-          name="municipality"
-          render={({ field }) => (
-            <MunicipalityPicker
-              id="organization-municipality"
-              municipalities={municipalities}
-              value={field.value}
-              onChange={field.onChange}
-              invalid={!!errors.municipality}
-            />
-          )}
-        />
-        <FieldError errors={[errors.municipality]} />
-      </Field>
       <Field data-invalid={!!errors.cnpj}>
         <FieldLabel htmlFor="organization-cnpj">CNPJ</FieldLabel>
         <div className="flex gap-2">
@@ -184,6 +163,28 @@ function OrganizationSheet({
           </AlertDescription>
         </Alert>
       )}
+      <Field data-invalid={!!errors.name}>
+        <FieldLabel htmlFor="organization-name">Nome</FieldLabel>
+        <Input id="organization-name" aria-invalid={!!errors.name} {...register('name')} />
+        <FieldError errors={[errors.name]} />
+      </Field>
+      <Field data-invalid={!!errors.municipality}>
+        <FieldLabel htmlFor="organization-municipality">Município</FieldLabel>
+        <Controller
+          control={control}
+          name="municipality"
+          render={({ field }) => (
+            <MunicipalityPicker
+              id="organization-municipality"
+              municipalities={municipalities}
+              value={field.value}
+              onChange={field.onChange}
+              invalid={!!errors.municipality}
+            />
+          )}
+        />
+        <FieldError errors={[errors.municipality]} />
+      </Field>
     </FormDialog>
   )
 }
