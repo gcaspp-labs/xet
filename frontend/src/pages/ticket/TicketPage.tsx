@@ -151,7 +151,7 @@ function MessageMedia({ message }: { message: Message }) {
       href={src}
       target="_blank"
       rel="noopener"
-      className="flex items-center gap-2 rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-2 hover:border-primary"
+      className="flex items-center gap-2 rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-2 text-foreground hover:border-primary"
     >
       <FileText strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       <span className="min-w-0 flex-1 truncate">
@@ -176,12 +176,12 @@ function conducts(ticket: TicketDetail, user: User) {
 
 // O responsável transfere o próprio chamado em atendimento; supervisão e
 // administração transferem o de qualquer atendente (spec.md, Transferências).
-function canTransfer(ticket: TicketDetail, user: User) {
+export function canTransfer(ticket: TicketDetail, user: User) {
   return ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')
 }
 
 // Só o responsável encerra, como responde (spec.md, Formulário de encerramento).
-function canClose(ticket: TicketDetail, user: User) {
+export function canClose(ticket: TicketDetail, user: User) {
   return ticket.status === 'in_progress' && conducts(ticket, user)
 }
 
@@ -193,7 +193,7 @@ function worksIn(ticket: TicketDetail, user: User) {
 
 // Na fila, quem é do setor cancela; em atendimento, o responsável e a
 // supervisão do setor (spec.md, Cancelamento).
-function canCancel(ticket: TicketDetail, user: User) {
+export function canCancel(ticket: TicketDetail, user: User) {
   return (
     worksIn(ticket, user) &&
     (ticket.status === 'queued' ||
@@ -203,7 +203,7 @@ function canCancel(ticket: TicketDetail, user: User) {
 
 // Devolvem à fila o chamado em atendimento o responsável e a supervisão do
 // setor (spec.md, Devolver à fila).
-function canReturn(ticket: TicketDetail, user: User) {
+export function canReturn(ticket: TicketDetail, user: User) {
   return (
     worksIn(ticket, user) &&
     ticket.status === 'in_progress' &&
@@ -213,7 +213,7 @@ function canReturn(ticket: TicketDetail, user: User) {
 
 // Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
 // cancelado não é corrigido (spec.md, Encerramento, retorno e correções).
-function canCorrect(ticket: TicketDetail, user: User) {
+export function canCorrect(ticket: TicketDetail, user: User) {
   return (
     ticket.status === 'closed' &&
     ticket.closureType !== 'cancelled' &&
@@ -253,11 +253,14 @@ function assignmentText(log: AssignmentLog) {
 }
 
 // Registro de responsável ou de encerramento entre as mensagens, na ordem do tempo.
-function AssignmentEntry({ log }: { log: AssignmentLog }) {
+function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?: boolean }) {
   return (
     <li
       aria-label="Registro do chamado"
-      className="caption flex items-start gap-1.5 self-center rounded-(--radius-7) border border-line-soft bg-muted px-2.5 py-1 text-ink-soft"
+      className={cn(
+        'caption flex items-start gap-1.5 self-center rounded-(--radius-7) border px-2.5 py-1 text-ink-soft',
+        modern ? 'border-dashed border-line bg-transparent' : 'border-line-soft bg-muted',
+      )}
     >
       {log.action === 'ticket_cancelled' ? (
         <Ban strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
@@ -308,11 +311,13 @@ function MessageBubble({
   canRetry,
   onRetry,
   retrying,
+  modern = false,
 }: {
   message: Message
   canRetry: boolean
   onRetry: () => void
   retrying: boolean
+  modern?: boolean
 }) {
   const outbound = message.direction === 'outbound'
   const status = message.status && outbound ? messageStatusLabels[message.status] : null
@@ -322,13 +327,27 @@ function MessageBubble({
   return (
     <li
       aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
-      className={`flex max-w-[78%] flex-col gap-1 rounded-(--radius-12) border px-3 py-2 ${
-        outbound
-          ? 'self-end border-accent-soft bg-accent-soft'
-          : 'self-start border-line-soft bg-card'
-      }`}
+      className={cn(
+        'flex max-w-[78%] flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+        modern
+          ? outbound
+            ? 'self-end rounded-br-(--radius-6) border-primary bg-primary text-primary-foreground'
+            : 'self-start rounded-bl-(--radius-6) border-line bg-card'
+          : outbound
+            ? 'self-end border-accent-soft bg-accent-soft'
+            : 'self-start border-line-soft bg-card',
+      )}
     >
-      {author && <p className="caption font-medium text-ink-soft">{author}</p>}
+      {author && (
+        <p
+          className={cn(
+            'caption font-medium',
+            modern && outbound ? 'text-primary-foreground' : 'text-ink-soft',
+          )}
+        >
+          {author}
+        </p>
+      )}
       <MessageMedia message={message} />
       {message.type === 'media_unavailable' && (
         <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
@@ -339,13 +358,36 @@ function MessageBubble({
         message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>
       )}
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <span className="mono-num caption text-ink-faint">{formatMessageTime(message.sentAt)}</span>
-        {status && <Badge tone={status.tone}>{status.label}</Badge>}
+        <span
+          className={cn(
+            'mono-num caption',
+            modern && outbound
+              ? 'text-primary-foreground'
+              : modern
+                ? 'text-ink-soft'
+                : 'text-ink-faint',
+          )}
+        >
+          {formatMessageTime(message.sentAt)}
+        </span>
+        {status &&
+          (modern && outbound ? (
+            <span className="caption font-medium text-primary-foreground">· {status.label}</span>
+          ) : (
+            <Badge tone={status.tone}>{status.label}</Badge>
+          ))}
       </div>
       {message.status === 'failed' && (
         <div className="flex flex-wrap items-center justify-end gap-2">
           {message.failureReason && (
-            <span className="caption text-danger">{message.failureReason}</span>
+            <span
+              className={cn(
+                'caption',
+                modern && outbound ? 'text-primary-foreground' : 'text-danger',
+              )}
+            >
+              {message.failureReason}
+            </span>
           )}
           {canRetry && message.origin === 'agent' && (
             <Button size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
@@ -563,14 +605,16 @@ function Composer({ ticketId }: { ticketId: number }) {
   )
 }
 
-function ConversationCard({
+export function ConversationCard({
   ticket,
   user,
   onRegister,
+  modern = false,
 }: {
   ticket: TicketDetail
   user: User
   onRegister: () => void
+  modern?: boolean
 }) {
   const { data: messages = [] } = useMessages(ticket.id)
   const { data: logs = [] } = useAssignments(ticket.id)
@@ -613,7 +657,13 @@ function ConversationCard({
           </Alert>
         </div>
       )}
-      <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
+      <div
+        ref={list}
+        className={cn(
+          'flex-1 overflow-y-auto px-4 py-4',
+          modern && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
+        )}
+      >
         {messages.length > 0 || logs.length > 0 ? (
           <ol className="flex flex-col gap-2">
             {timeline(messages, logs).map((item) =>
@@ -621,12 +671,13 @@ function ConversationCard({
                 <MessageBubble
                   key={`message-${item.message.id}`}
                   message={item.message}
+                  modern={modern}
                   canRetry={canReply}
                   retrying={retry.isPending}
                   onRetry={() => retry.mutate(item.message.id)}
                 />
               ) : (
-                <AssignmentEntry key={`log-${item.log.id}`} log={item.log} />
+                <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
               ),
             )}
           </ol>

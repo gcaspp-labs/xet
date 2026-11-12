@@ -62,6 +62,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Paulo Cliente' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 
@@ -175,6 +176,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   // Na fila, o atendente cancela sem assumir e sem cadastrar o contato.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Paula Golpe' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Cancelar chamado' }).click()
   const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
@@ -363,6 +365,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   // Na fila, sem assumir, o atendente vê o aviso e o botão junto do contato.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: profile }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const details = page.getByRole('region', { name: 'Chamado' })
   await expect(conversation).toContainText('Contato não cadastrado')
@@ -585,6 +588,7 @@ test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request
   // O cancelamento dispensa o cadastro: o contato continua sem cadastro, e o chamado sem aviso.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Contato não cadastrado')
   await page.getByRole('button', { name: 'Cancelar chamado' }).click()

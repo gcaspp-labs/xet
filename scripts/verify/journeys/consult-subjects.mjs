@@ -41,6 +41,7 @@ await journey("consult-subjects", async (t) => {
     "Assumir chamado e consultar soluções ao lado do chat",
     async () => {
       await page.getByRole("link", { name: "Cecília Consulta" }).click();
+      await page.getByRole("link", { name: "Ver chamado" }).click();
       await page.getByRole("button", { name: "Assumir", exact: true }).click();
       await card.getByRole("tab", { name: "Assuntos" }).click();
       await expect(card).toContainText("Agendadas pelo portal.");

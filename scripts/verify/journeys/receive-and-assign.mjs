@@ -60,9 +60,9 @@ await journey('receive-and-assign', async (t) => {
   await expect(staleAssign).toBeVisible()
 
   const ticketId = await t.step('Atendente assume pela fila e cai na conversa', async () => {
-    await mariaRow.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
-    await expect(agentPage.getByText('Chamado assumido')).toBeVisible()
-    await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
+    await agentPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+    await agentPage.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
+    await expect(agentPage).toHaveURL(/\/conversas\/\d+$/)
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
     const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
     await expect(conversation).toContainText(`${agent.name} assumiu o chamado`)
@@ -109,6 +109,15 @@ await journey('receive-and-assign', async (t) => {
     await expect(mine.getByRole('row', { name: /Maria Cliente/ })).toContainText('Você')
     await expect(queue.getByRole('row', { name: /Maria Cliente/ })).toHaveCount(0)
     await t.shot(agentPage, 'painel-em-atendimento')
+  })
+
+  await t.step('Atendente assume outro chamado pelo painel', async () => {
+    const cliente = t.customer('Pessoa do painel')
+    await phone.receive(cliente, 'Preciso de atendimento')
+    await queue.getByRole('button', { name: 'Assumir chamado de Pessoa do painel' }).click()
+    await expect(agentPage).toHaveURL(/\/conversas\/\d+$/)
+    await expect(agentPage.getByRole('region', { name: 'Conversa', exact: true })).toContainText('Preciso de atendimento')
+    await t.shot(agentPage, 'assumido-pelo-painel')
   })
 
   await t.step('Outro setor não vê a fila nem abre o chamado', async () => {

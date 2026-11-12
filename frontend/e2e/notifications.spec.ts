@@ -163,7 +163,10 @@ test('item sai quando outra pessoa assume e volta quando o chamado é devolvido 
   await expect(bellOf(page)).toHaveAccessibleName('Notificações')
 
   // Devolver à fila: o item volta nas duas janelas.
-  await other.getByRole('link', { name: 'Abrir conversa' }).click()
+  const openConversation = other.getByRole('link', { name: 'Abrir conversa' })
+  await expect(openConversation).toHaveAttribute('href', /^\/chamados\/\d+$/)
+  await openConversation.click()
+  await expect(other).toHaveURL(/\/chamados\/\d+$/)
   await other.getByRole('button', { name: 'Devolver à fila' }).click()
   const drawer = other.getByRole('dialog', { name: 'Devolver à fila' })
   await drawer.getByRole('button', { name: 'Devolver à fila' }).click()

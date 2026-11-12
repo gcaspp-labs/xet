@@ -47,6 +47,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   const toasts = await recordToasts(page)
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Joana Devolvida' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const url = page.url()
   await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Devolver à fila' })).toHaveCount(0)

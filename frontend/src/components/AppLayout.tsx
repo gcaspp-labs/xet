@@ -11,6 +11,7 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  MessageSquareText,
   MessagesSquare,
   Monitor,
   Moon,
@@ -67,6 +68,12 @@ type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 // A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
 const helpdeskItems: NavItem[] = [
   { to: '/', label: 'Atendimento', icon: MessagesSquare, roles: ['agent', 'supervisor', 'admin'] },
+  {
+    to: '/conversas',
+    label: 'Conversas',
+    icon: MessageSquareText,
+    roles: ['agent', 'supervisor', 'admin'],
+  },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['supervisor', 'admin'] },
   { to: '/contatos', label: 'Contatos', icon: BookUser, roles: ['agent', 'supervisor', 'admin'] },
   { to: '/conexao', label: 'Conexão', icon: QrCode, roles: ['supervisor', 'admin'] },
@@ -99,7 +106,9 @@ function NavGroup({ label, items, role }: { label: string; items: NavItem[]; rol
               <SidebarMenuButton
                 tooltip={item.label}
                 isActive={
-                  pathname === item.to || (item.to === '/' && pathname.startsWith('/chamados/'))
+                  pathname === item.to ||
+                  (item.to === '/' && pathname.startsWith('/chamados/')) ||
+                  (item.to === '/conversas' && pathname.startsWith('/conversas/'))
                 }
                 render={<NavLink to={item.to} onClick={() => setOpenMobile(false)} />}
               >

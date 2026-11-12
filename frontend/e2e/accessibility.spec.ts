@@ -431,7 +431,40 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(
       page.getByRole('listitem').filter({ hasText: 'Preciso do contracheque' }).last(),
     ).toBeVisible()
+    await page.getByRole('textbox', { name: 'Mensagem' }).fill('Resposta para teste de contraste')
+    await page.getByRole('textbox', { name: 'Mensagem' }).press('Enter')
+    await expect(page.getByRole('listitem', { name: 'Mensagem enviada' })).toBeVisible()
     await expectContrast(page, 'conversa')
+    await page.getByLabel('Arquivo para enviar').setInputFiles({
+      name: 'documento.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('teste'),
+    })
+    await page.getByRole('button', { name: 'Enviar mensagem' }).click()
+    await expect(page.getByRole('link', { name: /documento.txt/ })).toBeVisible()
+    await expectContrast(page, 'documento enviado')
+    await context.grantPermissions(['microphone'])
+    await page.getByRole('button', { name: 'Gravar áudio' }).click()
+    await expect(page.getByRole('status', { name: 'Gravação de áudio' })).toBeVisible()
+    await page.waitForTimeout(1200)
+    await page.getByRole('button', { name: 'Concluir gravação' }).click()
+    await page.getByRole('button', { name: 'Enviar áudio' }).click()
+    await expect(
+      page
+        .getByRole('listitem', { name: 'Mensagem enviada' })
+        .getByRole('group', { name: 'Áudio' }),
+    ).toBeVisible({ timeout: 15000 })
+    await expectContrast(page, 'áudio enviado')
+    expect(
+      (await page.request.post(`/api/test/messaging/sectors/${sector.id}/drop`)).ok(),
+    ).toBeTruthy()
+    await page.getByRole('textbox', { name: 'Mensagem' }).fill('Teste de falha')
+    await page.getByRole('button', { name: 'Enviar mensagem' }).click()
+    await expect(page.getByText('Número do setor desconectado.')).toBeVisible()
+    await expectContrast(page, 'falha no envio')
+    expect(await contrastOf(page, '[aria-label="Mensagem recebida"]')).toBeGreaterThanOrEqual(7)
+    expect(await contrastOf(page, '[aria-label="Mensagem enviada"]')).toBeGreaterThanOrEqual(7)
+    await page.getByRole('link', { name: 'Ver chamado' }).click()
     await expect(page.locator('[data-slot="badge"]').first()).toBeVisible()
     expect(await contrastOf(page, '[data-slot="badge"]')).toBeGreaterThanOrEqual(7)
 

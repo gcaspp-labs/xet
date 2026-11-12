@@ -60,7 +60,7 @@ export function AudioPlayer({
       role="group"
       aria-label={label}
       className={cn(
-        'flex min-w-0 items-center gap-2 rounded-(--radius-7) border border-line bg-card py-1 pr-2.5 pl-1',
+        'flex min-w-0 items-center gap-2 rounded-(--radius-7) border border-line bg-card py-1 pr-2.5 pl-1 text-foreground',
         className,
       )}
     >
