@@ -29,7 +29,7 @@ Como as mensagens viram chamados na fila do setor e como alguém assume. Inclui 
 23. Com a aba Assuntos aberta, a aba Fila mostra o número de chamados à espera, no estilo do contador do sino. Ele muda quando chegam chamados ou outra pessoa assume, e some quando chega a zero.
 24. Com um chamado da fila aberto na tela Conversas (por exemplo, vindo do painel), o topo da conversa também oferece o botão Assumir.
 25. No topo da conversa, Encerrar é a ação principal. Devolver à fila, Transferir e Outro setor são secundárias, e Cancelar chamado é a ação destrutiva, separada das demais. Cada ação só aparece para quem pode fazê-la, como na tela do chamado.
-26. A busca da aba Assuntos na tela Conversas não é guardada por chamado: ao trocar de conversa, ela é apagada e o painel volta para a Fila.
+26. A busca da aba Assuntos na tela Conversas não é guardada por chamado: o mesmo texto vale para todas as conversas da visita. Ao trocar de conversa, o painel volta para a Fila.
 
 ## Fora do escopo / limites conhecidos
 
