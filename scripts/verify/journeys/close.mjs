@@ -23,6 +23,7 @@ await journey('close', async (t) => {
 
   const ticketId = await t.step('Atendente assume o chamado', async () => {
     await agentPage.getByRole('link', { name: paulo.name }).click()
+    await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
     await agentPage.getByRole('button', { name: 'Assumir', exact: true }).click()
     await expect(agentPage.getByText('Chamado assumido')).toBeVisible()
     return Number(agentPage.url().split('/').pop())
@@ -49,6 +50,7 @@ await journey('close', async (t) => {
     await sheet.getByLabel('Órgão').fill(organization.name)
     await agentPage.getByRole('option', { name: organization.name }).click()
     await sheet.getByRole('button', { name: 'Encerrar' }).click()
+    await sheet.getByRole('button', { name: 'Não adicionar' }).click()
     await expect(sheet).toContainText(
       'Cadastre o contato e vincule-o a um órgão antes de encerrar.',
     )
@@ -85,6 +87,7 @@ await journey('close', async (t) => {
       await sheet.getByLabel('Fim').fill(local(60))
       await t.shot(agentPage, 'formulario-completo')
       await sheet.getByRole('button', { name: 'Encerrar' }).click()
+      await sheet.getByRole('button', { name: 'Não adicionar' }).click()
       await expect(agentPage.getByText('Chamado encerrado', { exact: true })).toBeVisible()
       await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
       const doneRow = agentPage
@@ -146,6 +149,7 @@ await journey('close', async (t) => {
     const golpe = t.customer('Paula Golpe')
     await phone.receive(golpe, 'Seu boleto venceu')
     await agentPage.getByRole('link', { name: golpe.name }).click()
+    await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
     await agentPage.getByRole('button', { name: 'Cancelar chamado' }).click()
     const cancel = agentPage.getByRole('dialog', { name: 'Cancelar chamado' })
     await cancel.getByRole('button', { name: 'Cancelar chamado' }).click()

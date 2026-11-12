@@ -53,12 +53,18 @@ import {
 
 // O link se estica sobre a linha, que precisa ser `relative`: a linha inteira abre
 // o chamado, e o teclado e o leitor de tela continuam num link de verdade.
-function ContactCell({ ticket }: { ticket: TicketSummary | ClosedTicket }) {
+function ContactCell({
+  ticket,
+  conversations = false,
+}: {
+  ticket: TicketSummary | ClosedTicket
+  conversations?: boolean
+}) {
   const { contact } = ticket
   return (
     <TableCell>
       <Link
-        to={`/chamados/${ticket.id}`}
+        to={`/${conversations ? 'conversas' : 'chamados'}/${ticket.id}`}
         className="body-strong underline-offset-2 after:absolute after:inset-0 hover:text-accent-strong hover:underline"
       >
         {contact.name}
@@ -124,7 +130,7 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
           <TableBody>
             {tickets.map((ticket) => (
               <TableRow key={ticket.id} className="relative">
-                <ContactCell ticket={ticket} />
+                <ContactCell ticket={ticket} conversations />
                 <MessageCell ticket={ticket} />
                 <TableCell>
                   <Button
@@ -139,7 +145,7 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
                         {
                           onSuccess: () => {
                             toast.success('Chamado assumido')
-                            void navigate(`/chamados/${ticket.id}`)
+                            void navigate(`/conversas/${ticket.id}`)
                           },
                         },
                       )
@@ -189,7 +195,7 @@ function InProgressCard({ tickets, user }: { tickets: TicketSummary[]; user: Use
           <TableBody>
             {sorted.map((ticket) => (
               <TableRow key={ticket.id} className="relative">
-                <ContactCell ticket={ticket} />
+                <ContactCell ticket={ticket} conversations />
                 <TableCell className="whitespace-nowrap">
                   {ticket.assignee?.id === user.id ? (
                     <Badge tone="success">Você</Badge>

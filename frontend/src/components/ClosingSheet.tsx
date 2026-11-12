@@ -46,10 +46,12 @@ export function ClosingSheet({
   open,
   onOpenChange,
   transfer = false,
+  successTo = '/',
 }: {
   ticket: TicketDetail
   open: boolean
   onOpenChange: (open: boolean) => void
+  successTo?: string
   transfer?: boolean
 }) {
   const queryClient = useQueryClient()
@@ -122,7 +124,7 @@ export function ClosingSheet({
       toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
       onOpenChange(false)
       // A próxima ação depois de encerrar ou transferir está no painel.
-      void navigate('/')
+      void navigate(successTo)
     }
     // Se o servidor recusar, o aviso aparece no formulário.
     const onError = () => questions.reset()

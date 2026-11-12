@@ -40,6 +40,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   // O atendente assume o chamado pela tela da conversa.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Maria Cliente' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(page.getByRole('heading', { name: 'Maria Cliente' })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Bom dia, preciso do balancete')
@@ -171,6 +172,7 @@ test('assumir pela lista não muda a tela nem apaga o texto em digitação', asy
   })
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Ana Aberta' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   // O aviso deste chamado sai antes, para o seguinte não empilhar sobre ele.
   const notice = page.getByText('Chamado assumido')
@@ -228,6 +230,7 @@ test('assumir pela lista a conversa aberta mostra o novo responsável', async ({
   })
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Caio Aberto' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const details = page.getByRole('region', { name: 'Chamado' })
   await expect(details).toContainText('Sem responsável')
   const openedAt = page.url()
@@ -258,6 +261,7 @@ test('quem perde a disputa pela lista vê o erro e o chamado sai da fila', async
   }
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Duda Aberta' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
 
   // Sem o WebSocket, a janela do colega continua mostrando o chamado na fila.
   const otherContext = await browser.newContext()
@@ -265,6 +269,7 @@ test('quem perde a disputa pela lista vê o erro e o chamado sai da fila', async
   await other.routeWebSocket(/\/api\/ws$/, () => {})
   await signIn(other, supervisor, userPassword)
   await other.getByRole('link', { name: 'Duda Aberta' }).click()
+  await other.getByRole('link', { name: 'Ver chamado' }).click()
   const otherQueue = other.getByRole('region', { name: 'Na fila (2)' })
   const contested = otherQueue.getByRole('button', { name: 'Assumir chamado de Enzo Disputado' })
   await expect(contested).toBeVisible()
@@ -303,6 +308,7 @@ test('mensagem que falhou é reenviada pelo responsável', async ({ page, reques
   })
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'João Cliente' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 

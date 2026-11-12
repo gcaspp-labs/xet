@@ -7,7 +7,7 @@ Mensagem de um contato vira chamado na fila do setor, e uma pessoa do setor assu
 - [jornada] Mensagem de número desconhecido abre chamado na fila, com protocolo, marcado como não cadastrado, sem recarregar a tela.
 - [jornada] Reentrega da mesma mensagem (mesmo `externalMessageId`) não gera efeito.
 - [jornada] Segunda mensagem do contato entra no mesmo chamado.
-- [jornada] Assumir pela fila abre a conversa, já com a caixa de resposta.
+- [jornada] Assumir pela aba Fila de Conversas e pelo painel Atendimento abre a conversa, já com a caixa de resposta.
 - [jornada] Quem está com a tela desatualizada perde a disputa e recebe o aviso na fila.
 - [jornada] Duas pessoas assumindo ao mesmo tempo: uma recebe 200 e a outra 409, com um registro só na auditoria.
 - [jornada] O chamado assumido sai da fila e aparece em "Em atendimento".
@@ -23,8 +23,8 @@ Mensagem de um contato vira chamado na fila do setor, e uma pessoa do setor assu
 
 1. Um contato manda uma mensagem para o número do setor.
 2. O atendente entra em `/login` e cai no painel "Atendimento". O cartão "Fila do setor" lista os chamados com o contato, o protocolo e a última mensagem.
-3. Ele clica em "Assumir" na linha do contato. O aviso "Chamado assumido" aparece, e a tela vai para `/chamados/<id>`, com a conversa e a caixa de resposta.
-4. De volta ao painel, o chamado está em "Em atendimento", marcado "Você".
+3. Ele abre Conversas pelo menu e clica em "Assumir" na aba Fila. A tela vai para `/conversas/<id>`, com a conversa e a caixa de resposta.
+4. De volta ao painel, o chamado está em "Em atendimento", marcado "Você". Para outro contato na fila, clica em "Assumir" no painel e também chega a `/conversas/<id>`.
 
 ## Driving it
 

@@ -19,10 +19,12 @@ export function TransferSheet({
   ticket,
   open,
   onOpenChange,
+  onSuccess,
 }: {
   ticket: TicketDetail
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }) {
   const { data: workload = [] } = useWorkload(ticket.sector.id)
   const transfer = useTransferTicket(ticket.id, ticket.sector.id)
@@ -59,6 +61,7 @@ export function TransferSheet({
       onSuccess: () => {
         toast.success('Chamado transferido')
         changeOpen(false)
+        onSuccess?.()
       },
       onError: (err) => setError(err.message),
     })

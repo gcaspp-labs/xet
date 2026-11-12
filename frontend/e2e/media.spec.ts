@@ -52,6 +52,7 @@ test('arquivo indisponível vira aviso na conversa e na última mensagem do pain
   await signIn(page, agent, userPassword)
   await expect(page.getByText('Arquivo não pôde ser baixado: video-grande.mp4')).toBeVisible()
   await page.getByRole('link', { name: 'Clara Cliente' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
 
   const received = page
     .getByRole('region', { name: 'Conversa', exact: true })
@@ -89,6 +90,7 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Clara Cliente' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
   await expect(received).toHaveCount(3)
@@ -173,6 +175,7 @@ test('player de áudio toca, avança e responde ao teclado na gravação e nas m
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Clara Cliente' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
 

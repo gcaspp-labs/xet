@@ -58,6 +58,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   // Na origem, o responsável preenche o formulário completo e escolhe o destino.
   await signIn(page, origin.agent, userPassword)
   await page.getByRole('link', { name: contact }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await page.getByRole('button', { name: 'Outro setor' }).click()
@@ -101,6 +102,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   // O destino recebe o chamado na fila, com a origem e a conversa anterior.
   await signIn(page, destination.agent, userPassword)
   await page.getByRole('link', { name: contact }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(conversation).toContainText(
     `Transferido de ${origin.sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
   )

@@ -61,7 +61,7 @@ test('nova mensagem aparece no painel sem recarregar e o atendente assume o cham
   await row.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   // Assumir abre a conversa, já com a caixa de resposta.
-  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  await expect(page).toHaveURL(/\/conversas\/\d+$/)
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
 
   await page.getByRole('link', { name: 'Atendimento' }).click()
@@ -96,7 +96,7 @@ test('o mesmo atendente conduz vários chamados ao mesmo tempo', async ({
   for (const contactName of names) {
     await receive(request, sector.id, { phone: unique().phone, contactName, body: 'Bom dia' })
     await queue.getByRole('button', { name: `Assumir chamado de ${contactName}` }).click()
-    await expect(page).toHaveURL(/\/chamados\/\d+$/)
+    await expect(page).toHaveURL(/\/conversas\/\d+$/)
     await page.getByRole('link', { name: 'Atendimento' }).click()
   }
 
@@ -124,7 +124,7 @@ test('a linha inteira do chamado abre a conversa e o botão de assumir continua 
   }
   await signIn(page, agent, userPassword)
   const queue = card(page, 'Fila do setor')
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
 
   // Clique na última mensagem, fora do nome do contato, abre o chamado daquela linha. O link
   // esticado cobre a célula de propósito; `force` dispensa a conferência de elemento coberto
@@ -134,9 +134,9 @@ test('a linha inteira do chamado abre a conversa e o botão de assumir continua 
     .getByText('Bruno Segundo')
     .last()
     .click({ force: true })
-  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  await expect(page).toHaveURL(/\/conversas\/\d+$/)
   await expect(page.getByRole('heading', { name: 'Bruno Segundo' })).toBeVisible()
-  await expect(details).toContainText('Na fila')
+  await expect(conversation).toContainText('Chamado na fila.')
   await page.goBack()
 
   // Pelo teclado, o nome do contato continua sendo um link.
@@ -149,7 +149,7 @@ test('a linha inteira do chamado abre a conversa e o botão de assumir continua 
   await queue.getByRole('button', { name: 'Assumir chamado de Ana Primeira' }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Ana Primeira' })).toBeVisible()
-  await expect(details).toContainText('Em atendimento')
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
 })
 
 test('atendente de outro setor não vê a fila', async ({ page, request, baseURL }) => {

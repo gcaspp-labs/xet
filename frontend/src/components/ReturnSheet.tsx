@@ -10,10 +10,12 @@ export function ReturnSheet({
   ticket,
   open,
   onOpenChange,
+  successTo = '/',
 }: {
   ticket: TicketDetail
   open: boolean
   onOpenChange: (open: boolean) => void
+  successTo?: string
 }) {
   const navigate = useNavigate()
   const returnTicket = useReturnTicket(ticket.id, ticket.sector.id)
@@ -35,7 +37,7 @@ export function ReturnSheet({
         toast.success('Chamado devolvido à fila')
         changeOpen(false)
         // A próxima ação depois de devolver está no painel.
-        void navigate('/')
+        void navigate(successTo)
       },
     })
   }

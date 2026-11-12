@@ -109,7 +109,8 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await search.fill('peruibe')
   await expect(found).toHaveCount(1)
   await expect(found.first()).toContainText(`Prefeitura ${id}`)
-  await search.fill('')
+  // A tabela é compartilhada entre testes e a edição pode mudar a página da linha.
+  await search.fill(id)
 
   await page.getByRole('button', { name: `Editar Prefeitura ${id}` }).click()
   const edit = page.getByRole('dialog', { name: 'Editar órgão' })

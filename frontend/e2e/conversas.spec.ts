@@ -1,0 +1,334 @@
+import { expect, request as apiRequest } from '@playwright/test'
+import { admin, seedDirectory, seedSector, signIn, test, unique, userPassword } from './fixtures'
+
+test('Conversas funciona no menu recolhido e no celular', async ({ page, baseURL }) => {
+  const { agent } = await seedSector(baseURL!)
+  await signIn(page, agent, userPassword)
+  await page.getByRole('button', { name: 'Recolher menu' }).click()
+  const link = page.getByRole('link', { name: 'Conversas', exact: true })
+  await link.hover()
+  await expect(
+    page.locator('[data-slot="tooltip-content"]', { hasText: 'Conversas' }),
+  ).toBeVisible()
+  await link.click()
+  await expect(link).toHaveAttribute('aria-current', 'page')
+  await page.setViewportSize({ width: 390, height: 800 })
+  await page.getByRole('banner').getByRole('button', { name: 'Abrir menu' }).click()
+  const mobileLink = page.getByRole('link', { name: 'Conversas', exact: true })
+  await expect(mobileLink).toBeVisible()
+  await mobileLink.click()
+  await expect(page).toHaveURL(/\/conversas$/)
+})
+
+test('menu Conversas abre a tela sem atendimentos', async ({ page, baseURL }) => {
+  const { agent } = await seedSector(baseURL!)
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Fila' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Conversas', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+})
+
+test('assumir pela fila abre a conversa e permite consultar assuntos', async ({
+  page,
+  request,
+  baseURL,
+  browser,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  const received = await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+    data: {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName: 'Cliente da fila com nome bastante comprido',
+      body: 'Olá',
+    },
+  })
+  expect(received.ok()).toBeTruthy()
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page
+    .getByRole('button', { name: 'Assumir chamado de Cliente da fila com nome bastante comprido' })
+    .click()
+  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  const title = page.getByRole('heading', { name: 'Cliente da fila com nome bastante comprido' })
+  await expect(title).toBeVisible()
+  expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toContainText('Olá')
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Assuntos' }).click()
+  await expect(page.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Ver chamado' })).toBeVisible()
+  for (const name of ['Detalhes', 'Notas', 'Histórico', 'Falou com']) {
+    await expect(page.getByRole('tab', { name })).toHaveCount(0)
+  }
+  await expect(page.getByRole('link', { name: 'Conversas', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  const other = await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+    data: {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName: 'Outro cliente',
+      body: 'Preciso de ajuda',
+    },
+  })
+  expect(other.ok()).toBeTruthy()
+  await expect(page.getByRole('tab', { name: 'Fila, 1 a assumir' })).toContainText('1')
+  const otherContext = await browser.newContext()
+  const otherPage = await otherContext.newPage()
+  await signIn(otherPage, supervisor, userPassword)
+  await otherPage.goto(page.url())
+  await expect(otherPage.getByRole('tab', { name: 'Assuntos' })).toHaveCount(0)
+  await expect(otherPage.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
+  await otherPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await otherPage.getByRole('button', { name: 'Assumir chamado de Outro cliente' }).click()
+  await expect(page.getByRole('tab', { name: 'Fila', exact: true })).toHaveText('Fila')
+  await otherContext.close()
+  await page.getByRole('button', { name: 'Devolver à fila' }).click()
+  await page
+    .getByRole('dialog', { name: 'Devolver à fila' })
+    .getByRole('button', { name: 'Devolver à fila' })
+    .click()
+  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Fila, 1 a assumir' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+})
+
+test('lista só atendimentos próprios, ordena pela atividade e permite alternar', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  const receive = async (name: string, phone: string, body: string) => {
+    expect(
+      (
+        await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+          data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: name, body },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  }
+  const first = unique().phone
+  await receive('Primeiro cliente', first, 'Mensagem inicial')
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('button', { name: 'Assumir chamado de Primeiro cliente' }).click()
+  await receive('Segundo cliente', unique().phone, 'Segunda mensagem')
+  await page.getByRole('button', { name: 'Assumir chamado de Segundo cliente' }).click()
+  const mine = page.getByRole('navigation', { name: 'Meus atendimentos' })
+  await expect(mine.getByRole('link')).toHaveCount(2)
+  await expect(mine.getByRole('link').first()).toContainText('Segundo cliente')
+  await expect(mine.getByRole('link').first()).toHaveAttribute('aria-current', 'page')
+  await receive('Primeiro cliente', first, 'Nova atividade')
+  await expect(mine.getByRole('link').first()).toContainText('Primeiro cliente')
+  await expect(mine.getByRole('link').first()).toContainText('Nova atividade')
+  await page.getByRole('tab', { name: 'Assuntos' }).click()
+  await mine.getByRole('link', { name: /Primeiro cliente/ }).click()
+  await expect(page.getByRole('tab', { name: /Fila/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(mine.getByRole('link').first()).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
+    'Nova atividade',
+  )
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await expect(page.getByText('Selecione um atendimento')).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Assuntos' })).toHaveCount(0)
+  await page.context().clearCookies()
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await expect(page.getByText('Você não tem atendimentos ativos.')).toBeVisible()
+})
+
+test('cancelar na tela Conversas retorna ao estado sem conversa', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  expect(
+    (
+      await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+        data: {
+          externalMessageId: `E2E-${unique().id}`,
+          phone: unique().phone,
+          contactName: 'Cliente cancelado',
+          body: 'Olá',
+        },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('button', { name: 'Assumir chamado de Cliente cancelado' }).click()
+  await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Cancelar chamado' })
+  await dialog.getByLabel('Motivo').fill('Atendimento iniciado por engano')
+  await dialog.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
+})
+
+test('supervisor e administrador assumem na fila dos setores permitidos', async ({
+  page,
+  request,
+  baseURL,
+  browser,
+}) => {
+  const first = await seedSector(baseURL!)
+  const second = await seedSector(baseURL!)
+  for (const [sector, name] of [
+    [first.sector, 'Cliente do setor'],
+    [second.sector, 'Cliente de outro setor'],
+  ] as const) {
+    expect(
+      (
+        await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+          data: {
+            externalMessageId: `E2E-${unique().id}`,
+            phone: unique().phone,
+            contactName: name,
+            body: 'Olá',
+          },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  }
+  await signIn(page, first.supervisor, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await expect(
+    page.getByRole('button', { name: 'Assumir chamado de Cliente de outro setor' }),
+  ).toHaveCount(0)
+  await page.getByRole('button', { name: 'Assumir chamado de Cliente do setor' }).click()
+  await expect(page.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(
+    'Cliente do setor',
+  )
+  const adminContext = await browser.newContext()
+  const adminPage = await adminContext.newPage()
+  await signIn(adminPage, admin.email, admin.password)
+  await adminPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await expect(adminPage.getByText('Você não tem atendimentos ativos.')).toBeVisible()
+  await adminPage.getByRole('button', { name: 'Assumir chamado de Cliente de outro setor' }).click()
+  await expect(adminPage.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(
+    'Cliente de outro setor',
+  )
+  await adminContext.close()
+})
+
+test('disputa na fila mostra aviso e remove o chamado já assumido', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  expect(
+    (
+      await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+        data: {
+          externalMessageId: `E2E-${unique().id}`,
+          phone: unique().phone,
+          contactName: 'Cliente disputado',
+          body: 'Olá',
+        },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  const context = await browser.newContext()
+  const other = await context.newPage()
+  await other.routeWebSocket(/\/api\/ws$/, () => {})
+  await signIn(other, supervisor, userPassword)
+  await other.getByRole('link', { name: 'Conversas', exact: true }).click()
+  const contested = other.getByRole('button', { name: 'Assumir chamado de Cliente disputado' })
+  await expect(contested).toBeVisible()
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('button', { name: 'Assumir chamado de Cliente disputado' }).click()
+  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await contested.click()
+  await expect(
+    other
+      .getByRole('alert')
+      .filter({ hasText: 'Este chamado já foi assumido por outro atendente.' }),
+  ).toBeVisible()
+  await expect(contested).toHaveCount(0)
+  await context.close()
+})
+
+for (const action of ['Encerrar', 'Outro setor', 'Transferir'] as const) {
+  test(`${action} na tela Conversas volta à lista sem conversa aberta`, async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    const origin = await seedSector(baseURL!)
+    const destination = await seedSector(baseURL!)
+    const api = await apiRequest.newContext({ baseURL })
+    expect(
+      (
+        await api.post('/api/auth/login', {
+          data: { email: admin.email, password: admin.password },
+        })
+      ).ok(),
+    ).toBeTruthy()
+    for (const sector of [origin.sector, destination.sector]) {
+      expect((await api.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
+      expect((await api.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
+    }
+    expect(
+      (
+        await api.post(`/api/sectors/${origin.sector.id}/modules`, { data: { name: 'Folha' } })
+      ).ok(),
+    ).toBeTruthy()
+    await api.dispose()
+    const { id, phone } = unique()
+    const contact = `Cliente ${id}`
+    await seedDirectory(
+      baseURL!,
+      [{ name: `Prefeitura ${id}` }],
+      [{ name: contact, phone, organization: 0, sector: origin.sector.id }],
+    )
+    expect(
+      (
+        await request.post(`/api/test/messaging/sectors/${origin.sector.id}/receive`, {
+          data: { externalMessageId: `E2E-${id}`, phone, contactName: contact, body: 'Olá' },
+        })
+      ).ok(),
+    ).toBeTruthy()
+    await signIn(page, origin.agent, userPassword)
+    await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+    await page.getByRole('button', { name: `Assumir chamado de ${contact}` }).click()
+    await page.getByRole('button', { name: action, exact: true }).click()
+    if (action === 'Transferir') {
+      const sheet = page.getByRole('dialog', { name: 'Transferir chamado' })
+      await sheet.getByRole('combobox', { name: 'Transferir para' }).click()
+      await page.getByRole('option', { name: /^supervisor .* · Supervisor/ }).click()
+      await sheet.getByRole('button', { name: 'Transferir' }).click()
+    } else {
+      const sheet = page.getByRole('dialog', {
+        name: action === 'Encerrar' ? 'Encerrar chamado' : 'Transferir para outro setor',
+      })
+      await sheet.getByLabel('Assunto').fill('Folha de março')
+      await sheet.getByLabel('Resolução').fill('Solicitação atendida.')
+      await sheet.getByRole('checkbox', { name: 'Folha' }).click()
+      if (action === 'Outro setor') {
+        await sheet.getByLabel('Setor de destino').click()
+        await page.getByRole('option', { name: destination.sector.name }).click()
+      }
+      await sheet
+        .getByRole('button', { name: action === 'Encerrar' ? 'Encerrar' : 'Transferir' })
+        .click()
+      await sheet.getByRole('button', { name: 'Não adicionar' }).click()
+    }
+    await expect(page).toHaveURL(/\/conversas$/)
+    await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
+  })
+}

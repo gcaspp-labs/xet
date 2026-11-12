@@ -4,6 +4,7 @@ import { type Role, useCurrentUser } from '@/lib/auth'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import PanelPage from '@/pages/PanelPage'
+import ConversasPage from '@/pages/ConversasPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
@@ -42,6 +43,8 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<PanelPage />} />
           <Route path="/chamados/:ticketId" element={<TicketPage />} />
+          <Route path="/conversas" element={<ConversasPage />} />
+          <Route path="/conversas/:ticketId" element={<ConversasPage />} />
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>

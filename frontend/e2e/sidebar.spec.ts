@@ -114,7 +114,7 @@ test('atendente vê só os itens do seu papel, sem Usuários em Configurações'
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Contatos'],
+      ['Helpdesk', 'Atendimento', 'Conversas', 'Contatos'],
       ['Cadastro', 'Órgãos'],
     ])
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -132,7 +132,7 @@ test('supervisor vê também Conexão, Módulos e Assuntos, com o breadcrumb do 
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Dashboard', 'Contatos', 'Conexão'],
+      ['Helpdesk', 'Atendimento', 'Conversas', 'Dashboard', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos'],
     ])
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -158,7 +158,7 @@ test('administrador vê tudo, com Usuários só em Configurações, e o breadcru
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Dashboard', 'Contatos', 'Conexão'],
+      ['Helpdesk', 'Atendimento', 'Conversas', 'Dashboard', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos', 'Setores'],
     ])
   await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0)
@@ -222,7 +222,19 @@ test('botão de voltar leva da conversa à lista de atendimentos', async ({
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Clara Cliente' }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  for (const name of ['Detalhes', 'Notas', 'Histórico']) {
+    await expect(page.getByRole('tab', { name, exact: true })).toBeVisible()
+  }
+  await expect(page.getByText('Falou com', { exact: true })).toBeVisible()
+  await expect(page.locator(sidebar).getByRole('link', { name: 'Atendimento' })).toHaveAttribute(
+    'data-active',
+    '',
+  )
+  await expect(page.locator(sidebar).getByRole('link', { name: 'Conversas' })).not.toHaveAttribute(
+    'data-active',
+  )
 
   await page.getByRole('link', { name: 'Voltar à lista' }).click()
   await expect(page).toHaveURL(/\/$/)

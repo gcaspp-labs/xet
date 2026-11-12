@@ -22,6 +22,7 @@ await journey('transfer', async (t) => {
 
   const ticketId = await t.step('Atendente assume o chamado', async () => {
     await agentPage.getByRole('link', { name: joana.name }).click()
+    await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
     await agentPage.getByRole('button', { name: 'Assumir', exact: true }).click()
     await expect(agentPage.getByText('Chamado assumido')).toBeVisible()
     await expect(conversation).toContainText(`${agent.name} assumiu o chamado`)
@@ -143,6 +144,7 @@ await journey('transfer', async (t) => {
     async () => {
       await agentPage.goto('/')
       await agentPage.getByRole('link', { name: lucia.name }).click()
+      await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
       await agentPage.getByRole('button', { name: 'Assumir', exact: true }).click()
       await expect(agentPage.getByText('Chamado assumido')).toBeVisible()
       return Number(agentPage.url().split('/').pop())
@@ -168,6 +170,7 @@ await journey('transfer', async (t) => {
     await sheet.getByLabel('Setor de destino').click()
     await agentPage.getByRole('option', { name: destination.name }).click()
     await sheet.getByRole('button', { name: 'Transferir' }).click()
+    await sheet.getByRole('button', { name: 'Não adicionar' }).click()
     await expect(agentPage.getByText('Chamado transferido para outro setor')).toBeVisible()
     await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
     const doneRow = agentPage
@@ -181,6 +184,7 @@ await journey('transfer', async (t) => {
 
   await t.step('Destino recebe na fila, com a origem e a conversa anterior', async () => {
     await destinationPage.getByRole('link', { name: lucia.name }).click()
+    await destinationPage.getByRole('link', { name: 'Ver chamado' }).click()
     const destinationConversation = destinationPage.getByRole('region', {
       name: 'Conversa',
       exact: true,

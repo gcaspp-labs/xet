@@ -12,10 +12,12 @@ export function CancelSheet({
   ticket,
   open,
   onOpenChange,
+  successTo = '/',
 }: {
   ticket: TicketDetail
   open: boolean
   onOpenChange: (open: boolean) => void
+  successTo?: string
 }) {
   const navigate = useNavigate()
   const cancel = useCancelTicket(ticket.id, ticket.sector.id)
@@ -46,7 +48,7 @@ export function CancelSheet({
         toast.success('Chamado cancelado')
         changeOpen(false)
         // A próxima ação depois de cancelar está no painel.
-        void navigate('/')
+        void navigate(successTo)
       },
     })
   }
