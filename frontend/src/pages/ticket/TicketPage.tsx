@@ -83,6 +83,9 @@ import {
   ticketStatusLabel,
 } from '@/lib/format'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
+import { cn } from '@/lib/utils'
+import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
+import { useTicketView } from '@/pages/ticket/useTicketView'
 
 const messageStatusLabels: Record<
   MessageStatus,
@@ -998,6 +1001,7 @@ export default function TicketPage() {
   const [registering, setRegistering] = useState(false)
   const openRegistration = () => setRegistering(true)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
+  const [view, setView] = useTicketView(ticketId)
 
   if (error) {
     return (
@@ -1015,6 +1019,9 @@ export default function TicketPage() {
   if (!ticket || !user) {
     return null
   }
+
+  const showSubjects = canClose(ticket, user)
+  const subjectsOpen = showSubjects && view.tab === 'subjects'
 
   return (
     <>
@@ -1114,7 +1121,14 @@ export default function TicketPage() {
         />
       )}
       {/* A tela de conversas usa a largura toda (design.md). */}
-      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]">
+      <div
+        className={cn(
+          'grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px]',
+          subjectsOpen
+            ? 'lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[280px_minmax(0,1fr)_420px]'
+            : 'lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]',
+        )}
+      >
         {assign.error && (
           <Alert variant="warning" className="lg:col-span-2 xl:col-span-3">
             <CircleAlert strokeWidth={1.7} aria-hidden />
@@ -1132,16 +1146,35 @@ export default function TicketPage() {
           />
         </div>
         <ConversationCard ticket={ticket} user={user} onRegister={openRegistration} />
-        <Card role="region" aria-labelledby="ticket-info-title">
+        <Card
+          role="region"
+          aria-labelledby="ticket-info-title"
+          className={cn(subjectsOpen && 'lg:h-[calc(100dvh-150px-var(--header-height))]')}
+        >
           <CardHeader>
             <CardTitle id="ticket-info-title">Chamado</CardTitle>
           </CardHeader>
-          <Tabs defaultValue="details" className="px-5 pb-5">
+          <Tabs
+            value={view.tab === 'subjects' && !showSubjects ? 'details' : view.tab}
+            onValueChange={(tab) => setView({ tab: String(tab) })}
+            className="min-h-0 flex-1 px-5 pb-5"
+          >
             <TabsList>
               <TabsTrigger value="details">Detalhes</TabsTrigger>
               <TabsTrigger value="notes">Notas</TabsTrigger>
               <TabsTrigger value="history">Histórico</TabsTrigger>
+              {showSubjects && <TabsTrigger value="subjects">Assuntos</TabsTrigger>}
             </TabsList>
+            {showSubjects && (
+              <TabsContent value="subjects" className="flex min-h-0 flex-col overflow-y-auto">
+                <SubjectsTab
+                  key={ticket.id}
+                  ticketId={ticket.id}
+                  query={view.query}
+                  onQueryChange={(query) => setView({ query })}
+                />
+              </TabsContent>
+            )}
             <TabsContent value="details">
               <DetailsTab ticket={ticket} user={user} onRegister={openRegistration} />
             </TabsContent>
