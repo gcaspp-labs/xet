@@ -1,3 +1,4 @@
+import { useIsProposal } from '@/prototype/p145'
 import {
   CheckCheck,
   CircleAlert,
@@ -95,6 +96,7 @@ function MessageCell({ ticket }: { ticket: TicketSummary }) {
 
 function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSummary[] }) {
   const assign = useAssignTicket()
+  const proposal = useIsProposal()
   const navigate = useNavigate()
 
   return (
@@ -129,7 +131,7 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
                 <TableCell>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant={proposal ? 'default' : 'outline'}
                     className="relative z-10"
                     disabled={assign.isPending}
                     aria-label={`Assumir chamado de ${ticket.contact.name}`}

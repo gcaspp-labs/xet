@@ -11,6 +11,7 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  MessageSquareText,
   MessagesSquare,
   Monitor,
   Moon,
@@ -60,6 +61,7 @@ import { type NotificationBlock, useAlertSettings } from '@/lib/alerts'
 import { type Role, type User, useCurrentUser, useLogout } from '@/lib/auth'
 import { roleLabels } from '@/lib/format'
 import { useRealtime } from '@/lib/realtime'
+import { PrototypeSwitcher, useIsProposal } from '@/prototype/p145'
 import { type Theme, useTheme } from '@/lib/theme'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
@@ -67,6 +69,8 @@ type NavItem = { to: string; label: string; icon: LucideIcon; roles: Role[] }
 // A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
 const helpdeskItems: NavItem[] = [
   { to: '/', label: 'Atendimento', icon: MessagesSquare, roles: ['agent', 'supervisor', 'admin'] },
+  // PROTÓTIPO #145: Conversas logo abaixo de Atendimento.
+  { to: '/conversas', label: 'Conversas', icon: MessageSquareText, roles: ['agent', 'supervisor', 'admin'] },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['supervisor', 'admin'] },
   { to: '/contatos', label: 'Contatos', icon: BookUser, roles: ['agent', 'supervisor', 'admin'] },
   { to: '/conexao', label: 'Conexão', icon: QrCode, roles: ['supervisor', 'admin'] },
@@ -81,9 +85,17 @@ const registryItems: NavItem[] = [
 ]
 
 function NavGroup({ label, items, role }: { label: string; items: NavItem[]; role: Role }) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const { setOpenMobile } = useSidebar()
-  const visible = items.filter((item) => item.roles.includes(role))
+  const proposal = useIsProposal()
+  // PROTÓTIPO #145: na versão atual, o menu fica como na main.
+  const visible = items
+    .filter((item) => item.roles.includes(role))
+    .filter((item) => proposal || item.to !== '/conversas')
+  const active = (to: string) =>
+    proposal
+      ? pathname === to || (to === '/conversas' && pathname.startsWith('/chamados/'))
+      : pathname === to || (to === '/' && pathname.startsWith('/chamados/'))
   if (visible.length === 0) {
     return null
   }
@@ -98,10 +110,10 @@ function NavGroup({ label, items, role }: { label: string; items: NavItem[]; rol
             <SidebarMenuItem key={item.to}>
               <SidebarMenuButton
                 tooltip={item.label}
-                isActive={
-                  pathname === item.to || (item.to === '/' && pathname.startsWith('/chamados/'))
+                isActive={active(item.to)}
+                render={
+                  <NavLink to={item.to + search} onClick={() => setOpenMobile(false)} end />
                 }
-                render={<NavLink to={item.to} onClick={() => setOpenMobile(false)} />}
               >
                 <item.icon strokeWidth={1.7} className="size-[17px]!" aria-hidden />
                 <span>{item.label}</span>
@@ -301,6 +313,7 @@ export default function AppLayout() {
         <SidebarInset className="min-w-0">
           {!online && <RealtimeNote />}
           <Outlet />
+          <PrototypeSwitcher />
         </SidebarInset>
       </div>
     </SidebarProvider>

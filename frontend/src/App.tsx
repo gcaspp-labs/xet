@@ -42,6 +42,8 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<PanelPage />} />
           <Route path="/chamados/:ticketId" element={<TicketPage />} />
+          {/* PROTÓTIPO #145: só a tela do chat; Conversas leva a uma conversa aberta. */}
+          <Route path="/conversas" element={<Navigate to="/chamados/101?variant=proposta" replace />} />
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>

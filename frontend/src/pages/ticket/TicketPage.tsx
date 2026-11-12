@@ -38,6 +38,7 @@ import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { TicketHistoryList } from '@/components/TicketHistory'
 import { Topbar } from '@/components/Topbar'
+import { useIsProposal } from '@/prototype/p145'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -254,10 +255,15 @@ function assignmentText(log: AssignmentLog) {
 
 // Registro de responsável ou de encerramento entre as mensagens, na ordem do tempo.
 function AssignmentEntry({ log }: { log: AssignmentLog }) {
+  const proposal = useIsProposal()
   return (
     <li
       aria-label="Registro do chamado"
-      className="caption flex items-start gap-1.5 self-center rounded-(--radius-7) border border-line-soft bg-muted px-2.5 py-1 text-ink-soft"
+      className={cn(
+        'caption flex items-start gap-1.5 self-center rounded-(--radius-7) border px-2.5 py-1 text-ink-soft',
+        // PROTÓTIPO #145: evento sem preenchimento, com borda tracejada, para não parecer balão.
+        proposal ? 'border-dashed border-line bg-transparent' : 'border-line-soft bg-muted',
+      )}
     >
       {log.action === 'ticket_cancelled' ? (
         <Ban strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
@@ -318,17 +324,29 @@ function MessageBubble({
   const status = message.status && outbound ? messageStatusLabels[message.status] : null
   const author =
     message.origin === 'phone' ? 'Enviada fora do sistema' : outbound ? message.author?.name : null
+  const proposal = useIsProposal()
+  // PROTÓTIPO #145: enviada = cor primária cheia (texto on-accent); recebida = surface com borda line.
+  const sentStrong = proposal && outbound
 
   return (
     <li
       aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
-      className={`flex max-w-[78%] flex-col gap-1 rounded-(--radius-12) border px-3 py-2 ${
-        outbound
-          ? 'self-end border-accent-soft bg-accent-soft'
-          : 'self-start border-line-soft bg-card'
-      }`}
+      className={cn(
+        'flex max-w-[78%] flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+        proposal
+          ? outbound
+            ? 'self-end rounded-br-(--radius-6) border-primary bg-primary text-primary-foreground'
+            : 'self-start rounded-bl-(--radius-6) border-line bg-card'
+          : outbound
+            ? 'self-end border-accent-soft bg-accent-soft'
+            : 'self-start border-line-soft bg-card',
+      )}
     >
-      {author && <p className="caption font-medium text-ink-soft">{author}</p>}
+      {author && (
+        <p className={cn('caption font-medium', sentStrong ? 'text-primary-foreground' : 'text-ink-soft')}>
+          {author}
+        </p>
+      )}
       <MessageMedia message={message} />
       {message.type === 'media_unavailable' && (
         <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
@@ -339,8 +357,20 @@ function MessageBubble({
         message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>
       )}
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <span className="mono-num caption text-ink-faint">{formatMessageTime(message.sentAt)}</span>
-        {status && <Badge tone={status.tone}>{status.label}</Badge>}
+        <span
+          className={cn(
+            'mono-num caption',
+            sentStrong ? 'text-primary-foreground' : proposal ? 'text-ink-soft' : 'text-ink-faint',
+          )}
+        >
+          {formatMessageTime(message.sentAt)}
+        </span>
+        {status &&
+          (sentStrong ? (
+            <span className="caption font-medium text-primary-foreground">· {status.label}</span>
+          ) : (
+            <Badge tone={status.tone}>{status.label}</Badge>
+          ))}
       </div>
       {message.status === 'failed' && (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -577,6 +607,7 @@ function ConversationCard({
   const retry = useRetryMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
+  const proposal = useIsProposal()
 
   // Mostra sempre a mensagem mais recente.
   useEffect(() => {
@@ -613,7 +644,15 @@ function ConversationCard({
           </Alert>
         </div>
       )}
-      <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
+      <div
+        ref={list}
+        className={cn(
+          'flex-1 overflow-y-auto px-4 py-4',
+          // PROTÓTIPO #145: área de mensagens com o fundo da página (paper), distinto do cartão.
+          // No alto contraste, paper e surface coincidem; usa surface-2 (muted) para manter a distinção.
+          proposal && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
+        )}
+      >
         {messages.length > 0 || logs.length > 0 ? (
           <ol className="flex flex-col gap-2">
             {timeline(messages, logs).map((item) =>
@@ -1002,6 +1041,7 @@ export default function TicketPage() {
   const openRegistration = () => setRegistering(true)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
   const [view, setView] = useTicketView(ticketId)
+  const proposalTop = useIsProposal()
 
   if (error) {
     return (
@@ -1021,6 +1061,7 @@ export default function TicketPage() {
   }
 
   const showSubjects = canClose(ticket, user)
+  const proposalActions = proposalTop
   const subjectsOpen = showSubjects && view.tab === 'subjects'
 
   return (
@@ -1036,6 +1077,10 @@ export default function TicketPage() {
                 <Ban strokeWidth={1.7} aria-hidden />
                 Cancelar chamado
               </Button>
+            )}
+            {/* PROTÓTIPO #145: separa a ação destrutiva das demais. */}
+            {proposalActions && canCancel(ticket, user) && (
+              <span aria-hidden className="mx-1 w-px self-stretch bg-line" />
             )}
             {canReturn(ticket, user) && (
               <Button variant="outline" onClick={() => setReturning(true)}>

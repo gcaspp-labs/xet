@@ -1,6 +1,7 @@
 import { CircleAlert, MessagesSquare, UserCheck } from 'lucide-react'
 import { useEffect } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
+import { useIsProposal } from '@/prototype/p145'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -19,9 +20,10 @@ function lastActivity(ticket: TicketSummary) {
 
 function ConversationLink({ ticket, user }: { ticket: TicketSummary; user: User }) {
   const queued = ticket.status === 'queued'
+  const { search } = useLocation()
   return (
     <NavLink
-      to={`/chamados/${ticket.id}`}
+      to={`/chamados/${ticket.id}${search}`}
       className="flex flex-col gap-1 px-4 py-2.5 transition-colors hover:bg-muted aria-[current=page]:bg-accent-soft"
     >
       <span className="flex items-center gap-2">
@@ -68,6 +70,38 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
     .filter((t) => t.status !== 'queued')
     .sort((a, b) => Number(b.assignee?.id === user.id) - Number(a.assignee?.id === user.id))
 
+  const proposal = useIsProposal()
+  const assignButton = (ticket: TicketSummary) => (
+    <Button
+      size="sm"
+      variant={proposal ? 'default' : 'outline'}
+      className="absolute right-4 bottom-2.5"
+      disabled={assign.isPending}
+      aria-label={`Assumir chamado de ${ticket.contact.name}`}
+      onClick={() =>
+        assign.mutate(
+          { ticketId: ticket.id, sectorId },
+          {
+            onSuccess: () =>
+              toast.success('Chamado assumido', {
+                action: (
+                  <Link
+                    to={`/chamados/${ticket.id}`}
+                    className="body-strong ml-auto whitespace-nowrap text-accent-strong underline underline-offset-2"
+                  >
+                    Abrir conversa
+                  </Link>
+                ),
+              }),
+          },
+        )
+      }
+    >
+      <UserCheck strokeWidth={1.7} aria-hidden />
+      Assumir
+    </Button>
+  )
+
   return (
     <Card
       role="region"
@@ -86,7 +120,51 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
           </Alert>
         </div>
       )}
-      {tickets.length > 0 ? (
+      {proposal ? (
+        // PROTÓTIPO #145: duas seções, sempre com título e contagem; A assumir em destaque.
+        <nav aria-label="Conversas abertas" className="flex-1 overflow-y-auto">
+          <section aria-labelledby="conversation-queue-title" className="border-y border-warning">
+            <h3
+              id="conversation-queue-title"
+              className="overline sticky top-0 z-10 flex items-center gap-2 bg-warning-soft px-4 py-2 text-warning-ink"
+            >
+              <span className="size-2 rounded-full bg-warning" aria-hidden />
+              A assumir ({queued.length})
+            </h3>
+            {queued.length > 0 ? (
+              <ul className="flex flex-col divide-y divide-line-soft">
+                {queued.map((ticket) => (
+                  <li key={ticket.id} className="relative">
+                    <ConversationLink ticket={ticket} user={user} />
+                    {assignButton(ticket)}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="caption px-4 py-3 text-ink-soft">Nenhum chamado esperando.</p>
+            )}
+          </section>
+          <section aria-labelledby="conversation-progress-title">
+            <h3
+              id="conversation-progress-title"
+              className="overline sticky top-0 z-10 border-b border-line-soft bg-muted px-4 py-2 text-ink-soft"
+            >
+              Em atendimento ({others.length})
+            </h3>
+            {others.length > 0 ? (
+              <ul className="flex flex-col divide-y divide-line-soft">
+                {others.map((ticket) => (
+                  <li key={ticket.id}>
+                    <ConversationLink ticket={ticket} user={user} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="caption px-4 py-3 text-ink-soft">Nenhum chamado em atendimento.</p>
+            )}
+          </section>
+        </nav>
+      ) : tickets.length > 0 ? (
         <nav aria-label="Conversas abertas" className="flex-1 overflow-y-auto">
           {queued.length > 0 && (
             <section aria-labelledby="conversation-queue-title" className="border-b border-line">
@@ -97,34 +175,7 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
                 {queued.map((ticket) => (
                   <li key={ticket.id} className="relative">
                     <ConversationLink ticket={ticket} user={user} />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="absolute right-4 bottom-2.5"
-                      disabled={assign.isPending}
-                      aria-label={`Assumir chamado de ${ticket.contact.name}`}
-                      onClick={() =>
-                        assign.mutate(
-                          { ticketId: ticket.id, sectorId },
-                          {
-                            onSuccess: () =>
-                              toast.success('Chamado assumido', {
-                                action: (
-                                  <Link
-                                    to={`/chamados/${ticket.id}`}
-                                    className="body-strong ml-auto whitespace-nowrap text-accent-strong underline underline-offset-2"
-                                  >
-                                    Abrir conversa
-                                  </Link>
-                                ),
-                              }),
-                          },
-                        )
-                      }
-                    >
-                      <UserCheck strokeWidth={1.7} aria-hidden />
-                      Assumir
-                    </Button>
+                    {assignButton(ticket)}
                   </li>
                 ))}
               </ul>
