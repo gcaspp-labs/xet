@@ -3,6 +3,7 @@ import { expect, request as apiRequest, type Page } from '@playwright/test'
 import {
   admin,
   clearSession,
+  login,
   seedDirectory,
   seedSector,
   signIn,
@@ -10,6 +11,35 @@ import {
   unique,
   userPassword,
 } from './fixtures'
+
+// Módulo com dois assuntos e uma solução cada, criados pela API como administrador.
+async function seedSubjects(baseURL: string, sectorId: number) {
+  const api = await apiRequest.newContext({ baseURL })
+  expect(
+    (
+      await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
+    ).ok(),
+  ).toBeTruthy()
+  const module = await api.post(`/api/sectors/${sectorId}/modules`, { data: { name: 'Geral' } })
+  expect(module.ok()).toBeTruthy()
+  const { id: moduleId } = (await module.json()) as { id: number }
+  for (const [name, body] of [
+    ['Férias', 'Regra de férias do setor'],
+    ['Ponto', 'Regra do ponto eletrônico'],
+  ]) {
+    const subject = await api.post(`/api/sectors/${sectorId}/subjects`, {
+      data: { name, moduleId },
+    })
+    expect(subject.ok()).toBeTruthy()
+    const { id } = (await subject.json()) as { id: number }
+    expect(
+      (
+        await api.post(`/api/sectors/${sectorId}/subjects/${id}/solutions`, { data: { body } })
+      ).ok(),
+    ).toBeTruthy()
+  }
+  await api.dispose()
+}
 
 function assumeIn(page: Page, name: string) {
   return page.getByRole('button', { name: `Assumir chamado de ${name}` })
@@ -418,4 +448,99 @@ test('fila do administrador ignora setores inativos e preserva os demais perfis'
   await expect(page.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(ownName)
   await expect(assumeIn(page, inactiveName)).toBeVisible()
   await adminContext.close()
+})
+
+test('a busca de Assuntos é lembrada por chamado e a Fila abre ao trocar', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await seedSubjects(baseURL!, sector.id)
+  for (const name of ['Cliente A', 'Cliente B']) {
+    expect(
+      (
+        await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+          data: {
+            externalMessageId: `E2E-${unique().id}`,
+            phone: unique().phone,
+            contactName: name,
+            body: 'Preciso de ajuda',
+          },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  }
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  const mine = page.getByRole('navigation', { name: 'Meus atendimentos' })
+  const search = page.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })
+  const vacation = page.getByText('Regra de férias do setor')
+  const timeclock = page.getByText('Regra do ponto eletrônico')
+  const fila = page.getByRole('tab', { name: /Fila/ })
+  const openSubjects = () => page.getByRole('tab', { name: 'Assuntos' }).click()
+
+  await assumeIn(page, 'Cliente A').click()
+  await expect(mine.getByRole('link', { name: /Cliente A/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await openSubjects()
+  await search.fill('ferias')
+  await expect(vacation).toBeVisible()
+  await expect(timeclock).toHaveCount(0)
+
+  // B ainda não visitado: busca vazia, sem vazar a de A.
+  await fila.click()
+  await assumeIn(page, 'Cliente B').click()
+  await expect(mine.getByRole('link', { name: /Cliente B/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await expect(fila).toHaveAttribute('aria-selected', 'true')
+  await openSubjects()
+  await expect(search).toHaveValue('')
+  await expect(vacation).toBeVisible()
+  await expect(timeclock).toBeVisible()
+  await search.fill('ponto')
+  await expect(timeclock).toBeVisible()
+  await expect(vacation).toHaveCount(0)
+
+  // De volta a A: Fila por padrão, e a busca de A restaurada ao abrir Assuntos.
+  await mine.getByRole('link', { name: /Cliente A/ }).click()
+  await expect(fila).toHaveAttribute('aria-selected', 'true')
+  await openSubjects()
+  await expect(search).toHaveValue('ferias')
+  await expect(vacation).toBeVisible()
+  await expect(timeclock).toHaveCount(0)
+
+  // E B mantém a própria.
+  await mine.getByRole('link', { name: /Cliente B/ }).click()
+  await expect(fila).toHaveAttribute('aria-selected', 'true')
+  await openSubjects()
+  await expect(search).toHaveValue('ponto')
+
+  // Recarregar apaga as buscas.
+  await page.reload()
+  await expect(fila).toHaveAttribute('aria-selected', 'true')
+  await openSubjects()
+  await expect(search).toHaveValue('')
+  await search.fill('ponto')
+  await mine.getByRole('link', { name: /Cliente A/ }).click()
+  await openSubjects()
+  await expect(search).toHaveValue('')
+
+  // Sair do sistema também apaga: a mesma pessoa entra de novo e a busca começa vazia.
+  await mine.getByRole('link', { name: /Cliente B/ }).click()
+  await openSubjects()
+  await expect(search).toHaveValue('ponto')
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await page.getByRole('menuitem', { name: 'Sair' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await login(page, agent, userPassword)
+  await expect(page).not.toHaveURL(/\/login$/)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await mine.getByRole('link', { name: /Cliente B/ }).click()
+  await openSubjects()
+  await expect(search).toHaveValue('')
 })
