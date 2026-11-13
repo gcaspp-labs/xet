@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Os dois históricos alcançam chamados antigos sem vazar o outro setor.
@@ -77,6 +79,74 @@ func TestHistoriesBeyondTwoHundred(t *testing.T) {
 			if tc.token != c.rhToken && ok && len(items) > 0 && items[len(items)-1].(map[string]any)["protocol"] != "9900-000001" {
 				t.Errorf("%s: oldest ticket missing: %v", base, items)
 			}
+		}
+	}
+}
+
+// As colunas dos dois históricos ordenam os valores exibidos nas duas direções.
+func TestHistorySortColumns(t *testing.T) {
+	t.Parallel()
+	c := newClosing(t)
+	c.register()
+	rh := *c.e.userSector("rh@exemplo.com")
+	var rhUser int64
+	if err := c.e.Pool.QueryRow(t.Context(), "select id from users where email = 'rh@exemplo.com'").Scan(&rhUser); err != nil {
+		t.Fatal(err)
+	}
+	_, err := c.e.Pool.Exec(t.Context(), `
+		update users set name = case id when $1 then 'Álvaro' else 'bruno' end where id in ($1, $2);
+		update tickets set protocol='9000-000002', arrived_at='2020-01-02' where id=$3;
+		insert into contacts (name, phone, organization_id, registered) values
+		  ('bruno', '5511900010001', $4, true), ('Álvaro', '5511900010002', $4, true);
+		insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id,
+		  arrived_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution)
+		select v.protocol, v.sector_id, v.contact_id, $4, 'closed', v.assignee_id,
+		  v.arrived_at::timestamptz, v.arrived_at::timestamptz, now(), now(), v.assignee_id,
+		  v.closure_type::closure_type, 'Assunto', 'Resolvido'
+		from (values
+		  ('9000-000001', $5::bigint, $6::bigint, $2::bigint, '2020-01-01', 'cancelled'),
+		  ('9000-000003', $7::bigint, (select id from contacts where phone='5511900010001'), $1::bigint, '2020-01-03', 'resolved'),
+		  ('9000-000004', $5::bigint, (select id from contacts where phone='5511900010002'), $2::bigint, '2020-01-04', 'resolved')
+		) v(protocol, sector_id, contact_id, assignee_id, arrived_at, closure_type)`,
+		pgx.QueryExecModeSimpleProtocol, c.ana.ID, rhUser, c.ticket.ID, c.org, rh, c.ticket.ContactID, c.sector.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contact := fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID)
+	org := fmt.Sprintf("/api/organizations/%d/tickets", c.org)
+	for _, tc := range []struct {
+		path, column, direction, want string
+	}{
+		{org, "protocol", "asc", "[9000-000001 9000-000002 9000-000003 9000-000004]"},
+		{org, "protocol", "desc", "[9000-000004 9000-000003 9000-000002 9000-000001]"},
+		{org, "arrived", "asc", "[9000-000001 9000-000002 9000-000003 9000-000004]"},
+		{org, "arrived", "desc", "[9000-000004 9000-000003 9000-000002 9000-000001]"},
+		{org, "contact", "asc", "[9000-000004 9000-000003 9000-000002 9000-000001]"},
+		{org, "contact", "desc", "[9000-000001 9000-000002 9000-000003 9000-000004]"},
+		{org, "sector", "asc", "[9000-000002 9000-000003 9000-000001 9000-000004]"},
+		{org, "sector", "desc", "[9000-000004 9000-000001 9000-000003 9000-000002]"},
+		{org, "assignee", "asc", "[9000-000002 9000-000003 9000-000001 9000-000004]"},
+		{org, "assignee", "desc", "[9000-000004 9000-000001 9000-000003 9000-000002]"},
+		{org, "status", "asc", "[9000-000001 9000-000002 9000-000003 9000-000004]"},
+		{org, "status", "desc", "[9000-000004 9000-000003 9000-000002 9000-000001]"},
+		{contact, "protocol", "asc", "[9000-000001 9000-000002]"},
+		{contact, "protocol", "desc", "[9000-000002 9000-000001]"},
+		{contact, "arrived", "asc", "[9000-000001 9000-000002]"},
+		{contact, "arrived", "desc", "[9000-000002 9000-000001]"},
+		{contact, "sector", "asc", "[9000-000002 9000-000001]"},
+		{contact, "sector", "desc", "[9000-000001 9000-000002]"},
+		{contact, "assignee", "asc", "[9000-000002 9000-000001]"},
+		{contact, "assignee", "desc", "[9000-000001 9000-000002]"},
+		{contact, "status", "asc", "[9000-000001 9000-000002]"},
+		{contact, "status", "desc", "[9000-000002 9000-000001]"},
+	} {
+		path := fmt.Sprintf("%s?sort=%s&direction=%s", tc.path, tc.column, tc.direction)
+		var protocols []string
+		for _, item := range c.e.DoPageItems(path, c.adminToken) {
+			protocols = append(protocols, item["protocol"].(string))
+		}
+		if got := fmt.Sprint(protocols); got != tc.want {
+			t.Errorf("%s: %s, esperado %s", path, got, tc.want)
 		}
 	}
 }
