@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 
 // Resposta comum das listas paginadas no servidor: os itens da página, o total que o
 // filtro encontra, a página de fato devolvida (a última, se a pedida passou dela) e
@@ -22,9 +22,11 @@ export function pageParams<Sort extends string>(request: PageRequest<Sort>) {
   }
 }
 
-// Atualiza a query string da tela; nulo tira o parâmetro.
+// Atualiza a query string da tela; nulo tira o parâmetro. O estado da navegação
+// (por exemplo, de onde o histórico foi aberto) segue junto com o endereço.
 export function useQueryState() {
   const [params, setParams] = useSearchParams()
+  const { state } = useLocation()
   const update = (next: Record<string, string | null>, replace = false) => {
     setParams(
       (current) => {
@@ -38,7 +40,7 @@ export function useQueryState() {
         }
         return copy
       },
-      { replace },
+      { replace, state },
     )
   }
   return { params, update }

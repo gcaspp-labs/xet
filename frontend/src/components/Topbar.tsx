@@ -11,7 +11,7 @@ export function Topbar({
   action,
   wrapTitle = false,
 }: {
-  back?: { to: string; label: string }
+  back?: { to: string; label: string; state?: unknown }
   breadcrumb?: string
   title: string
   action?: ReactNode
@@ -23,6 +23,7 @@ export function Topbar({
         {back && (
           <Link
             to={back.to}
+            state={back.state}
             aria-label={back.label}
             className={buttonVariants({ variant: 'ghost', size: 'icon' })}
           >

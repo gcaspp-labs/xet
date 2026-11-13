@@ -38,6 +38,7 @@ import { ConversationList } from '@/components/ConversationList'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
+import type { HistoryReturnState } from '@/lib/history-return'
 import { Topbar } from '@/components/Topbar'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -1086,8 +1087,10 @@ function HistoryTab({ ticket }: { ticket: TicketDetail }) {
 export default function TicketPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const returnTo = (location.state as { historyReturn?: string } | null)?.historyReturn
-  const back = returnTo ? { to: returnTo, label: 'Voltar ao histórico' } : backToList
+  const origin = location.state as Partial<HistoryReturnState> | null
+  const back = origin?.historyReturn
+    ? { to: origin.historyReturn, label: 'Voltar ao histórico', state: origin.historyBefore }
+    : backToList
   const ticketId = Number(useParams().ticketId)
   const queryClient = useQueryClient()
   const { data: user } = useCurrentUser()
