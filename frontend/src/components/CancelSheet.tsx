@@ -12,7 +12,7 @@ export function CancelSheet({
   ticket,
   open,
   onOpenChange,
-  successTo = '/',
+  successTo = '/conversas',
 }: {
   ticket: TicketDetail
   open: boolean

@@ -27,7 +27,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { CancelSheet } from '@/components/CancelSheet'
@@ -1050,6 +1050,7 @@ function HistoryTab({ ticket }: { ticket: TicketDetail }) {
 }
 
 export default function TicketPage() {
+  const navigate = useNavigate()
   const ticketId = Number(useParams().ticketId)
   const queryClient = useQueryClient()
   const { data: user } = useCurrentUser()
@@ -1176,7 +1177,12 @@ export default function TicketPage() {
         <CorrectionSheet ticket={ticket} recorded={recordedModules} onOpenChange={setCorrecting} />
       )}
       {/* Sempre montado: quem transfere o próprio chamado perde o botão ao concluir. */}
-      <TransferSheet ticket={ticket} open={transferring} onOpenChange={setTransferring} />
+      <TransferSheet
+        ticket={ticket}
+        open={transferring}
+        onOpenChange={setTransferring}
+        onSuccess={() => void navigate('/conversas')}
+      />
       {registering && (
         <RegisterContactSheet
           contactId={ticket.contact.id}
