@@ -2,6 +2,7 @@ import { BarChart3, ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
 import { useId, type ReactNode } from 'react'
 import { OrganizationPicker } from '@/components/ContactSheet'
 import { KpiCard } from '@/components/KpiCard'
+import { DashboardLists } from '@/components/DashboardLists'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -391,6 +392,12 @@ export default function DashboardPage() {
           <Kpi label="Na fila" number={numbers?.queued} />
           <Kpi label="Em atendimento" number={numbers?.inProgress} />
         </KpiSection>
+        <DashboardLists
+          sectorId={filter.sectorId}
+          assigneeId={filter.assigneeId}
+          organizationId={filter.organization?.id}
+          showSector={filter.isAdmin && filter.sectorId === undefined}
+        />
         <KpiSection section="period" title="No período" detail={periodDetail(data?.period)}>
           <Kpi label="Recebidos" number={numbers?.received} />
           <Kpi label="Iniciados" number={numbers?.started} />

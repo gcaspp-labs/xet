@@ -89,6 +89,33 @@ function yesterday() {
   return day.toISOString().slice(0, 10)
 }
 
+test('listas ao vivo permitem abrir e assumir chamados', async ({ page, baseURL }) => {
+  const own = await seedSector(baseURL!)
+  const first = `Fila ${unique().id}`
+  const second = `Atendimento ${unique().id}`
+  await receive(baseURL!, own.sector.id, second)
+  const assigned = await assignNext(baseURL!, own.sector.id, own.agent)
+  await assigned.api.dispose()
+  await receive(baseURL!, own.sector.id, first)
+  await signIn(page, own.supervisor, userPassword)
+  await page.goto('/dashboard')
+  const queue = page.getByRole('region', { name: /^Fila/ })
+  const progress = page.getByRole('region', { name: /^Em atendimento/ })
+  await expect(queue.getByText(first)).toBeVisible()
+  await expect(progress.getByText(second)).toBeVisible()
+  await progress.getByRole('link', { name: second }).click()
+  await expect(page).toHaveURL(/\/chamados\/\d+/)
+  await page.goto('/dashboard')
+  await queue.getByRole('button', { name: `Assumir chamado de ${first}` }).click()
+  await expect(page).toHaveURL(/\/conversas\/\d+/)
+  await page.goto('/dashboard')
+  await expect(queue.getByText(first)).toHaveCount(0)
+  await expect(progress.getByText(first)).toBeVisible()
+  const live = `Ao vivo ${unique().id}`
+  await receive(baseURL!, own.sector.id, live)
+  await expect(queue.getByText(live)).toBeVisible()
+})
+
 test('supervisor abre pelo menu, vê só o próprio setor e não tem filtro de setor', async ({
   page,
   baseURL,
@@ -292,6 +319,7 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   await expectKpi(page, 'Encerrados', '0')
   await expectKpi(page, 'Recebidos', '0')
   await expectKpi(page, 'Na fila', '1')
+  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toBeVisible()
   await expect(page.getByText('Nenhum atendente com números nestes filtros.')).toBeVisible()
 
   // Início depois do fim: avisa e não consulta a API.
@@ -311,6 +339,7 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   }
   await expect(kpi(page, 'Encerrados')).not.toContainText(notApplicable)
   await expect(table.getByRole('row')).toHaveCount(2)
+  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toBeVisible()
   await choose(page, 'Atendente', 'Todos os atendentes')
   await expectKpi(page, 'Na fila', '1')
 
@@ -321,6 +350,7 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
     await expect(kpi(page, label)).toContainText(notApplicable)
   }
   await expect(table).toContainText(`${notApplicable}: Em atendimento, Iniciados e Cancelados.`)
+  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toBeVisible()
   await choose(page, 'Módulo', 'Todos os módulos')
 
   // Órgão: chamado sem órgão fica de fora.
@@ -329,6 +359,7 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   await page.getByRole('option', { name: new RegExp(`Prefeitura ${id}`) }).click()
   await expectKpi(page, 'Encerrados', '1')
   await expectKpi(page, 'Na fila', '0')
+  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toHaveCount(0)
 
   // Tudo junto, no endereço, sobrevive ao recarregar.
   await choose(page, 'Atendente', /^agent /)
