@@ -36,7 +36,7 @@ export function CorrectionSheet({
   recorded: { id: number; name: string }[]
   onOpenChange: (open: boolean) => void
 }) {
-  const { data: form } = useClosingForm(ticket.id, true)
+  const { data: form, refetch: refetchForm } = useClosingForm(ticket.id, true)
   const correct = useCorrectTicket(ticket.id)
   // Horários como estavam; sem alteração, vão com a precisão original.
   const [original] = useState(() => ({
@@ -64,10 +64,18 @@ export function CorrectionSheet({
   const {
     register,
     handleSubmit,
+    setError,
+    setValue,
     formState: { errors },
   } = methods
 
-  const saveCorrection = (values: Values, addSubject: boolean, addSolution: boolean) => {
+  const saveCorrection = (
+    values: Values,
+    addSubject: boolean,
+    addSolution: boolean,
+    subjectModuleId?: number,
+    solutionModuleId?: number,
+  ) => {
     if (correct.isPending) {
       return
     }
@@ -89,6 +97,8 @@ export function CorrectionSheet({
         reason: values.reason,
         addSubject,
         addSolution,
+        subjectModuleId,
+        solutionModuleId,
       },
       {
         onSuccess: () => {
@@ -96,7 +106,34 @@ export function CorrectionSheet({
           onOpenChange(false)
         },
         // Se o servidor recusar, o aviso aparece no formulário.
-        onError: () => questions.reset(),
+        onError: async (error) => {
+          if (error.message !== 'Escolha módulos ativos do setor do chamado.') {
+            questions.reset()
+            return
+          }
+          const { data: refreshed } = await refetchForm()
+          if (!refreshed) {
+            questions.reset()
+            return
+          }
+          const activeIds = values.moduleIds.filter((id) =>
+            refreshed.modules.some((module) => module.id === id),
+          )
+          const keptIds = values.moduleIds.filter(
+            (id) => activeIds.includes(id) || recorded.some((module) => module.id === id),
+          )
+          setValue('moduleIds', keptIds)
+          if (activeIds.length === 0) {
+            questions.reset()
+            setError('moduleIds', {
+              message: 'Os módulos marcados foram desativados. Marque outro módulo ativo.',
+            })
+          } else if (addSubject) {
+            questions.retry({ ...values, moduleIds: keptIds })
+          } else {
+            questions.reset()
+          }
+        },
       },
     )
   }
@@ -105,6 +142,7 @@ export function CorrectionSheet({
   // não perguntar sobre textos que já estavam no chamado.
   const questions = useClosingQuestions<Values>({
     subjects: form?.subjects ?? [],
+    modules: form?.modules ?? [],
     askSubject: (values) => !sameText(values.subject, ticket.subject ?? ''),
     askSolution: (values) => !sameText(values.resolution, ticket.resolution ?? ''),
     save: saveCorrection,
@@ -112,6 +150,16 @@ export function CorrectionSheet({
 
   const onSubmit = handleSubmit((values) => {
     if (correct.isPending) {
+      return
+    }
+    const newSubject =
+      !sameText(values.subject, ticket.subject ?? '') &&
+      !form?.subjects.some(
+        (subject) =>
+          values.moduleIds.includes(subject.moduleId) && sameText(subject.name, values.subject),
+      )
+    if (newSubject && !form?.modules.some((module) => values.moduleIds.includes(module.id))) {
+      setError('moduleIds', { message: 'Marque ao menos um módulo ativo para salvar.' })
       return
     }
     questions.start(values)

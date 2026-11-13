@@ -68,6 +68,7 @@ func (c closing) form(org int64) map[string]any {
 	return map[string]any{
 		"subject": "Contracheque", "resolution": "Enviada a segunda via.",
 		"moduleIds": c.modules, "organizationId": org,
+		"subjectModuleId": c.modules[0], "solutionModuleId": c.modules[0],
 	}
 }
 

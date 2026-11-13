@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { expect, request as apiRequest, test } from '@playwright/test'
 import {
   admin,
@@ -83,12 +84,16 @@ async function prepare(baseURL: string, subjects: string[], tickets: number) {
   const api = await adminApi(baseURL)
   expect((await api.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
   expect((await api.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
-  expect(
-    (await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Folha' } })).ok(),
-  ).toBeTruthy()
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
   for (const name of subjects) {
     expect(
-      (await api.post(`/api/sectors/${sector.id}/subjects`, { data: { name } })).ok(),
+      (
+        await api.post(`/api/sectors/${sector.id}/subjects`, {
+          data: { name, moduleId: module.id },
+        })
+      ).ok(),
     ).toBeTruthy()
   }
   for (const contact of contacts) {
@@ -122,6 +127,231 @@ async function prepare(baseURL: string, subjects: string[], tickets: number) {
   await agentApi.dispose()
   return { sector, agent, supervisor, contacts: contacts.map((contact) => contact.name) }
 }
+
+test('sugestões dependem dos módulos marcados sem apagar o texto', async ({ page, baseURL }) => {
+  const { agent, contacts } = await prepare(baseURL!, ['Folha de pagamento'], 1)
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  const subject = sheet.getByLabel('Assunto')
+  await subject.fill('Folha')
+  await expect(sheet.getByText('Marque um módulo para ver os assuntos.')).toBeVisible()
+  await sheet.getByRole('checkbox', { name: 'Folha', exact: true }).check()
+  await expect(subject).toHaveValue('Folha')
+  await subject.click()
+  await expect(page.getByRole('option', { name: 'Folha de pagamento' })).toBeVisible()
+})
+
+test('assuntos iguais mostram os módulos e reúnem soluções sem repetição', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent, contacts } = await prepare(baseURL!, ['Senha'], 1)
+  const api = await adminApi(baseURL!)
+  const original = await json<{ id: number; name: string }[]>(
+    await api.get(`/api/sectors/${sector.id}/subjects`),
+  )
+  const secondModule = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }),
+  )
+  const second = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/subjects`, {
+      data: { name: 'SENHA', moduleId: secondModule.id },
+    }),
+  )
+  for (const subjectId of [original[0].id, second.id]) {
+    expect(
+      (
+        await api.post(`/api/sectors/${sector.id}/subjects/${subjectId}/solutions`, {
+          data: { body: 'Redefinir acesso' },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  }
+  expect(
+    (
+      await api.post(`/api/sectors/${sector.id}/subjects/${second.id}/solutions`, {
+        data: { body: 'Orientar responsável' },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await sheet.getByRole('checkbox', { name: 'Folha' }).check()
+  await sheet.getByRole('checkbox', { name: 'Patrimônio' }).check()
+  await sheet.getByLabel('Assunto').fill('sen')
+  const options = page.getByRole('option')
+  await expect(options).toHaveCount(1)
+  await expect(options.first()).toContainText('Folha')
+  await expect(options.first()).toContainText('Patrimônio')
+  await options.first().click()
+  await sheet.getByRole('combobox', { name: 'Soluções sugeridas' }).click()
+  await expect(page.getByRole('option', { name: 'Redefinir acesso' })).toHaveCount(1)
+  await expect(page.getByRole('option', { name: 'Orientar responsável' })).toBeVisible()
+  await api.dispose()
+})
+
+test('escolhe módulo para adicionar assunto quando há mais de um', async ({ page, baseURL }) => {
+  const { sector, agent, contacts } = await prepare(baseURL!, [], 1)
+  const api = await adminApi(baseURL!)
+  expect(
+    (await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } })).ok(),
+  ).toBeTruthy()
+  await api.dispose()
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await sheet.getByRole('checkbox', { name: 'Folha' }).check()
+  await sheet.getByRole('checkbox', { name: 'Patrimônio' }).check()
+  await sheet.getByLabel('Assunto').fill('Nova dúvida')
+  await sheet.getByLabel('Resolução').fill('Resolvida')
+  await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click()
+  await expect(sheet.getByText('Escolha o módulo.')).toBeVisible()
+  await sheet.getByRole('radio', { name: 'Folha' }).check()
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click()
+  await expect(sheet.getByRole('group', { name: 'Adicionar solução' })).toBeVisible()
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
+  await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
+})
+
+test('módulo desativado durante a pergunta exige escolher outro marcado', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent, contacts } = await prepare(baseURL!, [], 1)
+  const api = await adminApi(baseURL!)
+  const modules = await json<{ id: number; name: string }[]>(
+    await api.get(`/api/sectors/${sector.id}/modules`),
+  )
+  const original = modules.find((module) => module.name === 'Folha')!
+  await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }))
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await sheet.getByRole('checkbox', { name: 'Folha' }).check()
+  await sheet.getByRole('checkbox', { name: 'Patrimônio' }).check()
+  await sheet.getByLabel('Assunto').fill('Dúvida nova')
+  await sheet.getByLabel('Resolução').fill('Resolvida')
+  await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  await sheet.getByRole('radio', { name: 'Folha' }).check()
+  expect(
+    (
+      await api.put(`/api/sectors/${sector.id}/modules/${original.id}`, {
+        data: { name: 'Folha', active: false },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
+  await expect(
+    sheet.getByText('O módulo escolhido foi desativado. Escolha outro módulo ativo.'),
+  ).toBeVisible()
+  await expect(sheet.getByRole('radio', { name: 'Patrimônio' })).not.toBeChecked()
+  await sheet.getByRole('radio', { name: 'Patrimônio' }).check()
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
+  await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
+  expect(await subjectNames(baseURL!, sector.id)).toEqual(['Dúvida nova'])
+  await api.dispose()
+})
+
+test('sem módulo ativo marcado exige marcar outro antes de encerrar', async ({ page, baseURL }) => {
+  const { sector, agent, contacts } = await prepare(baseURL!, [], 1)
+  const api = await adminApi(baseURL!)
+  const modules = await json<{ id: number; name: string }[]>(
+    await api.get(`/api/sectors/${sector.id}/modules`),
+  )
+  const original = modules.find((module) => module.name === 'Folha')!
+  await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }))
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: contacts[0] }).click()
+  await page.getByRole('link', { name: 'Ver chamado' }).click()
+  await page.getByRole('button', { name: 'Encerrar' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
+  await sheet.getByRole('checkbox', { name: 'Folha' }).check()
+  await sheet.getByLabel('Assunto').fill('Dúvida nova')
+  await sheet.getByLabel('Resolução').fill('Resolvida')
+  await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click()
+  expect(
+    (
+      await api.put(`/api/sectors/${sector.id}/modules/${original.id}`, {
+        data: { name: 'Folha', active: false },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
+  await expect(
+    sheet.getByText('Os módulos marcados foram desativados. Marque outro módulo ativo.'),
+  ).toBeVisible()
+  await sheet.getByRole('checkbox', { name: 'Patrimônio' }).check()
+  await sheet.getByRole('button', { name: 'Encerrar' }).click()
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
+  await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
+  expect(await subjectNames(baseURL!, sector.id)).toEqual(['Dúvida nova'])
+  await api.dispose()
+})
+
+test('supervisor escolhe módulo ao cadastrar assunto', async ({ page, baseURL }) => {
+  const { supervisor } = await prepare(baseURL!, [], 0)
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Assuntos' }).click()
+  await page.getByRole('button', { name: 'Novo assunto' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo assunto' })
+  await sheet.getByRole('combobox', { name: 'Módulo' }).click()
+  await page.getByRole('option', { name: 'Folha' }).click()
+  await sheet.getByLabel('Nome').fill('Senha')
+  await sheet.getByRole('button', { name: 'Cadastrar assunto' }).click()
+  await expect(page.getByText('Assunto salvo')).toBeVisible()
+  await expect(page.getByRole('table')).toContainText('Senha')
+  await expect(page.getByRole('table')).toContainText('Folha')
+})
+
+test('assunto novo exige outro módulo quando o escolhido é desativado', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await prepare(baseURL!, [], 0)
+  const api = await adminApi(baseURL!)
+  const modules = await json<{ id: number; name: string }[]>(
+    await api.get(`/api/sectors/${sector.id}/modules`),
+  )
+  const original = modules.find((module) => module.name === 'Folha')!
+  await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }))
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Assuntos' }).click()
+  await page.getByRole('button', { name: 'Novo assunto' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo assunto' })
+  await sheet.getByRole('combobox', { name: 'Módulo' }).click()
+  await page.getByRole('option', { name: 'Folha' }).click()
+  await sheet.getByLabel('Nome').fill('Senha')
+  expect(
+    (
+      await api.put(`/api/sectors/${sector.id}/modules/${original.id}`, {
+        data: { name: 'Folha', active: false },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await sheet.getByRole('button', { name: 'Cadastrar assunto' }).click()
+  await expect(sheet.getByText('Escolha um módulo ativo do setor.')).toBeVisible()
+  await sheet.getByRole('combobox', { name: 'Módulo' }).click()
+  await expect(page.getByRole('option', { name: 'Folha' })).toHaveCount(0)
+  await page.getByRole('option', { name: 'Patrimônio' }).click()
+  await sheet.getByRole('button', { name: 'Cadastrar assunto' }).click()
+  await expect(page.getByText('Assunto salvo')).toBeVisible()
+  await api.dispose()
+})
 
 test('o responsável consulta soluções durante o atendimento', async ({ page, baseURL }) => {
   const { sector, agent, contacts } = await prepare(baseURL!, ['Folha de pagamento'], 1)
@@ -233,8 +463,15 @@ test('supervisor e administrador consultam quando são responsáveis', async ({ 
   const api = await adminApi(baseURL!)
   expect((await api.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
   expect((await api.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }),
+  )
   expect(
-    (await api.post(`/api/sectors/${sector.id}/subjects`, { data: { name: 'Orientações' } })).ok(),
+    (
+      await api.post(`/api/sectors/${sector.id}/subjects`, {
+        data: { name: 'Orientações', moduleId: module.id },
+      })
+    ).ok(),
   ).toBeTruthy()
   for (const name of ['Cliente Supervisor', 'Cliente Administrador']) {
     expect(
@@ -269,7 +506,7 @@ test('supervisor e administrador consultam quando são responsáveis', async ({ 
   await expect(page.getByText('Resposta do setor.')).toBeVisible()
 })
 
-test('o campo Assunto sugere a lista do setor, sem nenhum marcado, e um assunto da lista não tem a pergunta do assunto', async ({
+test('o campo Assunto sugere a lista do módulo marcado e um assunto da lista não tem a pergunta do assunto', async ({
   page,
   baseURL,
 }) => {
@@ -287,10 +524,11 @@ test('o campo Assunto sugere a lista do setor, sem nenhum marcado, e um assunto 
   // Nenhum assunto vem marcado.
   await expect(subject).toHaveValue('')
 
-  // Enquanto digita, sugere os assuntos que contêm o texto, sem diferenciar maiúsculas.
+  // As sugestões aparecem depois de marcar o módulo.
+  await sheet.getByRole('checkbox', { name: 'Folha' }).check()
   await subject.fill('contr')
   const options = page.getByRole('option')
-  await expect(options).toHaveText(['Contracheque', 'Contrato de estágio'])
+  await expect(options).toHaveText(['ContrachequeFolha', 'Contrato de estágioFolha'])
   // Esc fecha só a lista: o texto e a janela continuam; outro Esc também não apaga o texto.
   await page.keyboard.press('Escape')
   await expect(options).toHaveCount(0)
@@ -301,12 +539,11 @@ test('o campo Assunto sugere a lista do setor, sem nenhum marcado, e um assunto 
   await subject.fill('xyz')
   await expect(options).toHaveCount(0)
   await subject.fill('contr')
-  await expect(options).toHaveText(['Contracheque', 'Contrato de estágio'])
+  await expect(options).toHaveText(['ContrachequeFolha', 'Contrato de estágioFolha'])
   await page.getByRole('option', { name: 'Contracheque' }).click()
   await expect(subject).toHaveValue('Contracheque')
 
   await sheet.getByLabel('Resolução').fill('Enviada a segunda via.')
-  await sheet.getByRole('checkbox', { name: 'Folha' }).click()
   await sheet.getByRole('button', { name: 'Encerrar' }).click()
   // Da lista, não pergunta sobre o assunto; só sobre a resolução, que não está
   // na lista do assunto (ainda sem soluções).
@@ -414,6 +651,9 @@ test('o supervisor cadastra, edita e exclui assuntos do setor, e o repetido é r
   baseURL,
 }) => {
   const { sector, supervisor } = await seedSector(baseURL!)
+  const api = await adminApi(baseURL!)
+  await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }))
+  await api.dispose()
   await signIn(page, supervisor, userPassword)
   await page.getByRole('link', { name: 'Assuntos' }).click()
   await expect(page.getByRole('heading', { name: 'Assuntos' })).toBeVisible()
@@ -423,6 +663,8 @@ test('o supervisor cadastra, edita e exclui assuntos do setor, e o repetido é r
 
   await page.getByRole('button', { name: 'Novo assunto' }).click()
   const sheet = page.getByRole('dialog', { name: 'Novo assunto' })
+  await sheet.getByRole('combobox', { name: 'Módulo' }).click()
+  await page.getByRole('option', { name: 'Sistema' }).click()
   await sheet.getByLabel('Nome').fill('Contracheque')
   await sheet.getByRole('button', { name: 'Cadastrar assunto' }).click()
   await expect(page.getByText('Assunto salvo')).toBeVisible()
@@ -431,6 +673,8 @@ test('o supervisor cadastra, edita e exclui assuntos do setor, e o repetido é r
 
   // Repetido, com outras maiúsculas, é recusado com aviso no formulário.
   await page.getByRole('button', { name: 'Novo assunto' }).click()
+  await sheet.getByRole('combobox', { name: 'Módulo' }).click()
+  await page.getByRole('option', { name: 'Sistema' }).click()
   await sheet.getByLabel('Nome').fill('CONTRACHEQUE ')
   await sheet.getByRole('button', { name: 'Cadastrar assunto' }).click()
   await expect(sheet).toContainText('Já existe um assunto com este nome neste setor.')
@@ -461,6 +705,75 @@ test('o supervisor cadastra, edita e exclui assuntos do setor, e o repetido é r
   expect(await subjectNames(baseURL!, sector.id)).toEqual(['Férias e licenças'])
 })
 
+test('filtro Sem módulo encontra assuntos legados e combina com a busca', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  // A API não cria mais assuntos sem módulo; reproduz o estado deixado pela migração
+  // no banco isolado criado por make test-e2e.
+  expect(Number.isSafeInteger(sector.id)).toBeTruthy()
+  execFileSync('docker', [
+    'exec',
+    'xet-e2e-db',
+    'psql',
+    '-U',
+    'xet',
+    '-d',
+    'xet',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-c',
+    `INSERT INTO subjects (sector_id, name) VALUES (${sector.id}, 'Legado folha'), (${sector.id}, 'Legado patrimônio')`,
+  ])
+  const api = await adminApi(baseURL!)
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
+  await json(
+    await api.post(`/api/sectors/${sector.id}/subjects`, {
+      data: { name: 'Classificado folha', moduleId: module.id },
+    }),
+  )
+  await api.dispose()
+  await addSolutions(baseURL!, sector.id, 'Legado folha', ['Consultar o portal.'])
+
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/assuntos')
+  const table = page.getByRole('table')
+  const filter = page.getByRole('combobox', { name: 'Filtrar por módulo' })
+  const search = page.getByRole('searchbox', { name: 'Buscar assuntos' })
+  await expect(table).toContainText('Classificado folha')
+  await expect(table).toContainText('Legado folha')
+  await expect(
+    page.getByText('Há assuntos sem módulo que não aparecem no formulário.'),
+  ).toBeVisible()
+
+  await filter.click()
+  await page.getByRole('option', { name: 'Sem módulo' }).click()
+  await expect(table).toContainText('Legado folha')
+  await expect(table).toContainText('Legado patrimônio')
+  await expect(table).not.toContainText('Classificado folha')
+  await expect(page.locator('[data-subject="Legado folha"]')).toContainText('Sem módulo')
+
+  await search.fill('portal')
+  await expect.poll(() => tableRows(page)).toEqual(['# Legado folha', 'Consultar o portal.'])
+  await search.fill('folha')
+  await expect(table).toContainText('Legado folha')
+  await expect(table).not.toContainText('Legado patrimônio')
+  await expect(table).not.toContainText('Classificado folha')
+
+  await search.fill('')
+  await filter.click()
+  await page.getByRole('option', { name: 'Folha', exact: true }).click()
+  await expect(table).toContainText('Classificado folha')
+  await expect(table).not.toContainText('Legado folha')
+  await page.getByRole('button', { name: 'Ver assuntos sem módulo' }).click()
+  await expect(filter).toContainText('Sem módulo')
+  await expect(table).toContainText('Legado patrimônio')
+  await expect(table).not.toContainText('Classificado folha')
+})
+
 test('o administrador escolhe o setor na tela Assuntos', async ({ page, baseURL }) => {
   const first = await seedSector(baseURL!)
   const second = await seedSector(baseURL!)
@@ -469,8 +782,15 @@ test('o administrador escolhe o setor na tela Assuntos', async ({ page, baseURL 
     [first.sector, 'Assunto do primeiro'],
     [second.sector, 'Assunto do segundo'],
   ] as const) {
+    const module = await json<{ id: number }>(
+      await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }),
+    )
     expect(
-      (await api.post(`/api/sectors/${sector.id}/subjects`, { data: { name } })).ok(),
+      (
+        await api.post(`/api/sectors/${sector.id}/subjects`, {
+          data: { name, moduleId: module.id },
+        })
+      ).ok(),
     ).toBeTruthy()
   }
   await api.dispose()
@@ -491,6 +811,8 @@ test('o administrador escolhe o setor na tela Assuntos', async ({ page, baseURL 
   // Novo assunto entra no setor escolhido.
   await page.getByRole('button', { name: 'Novo assunto' }).click()
   const sheet = page.getByRole('dialog', { name: 'Novo assunto' })
+  await sheet.getByRole('combobox', { name: 'Módulo' }).click()
+  await page.getByRole('option', { name: 'Sistema' }).click()
   await sheet.getByLabel('Nome').fill('Outro do segundo')
   await sheet.getByRole('button', { name: 'Cadastrar assunto' }).click()
   await expect(sheet).toHaveCount(0)
@@ -515,9 +837,16 @@ test('a confirmação de exclusão do assunto diz quantas soluções serão apag
 }) => {
   const { sector, supervisor } = await seedSector(baseURL!)
   const api = await adminApi(baseURL!)
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }),
+  )
   for (const name of ['Contracheque', 'Férias', 'Admissão']) {
     expect(
-      (await api.post(`/api/sectors/${sector.id}/subjects`, { data: { name } })).ok(),
+      (
+        await api.post(`/api/sectors/${sector.id}/subjects`, {
+          data: { name, moduleId: module.id },
+        })
+      ).ok(),
     ).toBeTruthy()
   }
   await api.dispose()
@@ -749,9 +1078,14 @@ test('a correção só pergunta sobre a solução quando a resolução é altera
 // Setor com os assuntos dados, cada um com as suas soluções, criados pela API.
 async function seedSubjects(baseURL: string, sectorId: number, list: Record<string, string[]>) {
   const api = await adminApi(baseURL)
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sectorId}/modules`, { data: { name: 'Sistema' } }),
+  )
   for (const name of Object.keys(list)) {
     expect(
-      (await api.post(`/api/sectors/${sectorId}/subjects`, { data: { name } })).ok(),
+      (
+        await api.post(`/api/sectors/${sectorId}/subjects`, { data: { name, moduleId: module.id } })
+      ).ok(),
     ).toBeTruthy()
   }
   await api.dispose()

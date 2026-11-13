@@ -660,6 +660,7 @@ type Subject struct {
 	Name      string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	ModuleID  *int64
 }
 
 type SubjectSolution struct {

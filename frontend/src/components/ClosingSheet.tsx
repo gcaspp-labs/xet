@@ -56,7 +56,7 @@ export function ClosingSheet({
 }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const { data: form } = useClosingForm(ticket.id, open)
+  const { data: form, refetch: refetchForm } = useClosingForm(ticket.id, open)
   const close = useCloseTicket(ticket.id, ticket.sector.id)
   const transferSector = useTransferSector(ticket.id, ticket.sector.id)
   const save = transfer ? transferSector : close
@@ -80,7 +80,7 @@ export function ClosingSheet({
       ...suggested,
     },
   })
-  const { handleSubmit, getValues, setValue } = methods
+  const { handleSubmit, getValues, setValue, setError } = methods
 
   // O órgão sugerido chega com o formulário ou depois do cadastro do contato.
   useEffect(() => {
@@ -102,7 +102,13 @@ export function ClosingSheet({
     }
   }, [form?.contactModuleIds, getValues, setValue])
 
-  const saveForm = (values: Values, addSubject: boolean, addSolution: boolean) => {
+  const saveForm = (
+    values: Values,
+    addSubject: boolean,
+    addSolution: boolean,
+    subjectModuleId?: number,
+    solutionModuleId?: number,
+  ) => {
     if (save.isPending || (transfer && !sectorId)) {
       return
     }
@@ -119,6 +125,8 @@ export function ClosingSheet({
         values.endedAt !== suggested.endedAt ? new Date(values.endedAt).toISOString() : undefined,
       addSubject,
       addSolution,
+      subjectModuleId,
+      solutionModuleId,
     }
     const onSuccess = () => {
       toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
@@ -127,7 +135,31 @@ export function ClosingSheet({
       void navigate(successTo)
     }
     // Se o servidor recusar, o aviso aparece no formulário.
-    const onError = () => questions.reset()
+    const onError = async (error: Error) => {
+      if (error.message !== 'Escolha módulos ativos do setor do chamado.') {
+        questions.reset()
+        return
+      }
+      const { data: refreshed } = await refetchForm()
+      if (!refreshed) {
+        questions.reset()
+        return
+      }
+      const activeIds = values.moduleIds.filter((id) =>
+        refreshed.modules.some((module) => module.id === id),
+      )
+      setValue('moduleIds', activeIds)
+      if (activeIds.length === 0) {
+        questions.reset()
+        setError('moduleIds', {
+          message: 'Os módulos marcados foram desativados. Marque outro módulo ativo.',
+        })
+      } else if (addSubject) {
+        questions.retry({ ...values, moduleIds: activeIds })
+      } else {
+        questions.reset()
+      }
+    }
     if (transfer) {
       transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess, onError })
     } else {
@@ -137,7 +169,11 @@ export function ClosingSheet({
 
   // Assunto fora da lista do setor e resolução fora da lista do assunto:
   // pergunta antes de gravar.
-  const questions = useClosingQuestions<Values>({ subjects: form?.subjects ?? [], save: saveForm })
+  const questions = useClosingQuestions<Values>({
+    subjects: form?.subjects ?? [],
+    modules: form?.modules ?? [],
+    save: saveForm,
+  })
 
   const onSubmit = handleSubmit(
     (values) => {

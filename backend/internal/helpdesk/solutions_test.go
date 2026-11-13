@@ -153,7 +153,7 @@ func TestSupervisorManagesTheSolutionsOfASubject(t *testing.T) {
 		t.Fatalf("update case: status %d, body %v", resp.Status, resp.Body)
 	}
 	// Renomear o assunto devolve as soluções dele.
-	resp = e.Do(http.MethodPut, subjectPath(sector, subject), c.supToken, map[string]string{"name": "Holerite"})
+	resp = e.Do(http.MethodPut, subjectPath(sector, subject), c.supToken, map[string]any{"name": "Holerite", "moduleId": e.subjectModule(sector)})
 	if got, ok := resp.Body["solutions"].([]any); resp.Status != http.StatusOK || !ok || len(got) != 2 {
 		t.Fatalf("rename subject: status %d, body %v", resp.Status, resp.Body)
 	}

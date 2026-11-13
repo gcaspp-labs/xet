@@ -19,9 +19,25 @@ func subjectPath(sectorID, subjectID int64) string {
 	return fmt.Sprintf("/api/sectors/%d/subjects/%d", sectorID, subjectID)
 }
 
+func (e *testEnv) subjectModule(sectorID int64) int64 {
+	e.T.Helper()
+	modules, err := e.Q.ListActiveModules(e.T.Context(), sectorID)
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	if len(modules) > 0 {
+		return modules[0].ID
+	}
+	module, err := e.Q.CreateModule(e.T.Context(), db.CreateModuleParams{SectorID: sectorID, Name: "Módulo de teste"})
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	return module.ID
+}
+
 func (e *testEnv) createSubject(sectorID int64, token, name string) int64 {
 	e.T.Helper()
-	resp := e.Do(http.MethodPost, subjectsPath(sectorID), token, map[string]string{"name": name})
+	resp := e.Do(http.MethodPost, subjectsPath(sectorID), token, map[string]any{"name": name, "moduleId": e.subjectModule(sectorID)})
 	if resp.Status != http.StatusCreated {
 		e.T.Fatalf("create subject %q: status %d, body %v", name, resp.Status, resp.Body)
 	}
@@ -89,7 +105,7 @@ func TestSupervisorManagesTheSubjectList(t *testing.T) {
 		t.Fatalf("the list starts empty: %v", got)
 	}
 
-	resp := e.Do(http.MethodPost, subjectsPath(sector), c.supToken, map[string]string{"name": "  Folha de pagamento "})
+	resp := e.Do(http.MethodPost, subjectsPath(sector), c.supToken, map[string]any{"name": "  Folha de pagamento ", "moduleId": e.subjectModule(sector)})
 	if resp.Status != http.StatusCreated || resp.Body["name"] != "Folha de pagamento" {
 		t.Fatalf("create: status %d, body %v", resp.Status, resp.Body)
 	}
@@ -100,15 +116,15 @@ func TestSupervisorManagesTheSubjectList(t *testing.T) {
 	}
 
 	// Salvar sem mudar nada não grava auditoria.
-	if resp := e.Do(http.MethodPut, subjectPath(sector, folha), c.supToken, map[string]string{"name": "Folha de pagamento"}); resp.Status != http.StatusOK {
+	if resp := e.Do(http.MethodPut, subjectPath(sector, folha), c.supToken, map[string]any{"name": "Folha de pagamento", "moduleId": e.subjectModule(sector)}); resp.Status != http.StatusOK {
 		t.Fatalf("update without changes: status %d", resp.Status)
 	}
-	resp = e.Do(http.MethodPut, subjectPath(sector, folha), c.supToken, map[string]string{"name": "Folha"})
+	resp = e.Do(http.MethodPut, subjectPath(sector, folha), c.supToken, map[string]any{"name": "Folha", "moduleId": e.subjectModule(sector)})
 	if resp.Status != http.StatusOK || resp.Body["name"] != "Folha" {
 		t.Fatalf("update: status %d, body %v", resp.Status, resp.Body)
 	}
 	// Mudar só as maiúsculas do próprio nome não é repetição.
-	if resp := e.Do(http.MethodPut, subjectPath(sector, folha), c.supToken, map[string]string{"name": "FOLHA"}); resp.Status != http.StatusOK {
+	if resp := e.Do(http.MethodPut, subjectPath(sector, folha), c.supToken, map[string]any{"name": "FOLHA", "moduleId": e.subjectModule(sector)}); resp.Status != http.StatusOK {
 		t.Fatalf("update case: status %d, body %v", resp.Status, resp.Body)
 	}
 
@@ -191,7 +207,7 @@ func TestSubjectListPermissionsBySector(t *testing.T) {
 		t.Fatalf("admin list = %v", got)
 	}
 	inRH := e.createSubject(rh.ID, c.adminToken, "Licitação")
-	if resp := e.Do(http.MethodPut, subjectPath(rh.ID, inRH), c.adminToken, map[string]string{"name": "Compra direta"}); resp.Status != http.StatusOK {
+	if resp := e.Do(http.MethodPut, subjectPath(rh.ID, inRH), c.adminToken, map[string]any{"name": "Compra direta", "moduleId": e.subjectModule(rh.ID)}); resp.Status != http.StatusOK {
 		t.Fatalf("admin update: status %d", resp.Status)
 	}
 	if resp := e.Do(http.MethodDelete, subjectPath(sector, subject), c.adminToken, nil); resp.Status != http.StatusNoContent {
@@ -220,11 +236,11 @@ func TestSubjectNamesAreValidatedAndDoNotRepeatInTheSector(t *testing.T) {
 	e.createSubject(sector, c.supToken, "Contracheque")
 	other := e.createSubject(sector, c.supToken, "Férias")
 
-	resp := e.Do(http.MethodPost, subjectsPath(sector), c.supToken, map[string]string{"name": " CONTRACHEQUE "})
+	resp := e.Do(http.MethodPost, subjectsPath(sector), c.supToken, map[string]any{"name": " CONTRACHEQUE ", "moduleId": e.subjectModule(sector)})
 	if resp.Status != http.StatusConflict || resp.Body["error"] != taken {
 		t.Fatalf("create repeated: status %d, body %v", resp.Status, resp.Body)
 	}
-	resp = e.Do(http.MethodPut, subjectPath(sector, other), c.supToken, map[string]string{"name": "contracheque"})
+	resp = e.Do(http.MethodPut, subjectPath(sector, other), c.supToken, map[string]any{"name": "contracheque", "moduleId": e.subjectModule(sector)})
 	if resp.Status != http.StatusConflict || resp.Body["error"] != taken {
 		t.Fatalf("update repeated: status %d, body %v", resp.Status, resp.Body)
 	}
@@ -251,6 +267,7 @@ func TestConcurrentSubjectCreationsLetOneThrough(t *testing.T) {
 	c := newConversation(t)
 	e := c.e
 
+	moduleID := e.subjectModule(c.sector.ID)
 	const attempts = 6
 	statuses := make([]int, attempts)
 	var wg sync.WaitGroup
@@ -260,7 +277,7 @@ func TestConcurrentSubjectCreationsLetOneThrough(t *testing.T) {
 			if i%2 == 0 {
 				name = "CONTRACHEQUE"
 			}
-			statuses[i] = e.Do(http.MethodPost, subjectsPath(c.sector.ID), c.supToken, map[string]string{"name": name}).Status
+			statuses[i] = e.Do(http.MethodPost, subjectsPath(c.sector.ID), c.supToken, map[string]any{"name": name, "moduleId": moduleID}).Status
 		})
 	}
 	wg.Wait()
@@ -566,7 +583,7 @@ func TestEditingOrDeletingASubjectDoesNotChangeTickets(t *testing.T) {
 			t.Fatalf("%s: ticket subject = %v", step, ticket.Subject)
 		}
 	}
-	if resp := e.Do(http.MethodPut, subjectPath(c.sector.ID, subject), c.supToken, map[string]string{"name": "Holerite"}); resp.Status != http.StatusOK {
+	if resp := e.Do(http.MethodPut, subjectPath(c.sector.ID, subject), c.supToken, map[string]any{"name": "Holerite", "moduleId": e.subjectModule(c.sector.ID)}); resp.Status != http.StatusOK {
 		t.Fatalf("update: status %d", resp.Status)
 	}
 	wantSubjectOnTicket("after editing")

@@ -83,7 +83,7 @@ export function SubjectsTab({
                   <li key={solution.id} className="rounded-(--radius-8) border border-line p-3">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <Badge variant="tag" className="min-w-0 break-words">
-                        {subject.name}
+                        {subject.name} · {subject.moduleName}
                       </Badge>
                       <Button variant="outline" size="sm" onClick={() => void copy(solution.body)}>
                         <Copy strokeWidth={1.7} aria-hidden />
@@ -122,7 +122,9 @@ export function SubjectsTab({
                   key={`subject-${subject.id}`}
                   className="rounded-(--radius-8) border border-line p-3"
                 >
-                  <Badge variant="tag">{subject.name}</Badge>
+                  <Badge variant="tag">
+                    {subject.name} · {subject.moduleName}
+                  </Badge>
                   <p className="caption text-ink-soft">Nenhuma solução cadastrada.</p>
                 </li>,
               ],

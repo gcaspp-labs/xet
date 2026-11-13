@@ -108,6 +108,7 @@ export type Subject = {
   id: number
   sectorId: number
   name: string
+  moduleId: number | null
   // Soluções do assunto, apagadas junto com ele.
   solutions: { id: number; subjectId: number; body: string }[]
 }
@@ -125,10 +126,16 @@ export function useSubjects(sectorId: number | undefined) {
 export function useSaveSubject(sectorId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, name }: { id?: number; name: string }) =>
+    mutationFn: ({ id, name, moduleId }: { id?: number; name: string; moduleId: number }) =>
       id === undefined
-        ? api<Subject>(`/sectors/${sectorId}/subjects`, { method: 'POST', body: { name } })
-        : api<Subject>(`/sectors/${sectorId}/subjects/${id}`, { method: 'PUT', body: { name } }),
+        ? api<Subject>(`/sectors/${sectorId}/subjects`, {
+            method: 'POST',
+            body: { name, moduleId },
+          })
+        : api<Subject>(`/sectors/${sectorId}/subjects/${id}`, {
+            method: 'PUT',
+            body: { name, moduleId },
+          }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
   })
 }
