@@ -24,10 +24,12 @@ export async function login(page: Page, email: string, password: string) {
   await page.getByRole('button', { name: 'Entrar' }).click()
 }
 
-// Entra e espera sair da tela de login, antes de navegar para outra página.
+// Entra e abre o painel usado como ponto de partida pelos testes de atendimento.
 export async function signIn(page: Page, email: string, password: string) {
   await login(page, email, password)
   await expect(page).not.toHaveURL(/\/login$/)
+  await page.goto('/atendimento')
+  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
 }
 
 // Troca de usuário: sai da página antes de limpar os cookies. Uma requisição ainda em andamento

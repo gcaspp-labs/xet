@@ -132,7 +132,8 @@ test('supervisor vê também Conexão, Módulos e Assuntos, com o breadcrumb do 
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Conversas', 'Dashboard', 'Contatos', 'Conexão'],
+      [undefined, 'Dashboard'],
+      ['Helpdesk', 'Atendimento', 'Conversas', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos'],
     ])
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -158,7 +159,8 @@ test('administrador vê tudo, com Usuários só em Configurações, e o breadcru
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Conversas', 'Dashboard', 'Contatos', 'Conexão'],
+      [undefined, 'Dashboard'],
+      ['Helpdesk', 'Atendimento', 'Conversas', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos', 'Setores'],
     ])
   await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0)
@@ -237,6 +239,6 @@ test('botão de voltar leva da conversa à lista de atendimentos', async ({
   )
 
   await page.getByRole('link', { name: 'Voltar à lista' }).click()
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(/\/atendimento$/)
   await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
 })

@@ -26,6 +26,11 @@ function RequireAuth() {
   return <Outlet />
 }
 
+function Home() {
+  const { data: user } = useCurrentUser()
+  return <Navigate to={user?.role === 'agent' ? '/conversas' : '/dashboard'} replace />
+}
+
 // Rotas restritas a papéis; os demais voltam ao início. O backend também recusa.
 function RequireRole({ roles }: { roles: Role[] }) {
   const { data: user } = useCurrentUser()
@@ -41,7 +46,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<PanelPage />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/atendimento" element={<PanelPage />} />
           <Route path="/chamados/:ticketId" element={<TicketPage />} />
           <Route path="/conversas" element={<ConversasPage />} />
           <Route path="/conversas/:ticketId" element={<ConversasPage />} />

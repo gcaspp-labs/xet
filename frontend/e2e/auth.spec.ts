@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { admin, login, unique } from './fixtures'
+import { admin, login, seedSector, unique, userPassword } from './fixtures'
 
 test('sem sessão, a página inicial leva ao login', async ({ page }) => {
   await page.goto('/')
@@ -34,11 +34,11 @@ test('campos vazios são validados antes do envio', async ({ page }) => {
 
 test('usuário entra, mantém a sessão ao recarregar e sai', async ({ page }) => {
   await login(page, admin.email, admin.password)
-  await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Configurações' }).click()
   await page.getByRole('menuitem', { name: 'Sair' }).click()
@@ -95,3 +95,26 @@ test('favicon é o símbolo do design system', async ({ request }) => {
   expect(response.ok()).toBeTruthy()
   expect(await response.text()).toContain('<svg')
 })
+
+for (const role of ['admin', 'supervisor', 'agent'] as const) {
+  test(`início e navegação para ${role}`, async ({ page, baseURL }) => {
+    const sector = await seedSector(baseURL!)
+    const email = role === 'admin' ? admin.email : sector[role]
+    await login(page, email, role === 'admin' ? admin.password : userPassword)
+    const home = role === 'agent' ? '/conversas' : '/dashboard'
+    await expect(page).toHaveURL(new RegExp(`${home}$`))
+    await page.goto('/')
+    await expect(page).toHaveURL(new RegExp(`${home}$`))
+    await page.getByRole('link', { name: 'Atendimento', exact: true }).click()
+    await expect(page).toHaveURL(/\/atendimento$/)
+    await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+    await page.goto('/contatos')
+    await expect(page.getByRole('heading', { name: 'Contatos' })).toBeVisible()
+    if (role === 'agent') {
+      await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
+      await page.goto('/dashboard')
+      await expect(page).toHaveURL(/\/conversas$/)
+      expect((await page.request.get('/api/dashboard')).status()).toBe(403)
+    }
+  })
+}

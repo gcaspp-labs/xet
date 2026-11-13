@@ -103,7 +103,7 @@ test('supervisor abre pelo menu, vê só o próprio setor e não tem filtro de s
   await page.getByRole('link', { name: 'Dashboard' }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
-  await expect(page.getByText(`Helpdesk · ${own.sector.name}`)).toBeVisible()
+  await expect(page.getByText(own.sector.name, { exact: true })).toBeVisible()
   await expect(page.getByRole('combobox', { name: 'Setor' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Hoje' })).toHaveAttribute('aria-pressed', 'true')
   await expectKpi(page, 'Na fila', '1')
@@ -112,7 +112,7 @@ test('supervisor abre pelo menu, vê só o próprio setor e não tem filtro de s
   // Outro setor no endereço não muda o que ele vê.
   await page.goto(`/dashboard?sectorId=${other.sector.id}`)
   await expectKpi(page, 'Na fila', '1')
-  await expect(page.getByText(`Helpdesk · ${own.sector.name}`)).toBeVisible()
+  await expect(page.getByText(own.sector.name, { exact: true })).toBeVisible()
 })
 
 test('administrador alterna entre todos os setores e um setor; atendente e módulo dependem do setor', async ({
@@ -168,15 +168,15 @@ test('administrador alterna entre todos os setores e um setor; atendente e módu
   await expect(moduleFilter).toBeDisabled()
 })
 
-test('atendente não vê o item e, pelo endereço, volta ao painel', async ({ page, baseURL }) => {
+test('atendente não vê o item e, pelo endereço, volta a Conversas', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
   await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
 
   await page.goto('/dashboard')
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { name: 'Conversas' })).toBeVisible()
+  await expect(page).toHaveURL(/\/conversas$/)
 })
 
 test('chamado novo muda "Na fila" e "Recebidos" sem recarregar', async ({ page, baseURL }) => {

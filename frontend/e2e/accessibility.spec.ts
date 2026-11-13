@@ -533,7 +533,7 @@ test('na largura do celular, em "Maior", a página não rola para o lado', async
   await expectNoPageScroll(adminPage, 'login')
   await signIn(adminPage, admin.email, admin.password)
   for (const [path, title] of [
-    ['/', 'Atendimento'],
+    ['/atendimento', 'Atendimento'],
     ['/dashboard', 'Dashboard'],
     ['/contatos', 'Contatos'],
     ['/orgaos', 'Órgãos'],
@@ -613,7 +613,7 @@ test('o medidor de contraste aponta os textos fracos do tema normal', async ({ p
 test('a escolha de uma aba vale nas outras', async ({ context, page }) => {
   await signIn(page, admin.email, admin.password)
   const other = await context.newPage()
-  await other.goto('/')
+  await other.goto('/atendimento')
   await expect(other.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
 
   await chooseInMenu(page, 'menuitemradio', 'Grande')
