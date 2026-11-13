@@ -1,5 +1,19 @@
-import { expect, request as apiRequest } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, test, unique, userPassword } from './fixtures'
+import { execFileSync } from 'node:child_process'
+import { expect, request as apiRequest, type Page } from '@playwright/test'
+import {
+  admin,
+  clearSession,
+  seedDirectory,
+  seedSector,
+  signIn,
+  test,
+  unique,
+  userPassword,
+} from './fixtures'
+
+function assumeIn(page: Page, name: string) {
+  return page.getByRole('button', { name: `Assumir chamado de ${name}` })
+}
 
 test('Conversas funciona no menu recolhido e no celular', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
@@ -332,3 +346,76 @@ for (const action of ['Encerrar', 'Outro setor', 'Transferir'] as const) {
     await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
   })
 }
+
+test('fila do administrador ignora setores inativos e preserva os demais perfis', async ({
+  page,
+  request,
+  baseURL,
+  browser,
+}) => {
+  const active = await seedSector(baseURL!)
+  const inactive = await seedSector(baseURL!)
+  const receive = async (sectorId: number, name: string) =>
+    expect(
+      (
+        await request.post(`/api/test/messaging/sectors/${sectorId}/receive`, {
+          data: {
+            externalMessageId: `E2E-${unique().id}`,
+            phone: unique().phone,
+            contactName: name,
+            body: 'Olá',
+          },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  const ownName = `Cliente próprio ${unique().id}`
+  const inactiveName = `Cliente do setor inativo ${unique().id}`
+  const activeName = `Cliente do setor ativo ${unique().id}`
+  await receive(inactive.sector.id, ownName)
+  await receive(inactive.sector.id, inactiveName)
+  await receive(active.sector.id, activeName)
+
+  // Quem atende no setor inativo assume antes de ele ser desativado: o chamado próprio segue na lista.
+  await signIn(page, inactive.agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('button', { name: `Assumir chamado de ${ownName}` }).click()
+  await expect(page.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(ownName)
+  await clearSession(page)
+
+  // A API não desativa setores; usa o banco isolado criado por make test-e2e.
+  expect(Number.isSafeInteger(inactive.sector.id)).toBeTruthy()
+  execFileSync('docker', [
+    'exec',
+    'xet-e2e-db',
+    'psql',
+    '-U',
+    'xet',
+    '-d',
+    'xet',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-c',
+    `UPDATE sectors SET active = false WHERE id = ${inactive.sector.id}`,
+  ])
+
+  const adminContext = await browser.newContext()
+  const adminPage = await adminContext.newPage()
+  await signIn(adminPage, admin.email, admin.password)
+  await adminPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await expect(assumeIn(adminPage, activeName)).toBeVisible()
+  await expect(assumeIn(adminPage, inactiveName)).toHaveCount(0)
+  // O contador do administrador não conta o chamado do setor inativo: a aba mostra só os ativos
+  // (o banco é compartilhado, então confere a contagem pelo que a lista exibe).
+  const queue = adminPage.getByRole('tab', { name: /^Fila/ })
+  const shown = await adminPage.getByRole('button', { name: /^Assumir chamado de/ }).count()
+  await expect(queue).toHaveAccessibleName(`Fila, ${shown} a assumir`)
+  expect(shown).toBeGreaterThan(0)
+
+  // Atendente do setor inativo mantém a fila e a lista própria como hoje.
+  await clearSession(page)
+  await signIn(page, inactive.agent, userPassword)
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(ownName)
+  await expect(assumeIn(page, inactiveName)).toBeVisible()
+  await adminContext.close()
+})
