@@ -39,15 +39,8 @@ import {
   useSectionCollapsed,
 } from '@/lib/dashboard'
 import { formatDay, formatAverageTime, organizationLabel } from '@/lib/format'
-// PROTÓTIPO #160: versões da seção de fila e em atendimento.
-import {
-  PrototypeSwitcher,
-  useLiveLists,
-  useVariant,
-  VariantA,
-  VariantB,
-  VariantC,
-} from '@/prototype/DashboardLists'
+// PROTÓTIPO #160: versão aprovada (C) da fila e dos em atendimento.
+import { useLiveLists, VariantC } from '@/prototype/DashboardLists'
 
 const notApplicable = 'Não se aplica ao filtro'
 const noDataMark = '—'
@@ -376,7 +369,6 @@ export default function DashboardPage() {
   const { data: sectors = [] } = useSectors()
   const sector = sectors.find((item) => item.id === filter.sectorId)
   const numbers = data?.numbers
-  const variant = useVariant()
   const { data: lists } = useLiveLists(filter.search)
   const showSector = filter.isAdmin && filter.sectorId === undefined
   const moduleOn = filter.moduleId !== undefined
@@ -400,26 +392,11 @@ export default function DashboardPage() {
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
-        {variant === 'B' ? (
-          lists && (
-            <VariantB
-              lists={lists}
-              showSector={showSector}
-              moduleOn={moduleOn}
-              kpis={{
-                queued: numbers ? display(numbers.queued, asCount) : '…',
-                inProgress: numbers ? display(numbers.inProgress, asCount) : '…',
-              }}
-            />
-          )
-        ) : (
-          <KpiSection section="now" title="Agora">
-            <Kpi label="Na fila" number={numbers?.queued} />
-            <Kpi label="Em atendimento" number={numbers?.inProgress} />
-          </KpiSection>
-        )}
-        {variant === 'A' && lists && <VariantA lists={lists} showSector={showSector} moduleOn={moduleOn} />}
-        {variant === 'C' && lists && <VariantC lists={lists} showSector={showSector} moduleOn={moduleOn} />}
+        <KpiSection section="now" title="Agora">
+          <Kpi label="Na fila" number={numbers?.queued} />
+          <Kpi label="Em atendimento" number={numbers?.inProgress} />
+        </KpiSection>
+        {lists && <VariantC lists={lists} showSector={showSector} moduleOn={moduleOn} />}
         <KpiSection section="period" title="No período" detail={periodDetail(data?.period)}>
           <Kpi label="Recebidos" number={numbers?.received} />
           <Kpi label="Iniciados" number={numbers?.started} />
@@ -439,7 +416,6 @@ export default function DashboardPage() {
         </KpiSection>
         {data && <AssigneesCard assignees={data.assignees} allSectors={data.sectorId === null} />}
       </PageContent>
-      <PrototypeSwitcher current={variant} />
     </>
   )
 }
