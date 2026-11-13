@@ -547,11 +547,11 @@ func TestMessagesCarryTheNicknameOfTheSender(t *testing.T) {
 	)
 
 	// Texto; a repetição com o mesmo identificador devolve a mesma mensagem.
-	first := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia")
+	first := e.sendText(c.ticket.ID, c.anaToken, requestA, "Primeira linha\nSegunda linha")
 	if first.Status != http.StatusOK {
 		t.Fatalf("send: status %d, body %v", first.Status, first.Body)
 	}
-	if r := e.sendText(c.ticket.ID, c.anaToken, requestA, "Bom dia"); r.Status != http.StatusOK || id(r.Body) != id(first.Body) {
+	if r := e.sendText(c.ticket.ID, c.anaToken, requestA, "Primeira linha\nSegunda linha"); r.Status != http.StatusOK || id(r.Body) != id(first.Body) {
 		t.Fatalf("repeated: status %d, body %v", r.Status, r.Body)
 	}
 
@@ -582,7 +582,7 @@ func TestMessagesCarryTheNicknameOfTheSender(t *testing.T) {
 	}
 
 	got := e.outbound(c.ticket.ID)
-	want := []string{"*Ana Souza:*\nBom dia", "*Ana Souza:*", "*Ana Souza:*\nSegue o boleto", "*Aninha:*\nMais alguma dúvida?"}
+	want := []string{"*Ana Souza:*\nPrimeira linha\nSegunda linha", "*Ana Souza:*", "*Ana Souza:*\nSegue o boleto", "*Aninha:*\nMais alguma dúvida?"}
 	if len(got) != len(want) {
 		t.Fatalf("messages = %+v", got)
 	}
