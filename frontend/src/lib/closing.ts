@@ -37,6 +37,8 @@ export const inList = (text: string, list: { name: string }[]) =>
 export type FormSubject = {
   id: number
   name: string
+  moduleId: number
+  moduleName: string
   solutions: { id: number; body: string }[]
 }
 

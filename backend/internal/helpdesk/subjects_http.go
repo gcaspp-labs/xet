@@ -3,6 +3,7 @@ package helpdesk
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
@@ -13,6 +14,7 @@ type subjectResponse struct {
 	ID        int64              `json:"id"`
 	SectorID  int64              `json:"sectorId"`
 	Name      string             `json:"name"`
+	ModuleID  *int64             `json:"moduleId"`
 	Solutions []solutionResponse `json:"solutions"`
 }
 
@@ -23,7 +25,7 @@ type solutionResponse struct {
 }
 
 func toSubjectResponse(s db.Subject, solutions []db.SubjectSolution) subjectResponse {
-	return subjectResponse{ID: s.ID, SectorID: s.SectorID, Name: s.Name, Solutions: toSolutionResponses(solutions)}
+	return subjectResponse{ID: s.ID, SectorID: s.SectorID, Name: s.Name, ModuleID: s.ModuleID, Solutions: toSolutionResponses(solutions)}
 }
 
 func toSolutionResponse(s db.SubjectSolution) solutionResponse {
@@ -39,7 +41,8 @@ func toSolutionResponses(solutions []db.SubjectSolution) []solutionResponse {
 }
 
 type subjectRequest struct {
-	Name string `json:"name" validate:"required"`
+	Name     string `json:"name" validate:"required"`
+	ModuleID int64  `json:"moduleId"`
 }
 
 type solutionRequest struct {
@@ -56,9 +59,21 @@ func (h *Handler) listSubjects(w http.ResponseWriter, r *http.Request) {
 		httpx.InternalError(h.logger, w, r, err)
 		return
 	}
-	out := make([]subjectResponse, len(subjects))
-	for i, s := range subjects {
-		out[i] = toSubjectResponse(s.Subject, s.Solutions)
+	filter := r.URL.Query().Get("moduleId")
+	var moduleID int64
+	if filter != "" && filter != "none" {
+		moduleID, err = strconv.ParseInt(filter, 10, 64)
+		if err != nil || moduleID <= 0 {
+			httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha um módulo válido.")
+			return
+		}
+	}
+	out := make([]subjectResponse, 0, len(subjects))
+	for _, s := range subjects {
+		if filter == "none" && s.ModuleID != nil || moduleID > 0 && (s.ModuleID == nil || *s.ModuleID != moduleID) {
+			continue
+		}
+		out = append(out, toSubjectResponse(s.Subject, s.Solutions))
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
@@ -72,7 +87,7 @@ func (h *Handler) createSubject(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	s, err := h.service.CreateSubject(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, req.Name)
+	s, err := h.service.CreateSubject(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, req.ModuleID, req.Name)
 	if err != nil {
 		h.subjectError(w, r, err)
 		return
@@ -93,7 +108,7 @@ func (h *Handler) updateSubject(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	s, err := h.service.UpdateSubject(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, subjectID, req.Name)
+	s, err := h.service.UpdateSubject(r.Context(), auth.CurrentUser(r.Context()).ID, sectorID, subjectID, req.ModuleID, req.Name)
 	if err != nil {
 		h.subjectError(w, r, err)
 		return
@@ -185,6 +200,8 @@ func (h *Handler) deleteSolution(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) subjectError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, ErrInvalidModules):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha um módulo ativo do setor.")
 	case errors.Is(err, ErrInvalidSubject):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Informe o nome do assunto.")
 	case errors.Is(err, ErrSubjectTooLong):

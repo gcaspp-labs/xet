@@ -76,7 +76,7 @@ async function closedTicket(baseURL: string) {
     }),
   )
   await agentApi.dispose()
-  return { ticketId: ticket.id, agent, otherAgent, supervisor }
+  return { ticketId: ticket.id, agent, otherAgent, supervisor, sector, modules }
 }
 
 test('correção do atendimento encerrado exige motivo e fica na auditoria', async ({
@@ -153,6 +153,44 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   await signIn(page, supervisor, userPassword)
   await page.goto(`/chamados/${ticketId}`)
   await expect(page.getByRole('button', { name: 'Corrigir' })).toBeVisible()
+})
+
+test('correção exige marcar módulo ativo e preserva os módulos antigos', async ({
+  page,
+  baseURL,
+}) => {
+  const { ticketId, agent, sector, modules } = await closedTicket(baseURL!)
+  const api = await apiRequest.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
+  for (const [index, name] of ['Folha', 'Patrimônio'].entries()) {
+    ok(
+      await api.put(`/api/sectors/${sector.id}/modules/${modules[index].id}`, {
+        data: { name, active: false },
+      }),
+    )
+  }
+  const replacement = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Novo sistema' } }),
+  )
+  await signIn(page, agent, userPassword)
+  await page.goto(`/chamados/${ticketId}`)
+  await page.getByRole('button', { name: 'Corrigir' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Corrigir atendimento' })
+  await sheet.getByLabel('Assunto').fill('Novo assunto')
+  await sheet.getByLabel('Motivo da correção').fill('Corrigir assunto.')
+  await sheet.getByRole('button', { name: 'Salvar correção' }).click()
+  await expect(sheet.getByText('Marque ao menos um módulo ativo para salvar.')).toBeVisible()
+  await sheet.getByRole('checkbox', { name: 'Novo sistema' }).check()
+  await sheet.getByRole('button', { name: 'Salvar correção' }).click()
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click()
+  await expect(page.getByText('Atendimento corrigido')).toBeVisible()
+  const result = await json<{ id: number }[]>(
+    await page.request.get(`/api/tickets/${ticketId}/modules`),
+  )
+  expect(result.map((module) => module.id).sort((a, b) => a - b)).toEqual(
+    [...modules.map((module) => module.id), replacement.id].sort((a, b) => a - b),
+  )
+  await api.dispose()
 })
 
 test('a janela de correção tem bloqueio', async ({ page, baseURL }) => {

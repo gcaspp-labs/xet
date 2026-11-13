@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -23,7 +24,8 @@ const (
 // Subject is a subject of the list of the sector with its solutions.
 type Subject struct {
 	db.Subject
-	Solutions []db.SubjectSolution
+	ModuleName string
+	Solutions  []db.SubjectSolution
 }
 
 // Subjects returns the subject list of the sector, each with its solutions.
@@ -36,6 +38,14 @@ func (s *Service) Subjects(ctx context.Context, sectorID int64) ([]Subject, erro
 	if err != nil {
 		return nil, fmt.Errorf("list solutions: %w", err)
 	}
+	modules, err := s.q.ListModules(ctx, sectorID)
+	if err != nil {
+		return nil, fmt.Errorf("list modules: %w", err)
+	}
+	moduleNames := make(map[int64]string, len(modules))
+	for _, module := range modules {
+		moduleNames[module.ID] = module.Name
+	}
 	bySubject := map[int64][]db.SubjectSolution{}
 	for _, sol := range solutions {
 		bySubject[sol.SubjectID] = append(bySubject[sol.SubjectID], sol)
@@ -43,6 +53,9 @@ func (s *Service) Subjects(ctx context.Context, sectorID int64) ([]Subject, erro
 	out := make([]Subject, len(subjects))
 	for i, sub := range subjects {
 		out[i] = Subject{Subject: sub, Solutions: bySubject[sub.ID]}
+		if sub.ModuleID != nil {
+			out[i].ModuleName = moduleNames[*sub.ModuleID]
+		}
 	}
 	return out, nil
 }
@@ -57,7 +70,7 @@ func (s *Service) Solutions(ctx context.Context, subjectID int64) ([]db.SubjectS
 }
 
 // CreateSubject adds a subject to the list of the sector.
-func (s *Service) CreateSubject(ctx context.Context, actorID, sectorID int64, name string) (db.Subject, error) {
+func (s *Service) CreateSubject(ctx context.Context, actorID, sectorID, moduleID int64, name string) (db.Subject, error) {
 	name, err := normalizeSubject(name)
 	if err != nil {
 		return db.Subject{}, err
@@ -66,8 +79,19 @@ func (s *Service) CreateSubject(ctx context.Context, actorID, sectorID int64, na
 	var subject db.Subject
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		var err error
-		subject, err = q.CreateSubject(ctx, db.CreateSubjectParams{SectorID: sectorID, Name: name})
+		modules, err := q.GetModulesForShare(ctx, []int64{moduleID})
+		if err != nil {
+			return fmt.Errorf("get module: %w", err)
+		}
+		if len(modules) != 1 || modules[0].SectorID != sectorID || !modules[0].Active {
+			if _, err := q.GetSector(ctx, sectorID); errors.Is(err, pgx.ErrNoRows) {
+				return ErrSectorNotFound
+			} else if err != nil {
+				return fmt.Errorf("get sector: %w", err)
+			}
+			return ErrInvalidModules
+		}
+		subject, err = q.CreateSubject(ctx, db.CreateSubjectParams{SectorID: sectorID, ModuleID: &moduleID, Name: name})
 		if err != nil {
 			return subjectError("create subject", err)
 		}
@@ -81,7 +105,7 @@ func (s *Service) CreateSubject(ctx context.Context, actorID, sectorID int64, na
 
 // UpdateSubject renames a subject of the sector. Tickets keep their own text,
 // so they do not change.
-func (s *Service) UpdateSubject(ctx context.Context, actorID, sectorID, id int64, name string) (db.Subject, error) {
+func (s *Service) UpdateSubject(ctx context.Context, actorID, sectorID, id, moduleID int64, name string) (db.Subject, error) {
 	name, err := normalizeSubject(name)
 	if err != nil {
 		return db.Subject{}, err
@@ -94,17 +118,27 @@ func (s *Service) UpdateSubject(ctx context.Context, actorID, sectorID, id int64
 		if err != nil {
 			return err
 		}
-		if before.Name == name {
+		if before.ModuleID == nil || *before.ModuleID != moduleID {
+			modules, err := q.GetModulesForShare(ctx, []int64{moduleID})
+			if err != nil {
+				return fmt.Errorf("get module: %w", err)
+			}
+			if len(modules) != 1 || modules[0].SectorID != sectorID || !modules[0].Active {
+				return ErrInvalidModules
+			}
+		}
+		if before.Name == name && before.ModuleID != nil && *before.ModuleID == moduleID {
 			subject = before
 			return nil
 		}
-		subject, err = q.UpdateSubject(ctx, db.UpdateSubjectParams{ID: id, Name: name})
+		subject, err = q.UpdateSubject(ctx, db.UpdateSubjectParams{ID: id, ModuleID: &moduleID, Name: name})
 		if err != nil {
 			return subjectError("update subject", err)
 		}
 		return recordSubject(ctx, q, id, "subject_updated", actorID, audit.Changes{
 			"sector_id": {From: sectorID, To: sectorID},
 			"name":      {From: before.Name, To: subject.Name},
+			"module_id": {From: before.ModuleID, To: subject.ModuleID},
 		})
 	})
 	if err != nil {
@@ -222,12 +256,12 @@ func (s *Service) DeleteSolution(ctx context.Context, actorID, sectorID, subject
 // sector, inside the transaction that holds the ticket. A subject already on
 // the list stays as it is, and a text over the limit does not enter, without
 // stopping the form from being saved (spec.md, Assuntos e soluções).
-func addFormSubject(ctx context.Context, q *db.Queries, actorID, sectorID int64, name string) error {
+func addFormSubject(ctx context.Context, q *db.Queries, actorID, sectorID, moduleID int64, name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" || utf8.RuneCountInString(name) > maxSubjectLength {
 		return nil
 	}
-	added, err := q.AddSubjectIfMissing(ctx, db.AddSubjectIfMissingParams{SectorID: sectorID, Name: name})
+	added, err := q.AddSubjectIfMissing(ctx, db.AddSubjectIfMissingParams{SectorID: sectorID, ModuleID: &moduleID, Name: name})
 	if err != nil {
 		return fmt.Errorf("add subject: %w", err)
 	}
@@ -246,12 +280,12 @@ func addFormSubject(ctx context.Context, q *db.Queries, actorID, sectorID int64,
 // solution already on the list stays as it is, and a text over the limit does
 // not enter, without stopping the form from being saved (spec.md, Assuntos e
 // soluções).
-func addFormSolution(ctx context.Context, q *db.Queries, actorID, sectorID int64, subject, body string) error {
+func addFormSolution(ctx context.Context, q *db.Queries, actorID, sectorID, moduleID int64, subject, body string) error {
 	subject, body = strings.TrimSpace(subject), strings.TrimSpace(body)
 	if subject == "" || body == "" || utf8.RuneCountInString(body) > maxSolutionLength {
 		return nil
 	}
-	held, err := q.GetSubjectByNameForShare(ctx, db.GetSubjectByNameForShareParams{SectorID: sectorID, Name: subject})
+	held, err := q.GetSubjectByNameForShare(ctx, db.GetSubjectByNameForShareParams{SectorID: sectorID, ModuleID: &moduleID, Name: subject})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -272,14 +306,27 @@ func addFormSolution(ctx context.Context, q *db.Queries, actorID, sectorID int64
 
 // addFormItems adds what the closing form asked to add: the subject first and
 // then the solution, which needs the subject on the list.
-func addFormItems(ctx context.Context, q *db.Queries, actorID, sectorID int64, subject, resolution string, addSubject, addSolution bool) error {
+func addFormItems(ctx context.Context, q *db.Queries, actorID, sectorID int64, subject, resolution string, moduleIDs []int64, subjectModuleID, solutionModuleID *int64, addSubject, addSolution bool) error {
 	if addSubject {
-		if err := addFormSubject(ctx, q, actorID, sectorID, subject); err != nil {
+		if subjectModuleID == nil || !slices.Contains(moduleIDs, *subjectModuleID) {
+			return ErrInvalidModules
+		}
+		modules, err := q.GetModulesForShare(ctx, []int64{*subjectModuleID})
+		if err != nil {
+			return fmt.Errorf("get module: %w", err)
+		}
+		if len(modules) != 1 || modules[0].SectorID != sectorID || !modules[0].Active {
+			return ErrInvalidModules
+		}
+		if err := addFormSubject(ctx, q, actorID, sectorID, *subjectModuleID, subject); err != nil {
 			return err
 		}
 	}
 	if addSolution {
-		return addFormSolution(ctx, q, actorID, sectorID, subject, resolution)
+		if solutionModuleID == nil || !slices.Contains(moduleIDs, *solutionModuleID) {
+			return ErrInvalidModules
+		}
+		return addFormSolution(ctx, q, actorID, sectorID, *solutionModuleID, subject, resolution)
 	}
 	return nil
 }
@@ -384,6 +431,7 @@ func recordSubjectCreated(ctx context.Context, q *db.Queries, actorID int64, sub
 	return recordSubject(ctx, q, subject.ID, "subject_created", actorID, audit.Changes{
 		"sector_id": {From: nil, To: subject.SectorID},
 		"name":      {From: nil, To: subject.Name},
+		"module_id": {From: nil, To: subject.ModuleID},
 	})
 }
 
@@ -407,7 +455,7 @@ func recordSubject(ctx context.Context, q *db.Queries, subjectID int64, action s
 // subjectError converts constraint violations into domain errors.
 func subjectError(op string, err error) error {
 	switch {
-	case isConstraint(err, "subjects_sector_id_name_key"):
+	case isConstraint(err, "subjects_module_name_key"), isConstraint(err, "subjects_unclassified_name_key"):
 		return ErrSubjectNameTaken
 	case isConstraint(err, "subjects_sector_id_fkey"):
 		return ErrSectorNotFound

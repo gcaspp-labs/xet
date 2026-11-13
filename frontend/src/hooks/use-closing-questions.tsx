@@ -1,79 +1,139 @@
 import { useState } from 'react'
 import { SolutionQuestion, SubjectQuestion } from '@/components/ClosingFields'
 import type { FormQuestion } from '@/components/FormDialog'
-import { type FormSubject, findSubject, hasSolution, inList } from '@/lib/closing'
+import { type FormSubject, sameText } from '@/lib/closing'
 
-type Answerable = { subject: string; resolution: string }
+type Answerable = { subject: string; resolution: string; moduleIds: number[] }
+type Module = { id: number; name: string }
 
-// Perguntas ao salvar o formulário, em sequência (spec.md, Assuntos e
-// soluções): primeiro o assunto fora da lista do setor; depois, com o assunto
-// na lista ou adicionado, a resolução fora da lista do assunto. Sem o assunto
-// na lista, não há pergunta da solução. `askSubject` e `askSolution` limitam as
-// perguntas, por exemplo, aos campos alterados na correção. Voltar não salva.
 export function useClosingQuestions<V extends Answerable>({
   subjects,
+  modules,
   askSubject = () => true,
   askSolution = () => true,
   save,
 }: {
   subjects: FormSubject[]
+  modules: Module[]
   askSubject?: (values: V) => boolean
   askSolution?: (values: V) => boolean
-  save: (values: V, addSubject: boolean, addSolution: boolean) => void
+  save: (
+    values: V,
+    addSubject: boolean,
+    addSolution: boolean,
+    subjectModuleId?: number,
+    solutionModuleId?: number,
+  ) => void
 }) {
   const [asking, setAsking] = useState<{
     values: V
     step: 'subject' | 'solution'
     addSubject: boolean
+    subjectModuleId?: number
+    retry?: boolean
   } | null>(null)
+  const [chosen, setChosen] = useState<number | null>(null)
+  const [error, setError] = useState(false)
 
-  // A resolução fora da lista do assunto, que está na lista ou será adicionado
-  // (um assunto novo ainda não tem soluções).
+  const matching = (values: V) =>
+    subjects.filter(
+      (item) => values.moduleIds.includes(item.moduleId) && sameText(item.name, values.subject),
+    )
   const solutionMissing = (values: V, addingSubject: boolean) => {
-    if (!askSolution(values)) {
-      return false
-    }
-    const subject = findSubject(subjects, values.subject)
-    if (subject) {
-      return !hasSolution(subject, values.resolution)
-    }
-    return addingSubject
+    if (!askSolution(values)) return false
+    const matches = matching(values)
+    return matches.length
+      ? !matches.some((item) =>
+          item.solutions.some((solution) => sameText(solution.body, values.resolution)),
+        )
+      : addingSubject
   }
-
+  const begin = (
+    values: V,
+    step: 'subject' | 'solution',
+    addSubject: boolean,
+    subjectModuleId?: number,
+    retry = false,
+  ) => {
+    setChosen(null)
+    setError(false)
+    setAsking({ values, step, addSubject, subjectModuleId, retry })
+  }
   const start = (values: V) => {
-    if (askSubject(values) && !inList(values.subject, subjects)) {
-      setAsking({ values, step: 'subject', addSubject: false })
+    const active = modules.filter((module) => values.moduleIds.includes(module.id))
+    if (askSubject(values) && !matching(values).length && active.length) {
+      begin(values, 'subject', false)
     } else if (solutionMissing(values, false)) {
-      setAsking({ values, step: 'solution', addSubject: false })
+      begin(values, 'solution', false)
     } else {
       save(values, false, false)
     }
   }
 
   let question: FormQuestion | null = null
-  if (asking?.step === 'subject') {
-    const { values } = asking
+  if (asking) {
+    const { values, addSubject, subjectModuleId, step, retry } = asking
+    const options =
+      step === 'subject'
+        ? modules.filter((module) => values.moduleIds.includes(module.id))
+        : addSubject
+          ? modules.filter((module) => module.id === subjectModuleId)
+          : matching(values).map((item) => ({ id: item.moduleId, name: item.moduleName }))
+    const selected = options.length === 1 && !retry ? options[0].id : chosen
     question = {
-      id: 'subject',
-      body: <SubjectQuestion subject={values.subject} />,
+      id: step,
+      body: (
+        <>
+          {step === 'subject' ? (
+            <SubjectQuestion subject={values.subject} />
+          ) : (
+            <SolutionQuestion subject={values.subject} resolution={values.resolution} />
+          )}
+          {retry && (
+            <p role="alert">O módulo escolhido foi desativado. Escolha outro módulo ativo.</p>
+          )}
+          {(options.length > 1 || retry) && (
+            <fieldset>
+              <legend>Adicionar em qual módulo?</legend>
+              {options.map((module) => (
+                <label key={module.id} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="question-module"
+                    checked={chosen === module.id}
+                    onChange={() => {
+                      setChosen(module.id)
+                      setError(false)
+                    }}
+                  />
+                  {module.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {error && <p role="alert">Escolha o módulo.</p>}
+        </>
+      ),
       onBack: () => setAsking(null),
-      // Sem o assunto na lista, não há pergunta da solução.
-      onSkip: () => save(values, false, false),
-      onConfirm: () =>
-        solutionMissing(values, true)
-          ? setAsking({ values, step: 'solution', addSubject: true })
-          : save(values, true, false),
-    }
-  } else if (asking?.step === 'solution') {
-    const { values, addSubject } = asking
-    question = {
-      id: 'solution',
-      body: <SolutionQuestion subject={values.subject} resolution={values.resolution} />,
-      onBack: () => setAsking(null),
-      onSkip: () => save(values, addSubject, false),
-      onConfirm: () => save(values, addSubject, true),
+      onSkip: () => save(values, addSubject, false, subjectModuleId),
+      onConfirm: () => {
+        if (selected == null) {
+          setError(true)
+          return
+        }
+        if (step === 'subject') {
+          if (solutionMissing(values, true)) begin(values, 'solution', true, selected)
+          else save(values, true, false, selected)
+        } else {
+          save(values, addSubject, true, subjectModuleId, selected)
+        }
+      },
     }
   }
-
-  return { start, question, reset: () => setAsking(null) }
+  return {
+    start,
+    question,
+    retry: (values: V) => begin(values, 'subject', false, undefined, true),
+    reset: () => setAsking(null),
+  }
 }

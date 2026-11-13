@@ -4,16 +4,16 @@ where sector_id = @sector_id
 order by lower(name), id;
 
 -- name: CreateSubject :one
-insert into subjects (sector_id, name)
-values (@sector_id, @name)
+insert into subjects (sector_id, module_id, name)
+values (@sector_id, @module_id, @name)
 returning *;
 
 -- name: AddSubjectIfMissing :many
 -- From the closing form: a subject someone else already added stays as it is,
 -- and no row comes back.
-insert into subjects (sector_id, name)
-values (@sector_id, @name)
-on conflict (sector_id, lower(name)) do nothing
+insert into subjects (sector_id, module_id, name)
+values (@sector_id, @module_id, @name)
+on conflict do nothing
 returning *;
 
 -- name: GetSubjectForUpdate :one
@@ -23,7 +23,7 @@ for update;
 
 -- name: UpdateSubject :one
 update subjects
-set name = @name
+set name = @name, module_id = @module_id
 where id = @id
 returning *;
 
@@ -42,7 +42,7 @@ for share;
 -- From the closing form: the subject of the list with the name of the form,
 -- held while the solution is added.
 select * from subjects
-where sector_id = @sector_id and lower(name) = lower(@name)
+where sector_id = @sector_id and module_id = @module_id and lower(btrim(name)) = lower(btrim(@name))
 for share;
 
 -- name: ListSectorSolutions :many

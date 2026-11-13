@@ -5,10 +5,12 @@ await journey("consult-subjects", async (t) => {
   const sector = await t.step(
     "Preparar setor, assuntos e dois chamados",
     async () => {
-      const seeded = await t.seedSector({ agents: 1 });
+      const seeded = await t.seedSector({ agents: 1, modules: ["Folha"] });
+      const modules = await t.admin.get(`/api/sectors/${seeded.id}/modules`);
+      const [module] = await modules.json();
       const response = await t.apiOk(
         t.admin.post(`/api/sectors/${seeded.id}/subjects`, {
-          data: { name: "Férias" },
+          data: { name: "Férias", moduleId: module.id },
         }),
         "criar assunto",
       );

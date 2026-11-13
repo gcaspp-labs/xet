@@ -22,14 +22,16 @@ import (
 // list of the sector, and AddSolution the resolution to the list of the
 // subject, with the form.
 type Closing struct {
-	Subject        string
-	Resolution     string
-	ModuleIDs      []int64
-	OrganizationID int64
-	StartedAt      *time.Time
-	EndedAt        *time.Time
-	AddSubject     bool
-	AddSolution    bool
+	Subject          string
+	Resolution       string
+	ModuleIDs        []int64
+	OrganizationID   int64
+	StartedAt        *time.Time
+	EndedAt          *time.Time
+	AddSubject       bool
+	SubjectModuleID  *int64 `json:"subjectModuleId"`
+	SolutionModuleID *int64 `json:"solutionModuleId"`
+	AddSolution      bool
 }
 
 // ClosingForm is what the closing form shows before the assignee fills it:
@@ -102,7 +104,7 @@ func (s *Service) Close(ctx context.Context, actor auth.User, ticketID int64, in
 		if err != nil {
 			return err
 		}
-		if err := addFormItems(ctx, q, actor.ID, ticket.SectorID, in.Subject, in.Resolution, in.AddSubject, in.AddSolution); err != nil {
+		if err := addFormItems(ctx, q, actor.ID, ticket.SectorID, in.Subject, in.Resolution, in.ModuleIDs, in.SubjectModuleID, in.SolutionModuleID, in.AddSubject, in.AddSolution); err != nil {
 			return err
 		}
 		return recordTicket(ctx, q, ticket.ID, "ticket_closed", actor.ID, changes)

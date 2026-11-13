@@ -11,9 +11,11 @@ import (
 
 // formSubjectResponse is a subject of the closing form with its solutions.
 type formSubjectResponse struct {
-	ID        int64              `json:"id"`
-	Name      string             `json:"name"`
-	Solutions []solutionResponse `json:"solutions"`
+	ID         int64              `json:"id"`
+	Name       string             `json:"name"`
+	ModuleID   int64              `json:"moduleId"`
+	ModuleName string             `json:"moduleName"`
+	Solutions  []solutionResponse `json:"solutions"`
 }
 
 type closingFormResponse struct {
@@ -39,15 +41,17 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 	}
 	out := closingFormResponse{
 		Modules:          make([]httpx.Ref, len(form.Modules)),
-		Subjects:         make([]formSubjectResponse, len(form.Subjects)),
+		Subjects:         make([]formSubjectResponse, 0, len(form.Subjects)),
 		ContactModuleIDs: append([]int64{}, form.ContactModuleIDs...),
 		StartedAt:        form.StartedAt,
 	}
 	for i, m := range form.Modules {
 		out.Modules[i] = httpx.Ref{ID: m.ID, Name: m.Name}
 	}
-	for i, s := range form.Subjects {
-		out.Subjects[i] = formSubjectResponse{ID: s.ID, Name: s.Name, Solutions: toSolutionResponses(s.Solutions)}
+	for _, s := range form.Subjects {
+		if s.ModuleID != nil {
+			out.Subjects = append(out.Subjects, formSubjectResponse{ID: s.ID, Name: s.Name, ModuleID: *s.ModuleID, ModuleName: s.ModuleName, Solutions: toSolutionResponses(s.Solutions)})
+		}
 	}
 	if o := form.Organization; o != nil {
 		out.Organization = &httpx.OrganizationRef{
@@ -61,14 +65,16 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 // closeRequest has no limit on the subject: a text over the limit of the list
 // does not enter it, and the form is still saved (spec.md, Assuntos e soluções).
 type closeRequest struct {
-	Subject        string     `json:"subject" validate:"required"`
-	Resolution     string     `json:"resolution" validate:"required"`
-	ModuleIDs      []int64    `json:"moduleIds" validate:"required,min=1,max=100"`
-	OrganizationID int64      `json:"organizationId" validate:"required"`
-	StartedAt      *time.Time `json:"startedAt"`
-	EndedAt        *time.Time `json:"endedAt"`
-	AddSubject     bool       `json:"addSubject"`
-	AddSolution    bool       `json:"addSolution"`
+	Subject          string     `json:"subject" validate:"required"`
+	Resolution       string     `json:"resolution" validate:"required"`
+	ModuleIDs        []int64    `json:"moduleIds" validate:"required,min=1,max=100"`
+	OrganizationID   int64      `json:"organizationId" validate:"required"`
+	StartedAt        *time.Time `json:"startedAt"`
+	EndedAt          *time.Time `json:"endedAt"`
+	AddSubject       bool       `json:"addSubject"`
+	SubjectModuleID  *int64     `json:"subjectModuleId"`
+	SolutionModuleID *int64     `json:"solutionModuleId"`
+	AddSolution      bool       `json:"addSolution"`
 }
 
 func (req closeRequest) closing() Closing {

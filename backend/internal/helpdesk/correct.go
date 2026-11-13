@@ -22,16 +22,18 @@ import (
 // list of the sector, and AddSolution the resolution to the list of the
 // subject, with the correction.
 type Correction struct {
-	Subject        string
-	Resolution     string
-	ModuleIDs      []int64
-	OrganizationID int64
-	StartedAt      time.Time
-	EndedAt        time.Time
-	SpokeWith      string
-	Reason         string
-	AddSubject     bool
-	AddSolution    bool
+	Subject          string
+	Resolution       string
+	ModuleIDs        []int64
+	OrganizationID   int64
+	StartedAt        time.Time
+	EndedAt          time.Time
+	SpokeWith        string
+	Reason           string
+	AddSubject       bool
+	SubjectModuleID  *int64 `json:"subjectModuleId"`
+	SolutionModuleID *int64 `json:"solutionModuleId"`
+	AddSolution      bool
 }
 
 // Correct changes the closing data of a closed ticket. Whoever closed it,
@@ -80,6 +82,20 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 			return ErrInvalidOrganization
 		} else if err != nil {
 			return fmt.Errorf("get organization: %w", err)
+		}
+
+		modules, err := q.GetModulesForShare(ctx, in.ModuleIDs)
+		if err != nil {
+			return fmt.Errorf("lock correction modules: %w", err)
+		}
+		hasActiveModule := false
+		for _, module := range modules {
+			if module.SectorID == t.SectorID && module.Active {
+				hasActiveModule = true
+			}
+		}
+		if in.AddSubject && !hasActiveModule {
+			return ErrInvalidModules
 		}
 
 		current, err := q.ListTicketModuleIDs(ctx, t.ID)
@@ -141,7 +157,7 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 		if changes.Empty() {
 			return ErrNoChanges
 		}
-		if err := addFormItems(ctx, q, actor.ID, ticket.SectorID, in.Subject, in.Resolution, in.AddSubject, in.AddSolution); err != nil {
+		if err := addFormItems(ctx, q, actor.ID, ticket.SectorID, in.Subject, in.Resolution, in.ModuleIDs, in.SubjectModuleID, in.SolutionModuleID, in.AddSubject, in.AddSolution); err != nil {
 			return err
 		}
 		raw, err := changes.JSON()

@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Tags } from 'lucide-react'
 import { type FormEvent, Fragment, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormDialog } from '@/components/FormDialog'
@@ -34,6 +34,7 @@ import {
   type Subject,
   useDeleteSolution,
   useDeleteSubject,
+  useModules,
   useSaveSolution,
   useSaveSubject,
   useSectors,
@@ -42,6 +43,7 @@ import {
 import { useCurrentUser } from '@/lib/auth'
 
 const schema = z.object({
+  moduleId: z.string().min(1, 'Escolha o módulo.'),
   name: z.string().trim().min(1, 'Informe o nome do assunto.'),
 })
 
@@ -59,13 +61,19 @@ function SubjectSheet({
   onOpenChange: (open: boolean) => void
 }) {
   const save = useSaveSubject(sectorId)
+  const { data: modules = [], refetch: refetchModules } = useModules(sectorId)
+  const availableModules = modules.filter(
+    (module) => module.active || module.id === subject?.moduleId,
+  )
   const {
     register,
+    control,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: subject?.name ?? '' },
+    defaultValues: { name: subject?.name ?? '', moduleId: subject?.moduleId?.toString() ?? '' },
   })
 
   const onSubmit = handleSubmit((values) => {
@@ -73,11 +81,17 @@ function SubjectSheet({
       return
     }
     save.mutate(
-      { id: subject?.id, name: values.name },
+      { id: subject?.id, name: values.name, moduleId: Number(values.moduleId) },
       {
         onSuccess: () => {
           toast.success('Assunto salvo')
           onOpenChange(false)
+        },
+        onError: async (error) => {
+          if (error.message === 'Escolha um módulo ativo do setor.') {
+            await refetchModules()
+            setValue('moduleId', '')
+          }
         },
       },
     )
@@ -93,6 +107,36 @@ function SubjectSheet({
       error={save.error?.message}
       onSubmit={onSubmit}
     >
+      <Field data-invalid={!!errors.moduleId}>
+        <FieldLabel htmlFor="subject-module">Módulo</FieldLabel>
+        <Controller
+          name="moduleId"
+          control={control}
+          render={({ field }) => (
+            <Select
+              items={availableModules.map((module) => ({
+                value: String(module.id),
+                label: module.name,
+              }))}
+              value={field.value || null}
+              onValueChange={(value) => field.onChange(value ?? '')}
+            >
+              <SelectTrigger id="subject-module">
+                <SelectValue placeholder="Escolha o módulo" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableModules.map((module) => (
+                  <SelectItem key={module.id} value={String(module.id)}>
+                    {module.name}
+                    {!module.active && ' (desativado)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+        <FieldError errors={[errors.moduleId]} />
+      </Field>
       <Field data-invalid={!!errors.name}>
         <FieldLabel htmlFor="subject-name">Nome</FieldLabel>
         <Input
@@ -309,8 +353,22 @@ export default function SubjectsPage() {
   const sectorId = user?.sectorId ?? chosen ?? sectors[0]?.id
   const sector = sectors.find((s) => s.id === sectorId)
   const { data: subjects, isPending } = useSubjects(sectorId)
+  const { data: modules = [] } = useModules(sectorId)
+  const [moduleFilter, setModuleFilter] = useState('all')
   const [query, setQuery] = useState('')
-  const shown = subjects && filterSubjects(subjects, query)
+  const shown =
+    subjects &&
+    filterSubjects(
+      subjects.filter(
+        (subject) =>
+          moduleFilter === 'all' ||
+          (moduleFilter === 'none'
+            ? subject.moduleId === null
+            : subject.moduleId === Number(moduleFilter)),
+      ),
+      query,
+    )
+  const unclassified = subjects?.some((subject) => subject.moduleId === null) ?? false
   const [editing, setEditing] = useState<Subject | null>(null)
   const [open, setOpen] = useState(false)
   const [deleting, setDeleting] = useState<Subject | null>(null)
@@ -373,7 +431,12 @@ export default function SubjectsPage() {
             <Select
               items={sectorItems}
               value={sectorId?.toString() ?? null}
-              onValueChange={(value) => value && setChosen(Number(value))}
+              onValueChange={(value) => {
+                if (value) {
+                  setChosen(Number(value))
+                  setModuleFilter('all')
+                }
+              }}
             >
               <SelectTrigger id="subjects-sector">
                 <SelectValue />
@@ -384,6 +447,41 @@ export default function SubjectsPage() {
                     {item.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
+        {unclassified && (
+          <p>
+            Há assuntos sem módulo que não aparecem no formulário.{' '}
+            <Button variant="link" onClick={() => setModuleFilter('none')}>
+              Ver assuntos sem módulo
+            </Button>
+          </p>
+        )}
+        {subjects && subjects.length > 0 && (
+          <Field className="max-w-[260px]">
+            <FieldLabel htmlFor="subjects-module-filter">Filtrar por módulo</FieldLabel>
+            <Select
+              value={moduleFilter}
+              onValueChange={(value) => value && setModuleFilter(value)}
+              items={[
+                { value: 'all', label: 'Todos os módulos' },
+                ...modules.map((module) => ({ value: String(module.id), label: module.name })),
+                { value: 'none', label: 'Sem módulo' },
+              ]}
+            >
+              <SelectTrigger id="subjects-module-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os módulos</SelectItem>
+                {modules.map((module) => (
+                  <SelectItem key={module.id} value={String(module.id)}>
+                    {module.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value="none">Sem módulo</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -402,6 +500,7 @@ export default function SubjectsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Assunto e soluções</TableHead>
+                  <TableHead className="hidden sm:table-cell">Módulo</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -413,11 +512,29 @@ export default function SubjectsPage() {
                     <TableRow data-subject={subject.name}>
                       <TableCell className="w-full max-w-0 whitespace-normal">
                         <div className="body-strong [overflow-wrap:anywhere]">{subject.name}</div>
+                        <div className="caption text-ink-soft sm:hidden">
+                          {subject.moduleId === null
+                            ? 'Sem módulo'
+                            : modules.find((module) => module.id === subject.moduleId)?.name}
+                          {subject.moduleId !== null &&
+                            modules.find((module) => module.id === subject.moduleId)?.active ===
+                              false &&
+                            ' (desativado)'}
+                        </div>
                         <div className="caption text-ink-soft">
                           {solutionCount(
                             subjects!.find((item) => item.id === subject.id)!.solutions.length,
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        {subject.moduleId === null
+                          ? 'Sem módulo'
+                          : modules.find((module) => module.id === subject.moduleId)?.name}
+                        {subject.moduleId !== null &&
+                          modules.find((module) => module.id === subject.moduleId)?.active ===
+                            false &&
+                          ' (desativado)'}
                       </TableCell>
                       <TableCell className="whitespace-normal sm:whitespace-nowrap">
                         <div className="flex flex-wrap justify-end gap-1 sm:flex-nowrap">
@@ -461,6 +578,7 @@ export default function SubjectsPage() {
                             {solution.body}
                           </p>
                         </TableCell>
+                        <TableCell className="hidden sm:table-cell" />
                         <TableCell className="whitespace-normal sm:whitespace-nowrap">
                           <div className="flex flex-wrap justify-end gap-1 sm:flex-nowrap">
                             <Button

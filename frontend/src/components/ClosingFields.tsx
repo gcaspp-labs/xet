@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { closingSchema, type FormSubject, findSubject } from '@/lib/closing'
+import { closingSchema, type FormSubject, sameText } from '@/lib/closing'
 import type { Organization } from '@/lib/directory'
 import { normalizeSearch } from '@/lib/format'
 
@@ -56,13 +56,58 @@ export function ClosingFields({
     formState: { errors },
   } = useFormContext<ClosingValues>()
   const subject = useWatch<ClosingValues, 'subject'>({ name: 'subject' })
-  const solutions = findSubject(subjects, subject)?.solutions ?? []
+  const moduleIds = useWatch<ClosingValues, 'moduleIds'>({ name: 'moduleIds' })
+  const selectedSubjects = subjects.filter((item) => moduleIds.includes(item.moduleId))
+  const solutions = selectedSubjects
+    .filter((item) => sameText(item.name, subject))
+    .flatMap((item) => item.solutions)
+    .filter(
+      (solution, index, all) =>
+        all.findIndex((other) => sameText(other.body, solution.body)) === index,
+    )
 
   return (
     <>
+      <Controller
+        control={control}
+        name="moduleIds"
+        render={({ field }) => (
+          <FieldSet data-invalid={!!errors.moduleIds}>
+            <FieldLegend variant="label">Módulos</FieldLegend>
+            {emptyModules && modules.length === 0 && (
+              <FieldDescription>{emptyModules}</FieldDescription>
+            )}
+            <div className="flex flex-col gap-2">
+              {modules.map((module) => (
+                <label key={module.id} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={field.value.includes(module.id)}
+                    onCheckedChange={(checked) =>
+                      field.onChange(
+                        checked
+                          ? [...field.value, module.id]
+                          : field.value.filter((id) => id !== module.id),
+                      )
+                    }
+                  />
+                  {module.name}
+                </label>
+              ))}
+            </div>
+            <FieldError errors={[errors.moduleIds]} />
+          </FieldSet>
+        )}
+      />
       <Field data-invalid={!!errors.subject}>
         <FieldLabel htmlFor={`${idPrefix}-subject`}>Assunto</FieldLabel>
-        <SubjectInput id={`${idPrefix}-subject`} subjects={subjects} invalid={!!errors.subject} />
+        <SubjectInput
+          id={`${idPrefix}-subject`}
+          subjects={selectedSubjects}
+          invalid={!!errors.subject}
+        />
+        {moduleIds.length === 0 && (
+          <FieldDescription>Marque um módulo para ver os assuntos.</FieldDescription>
+        )}
         <FieldError errors={[errors.subject]} />
       </Field>
       {solutions.length > 0 && (
@@ -104,36 +149,6 @@ export function ClosingFields({
         />
         <FieldError errors={[errors.resolution]} />
       </Field>
-      <Controller
-        control={control}
-        name="moduleIds"
-        render={({ field }) => (
-          <FieldSet data-invalid={!!errors.moduleIds}>
-            <FieldLegend variant="label">Módulos</FieldLegend>
-            {emptyModules && modules.length === 0 && (
-              <FieldDescription>{emptyModules}</FieldDescription>
-            )}
-            <div className="flex flex-col gap-2">
-              {modules.map((module) => (
-                <label key={module.id} className="flex items-center gap-2">
-                  <Checkbox
-                    checked={field.value.includes(module.id)}
-                    onCheckedChange={(checked) =>
-                      field.onChange(
-                        checked
-                          ? [...field.value, module.id]
-                          : field.value.filter((id) => id !== module.id),
-                      )
-                    }
-                  />
-                  {module.name}
-                </label>
-              ))}
-            </div>
-            <FieldError errors={[errors.moduleIds]} />
-          </FieldSet>
-        )}
-      />
       <Field data-invalid={!!errors.organization}>
         <FieldLabel htmlFor={`${idPrefix}-organization`}>Órgão</FieldLabel>
         <Controller
@@ -198,12 +213,13 @@ function SubjectInput({
   } = useController<ClosingValues, 'subject'>({ name: 'subject' })
   const [open, setOpen] = useState(false)
   const typed = normalizeSearch(value.trim())
-  const matches = subjects
+  const names = subjects
     .map((subject) => subject.name)
-    .filter((item) => normalizeSearch(item).includes(typed))
+    .filter((name, index, all) => all.findIndex((other) => sameText(name, other)) === index)
+  const matches = names.filter((item) => normalizeSearch(item).includes(typed))
   return (
     <Autocomplete
-      items={subjects.map((subject) => subject.name)}
+      items={names}
       filteredItems={matches}
       value={value}
       onValueChange={(next) => onChange(next)}
@@ -230,6 +246,12 @@ function SubjectInput({
           {(name: string) => (
             <AutocompleteItem key={name} value={name}>
               <span className="min-w-0 flex-1 break-words">{name}</span>
+              <span className="text-muted-foreground text-xs">
+                {subjects
+                  .filter((item) => sameText(item.name, name))
+                  .map((item) => item.moduleName)
+                  .join(', ')}
+              </span>
             </AutocompleteItem>
           )}
         </AutocompleteList>

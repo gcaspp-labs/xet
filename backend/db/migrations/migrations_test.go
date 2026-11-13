@@ -46,6 +46,57 @@ func TestMigrationsUpAndDown(t *testing.T) {
 	}
 }
 
+// Assuntos e soluções anteriores permanecem intactos e sem módulo na migração.
+func TestSubjectModulesPreserveExistingSubjectsAndSolutions(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 24); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into subjects (sector_id, name) values (1, 'Senha'), (1, 'Férias');
+		insert into subject_solutions (subject_id, body) values (1, 'Redefinir senha'), (2, 'Consultar calendário');`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 25); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.QueryContext(ctx, `
+		select s.name, s.module_id, ss.body from subjects s
+		join subject_solutions ss on ss.subject_id = s.id order by s.id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []string
+	for rows.Next() {
+		var name, solution string
+		var moduleID sql.NullInt64
+		if err := rows.Scan(&name, &moduleID, &solution); err != nil {
+			t.Fatal(err)
+		}
+		if moduleID.Valid {
+			t.Fatalf("legacy subject %s gained module %d", name, moduleID.Int64)
+		}
+		got = append(got, name+": "+solution)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"Senha: Redefinir senha", "Férias: Consultar calendário"}) {
+		t.Fatalf("migrated subjects and solutions: %v", got)
+	}
+}
+
 // A migração dos setores do contato preenche os vínculos a partir dos chamados:
 // sem repetir o setor e deixando sem setor o contato sem chamado.
 func TestContactSectorsAreFilledFromTickets(t *testing.T) {

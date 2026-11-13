@@ -27,6 +27,7 @@ erDiagram
     sectors ||--o{ modules : possui
     sectors ||--o{ tickets : "fila do setor"
     sectors ||--o{ subjects : possui
+    modules ||--o{ subjects : possui
     subjects ||--o{ subject_solutions : possui
     users ||--o{ sessions : possui
     municipalities ||--o{ organizations : "município do órgão"
@@ -257,14 +258,15 @@ Restrições:
 
 Notas não são editadas nem excluídas. Qualquer pessoa com acesso ao setor do chamado escreve notas, mesmo sem ser o responsável e após o encerramento. Ficam visíveis para quem pode ver o chamado e, após transferência entre setores, para o setor de destino.
 
-### `subjects` — Assunto da lista do setor
+### `subjects` — Assunto da lista do módulo
 
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
 | `sector_id` | bigint → `sectors` | Obrigatório |
-| `name` | text | Obrigatório, não em branco, até 500 caracteres; único por setor, sem diferenciar maiúsculas (`subjects_sector_id_name_key`, em `(sector_id, lower(name))`) |
+| `module_id` | bigint → `modules` | Obrigatório ao criar ou editar; vazio nos assuntos anteriores até a classificação. A chave composta `(module_id, sector_id)` referencia o módulo do mesmo setor |
+| `name` | text | Obrigatório, não em branco, até 500 caracteres; único por módulo, ignorando maiúsculas e espaços nas pontas; assuntos sem módulo são únicos entre si no setor |
 
-Assuntos são excluídos de verdade. `tickets.subject` guarda o próprio texto, sem ligação com esta tabela.
+A migração mantém os assuntos e suas soluções sem classificá-los. Assuntos são excluídos de verdade. `tickets.subject` guarda o próprio texto, sem ligação com esta tabela.
 
 ### `subject_solutions` — Solução da lista do assunto
 
@@ -403,7 +405,7 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |
 | `module_created`, `module_updated` | Administração de módulos |
-| `subject_created`, `subject_updated`, `subject_deleted` | Tela de assuntos e, em `subject_created`, também a pergunta do formulário. `changes` com `sector_id` e `name`; `subject_deleted` guarda também o texto das soluções apagadas (`solutions`) |
+| `subject_created`, `subject_updated`, `subject_deleted` | Tela de assuntos e, em `subject_created`, também a pergunta do formulário. `changes` com `sector_id` e `name`; criação e edição incluem `module_id`; `subject_deleted` guarda também o texto das soluções apagadas (`solutions`) |
 | `solution_created`, `solution_updated`, `solution_deleted` | Tela de assuntos e, em `solution_created`, também a pergunta do formulário. `changes` com `subject_id` e `body`. Excluir um assunto não grava um registro por solução: elas ficam em `subject_deleted` |
 | `organization_created`, `organization_updated` | Administração de órgãos |
 | `contact_links_updated` | Cadastro ou edição muda setores ou módulos do contato, na entidade `contact`: `changes` só com o que mudou entre `sector_ids` e `module_ids` (listas ordenadas) |

@@ -11,16 +11,18 @@ import (
 
 // correctRequest has no limit on the subject, as in closeRequest.
 type correctRequest struct {
-	Subject        string    `json:"subject" validate:"required"`
-	Resolution     string    `json:"resolution" validate:"required"`
-	ModuleIDs      []int64   `json:"moduleIds" validate:"required,min=1,max=100"`
-	OrganizationID int64     `json:"organizationId" validate:"required"`
-	StartedAt      time.Time `json:"startedAt" validate:"required"`
-	EndedAt        time.Time `json:"endedAt" validate:"required"`
-	SpokeWith      string    `json:"spokeWith" validate:"max=200"`
-	Reason         string    `json:"reason" validate:"max=2000"`
-	AddSubject     bool      `json:"addSubject"`
-	AddSolution    bool      `json:"addSolution"`
+	Subject          string    `json:"subject" validate:"required"`
+	Resolution       string    `json:"resolution" validate:"required"`
+	ModuleIDs        []int64   `json:"moduleIds" validate:"required,min=1,max=100"`
+	OrganizationID   int64     `json:"organizationId" validate:"required"`
+	StartedAt        time.Time `json:"startedAt" validate:"required"`
+	EndedAt          time.Time `json:"endedAt" validate:"required"`
+	SpokeWith        string    `json:"spokeWith" validate:"max=200"`
+	Reason           string    `json:"reason" validate:"max=2000"`
+	AddSubject       bool      `json:"addSubject"`
+	SubjectModuleID  *int64    `json:"subjectModuleId"`
+	SolutionModuleID *int64    `json:"solutionModuleId"`
+	AddSolution      bool      `json:"addSolution"`
 }
 
 // correctTicket corrects the closing data of a closed ticket, with a reason.

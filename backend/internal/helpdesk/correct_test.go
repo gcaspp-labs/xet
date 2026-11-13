@@ -38,6 +38,7 @@ func (c correction) data(reason string) map[string]any {
 	return map[string]any{
 		"subject": "Contracheque", "resolution": "Enviada a segunda via.",
 		"moduleIds": c.modules, "organizationId": c.org,
+		"subjectModuleId": c.modules[0], "solutionModuleId": c.modules[0],
 		"startedAt": c.startedAt, "endedAt": c.endedAt, "spokeWith": "", "reason": reason,
 	}
 }

@@ -326,6 +326,8 @@ export type ClosingInput = {
   // setor, e a resolução, na lista do assunto.
   addSubject?: boolean
   addSolution?: boolean
+  subjectModuleId?: number
+  solutionModuleId?: number
 }
 
 export function useClosingForm(ticketId: number, enabled: boolean) {
@@ -392,6 +394,8 @@ export type CorrectionInput = {
   reason: string
   addSubject?: boolean
   addSolution?: boolean
+  subjectModuleId?: number
+  solutionModuleId?: number
 }
 
 // Campo corrigido com o valor anterior e o novo: órgão pelo nome, módulos
