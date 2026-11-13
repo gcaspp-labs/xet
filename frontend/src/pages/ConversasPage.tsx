@@ -8,6 +8,8 @@ import {
   Inbox,
   MessageSquarePlus,
   MessagesSquare,
+  MoreHorizontal,
+  Plus,
   PencilLine,
   Undo2,
   UserCheck,
@@ -36,7 +38,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PrototypeSwitcher, useHeader178, useVariant } from '@/prototype/p172'
+import { cn } from '@/lib/utils'
 import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
 import { ticketKey, useAssignTicket, useTicket, useTicketModules } from '@/lib/conversation'
@@ -53,10 +64,10 @@ import {
 } from '@/pages/ticket/TicketPage'
 
 type SectorTicket = TicketSummary & { sectorId: number }
-// PROTÓTIPO #172: sem altura fixa presumida. A tela ocupa a altura da janela abaixo da
-// barra do topo; o cabeçalho fica com o que precisar e as colunas com o resto (xl+).
-// Abaixo de xl as colunas empilham e cada lista tem altura máxima própria e rola sozinha.
-const listHeight = 'min-h-0 max-h-[60dvh] xl:max-h-none xl:h-full'
+// PROTÓTIPO #172: sem altura fixa presumida, em todos os tamanhos. A tela ocupa a altura
+// da janela abaixo da barra do topo; o cabeçalho fica com o que precisar e os blocos com o
+// resto. Abaixo de xl, ver as versões em `@/prototype/p172`.
+type Panel = 'mine' | 'conversation' | 'queue'
 
 function TicketLine({ ticket }: { ticket: TicketSummary }) {
   return (
@@ -88,10 +99,15 @@ export default function ConversasPage() {
   const assign = useAssignTicket()
   const navigate = useNavigate()
   const [tab, setTab] = useState('queue')
+  const variant = useVariant()
+  const header178 = useHeader178()
+  // Bloco visível quando só cabe um (A: abaixo de xl; B: abaixo de lg).
+  const [panel, setPanel] = useState<Panel>(ticketId ? 'conversation' : 'mine')
   const [previousTicketId, setPreviousTicketId] = useState(ticketId)
   if (previousTicketId !== ticketId) {
     setPreviousTicketId(ticketId)
     setTab('queue')
+    setPanel(ticketId ? 'conversation' : 'mine')
   }
   const [chosen, setChosen] = useState<number | null>(null)
   const [starting, setStarting] = useState(false)
@@ -115,10 +131,15 @@ export default function ConversasPage() {
   const showSubjects = !!ticket && !!user && canClose(ticket, user)
   const currentTab = showSubjects ? tab : 'queue'
   const leave = () => void navigate('/conversas')
+  // Só um bloco por vez: A abaixo de xl, B abaixo de lg.
+  const show = (which: Panel) =>
+    panel === which ? undefined : variant === 'A' ? 'max-xl:hidden' : 'max-lg:hidden'
+  const conversationPlace =
+    variant === 'B' ? 'lg:col-start-2 lg:row-span-2 lg:row-start-1 xl:row-span-1' : undefined
   if (!user) return null
 
   return (
-    <div className="flex flex-col xl:h-[calc(100dvh-var(--header-height))]">
+    <div className="flex h-[calc(100dvh-var(--header-height))] flex-col overflow-clip [&>header]:shrink-0">
       <Topbar
         wrapTitle
         breadcrumb={ticket ? `Conversas · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
@@ -146,13 +167,55 @@ export default function ConversasPage() {
                 </Select>
               </Field>
             )}
-            {sector && (
+            {sector && !header178 && (
               <Button onClick={() => setStarting(true)}>
                 <MessageSquarePlus strokeWidth={1.7} aria-hidden />
                 Nova conversa
               </Button>
             )}
-            {ticket && (
+            {ticket && header178 && (
+              <>
+                {ticket.status === 'queued' && (
+                  <Button>
+                    <UserCheck strokeWidth={1.7} aria-hidden />
+                    Assumir
+                  </Button>
+                )}
+                {showSubjects && (
+                  <Button>
+                    <CircleCheck strokeWidth={1.7} aria-hidden />
+                    Encerrar
+                  </Button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={<Button variant="outline" size="icon" aria-label="Mais ações" />}
+                  >
+                    <MoreHorizontal strokeWidth={1.7} aria-hidden />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-48">
+                    <DropdownMenuItem>
+                      <Undo2 strokeWidth={1.7} aria-hidden />
+                      Devolver à fila
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <UserRoundCog strokeWidth={1.7} aria-hidden />
+                      Transferir
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <ArrowRightLeft strokeWidth={1.7} aria-hidden />
+                      Outro setor
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem variant="destructive">
+                      <Ban strokeWidth={1.7} aria-hidden />
+                      Cancelar chamado
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+            {ticket && !header178 && (
               <>
                 <Link
                   to={`/chamados/${ticket.id}`}
@@ -290,146 +353,200 @@ export default function ConversasPage() {
           )}
         </>
       )}
-      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] xl:min-h-0 xl:flex-1 xl:grid-cols-[260px_minmax(0,1fr)_320px] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
-        <Card role="region" aria-labelledby="my-conversations-title" className={listHeight}>
-          <CardHeader>
-            <CardTitle id="my-conversations-title">Meus atendimentos ({mine.length})</CardTitle>
-          </CardHeader>
-          {mine.length ? (
-            <nav aria-label="Meus atendimentos" className="flex-1 overflow-y-auto">
-              <ul className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
-                {mine.map((item) => (
-                  <li key={item.id}>
-                    <NavLink
-                      to={`/conversas/${item.id}`}
-                      className="flex flex-col gap-1 border-l-3 border-transparent px-4 py-2.5 hover:bg-muted aria-[current=page]:border-primary aria-[current=page]:bg-accent-soft"
-                    >
-                      <TicketLine ticket={item} />
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          ) : (
-            <p className="caption border-t border-line-soft px-4 py-3 text-ink-soft">
-              Você não tem atendimentos ativos.
-            </p>
+      <div className="flex min-h-0 w-full flex-1 flex-col gap-3 px-4 py-3 md:px-[30px] md:py-[30px]">
+        <Tabs
+          value={panel}
+          onValueChange={(value) => setPanel(value as Panel)}
+          className={cn('shrink-0', variant === 'A' ? 'xl:hidden' : 'lg:hidden')}
+        >
+          <TabsList aria-label="Mostrar" className="w-full">
+            <TabsTrigger value="mine" className="flex-1">
+              Meus <span className="mono-num ml-1">({mine.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="conversation" className="flex-1">
+              Conversa
+            </TabsTrigger>
+            <TabsTrigger value="queue" className="flex-1">
+              Fila <span className="mono-num ml-1">({queue.length})</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div
+          className={cn(
+            'grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-4',
+            variant === 'B' &&
+              'lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]',
+            'xl:grid-cols-[260px_minmax(0,1fr)_320px] xl:grid-rows-[minmax(0,1fr)]',
           )}
-        </Card>
-        {ticketError ? (
-          <Alert variant="warning">
-            <CircleAlert strokeWidth={1.7} aria-hidden />
-            <AlertDescription>{ticketError.message}</AlertDescription>
-          </Alert>
-        ) : ticket ? (
-          <ConversationCard
-            ticket={ticket}
-            user={user}
-            modern
-            className="h-[70dvh] lg:h-[70dvh] xl:h-full xl:min-h-0"
-            onRegister={() => setAction('register')}
-          />
-        ) : (
-          <Card className="justify-center xl:h-full xl:min-h-0">
-            <Empty>
-              <EmptyMedia>
-                <MessagesSquare strokeWidth={1.7} aria-hidden />
-              </EmptyMedia>
-              <EmptyDescription>
-                <span className="body-strong block text-ink">
-                  {mine.length ? 'Selecione um atendimento' : 'Sem atendimentos disponíveis'}
-                </span>
-                {mine.length
-                  ? 'Escolha uma conversa à esquerda para continuar.'
-                  : 'Assuma um chamado na Fila, à direita.'}
-              </EmptyDescription>
-            </Empty>
-          </Card>
-        )}
-        <Card role="region" aria-label="Fila e assuntos" className={listHeight}>
-          <Tabs
-            value={currentTab}
-            onValueChange={(value) => setTab(String(value))}
-            className="min-h-0 flex-1 p-5"
+        >
+          <Card
+            role="region"
+            aria-labelledby="my-conversations-title"
+            className={cn(
+              'min-h-0',
+              show('mine'),
+              variant === 'B' && 'lg:col-start-1 lg:row-start-1',
+            )}
           >
-            <TabsList>
-              <TabsTrigger
-                value="queue"
-                aria-label={queue.length ? `Fila, ${queue.length} a assumir` : 'Fila'}
-              >
-                Fila
-                {currentTab !== 'queue' && queue.length > 0 && (
-                  <span
-                    aria-hidden
-                    className="mono-num ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[calc(10px*var(--text-scale))] leading-none font-medium text-primary-foreground"
-                  >
-                    {queue.length}
-                  </span>
-                )}
-              </TabsTrigger>
-              {showSubjects && <TabsTrigger value="subjects">Assuntos</TabsTrigger>}
-            </TabsList>
-            <TabsContent value="queue" className="min-h-0 overflow-y-auto">
-              {assign.error && (
-                <Alert variant="warning">
-                  <CircleAlert strokeWidth={1.7} aria-hidden />
-                  <AlertDescription>{assign.error.message}</AlertDescription>
-                </Alert>
+            <CardHeader className={header178 ? 'grid-cols-[1fr_auto] items-center' : undefined}>
+              <CardTitle id="my-conversations-title">Meus atendimentos ({mine.length})</CardTitle>
+              {header178 && sector && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Nova conversa"
+                  className="-my-1"
+                  onClick={() => setStarting(true)}
+                >
+                  <Plus strokeWidth={1.7} aria-hidden />
+                </Button>
               )}
-              {queue.length === 0 ? (
-                <Empty>
-                  <EmptyMedia>
-                    <Inbox strokeWidth={1.7} aria-hidden />
-                  </EmptyMedia>
-                  <EmptyDescription>Nenhum chamado esperando.</EmptyDescription>
-                </Empty>
-              ) : (
+            </CardHeader>
+            {mine.length ? (
+              <nav aria-label="Meus atendimentos" className="flex-1 overflow-y-auto">
                 <ul className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
-                  {queue.map((item) => (
-                    <li key={item.id} className="flex flex-col gap-2 py-3">
-                      <TicketLine ticket={item} />
-                      {item.organizationName && (
-                        <span className="caption truncate text-ink-faint">
-                          {organizationLabel(item.organizationName, item.municipalityName)}
-                        </span>
-                      )}
-                      <Button
-                        className="self-start"
-                        disabled={assign.isPending}
-                        aria-label={`Assumir chamado de ${item.contact.name}`}
-                        onClick={() =>
-                          assign.mutate(
-                            { ticketId: item.id, sectorId: item.sectorId },
-                            {
-                              onSuccess: () => {
-                                setTab('queue')
-                                void navigate(`/conversas/${item.id}`)
-                              },
-                            },
-                          )
-                        }
+                  {mine.map((item) => (
+                    <li key={item.id}>
+                      <NavLink
+                        to={`/conversas/${item.id}`}
+                        className="flex flex-col gap-1 border-l-3 border-transparent px-4 py-2.5 hover:bg-muted aria-[current=page]:border-primary aria-[current=page]:bg-accent-soft"
                       >
-                        <UserCheck strokeWidth={1.7} aria-hidden />
-                        Assumir
-                      </Button>
+                        <TicketLine ticket={item} />
+                      </NavLink>
                     </li>
                   ))}
                 </ul>
-              )}
-            </TabsContent>
-            {showSubjects && (
-              <TabsContent value="subjects" className="flex min-h-0 flex-col overflow-y-auto">
-                <SubjectsTab
-                  key={ticket.id}
-                  ticketId={ticket.id}
-                  query={query}
-                  onQueryChange={setQuery}
-                />
-              </TabsContent>
+              </nav>
+            ) : (
+              <p className="caption border-t border-line-soft px-4 py-3 text-ink-soft">
+                Você não tem atendimentos ativos.
+              </p>
             )}
-          </Tabs>
-        </Card>
+          </Card>
+          {ticketError ? (
+            <Alert variant="warning" className={cn('self-start', show('conversation'))}>
+              <CircleAlert strokeWidth={1.7} aria-hidden />
+              <AlertDescription>{ticketError.message}</AlertDescription>
+            </Alert>
+          ) : ticket ? (
+            <ConversationCard
+              ticket={ticket}
+              user={user}
+              modern
+              className={cn('h-full min-h-0 lg:h-full', show('conversation'), conversationPlace)}
+              onRegister={() => setAction('register')}
+            />
+          ) : (
+            <Card className={cn('min-h-0 justify-center', show('conversation'), conversationPlace)}>
+              <Empty>
+                <EmptyMedia>
+                  <MessagesSquare strokeWidth={1.7} aria-hidden />
+                </EmptyMedia>
+                <EmptyDescription>
+                  <span className="body-strong block text-ink">
+                    {mine.length ? 'Selecione um atendimento' : 'Sem atendimentos disponíveis'}
+                  </span>
+                  {mine.length
+                    ? 'Escolha uma conversa à esquerda para continuar.'
+                    : 'Assuma um chamado na Fila, à direita.'}
+                </EmptyDescription>
+              </Empty>
+            </Card>
+          )}
+          <Card
+            role="region"
+            aria-label="Fila e assuntos"
+            className={cn(
+              'min-h-0',
+              show('queue'),
+              variant === 'B' && 'lg:col-start-1 lg:row-start-2 xl:col-start-3 xl:row-start-1',
+            )}
+          >
+            <Tabs
+              value={currentTab}
+              onValueChange={(value) => setTab(String(value))}
+              className="min-h-0 flex-1 p-5"
+            >
+              <TabsList>
+                <TabsTrigger
+                  value="queue"
+                  aria-label={queue.length ? `Fila, ${queue.length} a assumir` : 'Fila'}
+                >
+                  Fila
+                  {currentTab !== 'queue' && queue.length > 0 && (
+                    <span
+                      aria-hidden
+                      className="mono-num ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[calc(10px*var(--text-scale))] leading-none font-medium text-primary-foreground"
+                    >
+                      {queue.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                {showSubjects && <TabsTrigger value="subjects">Assuntos</TabsTrigger>}
+              </TabsList>
+              <TabsContent value="queue" className="min-h-0 overflow-y-auto">
+                {assign.error && (
+                  <Alert variant="warning">
+                    <CircleAlert strokeWidth={1.7} aria-hidden />
+                    <AlertDescription>{assign.error.message}</AlertDescription>
+                  </Alert>
+                )}
+                {queue.length === 0 ? (
+                  <Empty>
+                    <EmptyMedia>
+                      <Inbox strokeWidth={1.7} aria-hidden />
+                    </EmptyMedia>
+                    <EmptyDescription>Nenhum chamado esperando.</EmptyDescription>
+                  </Empty>
+                ) : (
+                  <ul className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
+                    {queue.map((item) => (
+                      <li key={item.id} className="flex flex-col gap-2 py-3">
+                        <TicketLine ticket={item} />
+                        {item.organizationName && (
+                          <span className="caption truncate text-ink-faint">
+                            {organizationLabel(item.organizationName, item.municipalityName)}
+                          </span>
+                        )}
+                        <Button
+                          className="self-start"
+                          disabled={assign.isPending}
+                          aria-label={`Assumir chamado de ${item.contact.name}`}
+                          onClick={() =>
+                            assign.mutate(
+                              { ticketId: item.id, sectorId: item.sectorId },
+                              {
+                                onSuccess: () => {
+                                  setTab('queue')
+                                  void navigate(`/conversas/${item.id}`)
+                                },
+                              },
+                            )
+                          }
+                        >
+                          <UserCheck strokeWidth={1.7} aria-hidden />
+                          Assumir
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </TabsContent>
+              {showSubjects && (
+                <TabsContent value="subjects" className="flex min-h-0 flex-col overflow-y-auto">
+                  <SubjectsTab
+                    key={ticket.id}
+                    ticketId={ticket.id}
+                    query={query}
+                    onQueryChange={setQuery}
+                  />
+                </TabsContent>
+              )}
+            </Tabs>
+          </Card>
+        </div>
       </div>
+      <PrototypeSwitcher />
     </div>
   )
 }
