@@ -79,7 +79,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   // Volta a Conversas sem chamado aberto; o painel mantém os realizados.
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
-  await page.goto('/')
+  await page.goto('/atendimento')
   const doneRow = page
     .getByRole('region', { name: 'Realizados hoje' })
     .getByRole('row', { name: new RegExp(contact) })

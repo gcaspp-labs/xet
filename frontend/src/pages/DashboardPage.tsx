@@ -370,7 +370,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Topbar breadcrumb={sector ? `Helpdesk · ${sector.name}` : 'Helpdesk'} title="Dashboard" />
+      <Topbar breadcrumb={sector?.name} title="Dashboard" />
       <PageContent>
         <Filters filter={filter} shownPeriod={data?.period} />
         {!filter.datesValid && (

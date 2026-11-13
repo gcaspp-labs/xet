@@ -421,6 +421,8 @@ test('a aba e a busca não passam para outra pessoa depois de sair', async ({ pa
   await page.getByLabel('E-mail').fill(supervisor)
   await page.getByLabel('Senha').fill(userPassword)
   await page.getByRole('button', { name: 'Entrar' }).click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await page.goto('/atendimento')
   await page.getByRole('link', { name: contacts[0] }).click()
   await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(card.getByRole('tab', { name: 'Detalhes' })).toHaveAttribute('aria-selected', 'true')
@@ -567,7 +569,7 @@ test('assunto fora da lista: voltar não salva, adicionar e não adicionar salva
   await signIn(page, agent, userPassword)
 
   const fill = async (contact: string, subject: string) => {
-    await page.goto('/')
+    await page.goto('/atendimento')
     await page.getByRole('link', { name: contact }).click()
     await page.getByRole('button', { name: 'Encerrar' }).click()
     const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
@@ -828,7 +830,7 @@ test('o atendente não abre a tela Assuntos', async ({ page, baseURL }) => {
   await signIn(page, agent, userPassword)
   await expect(page.getByRole('link', { name: 'Assuntos' })).toHaveCount(0)
   await page.goto('/assuntos')
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(/\/conversas$/)
 })
 
 test('a confirmação de exclusão do assunto diz quantas soluções serão apagadas', async ({
@@ -881,7 +883,7 @@ test('a confirmação de exclusão do assunto diz quantas soluções serão apag
 
 // Abre o encerramento do chamado do contato e preenche o módulo.
 async function openClosing(page: import('@playwright/test').Page, contact: string) {
-  await page.goto('/')
+  await page.goto('/atendimento')
   await page.getByRole('link', { name: contact }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })

@@ -98,7 +98,7 @@ const messageStatusLabels: Record<
   failed: { label: 'Falhou', tone: 'danger' },
 }
 
-const backToList = { to: '/', label: 'Voltar à lista' }
+const backToList = { to: '/atendimento', label: 'Voltar à lista' }
 
 const fileLabels: Record<string, string> = {
   image: 'Imagem',

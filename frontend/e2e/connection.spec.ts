@@ -196,5 +196,5 @@ test('atendente não vê a conexão nem o aviso de desconexão', async ({ page, 
   await expect(page.getByRole('link', { name: 'Conexão' })).toBeHidden()
   await expect(page.getByText(/desconectado\./)).toBeHidden()
   await page.goto('/conexao')
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(/\/conversas$/)
 })

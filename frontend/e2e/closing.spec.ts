@@ -120,7 +120,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   // Volta a Conversas sem chamado aberto; o painel mantém os realizados.
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
-  await page.goto('/')
+  await page.goto('/atendimento')
   const done = page.getByRole('region', { name: 'Realizados hoje' })
   const doneRow = done.getByRole('row', { name: /Paulo Cliente/ })
   await expect(doneRow).toContainText('Você')
@@ -190,7 +190,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   // Volta a Conversas sem chamado aberto; o painel mantém os realizados.
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
-  await page.goto('/')
+  await page.goto('/atendimento')
   const done = page.getByRole('region', { name: 'Realizados hoje' })
   const doneRow = done.getByRole('row', { name: /Paula Golpe/ })
   await expect(doneRow).toContainText('Você')
@@ -362,7 +362,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   const otherQueue = otherPanel.getByRole('region', { name: 'Fila do setor' })
   await expect(otherQueue.getByRole('link', { name: profile })).toBeVisible()
   const otherContacts = await otherContext.newPage()
-  await otherContacts.goto('/')
+  await otherContacts.goto('/atendimento')
   await otherContacts.getByRole('link', { name: 'Contatos' }).click()
   await expect(otherContacts.getByRole('row', { name: new RegExp(profile) })).toBeVisible()
 
@@ -602,7 +602,7 @@ test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request
   await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
 
   await expect(page).toHaveURL(/\/conversas$/)
-  await page.goto('/')
+  await page.goto('/atendimento')
   const row = page.getByRole('region', { name: 'Realizados hoje' }).getByRole('row', { name })
   await row.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
   await expect(conversation).toContainText('Chamado cancelado.')

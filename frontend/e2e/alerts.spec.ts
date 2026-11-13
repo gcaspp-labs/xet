@@ -297,7 +297,7 @@ test('duas abas não repetem o mesmo chamado, e a aba visível evita a notifica�
   await signIn(page, agent, userPassword)
   const other = await context.newPage()
   await spyOnAlerts(other)
-  await other.goto('/')
+  await other.goto('/atendimento')
   await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
   await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
   await setHidden(page, true)
@@ -372,7 +372,7 @@ test('voltar a uma aba impede a notificação pendente na outra, com som único'
   await signIn(page, agent, userPassword)
   const other = await context.newPage()
   await spyOnAlerts(other)
-  await other.goto('/')
+  await other.goto('/atendimento')
   await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
   await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
   // O navegador só libera o som depois de uma interação com a página.
@@ -438,7 +438,7 @@ test('mudar as opções numa aba vale na outra, sem abrir o menu nela', async ({
 
   const other = await context.newPage()
   await spyOnAlerts(other)
-  await other.goto('/')
+  await other.goto('/atendimento')
   await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
   await setHidden(page, true)
   await setHidden(other, true)
