@@ -108,7 +108,13 @@ export default function ConversasPage() {
         new Date(b.lastMessage?.sentAt ?? b.arrivedAt).getTime() -
         new Date(a.lastMessage?.sentAt ?? a.arrivedAt).getTime(),
     )
-  const queue = tickets.filter((item) => item.status === 'queued')
+  // A fila do administrador só tem setores ativos, como o sino; atendente e supervisor seguem com o
+  // próprio setor, e "Meus atendimentos" não é filtrada.
+  const activeSectorIds = new Set(sectors.filter((item) => item.active).map((item) => item.id))
+  const queue = tickets.filter(
+    (item) =>
+      item.status === 'queued' && (user?.role !== 'admin' || activeSectorIds.has(item.sectorId)),
+  )
   const showSubjects = !!ticket && !!user && canClose(ticket, user)
   const currentTab = showSubjects ? tab : 'queue'
   const leave = () => void navigate('/conversas')
