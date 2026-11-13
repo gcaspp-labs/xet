@@ -135,7 +135,7 @@ export function NotificationBell({ user }: { user: User }) {
                             toast.success('Chamado assumido', {
                               action: (
                                 <Link
-                                  to={`/chamados/${ticket.id}`}
+                                  to={`/conversas/${ticket.id}`}
                                   className="body-strong ml-auto whitespace-nowrap text-accent-strong underline underline-offset-2"
                                 >
                                   Abrir conversa
