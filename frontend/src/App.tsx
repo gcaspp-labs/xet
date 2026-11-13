@@ -1,4 +1,5 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router'
+import AtendimentoPrototype from '@/prototype/AtendimentoPrototype'
 import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
 import DashboardPage from '@/pages/DashboardPage'
@@ -41,7 +42,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<PanelPage />} />
+          {/* PROTÓTIPO #164: a lista Atendimento no lugar do painel, só em desenvolvimento. */}
+          <Route path="/" element={import.meta.env.DEV ? <AtendimentoPrototype /> : <PanelPage />} />
           <Route path="/chamados/:ticketId" element={<TicketPage />} />
           <Route path="/conversas" element={<ConversasPage />} />
           <Route path="/conversas/:ticketId" element={<ConversasPage />} />
