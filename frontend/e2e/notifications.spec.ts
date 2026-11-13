@@ -115,7 +115,7 @@ test('o botão do sino tem borda visível e o contador continua legível', async
   expect(onTop).toBe(true)
 })
 
-test('assumir pelo sino não muda a tela e "Abrir" leva à conversa', async ({
+test('assumir pelo sino não muda a tela e "Abrir conversa" leva à tela Conversas', async ({
   page,
   request,
   baseURL,
@@ -123,6 +123,7 @@ test('assumir pelo sino não muda a tela e "Abrir" leva à conversa', async ({
   const { sector, agent } = await connectedSector(baseURL!, request)
   await receive(request, sector.id, 'Carla Fila')
   await receive(request, sector.id, 'Davi Fila')
+  await receive(request, sector.id, 'Eva Fila')
   await signIn(page, agent, userPassword)
   await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
   const openedAt = page.url()
@@ -133,11 +134,43 @@ test('assumir pelo sino não muda a tela e "Abrir" leva à conversa', async ({
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   expect(page.url()).toBe(openedAt)
   await expect(popover.getByText('Carla Fila')).toHaveCount(0)
-  await expect(bellOf(page)).toHaveAccessibleName('Notificações, 1 pendente')
+  await expect(bellOf(page)).toHaveAccessibleName('Notificações, 2 pendentes')
 
+  // O link do aviso abre a conversa assumida na tela Conversas.
+  const openConversation = page.getByRole('link', { name: 'Abrir conversa' })
+  await expect(openConversation).toHaveAttribute('href', /^\/conversas\/\d+$/)
+  await openConversation.click()
+  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(
+    page.getByRole('region', { name: 'Conversa', exact: true }).getByText('Carla Fila'),
+  ).toBeVisible()
+  const mine = page.getByRole('navigation', { name: 'Meus atendimentos' })
+  await expect(mine.getByRole('link', { name: /Carla Fila/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await expect(page.getByRole('link', { name: 'Conversas', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  // Os demais links do sino mantêm o comportamento.
+  await bellOf(page).click()
   await popover.getByRole('link', { name: 'Abrir chamado de Davi Fila' }).click()
   await expect(page.getByRole('heading', { name: 'Davi Fila' })).toBeVisible()
   await expect(popover).toBeHidden()
+
+  // Em outra tela (a do chamado) assumir também não navega, e o link leva à tela Conversas.
+  const ticketPage = page.url()
+  // O aviso da Carla pode ainda estar na tela: espera sumir para o link ser o da Eva.
+  await expect(page.getByText('Chamado assumido')).toHaveCount(0, { timeout: 15_000 })
+  await bellOf(page).click()
+  await popover.getByRole('button', { name: 'Assumir chamado de Eva Fila' }).click()
+  await expect(page.getByText('Chamado assumido')).toBeVisible()
+  expect(page.url()).toBe(ticketPage)
+  await page.getByRole('link', { name: 'Abrir conversa' }).click()
+  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(mine.getByRole('link', { name: /Eva Fila/ })).toHaveAttribute('aria-current', 'page')
 })
 
 test('item sai quando outra pessoa assume e volta quando o chamado é devolvido à fila', async ({
@@ -164,9 +197,9 @@ test('item sai quando outra pessoa assume e volta quando o chamado é devolvido 
 
   // Devolver à fila: o item volta nas duas janelas.
   const openConversation = other.getByRole('link', { name: 'Abrir conversa' })
-  await expect(openConversation).toHaveAttribute('href', /^\/chamados\/\d+$/)
+  await expect(openConversation).toHaveAttribute('href', /^\/conversas\/\d+$/)
   await openConversation.click()
-  await expect(other).toHaveURL(/\/chamados\/\d+$/)
+  await expect(other).toHaveURL(/\/conversas\/\d+$/)
   await other.getByRole('button', { name: 'Devolver à fila' }).click()
   const drawer = other.getByRole('dialog', { name: 'Devolver à fila' })
   await drawer.getByRole('button', { name: 'Devolver à fila' }).click()
