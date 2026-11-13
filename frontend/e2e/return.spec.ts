@@ -74,14 +74,13 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   ).toBeTruthy()
   await page.setViewportSize({ width: 1280, height: 720 })
 
-  // O responsável devolve e volta ao painel, com o chamado na fila.
+  // O responsável devolve e volta a Conversas sem chamado aberto.
   await page.getByRole('button', { name: 'Devolver à fila' }).click()
   const sheet = page.getByRole('dialog', { name: 'Devolver à fila' })
   await sheet.getByRole('button', { name: 'Devolver à fila' }).click()
   await expect.poll(toasts).toContain('Chamado devolvido à fila')
-  await expect(page).toHaveURL(/\/$/)
-  const queue = page.getByRole('region', { name: 'Fila do setor' })
-  await expect(queue.getByRole('link', { name: 'Joana Devolvida' })).toHaveCount(1)
+  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
 
   // O colega vê a devolução sem recarregar e assume.
   const returnedText = `${agentName} devolveu o chamado à fila`
@@ -111,7 +110,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   const supSheet = sup.getByRole('dialog', { name: 'Devolver à fila' })
   await supSheet.getByRole('button', { name: 'Devolver à fila' }).click()
   await expect.poll(supToasts).toContain('Chamado devolvido à fila')
-  await expect(sup).toHaveURL(/\/$/)
+  await expect(sup).toHaveURL(/\/conversas$/)
   await expect(colleagueConversation).toContainText(
     `${supName} devolveu à fila o chamado de ${colleagueName}`,
   )

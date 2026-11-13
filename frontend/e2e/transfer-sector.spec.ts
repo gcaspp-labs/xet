@@ -76,8 +76,10 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado transferido para outro setor')).toBeVisible()
 
-  // Volta ao painel, com o atendimento identificado nos realizados.
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  // Volta a Conversas sem chamado aberto; o painel mantém os realizados.
+  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
+  await page.goto('/')
   const doneRow = page
     .getByRole('region', { name: 'Realizados hoje' })
     .getByRole('row', { name: new RegExp(contact) })

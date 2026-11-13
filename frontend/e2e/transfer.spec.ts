@@ -59,6 +59,7 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   await expect(otherConversation).toContainText(`Chamado com ${agentName}. Peça a transferência`)
   await expect(other.getByRole('button', { name: 'Transferir' })).toHaveCount(0)
 
+  const ticketUrl = page.url()
   await page.getByRole('button', { name: 'Transferir' }).click()
   const sheet = page.getByRole('dialog', { name: 'Transferir chamado' })
   // O próprio responsável e administradores não aparecem como destino.
@@ -67,6 +68,11 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   await page.getByRole('option', { name: new RegExp(`^${colleague.name} · Atendente`) }).click()
   await sheet.getByRole('button', { name: 'Transferir' }).click()
   await expect(page.getByText('Chamado transferido')).toBeVisible()
+
+  // A transferência volta a Conversas sem chamado aberto.
+  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(conversation).toHaveCount(0)
+  await page.goto(ticketUrl)
 
   // O anterior perde a resposta; o histórico mostra a transferência.
   await expect(conversation).toContainText(`Chamado com ${colleague.name}. Peça a transferência`)
