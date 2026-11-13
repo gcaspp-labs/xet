@@ -58,6 +58,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
 		r.Get("/dashboard", h.dashboard)
+		r.Get("/dashboard/tickets", h.dashboardTickets)
 		r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/dashboard/assignees", h.listDashboardAssignees)
 	})
 	// Iniciar conversa pelo número do setor, ou ir ao chamado aberto do contato.

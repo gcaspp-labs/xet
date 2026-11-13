@@ -846,6 +846,89 @@ func (q *Queries) ListContactTickets(ctx context.Context, arg ListContactTickets
 	return items, nil
 }
 
+const listDashboardTickets = `-- name: ListDashboardTickets :many
+select t.id, t.protocol, t.status, t.arrived_at,
+    coalesce((select a.created_at from audit_logs a
+              where a.ticket_id = t.id and a.action in ('ticket_assigned', 'ticket_started')
+              order by a.id desc limit 1), t.assigned_at) as assigned_at,
+    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    o.name as organization_name, m.name as municipality_name,
+    t.assignee_id, u.name as assignee_name, s.id as sector_id, s.name as sector_name
+from tickets t
+join contacts c on c.id = t.contact_id
+join sectors s on s.id = t.sector_id
+left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
+left join users u on u.id = t.assignee_id
+where t.status <> 'closed'
+  and ($1::bigint is null or t.sector_id = $1)
+  and ($2::bigint is null or t.organization_id = $2)
+  and (t.status = 'queued' or $3::bigint is null or t.assignee_id = $3)
+order by t.arrived_at, t.id
+`
+
+type ListDashboardTicketsParams struct {
+	SectorID       *int64
+	OrganizationID *int64
+	AssigneeID     *int64
+}
+
+type ListDashboardTicketsRow struct {
+	ID                int64
+	Protocol          string
+	Status            TicketStatus
+	ArrivedAt         time.Time
+	AssignedAt        *time.Time
+	ContactID         int64
+	ContactName       string
+	ContactPhone      *string
+	ContactRegistered bool
+	OrganizationName  *string
+	MunicipalityName  *string
+	AssigneeID        *int64
+	AssigneeName      *string
+	SectorID          int64
+	SectorName        string
+}
+
+// assigned_at on the ticket is the first assignment; after a return to the
+// queue the board shows when the present attendance started instead.
+func (q *Queries) ListDashboardTickets(ctx context.Context, arg ListDashboardTicketsParams) ([]ListDashboardTicketsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardTickets, arg.SectorID, arg.OrganizationID, arg.AssigneeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardTicketsRow
+	for rows.Next() {
+		var i ListDashboardTicketsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.Status,
+			&i.ArrivedAt,
+			&i.AssignedAt,
+			&i.ContactID,
+			&i.ContactName,
+			&i.ContactPhone,
+			&i.ContactRegistered,
+			&i.OrganizationName,
+			&i.MunicipalityName,
+			&i.AssigneeID,
+			&i.AssigneeName,
+			&i.SectorID,
+			&i.SectorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLaterTicketSectors = `-- name: ListLaterTicketSectors :many
 with recursive later as (
     select f.id, f.sector_id from tickets f where f.previous_ticket_id = $1::bigint

@@ -45,6 +45,28 @@ left join users u on u.id = t.assignee_id
 where t.sector_id = @sector_id and t.status <> 'closed'
 order by t.arrived_at, t.id;
 
+-- name: ListDashboardTickets :many
+-- assigned_at on the ticket is the first assignment; after a return to the
+-- queue the board shows when the present attendance started instead.
+select t.id, t.protocol, t.status, t.arrived_at,
+    coalesce((select a.created_at from audit_logs a
+              where a.ticket_id = t.id and a.action in ('ticket_assigned', 'ticket_started')
+              order by a.id desc limit 1), t.assigned_at) as assigned_at,
+    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    o.name as organization_name, m.name as municipality_name,
+    t.assignee_id, u.name as assignee_name, s.id as sector_id, s.name as sector_name
+from tickets t
+join contacts c on c.id = t.contact_id
+join sectors s on s.id = t.sector_id
+left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
+left join users u on u.id = t.assignee_id
+where t.status <> 'closed'
+  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
+  and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
+  and (t.status = 'queued' or sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
+order by t.arrived_at, t.id;
+
 -- name: ListClosedTickets :many
 -- Tickets of the sector closed in the period, by the real closing moment,
 -- with the contact and who closed them, latest first.
