@@ -6,6 +6,7 @@ import {
   CircleCheck,
   FileText,
   Inbox,
+  MessageSquarePlus,
   MessagesSquare,
   PencilLine,
   Undo2,
@@ -19,6 +20,7 @@ import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { RegisterContactSheet } from '@/components/ContactSheet'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
+import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
 import { TransferSheet } from '@/components/TransferSheet'
@@ -26,6 +28,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
+import { Field, FieldLabel } from '@/components/ui/field'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
@@ -80,6 +90,11 @@ export default function ConversasPage() {
     setPreviousTicketId(ticketId)
     setTab('queue')
   }
+  const [chosen, setChosen] = useState<number | null>(null)
+  const [starting, setStarting] = useState(false)
+  const sectorId = user?.sectorId ?? chosen ?? sectors[0]?.id
+  const sector = sectors.find((item) => item.id === sectorId)
+  const sectorItems = sectors.map((item) => ({ value: item.id.toString(), label: item.name }))
   const [query, setQuery] = useState('')
   const [action, setAction] = useState('')
   const [closingKey, setClosingKey] = useState(0)
@@ -106,80 +121,120 @@ export default function ConversasPage() {
         breadcrumb={ticket ? `Conversas · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
         title={ticket?.contact.name ?? 'Conversas'}
         action={
-          ticket && (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Link to={`/chamados/${ticket.id}`} className={buttonVariants({ variant: 'ghost' })}>
-                <FileText strokeWidth={1.7} aria-hidden />
-                Ver chamado
-              </Link>
-              {canCancel(ticket, user) && (
-                <>
-                  <span aria-hidden className="h-6 border-l border-line" />
-                  <Button variant="destructive" onClick={() => setAction('cancel')}>
-                    <Ban strokeWidth={1.7} aria-hidden />
-                    Cancelar chamado
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {user.role === 'admin' && sectors.length > 0 && (
+              <Field className="w-[200px]">
+                <FieldLabel htmlFor="conversas-sector">Setor</FieldLabel>
+                <Select
+                  items={sectorItems}
+                  value={sectorId?.toString() ?? null}
+                  onValueChange={(value) => value && setChosen(Number(value))}
+                >
+                  <SelectTrigger id="conversas-sector">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sectorItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+            {sector && (
+              <Button onClick={() => setStarting(true)}>
+                <MessageSquarePlus strokeWidth={1.7} aria-hidden />
+                Nova conversa
+              </Button>
+            )}
+            {ticket && (
+              <>
+                <Link
+                  to={`/chamados/${ticket.id}`}
+                  className={buttonVariants({ variant: 'ghost' })}
+                >
+                  <FileText strokeWidth={1.7} aria-hidden />
+                  Ver chamado
+                </Link>
+                {canCancel(ticket, user) && (
+                  <>
+                    <span aria-hidden className="h-6 border-l border-line" />
+                    <Button variant="destructive" onClick={() => setAction('cancel')}>
+                      <Ban strokeWidth={1.7} aria-hidden />
+                      Cancelar chamado
+                    </Button>
+                  </>
+                )}
+                {canReturn(ticket, user) && (
+                  <Button variant="outline" onClick={() => setAction('return')}>
+                    <Undo2 strokeWidth={1.7} aria-hidden />
+                    Devolver à fila
                   </Button>
-                </>
-              )}
-              {canReturn(ticket, user) && (
-                <Button variant="outline" onClick={() => setAction('return')}>
-                  <Undo2 strokeWidth={1.7} aria-hidden />
-                  Devolver à fila
-                </Button>
-              )}
-              {ticket.status === 'queued' && (
-                <Button
-                  disabled={assign.isPending}
-                  onClick={() =>
-                    assign.mutate(
-                      { ticketId: ticket.id, sectorId: ticket.sector.id },
-                      { onSuccess: () => toast.success('Chamado assumido') },
-                    )
-                  }
-                >
-                  <UserCheck strokeWidth={1.7} aria-hidden />
-                  Assumir
-                </Button>
-              )}
-              {canTransfer(ticket, user) && (
-                <Button variant="outline" onClick={() => setAction('transfer')}>
-                  <UserRoundCog strokeWidth={1.7} aria-hidden />
-                  Transferir
-                </Button>
-              )}
-              {canCorrect(ticket, user) && (
-                <Button onClick={() => setAction('correct')}>
-                  <PencilLine strokeWidth={1.7} aria-hidden />
-                  Corrigir
-                </Button>
-              )}
-              {showSubjects && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setClosingKey((n) => n + 1)
-                    setAction('sector')
-                  }}
-                >
-                  <ArrowRightLeft strokeWidth={1.7} aria-hidden />
-                  Outro setor
-                </Button>
-              )}
-              {showSubjects && (
-                <Button
-                  onClick={() => {
-                    setClosingKey((n) => n + 1)
-                    setAction('close')
-                  }}
-                >
-                  <CircleCheck strokeWidth={1.7} aria-hidden />
-                  Encerrar
-                </Button>
-              )}
-            </div>
-          )
+                )}
+                {ticket.status === 'queued' && (
+                  <Button
+                    disabled={assign.isPending}
+                    onClick={() =>
+                      assign.mutate(
+                        { ticketId: ticket.id, sectorId: ticket.sector.id },
+                        { onSuccess: () => toast.success('Chamado assumido') },
+                      )
+                    }
+                  >
+                    <UserCheck strokeWidth={1.7} aria-hidden />
+                    Assumir
+                  </Button>
+                )}
+                {canTransfer(ticket, user) && (
+                  <Button variant="outline" onClick={() => setAction('transfer')}>
+                    <UserRoundCog strokeWidth={1.7} aria-hidden />
+                    Transferir
+                  </Button>
+                )}
+                {canCorrect(ticket, user) && (
+                  <Button onClick={() => setAction('correct')}>
+                    <PencilLine strokeWidth={1.7} aria-hidden />
+                    Corrigir
+                  </Button>
+                )}
+                {showSubjects && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setClosingKey((n) => n + 1)
+                      setAction('sector')
+                    }}
+                  >
+                    <ArrowRightLeft strokeWidth={1.7} aria-hidden />
+                    Outro setor
+                  </Button>
+                )}
+                {showSubjects && (
+                  <Button
+                    onClick={() => {
+                      setClosingKey((n) => n + 1)
+                      setAction('close')
+                    }}
+                  >
+                    <CircleCheck strokeWidth={1.7} aria-hidden />
+                    Encerrar
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         }
       />
+      {sector && (
+        <NewConversationSheet
+          key={`${sector.id}-${starting}`}
+          sectorId={sector.id}
+          open={starting}
+          onOpenChange={setStarting}
+        />
+      )}
       {ticket && (
         <>
           <CancelSheet
