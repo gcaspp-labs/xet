@@ -56,6 +56,7 @@ Os riscos que podem entrar sem a pessoa quando a trava passa, um rótulo por lin
 
 ```auto-merge-risk
 risk:low
+risk:medium
 ```
 
 Método de merge (`merge`, `squash` ou `rebase`):
