@@ -39,10 +39,10 @@ As issues fechadas até a #103 com `ready-for-agent` eram tasks do fluxo antigo 
 | Papel | Rótulo no xet | Significado |
 |---|---|---|
 | `risk:low` | `risk:low` | pode entrar sem a pessoa quando a trava passa |
-| `risk:medium` | `risk:medium` | a pessoa aprova o merge |
+| `risk:medium` | `risk:medium` | pode entrar sem a pessoa quando a trava passa (o Chief of Staff decide) |
 | `risk:high` | `risk:high` | a pessoa aprova o merge; revisão aprofundada |
 
-Substitui o antigo campo `**Verificação:**`: `automática` equivale a `risk:low`, e `humana` a `risk:medium` ou `risk:high`. Como classificar o risco: ver `merge-gate.md`.
+Substitui o antigo campo `**Verificação:**`: `automática` equivale a `risk:low`, e `humana` a `risk:high`; `risk:medium` entra pela trava. Como classificar o risco: ver `merge-gate.md`.
 
 ## Outros
 
