@@ -53,7 +53,10 @@ import {
 } from '@/pages/ticket/TicketPage'
 
 type SectorTicket = TicketSummary & { sectorId: number }
-const height = 'xl:h-[calc(100dvh-150px-var(--header-height))]'
+// PROTÓTIPO #172: sem altura fixa presumida. A tela ocupa a altura da janela abaixo da
+// barra do topo; o cabeçalho fica com o que precisar e as colunas com o resto (xl+).
+// Abaixo de xl as colunas empilham e cada lista tem altura máxima própria e rola sozinha.
+const listHeight = 'min-h-0 max-h-[60dvh] xl:max-h-none xl:h-full'
 
 function TicketLine({ ticket }: { ticket: TicketSummary }) {
   return (
@@ -115,7 +118,7 @@ export default function ConversasPage() {
   if (!user) return null
 
   return (
-    <>
+    <div className="flex flex-col xl:h-[calc(100dvh-var(--header-height))]">
       <Topbar
         wrapTitle
         breadcrumb={ticket ? `Conversas · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
@@ -287,8 +290,8 @@ export default function ConversasPage() {
           )}
         </>
       )}
-      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] xl:grid-cols-[260px_minmax(0,1fr)_320px]">
-        <Card role="region" aria-labelledby="my-conversations-title" className={height}>
+      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] xl:min-h-0 xl:flex-1 xl:grid-cols-[260px_minmax(0,1fr)_320px] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
+        <Card role="region" aria-labelledby="my-conversations-title" className={listHeight}>
           <CardHeader>
             <CardTitle id="my-conversations-title">Meus atendimentos ({mine.length})</CardTitle>
           </CardHeader>
@@ -323,10 +326,11 @@ export default function ConversasPage() {
             ticket={ticket}
             user={user}
             modern
+            className="h-[70dvh] lg:h-[70dvh] xl:h-full xl:min-h-0"
             onRegister={() => setAction('register')}
           />
         ) : (
-          <Card className={`justify-center ${height}`}>
+          <Card className="justify-center xl:h-full xl:min-h-0">
             <Empty>
               <EmptyMedia>
                 <MessagesSquare strokeWidth={1.7} aria-hidden />
@@ -342,7 +346,7 @@ export default function ConversasPage() {
             </Empty>
           </Card>
         )}
-        <Card role="region" aria-label="Fila e assuntos" className={height}>
+        <Card role="region" aria-label="Fila e assuntos" className={listHeight}>
           <Tabs
             value={currentTab}
             onValueChange={(value) => setTab(String(value))}
@@ -426,6 +430,6 @@ export default function ConversasPage() {
           </Tabs>
         </Card>
       </div>
-    </>
+    </div>
   )
 }

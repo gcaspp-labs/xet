@@ -624,11 +624,14 @@ export function ConversationCard({
   user,
   onRegister,
   modern = false,
+  className,
 }: {
   ticket: TicketDetail
   user: User
   onRegister: () => void
   modern?: boolean
+  // PROTÓTIPO #172: a tela Conversas define a própria altura; a do chamado fica como está.
+  className?: string
 }) {
   const { data: messages = [] } = useMessages(ticket.id)
   const { data: logs = [] } = useAssignments(ticket.id)
@@ -656,7 +659,7 @@ export function ConversationCard({
     <Card
       role="region"
       aria-label="Conversa"
-      className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
+      className={cn('h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]', className)}
     >
       {needsRegistration(ticket) && (
         <div className="border-b border-line-soft p-3">
