@@ -11,7 +11,7 @@ Como as mensagens viram chamados na fila do setor e como alguém assume. Inclui 
 5. Os outros integrantes autorizados do setor veem o chamado e quem é o responsável.
 6. Um atendente pode assumir vários chamados ao mesmo tempo, sem limite. O painel mostra a quantidade de chamados ativos de cada atendente, sem impedir novas atribuições.
 7. Ao assumir pelo painel, a conversa abre em seguida na tela Conversas. A linha inteira de um chamado da fila ou em atendimento no painel também abre a conversa na tela Conversas.
-8. Ao assumir pelo sino de notificações ou pela lista "Conversas do setor" da tela do chamado, a tela não muda e aparece o aviso "Chamado assumido" com o link "Abrir conversa", sem interromper a conversa atual nem o texto em digitação. O link "Abrir conversa" do aviso do sino abre a tela do chamado assumido.
+8. Ao assumir pelo sino de notificações ou pela lista "Conversas do setor" da tela do chamado, a tela não muda e aparece o aviso "Chamado assumido" com o link "Abrir conversa", sem interromper a conversa atual nem o texto em digitação. O link "Abrir conversa" do aviso do sino abre a conversa assumida na tela Conversas, em qualquer tela onde o sino aparece.
 9. Na tela Conversas, encerrar, devolver à fila, transferir para outro atendente, transferir para outro setor e cancelar levam de volta à tela Conversas, sem conversa aberta. Na tela do chamado, encerrar, transferir para outro setor, cancelar e devolver à fila levam ao painel. Em ambas, a correção continua na mesma tela.
 10. O painel mostra os realizados hoje: os atendimentos do setor encerrados no dia, no horário de Brasília e pelo momento real do encerramento, com "Você" nos próprios.
 11. Nos realizados hoje, transferidos para outro setor e cancelados aparecem identificados, e cada linha abre o chamado. O administrador vê o setor escolhido no painel.
@@ -33,7 +33,6 @@ Como as mensagens viram chamados na fila do setor e como alguém assume. Inclui 
 
 ## Fora do escopo / limites conhecidos
 
-- O link "Abrir conversa" do aviso do sino deverá abrir a conversa na tela Conversas: [#155](https://github.com/gcaspp-labs/xet/issues/155).
 - A Fila do administrador deverá mostrar apenas setores ativos: [#153](https://github.com/gcaspp-labs/xet/issues/153).
 - A busca de Assuntos deverá ser guardada por chamado durante a navegação, como na tela do chamado: [#154](https://github.com/gcaspp-labs/xet/issues/154).
 - O tratamento de grupos será reavaliado com base no uso real.
@@ -50,3 +49,4 @@ Como as mensagens viram chamados na fila do setor e como alguém assume. Inclui 
 
 - 2026-11-11: regras migradas do `spec.md` (Recebimento e distribuição; Usuários e acesso).
 - 2026-11-12: regras 18 a 26 acrescentadas (tela Conversas); regras 7, 8 e 9 alteradas. A regra 7 dizia "Ao assumir pelo painel, a conversa abre em seguida. A linha inteira do chamado no painel também abre a conversa."; a regra 8, "Ao assumir pela lista "Conversas do setor" ou pelo sino de notificações, a tela não muda e aparece o aviso "Chamado assumido" com o link "Abrir conversa", sem interromper a conversa atual nem o texto em digitação."; a regra 9, "Encerrar, transferir para outro setor, cancelar e devolver à fila levam de volta ao painel; a correção continua na mesma tela."; mudança da spec #144, PRs #151 e #152. As decisões pendentes de implementação estão em limites conhecidos.
+- 2026-11-13: regra 8 alterada. Dizia "O link "Abrir conversa" do aviso do sino abre a tela do chamado assumido."; decisão de Laboratório de 12/11/2026, ticket [#155](https://github.com/gcaspp-labs/xet/issues/155) (spec #144). Saiu dos limites conhecidos o item do link do sino.
