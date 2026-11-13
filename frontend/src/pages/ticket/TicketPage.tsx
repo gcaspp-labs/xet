@@ -776,7 +776,7 @@ const correctionFields: Record<CorrectionChange['field'], string> = {
   modules: 'Módulos',
   started_at: 'Início',
   ended_at: 'Fim',
-  spoke_with: 'Falou com',
+  spoke_with: 'Falou com', // PROTÓTIPO #174: não é mais mostrado (ver CorrectionHistory).
 }
 
 function correctionValue(field: CorrectionChange['field'], value: CorrectionChange['from']) {
@@ -791,7 +791,11 @@ function correctionValue(field: CorrectionChange['field'], value: CorrectionChan
 
 // Histórico de alterações do atendimento encerrado: autor, data, motivo e
 // valores anteriores e novos de cada campo corrigido.
-function CorrectionHistory({ corrections }: { corrections: Correction[] }) {
+function CorrectionHistory({ corrections: all }: { corrections: Correction[] }) {
+  // PROTÓTIPO #174: o "Falou com" sai do histórico; a correção que só mudou isso some.
+  const corrections = all
+    .map((c) => ({ ...c, changes: c.changes.filter((change) => change.field !== 'spoke_with') }))
+    .filter((c) => c.changes.length > 0)
   return (
     <section>
       <h3 className="overline text-ink-soft">Histórico de alterações</h3>
@@ -943,11 +947,7 @@ function DetailsTab({
             row('Fim', <span className="mono-num">{formatDateTime(ticket.endedAt)}</span>)}
         </>
       )}
-      <SpokeWithField
-        key={ticket.spokeWith ?? ''}
-        ticket={ticket}
-        editable={conducts(ticket, user)}
-      />
+      {/* PROTÓTIPO #174: sem "Falou com"; o Contato identifica com quem se falou. */}
       {corrections && <CorrectionHistory corrections={corrections} />}
       {ticket.previous && <PreviousTicket previous={ticket.previous} />}
     </dl>
@@ -1278,7 +1278,6 @@ export default function TicketPage() {
           >
             <TabsList>
               <TabsTrigger value="details">Detalhes</TabsTrigger>
-              <TabsTrigger value="notes">Notas</TabsTrigger>
               <TabsTrigger value="history">Histórico</TabsTrigger>
               {showSubjects && <TabsTrigger value="subjects">Assuntos</TabsTrigger>}
             </TabsList>
@@ -1294,9 +1293,6 @@ export default function TicketPage() {
             )}
             <TabsContent value="details">
               <DetailsTab ticket={ticket} user={user} onRegister={openRegistration} />
-            </TabsContent>
-            <TabsContent value="notes">
-              <NotesTab ticketId={ticket.id} canWrite={worksIn(ticket, user)} />
             </TabsContent>
             <TabsContent value="history">
               <HistoryTab ticket={ticket} />

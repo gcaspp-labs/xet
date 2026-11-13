@@ -73,7 +73,7 @@ export function TransferSheet({
       open={open}
       onOpenChange={changeOpen}
       title="Transferir chamado"
-      description="O novo responsável passa a responder; mensagens, notas e histórico continuam no chamado."
+      description="O novo responsável passa a responder; mensagens e histórico continuam no chamado."
       submitLabel="Transferir"
       pending={transfer.isPending}
       error={error}

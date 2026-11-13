@@ -181,15 +181,7 @@ export function CorrectionSheet({
       <FormProvider {...methods}>
         <ClosingFields idPrefix="correction" modules={modules} subjects={form?.subjects ?? []} />
       </FormProvider>
-      <Field>
-        <FieldLabel htmlFor="correction-spoke-with">Falou com</FieldLabel>
-        <Input
-          id="correction-spoke-with"
-          maxLength={200}
-          placeholder="Quem atendeu neste telefone"
-          {...register('spokeWith')}
-        />
-      </Field>
+      {/* PROTÓTIPO #174: sem o campo "Falou com". */}
       <Field data-invalid={!!errors.reason}>
         <FieldLabel htmlFor="correction-reason">Motivo da correção</FieldLabel>
         <Textarea
