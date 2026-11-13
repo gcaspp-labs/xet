@@ -9,7 +9,7 @@ import { MunicipalityPicker } from '@/components/MunicipalityPicker'
 import { Pagination } from '@/components/Pagination'
 import { SearchBox } from '@/components/SearchBox'
 import { SortableTableHead } from '@/components/SortableTableHead'
-import { HistorySheet } from '@/components/TicketHistory'
+import { HistorySheet, useHistoryTarget } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -218,7 +218,7 @@ export default function OrganizationsPage() {
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
   const [sheetKey, setSheetKey] = useState(0)
-  const [history, setHistory] = useState<Organization | null>(null)
+  const history = useHistoryTarget()
 
   const openSheet = (organization: Organization | null) => {
     setEditing(organization)
@@ -273,7 +273,16 @@ export default function OrganizationsPage() {
                         variant="ghost"
                         size="sm"
                         aria-label={`Histórico de ${organization.name}`}
-                        onClick={() => setHistory(organization)}
+                        onClick={() =>
+                          history.open({
+                            kind: 'organization',
+                            id: organization.id,
+                            name: organizationLabel(
+                              organization.name,
+                              organization.municipality.name,
+                            ),
+                          })
+                        }
                       >
                         Histórico
                       </Button>
@@ -316,16 +325,7 @@ export default function OrganizationsPage() {
         </Card>
       </PageContent>
       <OrganizationSheet key={sheetKey} organization={editing} open={open} onOpenChange={setOpen} />
-      <HistorySheet
-        target={
-          history && {
-            kind: 'organization',
-            id: history.id,
-            name: organizationLabel(history.name, history.municipality.name),
-          }
-        }
-        onClose={() => setHistory(null)}
-      />
+      <HistorySheet target={history.target} onClose={history.close} />
     </>
   )
 }

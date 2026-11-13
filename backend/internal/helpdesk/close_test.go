@@ -370,7 +370,7 @@ func TestMessageAfterClosingByTheFormOpensNewTicket(t *testing.T) {
 	if got := len(e.messages(c.ticket.ID)); got != 1 {
 		t.Fatalf("messages of the closed ticket = %d", got)
 	}
-	history := e.DoList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
+	history := e.DoPageItems(fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
 	if len(history) != 2 || history[1]["status"] != "closed" || history[1]["subject"] != "Contracheque" {
 		t.Fatalf("history = %v", history)
 	}

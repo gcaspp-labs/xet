@@ -6,7 +6,7 @@ import { ImportContactsSheet } from '@/components/ImportContactsSheet'
 import { Pagination } from '@/components/Pagination'
 import { SearchBox } from '@/components/SearchBox'
 import { SortableTableHead } from '@/components/SortableTableHead'
-import { HistorySheet } from '@/components/TicketHistory'
+import { HistorySheet, useHistoryTarget } from '@/components/TicketHistory'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -54,7 +54,7 @@ export default function ContactsPage() {
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
   const [sheetKey, setSheetKey] = useState(0)
-  const [history, setHistory] = useState<Contact | null>(null)
+  const history = useHistoryTarget()
   const [importOpen, setImportOpen] = useState(false)
   const [importKey, setImportKey] = useState(0)
 
@@ -159,7 +159,9 @@ export default function ContactsPage() {
                         variant="ghost"
                         size="sm"
                         aria-label={`Histórico de ${contact.name}`}
-                        onClick={() => setHistory(contact)}
+                        onClick={() =>
+                          history.open({ kind: 'contact', id: contact.id, name: contact.name })
+                        }
                       >
                         Histórico
                       </Button>
@@ -207,10 +209,7 @@ export default function ContactsPage() {
         open={importOpen}
         onOpenChange={setImportOpen}
       />
-      <HistorySheet
-        target={history && { kind: 'contact', id: history.id, name: history.name }}
-        onClose={() => setHistory(null)}
-      />
+      <HistorySheet target={history.target} onClose={history.close} />
     </>
   )
 }

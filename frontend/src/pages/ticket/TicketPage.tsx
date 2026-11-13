@@ -6,6 +6,7 @@ import {
   CircleAlert,
   CircleCheck,
   FileText,
+  History,
   MessagesSquare,
   Mic,
   Paperclip,
@@ -27,7 +28,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { CancelSheet } from '@/components/CancelSheet'
@@ -36,7 +37,8 @@ import { RegisterContactSheet } from '@/components/ContactSheet'
 import { ConversationList } from '@/components/ConversationList'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
-import { TicketHistoryList } from '@/components/TicketHistory'
+import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
+import type { HistoryReturnState } from '@/lib/history-return'
 import { Topbar } from '@/components/Topbar'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -1025,32 +1027,70 @@ function NotesTab({ ticketId, canWrite }: { ticketId: number; canWrite: boolean 
 function HistoryTab({ ticket }: { ticket: TicketDetail }) {
   const contact = useContactHistory(ticket.contact.id)
   const organization = useOrganizationHistory(ticket.organization?.id)
+  const history = useHistoryTarget()
   return (
     <div className="flex flex-col gap-4">
       <section>
         <h3 className="overline text-ink-soft">Do contato</h3>
         <TicketHistoryList
           label="Chamados do contato"
-          entries={contact.data}
+          entries={contact.data?.items.slice(0, 5)}
           currentTicketId={ticket.id}
         />
+        {contact.data && contact.data.total > 5 && (
+          <Button
+            variant="outline"
+            className="mt-2 w-full"
+            onClick={() =>
+              history.open({ kind: 'contact', id: ticket.contact.id, name: ticket.contact.name })
+            }
+          >
+            <History strokeWidth={1.7} aria-hidden />
+            Ver os {contact.data.total} chamados
+          </Button>
+        )}
       </section>
       {ticket.organization && (
         <section>
           <h3 className="overline text-ink-soft">Do órgão</h3>
           <TicketHistoryList
             label="Chamados do órgão"
-            entries={organization.data}
+            entries={organization.data?.items.slice(0, 5)}
             currentTicketId={ticket.id}
           />
+          {organization.data && organization.data.total > 5 && (
+            <Button
+              variant="outline"
+              className="mt-2 w-full"
+              onClick={() =>
+                history.open({
+                  kind: 'organization',
+                  id: ticket.organization!.id,
+                  name: organizationLabel(
+                    ticket.organization!.name,
+                    ticket.organization!.municipality.name,
+                  ),
+                })
+              }
+            >
+              <History strokeWidth={1.7} aria-hidden />
+              Ver os {organization.data.total} chamados
+            </Button>
+          )}
         </section>
       )}
+      <HistorySheet target={history.target} onClose={history.close} currentTicketId={ticket.id} />
     </div>
   )
 }
 
 export default function TicketPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const origin = location.state as Partial<HistoryReturnState> | null
+  const back = origin?.historyReturn
+    ? { to: origin.historyReturn, label: 'Voltar ao histórico', state: origin.historyBefore }
+    : backToList
   const ticketId = Number(useParams().ticketId)
   const queryClient = useQueryClient()
   const { data: user } = useCurrentUser()
@@ -1072,7 +1112,7 @@ export default function TicketPage() {
   if (error) {
     return (
       <>
-        <Topbar back={backToList} breadcrumb="Atendimento" title="Chamado" />
+        <Topbar back={back} breadcrumb="Atendimento" title="Chamado" />
         <div className="px-4 py-4 md:px-[30px] md:py-[30px]">
           <Alert variant="warning">
             <CircleAlert strokeWidth={1.7} aria-hidden />
@@ -1092,7 +1132,7 @@ export default function TicketPage() {
   return (
     <>
       <Topbar
-        back={backToList}
+        back={back}
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={
@@ -1226,7 +1266,13 @@ export default function TicketPage() {
             <CardTitle id="ticket-info-title">Chamado</CardTitle>
           </CardHeader>
           <Tabs
-            value={view.tab === 'subjects' && !showSubjects ? 'details' : view.tab}
+            value={
+              new URLSearchParams(location.search).has('historico')
+                ? 'history'
+                : view.tab === 'subjects' && !showSubjects
+                  ? 'details'
+                  : view.tab
+            }
             onValueChange={(tab) => setView({ tab: String(tab) })}
             className="min-h-0 flex-1 px-5 pb-5"
           >

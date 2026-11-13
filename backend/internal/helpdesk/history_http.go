@@ -6,6 +6,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -24,7 +25,7 @@ type historyResponse struct {
 	AssigneeName     *string         `json:"assigneeName"`
 }
 
-func writeHistory(w http.ResponseWriter, rows []HistoryEntry) {
+func writeHistory(w http.ResponseWriter, rows []HistoryEntry, total int64, page paging.Request) {
 	out := make([]historyResponse, len(rows))
 	for i, t := range rows {
 		out[i] = historyResponse{
@@ -36,7 +37,7 @@ func writeHistory(w http.ResponseWriter, rows []HistoryEntry) {
 			out[i].ClosureType = &t.ClosureType.ClosureType
 		}
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, paging.NewPage(out, total, page))
 }
 
 // contactHistory lists the tickets of the contact in the sectors of the user.
@@ -45,12 +46,12 @@ func (h *Handler) contactHistory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := h.service.ContactHistory(r.Context(), auth.CurrentUser(r.Context()), contactID)
+	rows, total, page, err := h.service.ContactHistory(r.Context(), auth.CurrentUser(r.Context()), contactID, paging.Parse(r, HistorySortColumns, "arrived", true))
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return
 	}
-	writeHistory(w, rows)
+	writeHistory(w, rows, total, page)
 }
 
 // organizationHistory lists the tickets of the organization in the sectors of the user.
@@ -59,10 +60,10 @@ func (h *Handler) organizationHistory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := h.service.OrganizationHistory(r.Context(), auth.CurrentUser(r.Context()), organizationID)
+	rows, total, page, err := h.service.OrganizationHistory(r.Context(), auth.CurrentUser(r.Context()), organizationID, paging.Parse(r, HistorySortColumns, "arrived", true))
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return
 	}
-	writeHistory(w, rows)
+	writeHistory(w, rows, total, page)
 }

@@ -133,8 +133,12 @@ set spoke_with = @spoke_with
 where id = @id
 returning *;
 
+-- name: CountContactTickets :one
+select count(*) from tickets t
+where t.contact_id = @contact_id
+  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id));
+
 -- name: ListContactTickets :many
--- History of the contact, newest first. A null sector lists every sector (admin).
 select
     t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
@@ -146,11 +150,29 @@ left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.contact_id = @contact_id
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
-order by t.arrived_at desc, t.id desc
-limit 200;
+order by
+    case when @sort::text = 'protocol' and @direction::text = 'asc' then lower(unaccent(t.protocol)) end asc nulls last,
+    case when @sort::text = 'protocol' and @direction::text = 'desc' then lower(unaccent(t.protocol)) end desc nulls last,
+    case when @sort::text = 'arrived' and @direction::text = 'asc' then t.arrived_at end asc nulls last,
+    case when @sort::text = 'arrived' and @direction::text = 'desc' then t.arrived_at end desc nulls last,
+    case when @sort::text = 'contact' and @direction::text = 'asc' then lower(unaccent(c.name)) end asc nulls last,
+    case when @sort::text = 'contact' and @direction::text = 'desc' then lower(unaccent(c.name)) end desc nulls last,
+    case when @sort::text = 'sector' and @direction::text = 'asc' then lower(unaccent(s.name)) end asc nulls last,
+    case when @sort::text = 'sector' and @direction::text = 'desc' then lower(unaccent(s.name)) end desc nulls last,
+    case when @sort::text = 'assignee' and @direction::text = 'asc' then lower(unaccent(u.name)) end asc nulls last,
+    case when @sort::text = 'assignee' and @direction::text = 'desc' then lower(unaccent(u.name)) end desc nulls last,
+    case when @sort::text = 'status' and @direction::text = 'asc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end asc nulls last,
+    case when @sort::text = 'status' and @direction::text = 'desc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end desc nulls last,
+    case when @direction::text = 'asc' then t.id end asc,
+    case when @direction::text = 'desc' then t.id end desc
+limit 20 offset @page_offset;
+
+-- name: CountOrganizationTickets :one
+select count(*) from tickets t
+where t.organization_id = @organization_id
+  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id));
 
 -- name: ListOrganizationTickets :many
--- History of the organization, newest first. A null sector lists every sector (admin).
 select
     t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
@@ -162,8 +184,22 @@ left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.organization_id = @organization_id
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
-order by t.arrived_at desc, t.id desc
-limit 200;
+order by
+    case when @sort::text = 'protocol' and @direction::text = 'asc' then lower(unaccent(t.protocol)) end asc nulls last,
+    case when @sort::text = 'protocol' and @direction::text = 'desc' then lower(unaccent(t.protocol)) end desc nulls last,
+    case when @sort::text = 'arrived' and @direction::text = 'asc' then t.arrived_at end asc nulls last,
+    case when @sort::text = 'arrived' and @direction::text = 'desc' then t.arrived_at end desc nulls last,
+    case when @sort::text = 'contact' and @direction::text = 'asc' then lower(unaccent(c.name)) end asc nulls last,
+    case when @sort::text = 'contact' and @direction::text = 'desc' then lower(unaccent(c.name)) end desc nulls last,
+    case when @sort::text = 'sector' and @direction::text = 'asc' then lower(unaccent(s.name)) end asc nulls last,
+    case when @sort::text = 'sector' and @direction::text = 'desc' then lower(unaccent(s.name)) end desc nulls last,
+    case when @sort::text = 'assignee' and @direction::text = 'asc' then lower(unaccent(u.name)) end asc nulls last,
+    case when @sort::text = 'assignee' and @direction::text = 'desc' then lower(unaccent(u.name)) end desc nulls last,
+    case when @sort::text = 'status' and @direction::text = 'asc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end asc nulls last,
+    case when @sort::text = 'status' and @direction::text = 'desc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end desc nulls last,
+    case when @direction::text = 'asc' then t.id end asc,
+    case when @direction::text = 'desc' then t.id end desc
+limit 20 offset @page_offset;
 
 -- name: GetOpenTicketID :one
 select id from tickets

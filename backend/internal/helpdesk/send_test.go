@@ -797,14 +797,14 @@ func TestHistoryByContactAndOrganization(t *testing.T) {
 	contactPath := fmt.Sprintf("/api/contacts/%d/tickets", maria)
 	orgPath := fmt.Sprintf("/api/organizations/%d/tickets", org)
 	// Do mais recente ao mais antigo, só dos setores do usuário.
-	check("contact history of the sector", ids(e.DoList(http.MethodGet, contactPath, anaToken)), second.ID, first.ID)
-	check("contact history of another sector", ids(e.DoList(http.MethodGet, contactPath, rhToken)), rhTicket.ID)
-	check("contact history for the admin", ids(e.DoList(http.MethodGet, contactPath, adminToken)), rhTicket.ID, second.ID, first.ID)
-	check("organization history of the sector", ids(e.DoList(http.MethodGet, orgPath, anaToken)), joaoTicket.ID, second.ID, first.ID)
-	check("organization history of another sector", ids(e.DoList(http.MethodGet, orgPath, rhToken)), rhTicket.ID)
-	check("history of João", ids(e.DoList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", joao), anaToken)), joaoTicket.ID)
+	check("contact history of the sector", ids(e.DoPageItems(contactPath, anaToken)), second.ID, first.ID)
+	check("contact history of another sector", ids(e.DoPageItems(contactPath, rhToken)), rhTicket.ID)
+	check("contact history for the admin", ids(e.DoPageItems(contactPath, adminToken)), rhTicket.ID, second.ID, first.ID)
+	check("organization history of the sector", ids(e.DoPageItems(orgPath, anaToken)), joaoTicket.ID, second.ID, first.ID)
+	check("organization history of another sector", ids(e.DoPageItems(orgPath, rhToken)), rhTicket.ID)
+	check("history of João", ids(e.DoPageItems(fmt.Sprintf("/api/contacts/%d/tickets", joao), anaToken)), joaoTicket.ID)
 
-	list := e.DoList(http.MethodGet, contactPath, anaToken)
+	list := e.DoPageItems(contactPath, anaToken)
 	if list[1]["status"] != "closed" || list[1]["subject"] != "Dúvida" || list[1]["sectorName"] != "Contabilidade" ||
 		list[1]["organizationName"] != "Câmara Municipal" || list[1]["municipalityName"] != "Itu" || list[1]["closedAt"] == nil {
 		t.Fatalf("closed ticket in history = %v", list[1])
