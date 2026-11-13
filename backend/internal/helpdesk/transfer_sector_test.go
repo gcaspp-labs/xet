@@ -157,7 +157,7 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 		t.Fatalf("first message: status %d, body %v", r.Status, r.Body)
 	}
 	sent := e.WhatsApp.SentMessages()
-	if msg, ok := sent[len(sent)-1].(messaging.TextMessage); !ok || msg.SectorID != c.rh || msg.Body != "rh@exemplo.com: Olá, aqui é o RH." {
+	if msg, ok := sent[len(sent)-1].(messaging.TextMessage); !ok || msg.SectorID != c.rh || msg.Body != "*rh@exemplo.com:*\nOlá, aqui é o RH." {
 		t.Fatalf("WhatsApp message = %+v", sent[len(sent)-1])
 	}
 }

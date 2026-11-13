@@ -323,6 +323,8 @@ function MessageBubble({
   const status = message.status && outbound ? messageStatusLabels[message.status] : null
   const author =
     message.origin === 'phone' ? 'Enviada fora do sistema' : outbound ? message.author?.name : null
+  const prefix =
+    outbound && message.origin === 'agent' ? message.body?.match(/^\*([^*\n]+:)\*(?:\n|$)/) : null
 
   return (
     <li
@@ -355,7 +357,19 @@ function MessageBubble({
       {message.type === 'unsupported' ? (
         <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
       ) : (
-        message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>
+        message.body && (
+          <p className="whitespace-pre-wrap break-words">
+            {prefix ? (
+              <>
+                <strong>{prefix[1]}</strong>
+                {message.body.slice(prefix[0].length) &&
+                  `\n${message.body.slice(prefix[0].length)}`}
+              </>
+            ) : (
+              message.body
+            )}
+          </p>
+        )
       )}
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span
