@@ -55,11 +55,14 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
   await expect(page.getByText('Conversa iniciada')).toBeVisible()
   await expect(page.getByRole('heading', { name })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
-  await expect(
-    conversation
-      .getByRole('listitem', { name: 'Mensagem enviada' })
-      .filter({ hasText: /agent \d+: Bom dia, sua guia está pronta\./ }),
-  ).toContainText('Enviada')
+  const firstMessage = conversation
+    .getByRole('listitem', { name: 'Mensagem enviada' })
+    .filter({ hasText: 'Bom dia, sua guia está pronta.' })
+  await expect(firstMessage).toContainText('Enviada')
+  await expect(firstMessage.locator('strong')).toHaveText(/agent \d+:/)
+  await expect(firstMessage.locator('p.whitespace-pre-wrap')).toHaveText(
+    /agent \d+:\nBom dia, sua guia está pronta\./,
+  )
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
   // Iniciar a conversa conta como assumir o chamado e fica registrado, antes da
   // primeira mensagem.

@@ -34,7 +34,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
     externalMessageId: `E2E-${unique().id}`,
     phone: number,
     contactName: 'Maria Cliente',
-    body: 'Bom dia, preciso do balancete',
+    body: '*Cliente:*\nBom dia, preciso do balancete',
   })
 
   // O atendente assume o chamado pela tela da conversa.
@@ -43,7 +43,9 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(page.getByRole('heading', { name: 'Maria Cliente' })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
-  await expect(conversation).toContainText('Bom dia, preciso do balancete')
+  const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
+  await expect(received).toContainText('*Cliente:*')
+  await expect(received.locator('strong')).toHaveCount(0)
   await expect(conversation).toContainText('Chamado na fila. Assuma o chamado para responder.')
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
@@ -69,7 +71,16 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
     .filter({ hasText: 'Segue o balancete em anexo.' })
   await expect(sent).toContainText('Enviada')
   // O painel mostra o texto como o cliente recebeu, com o apelido de quem enviou.
-  await expect(sent).toContainText(/agent \d+: Segue o balancete em anexo\./)
+  await expect(sent.locator('strong')).toHaveText(/agent \d+:/)
+  await expect(sent.locator('p.whitespace-pre-wrap')).toHaveText(
+    /agent \d+:\nSegue o balancete em anexo\./,
+  )
+  await expect(sent.locator('p.whitespace-pre-wrap')).not.toContainText('*')
+  const preview = page
+    .getByRole('navigation', { name: 'Conversas abertas' })
+    .getByRole('link', { name: /Maria Cliente/ })
+  await expect(preview).toContainText('Segue o balancete em anexo.')
+  await expect(preview).not.toContainText('*')
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
   // A outra janela recebe a mensagem sem recarregar.
   await expect(otherConversation).toContainText('Segue o balancete em anexo.')
@@ -92,8 +103,14 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   const file = conversation
     .getByRole('listitem', { name: 'Mensagem enviada' })
     .filter({ hasText: 'balancete.pdf' })
-  await expect(file).toContainText(/agent \d+: Balancete de outubro/)
   await expect(file).toContainText('Enviada')
+  await expect(file.locator('strong')).toHaveText(/agent \d+:/)
+  await expect(file.locator('p.whitespace-pre-wrap')).toHaveText(/agent \d+:\nBalancete de outubro/)
+  await expect(file.locator('p.whitespace-pre-wrap')).not.toContainText('*')
+  await page.reload()
+  await expect(sent.locator('strong')).toHaveText(/agent \d+:/)
+  await expect(file.locator('strong')).toHaveText(/agent \d+:/)
+  await expect(received).toContainText('*Cliente:*')
   await expect(file.getByRole('link', { name: /balancete\.pdf/ })).toHaveAttribute(
     'href',
     /^\/api\/media\/\d+$/,

@@ -90,11 +90,15 @@ export function lastMessagePreview(ticket: TicketSummary) {
   if (!message) {
     return 'Sem mensagens'
   }
+  const body =
+    message.origin === 'agent'
+      ? message.body?.replace(/^\*([^*\n]+:)\*(?:\n|$)/, '$1 ')
+      : message.body
   const content =
     message.type === 'text'
-      ? (message.body ?? '')
-      : message.body
-        ? `${mediaLabels[message.type]}: ${message.body}`
+      ? (body ?? '')
+      : body
+        ? `${mediaLabels[message.type]}: ${body}`
         : mediaLabels[message.type]
   return message.origin === 'phone' ? `Pelo celular: ${content}` : content
 }

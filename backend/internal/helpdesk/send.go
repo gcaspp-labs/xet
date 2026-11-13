@@ -176,10 +176,14 @@ func withNickname(ctx context.Context, q *db.Queries, userID int64, body string)
 	if err != nil {
 		return "", fmt.Errorf("get nickname: %w", err)
 	}
+	return formatNickname(nickname, body), nil
+}
+
+func formatNickname(nickname, body string) string {
 	if strings.TrimSpace(body) == "" {
-		return nickname + ":", nil
+		return "*" + nickname + ":*"
 	}
-	return nickname + ": " + body, nil
+	return "*" + nickname + ":*\n" + body
 }
 
 // repeated returns the message of a repeated request, refusing a request ID

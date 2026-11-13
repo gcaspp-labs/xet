@@ -215,7 +215,7 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 	}
 	m := got[0]
 	if m.Origin != "agent" || m.AuthorID == nil || *m.AuthorID != c.ana.ID || m.Type != "text" ||
-		str(m.Body) != "ana@exemplo.com: Bom dia, em que posso ajudar?" || str(m.Status) != "sent" || m.ExternalMessageID == nil {
+		str(m.Body) != "*ana@exemplo.com:*\nBom dia, em que posso ajudar?" || str(m.Status) != "sent" || m.ExternalMessageID == nil {
 		t.Fatalf("sent message = %+v", m)
 	}
 	sent := e.WhatsApp.SentMessages()
@@ -223,7 +223,7 @@ func TestOnlyTheAssigneeReplies(t *testing.T) {
 		t.Fatalf("sent to WhatsApp = %+v", sent)
 	}
 	if msg, ok := sent[0].(messaging.TextMessage); !ok || msg.To != "5511988887777@s.whatsapp.net" ||
-		msg.SectorID != c.sector.ID || msg.Body != "ana@exemplo.com: Bom dia, em que posso ajudar?" || msg.IdempotencyKey != requestA {
+		msg.SectorID != c.sector.ID || msg.Body != "*ana@exemplo.com:*\nBom dia, em que posso ajudar?" || msg.IdempotencyKey != requestA {
 		t.Fatalf("WhatsApp message = %+v", sent[0])
 	}
 
@@ -326,7 +326,7 @@ func TestSendingFiles(t *testing.T) {
 	}
 
 	got := e.outbound(c.ticket.ID)
-	if len(got) != 2 || got[0].Type != "image" || str(got[0].Body) != "ana@exemplo.com: Comprovante" || got[1].Type != "document" || str(got[1].Body) != "ana@exemplo.com:" {
+	if len(got) != 2 || got[0].Type != "image" || str(got[0].Body) != "*ana@exemplo.com:*\nComprovante" || got[1].Type != "document" || str(got[1].Body) != "*ana@exemplo.com:*" {
 		t.Fatalf("file messages = %+v", got)
 	}
 	if f := e.media(*got[1].MediaID); f.MimeType != "application/pdf" || str(f.FileName) != "balancete.pdf" || f.SizeBytes != int64(len(pdf)) {
@@ -334,11 +334,11 @@ func TestSendingFiles(t *testing.T) {
 	}
 	sent := e.WhatsApp.SentMessages()
 	img, ok := sent[0].(messaging.MediaMessage)
-	if !ok || img.Type != messaging.TypeImage || img.Caption != "ana@exemplo.com: Comprovante" || !bytes.Equal(img.Media.Data, png) {
+	if !ok || img.Type != messaging.TypeImage || img.Caption != "*ana@exemplo.com:*\nComprovante" || !bytes.Equal(img.Media.Data, png) {
 		t.Fatalf("image sent = %+v", sent[0])
 	}
 	doc, ok := sent[1].(messaging.MediaMessage)
-	if !ok || doc.Type != messaging.TypeDocument || doc.Media.FileName != "balancete.pdf" || doc.Caption != "ana@exemplo.com:" || !bytes.Equal(doc.Media.Data, pdf) {
+	if !ok || doc.Type != messaging.TypeDocument || doc.Media.FileName != "balancete.pdf" || doc.Caption != "*ana@exemplo.com:*" || !bytes.Equal(doc.Media.Data, pdf) {
 		t.Fatalf("document sent = %+v", sent[1])
 	}
 
@@ -582,7 +582,7 @@ func TestMessagesCarryTheNicknameOfTheSender(t *testing.T) {
 	}
 
 	got := e.outbound(c.ticket.ID)
-	want := []string{"Ana Souza: Bom dia", "Ana Souza:", "Ana Souza: Segue o boleto", "Aninha: Mais alguma dúvida?"}
+	want := []string{"*Ana Souza:*\nBom dia", "*Ana Souza:*", "*Ana Souza:*\nSegue o boleto", "*Aninha:*\nMais alguma dúvida?"}
 	if len(got) != len(want) {
 		t.Fatalf("messages = %+v", got)
 	}
