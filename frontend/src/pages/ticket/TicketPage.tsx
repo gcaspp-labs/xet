@@ -22,6 +22,7 @@ import {
 import {
   type ChangeEvent,
   type KeyboardEvent,
+  type CSSProperties,
   type ReactNode,
   useEffect,
   useRef,
@@ -85,6 +86,7 @@ import {
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { cn } from '@/lib/utils'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
+import { PrototypeSwitcher, TicketSummary, summaryHeight } from '@/pages/ticket/TicketSummary'
 import { useTicketView } from '@/pages/ticket/useTicketView'
 
 const messageStatusLabels: Record<
@@ -642,7 +644,7 @@ export function ConversationCard({
     <Card
       role="region"
       aria-label="Conversa"
-      className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
+      className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height)-var(--ticket-summary,0px))]"
     >
       {needsRegistration(ticket) && (
         <div className="border-b border-line-soft p-3">
@@ -1173,6 +1175,8 @@ export default function TicketPage() {
       )}
       {/* A tela de conversas usa a largura toda (design.md). */}
       <div
+        // PROTÓTIPO #162: a faixa de resumo ocupa a primeira linha da grade.
+        style={{ '--ticket-summary': `calc(${summaryHeight} + 16px)` } as CSSProperties}
         className={cn(
           'grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px]',
           subjectsOpen
@@ -1186,6 +1190,7 @@ export default function TicketPage() {
             <AlertDescription>{assign.error.message}</AlertDescription>
           </Alert>
         )}
+        <TicketSummary ticket={ticket} />
         {/* Abaixo de 1280px a lista some; o painel continua sendo o caminho entre conversas. */}
         <div className="hidden xl:block">
           {/* Lendo um chamado anterior de outro setor, a lista continua sendo a do próprio setor. */}
@@ -1200,7 +1205,7 @@ export default function TicketPage() {
         <Card
           role="region"
           aria-labelledby="ticket-info-title"
-          className={cn(subjectsOpen && 'lg:h-[calc(100dvh-150px-var(--header-height))]')}
+          className={cn(subjectsOpen && 'lg:h-[calc(100dvh-150px-var(--header-height)-var(--ticket-summary,0px))]')}
         >
           <CardHeader>
             <CardTitle id="ticket-info-title">Chamado</CardTitle>
@@ -1238,6 +1243,7 @@ export default function TicketPage() {
           </Tabs>
         </Card>
       </div>
+      <PrototypeSwitcher current={ticket.id} />
     </>
   )
 }
