@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -20,26 +21,44 @@ func historySector(actor auth.User) *int64 {
 	return actor.SectorID
 }
 
-// ContactHistory lists the tickets of the contact in the sectors the user
-// may see, newest first.
-func (s *Service) ContactHistory(ctx context.Context, actor auth.User, contactID int64) ([]HistoryEntry, error) {
-	rows, err := s.q.ListContactTickets(ctx, db.ListContactTicketsParams{ContactID: contactID, SectorID: historySector(actor)})
-	if err != nil {
-		return nil, fmt.Errorf("list contact tickets: %w", err)
+// HistorySortColumns are the columns shown in the history table.
+var HistorySortColumns = []string{"protocol", "arrived", "contact", "sector", "assignee", "status"}
+
+func historyDirection(page paging.Request) string {
+	if page.Descending {
+		return "desc"
 	}
-	return rows, nil
+	return "asc"
 }
 
-// OrganizationHistory lists the tickets of the organization in the sectors
-// the user may see, newest first.
-func (s *Service) OrganizationHistory(ctx context.Context, actor auth.User, organizationID int64) ([]HistoryEntry, error) {
-	rows, err := s.q.ListOrganizationTickets(ctx, db.ListOrganizationTicketsParams{OrganizationID: &organizationID, SectorID: historySector(actor)})
+func (s *Service) ContactHistory(ctx context.Context, actor auth.User, contactID int64, page paging.Request) ([]HistoryEntry, int64, paging.Request, error) {
+	sector := historySector(actor)
+	total, err := s.q.CountContactTickets(ctx, db.CountContactTicketsParams{ContactID: contactID, SectorID: sector})
 	if err != nil {
-		return nil, fmt.Errorf("list organization tickets: %w", err)
+		return nil, 0, page, fmt.Errorf("count contact tickets: %w", err)
+	}
+	page = page.Clamp(total)
+	rows, err := s.q.ListContactTickets(ctx, db.ListContactTicketsParams{ContactID: contactID, SectorID: sector, Sort: page.Sort, Direction: historyDirection(page), PageOffset: page.Offset()})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("list contact tickets: %w", err)
+	}
+	return rows, total, page, nil
+}
+
+func (s *Service) OrganizationHistory(ctx context.Context, actor auth.User, organizationID int64, page paging.Request) ([]HistoryEntry, int64, paging.Request, error) {
+	sector := historySector(actor)
+	total, err := s.q.CountOrganizationTickets(ctx, db.CountOrganizationTicketsParams{OrganizationID: &organizationID, SectorID: sector})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("count organization tickets: %w", err)
+	}
+	page = page.Clamp(total)
+	rows, err := s.q.ListOrganizationTickets(ctx, db.ListOrganizationTicketsParams{OrganizationID: &organizationID, SectorID: sector, Sort: page.Sort, Direction: historyDirection(page), PageOffset: page.Offset()})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("list organization tickets: %w", err)
 	}
 	out := make([]HistoryEntry, len(rows))
 	for i, r := range rows {
 		out[i] = HistoryEntry(r)
 	}
-	return out, nil
+	return out, total, page, nil
 }

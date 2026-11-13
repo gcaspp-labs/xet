@@ -251,6 +251,24 @@ func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (T
 	return i, err
 }
 
+const countContactTickets = `-- name: CountContactTickets :one
+select count(*) from tickets t
+where t.contact_id = $1
+  and ($2::bigint is null or t.sector_id = $2)
+`
+
+type CountContactTicketsParams struct {
+	ContactID int64
+	SectorID  *int64
+}
+
+func (q *Queries) CountContactTickets(ctx context.Context, arg CountContactTicketsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countContactTickets, arg.ContactID, arg.SectorID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countInProgressTicketsOfAssignee = `-- name: CountInProgressTicketsOfAssignee :one
 select count(*)::integer from tickets
 where assignee_id = $1 and status = 'in_progress'
@@ -261,6 +279,24 @@ func (q *Queries) CountInProgressTicketsOfAssignee(ctx context.Context, assignee
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const countOrganizationTickets = `-- name: CountOrganizationTickets :one
+select count(*) from tickets t
+where t.organization_id = $1
+  and ($2::bigint is null or t.sector_id = $2)
+`
+
+type CountOrganizationTicketsParams struct {
+	OrganizationID *int64
+	SectorID       *int64
+}
+
+func (q *Queries) CountOrganizationTickets(ctx context.Context, arg CountOrganizationTicketsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationTickets, arg.OrganizationID, arg.SectorID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createQueuedTicket = `-- name: CreateQueuedTicket :one
@@ -788,13 +824,30 @@ left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.contact_id = $1
   and ($2::bigint is null or t.sector_id = $2)
-order by t.arrived_at desc, t.id desc
-limit 200
+order by
+    case when $3::text = 'protocol' and $4::text = 'asc' then lower(unaccent(t.protocol)) end asc nulls last,
+    case when $3::text = 'protocol' and $4::text = 'desc' then lower(unaccent(t.protocol)) end desc nulls last,
+    case when $3::text = 'arrived' and $4::text = 'asc' then t.arrived_at end asc nulls last,
+    case when $3::text = 'arrived' and $4::text = 'desc' then t.arrived_at end desc nulls last,
+    case when $3::text = 'contact' and $4::text = 'asc' then lower(unaccent(c.name)) end asc nulls last,
+    case when $3::text = 'contact' and $4::text = 'desc' then lower(unaccent(c.name)) end desc nulls last,
+    case when $3::text = 'sector' and $4::text = 'asc' then lower(unaccent(s.name)) end asc nulls last,
+    case when $3::text = 'sector' and $4::text = 'desc' then lower(unaccent(s.name)) end desc nulls last,
+    case when $3::text = 'assignee' and $4::text = 'asc' then lower(unaccent(u.name)) end asc nulls last,
+    case when $3::text = 'assignee' and $4::text = 'desc' then lower(unaccent(u.name)) end desc nulls last,
+    case when $3::text = 'status' and $4::text = 'asc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end asc nulls last,
+    case when $3::text = 'status' and $4::text = 'desc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end desc nulls last,
+    case when $4::text = 'asc' then t.id end asc,
+    case when $4::text = 'desc' then t.id end desc
+limit 20 offset $5
 `
 
 type ListContactTicketsParams struct {
-	ContactID int64
-	SectorID  *int64
+	ContactID  int64
+	SectorID   *int64
+	Sort       string
+	Direction  string
+	PageOffset int32
 }
 
 type ListContactTicketsRow struct {
@@ -812,9 +865,14 @@ type ListContactTicketsRow struct {
 	AssigneeName     *string
 }
 
-// History of the contact, newest first. A null sector lists every sector (admin).
 func (q *Queries) ListContactTickets(ctx context.Context, arg ListContactTicketsParams) ([]ListContactTicketsRow, error) {
-	rows, err := q.db.Query(ctx, listContactTickets, arg.ContactID, arg.SectorID)
+	rows, err := q.db.Query(ctx, listContactTickets,
+		arg.ContactID,
+		arg.SectorID,
+		arg.Sort,
+		arg.Direction,
+		arg.PageOffset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1038,13 +1096,30 @@ left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 where t.organization_id = $1
   and ($2::bigint is null or t.sector_id = $2)
-order by t.arrived_at desc, t.id desc
-limit 200
+order by
+    case when $3::text = 'protocol' and $4::text = 'asc' then lower(unaccent(t.protocol)) end asc nulls last,
+    case when $3::text = 'protocol' and $4::text = 'desc' then lower(unaccent(t.protocol)) end desc nulls last,
+    case when $3::text = 'arrived' and $4::text = 'asc' then t.arrived_at end asc nulls last,
+    case when $3::text = 'arrived' and $4::text = 'desc' then t.arrived_at end desc nulls last,
+    case when $3::text = 'contact' and $4::text = 'asc' then lower(unaccent(c.name)) end asc nulls last,
+    case when $3::text = 'contact' and $4::text = 'desc' then lower(unaccent(c.name)) end desc nulls last,
+    case when $3::text = 'sector' and $4::text = 'asc' then lower(unaccent(s.name)) end asc nulls last,
+    case when $3::text = 'sector' and $4::text = 'desc' then lower(unaccent(s.name)) end desc nulls last,
+    case when $3::text = 'assignee' and $4::text = 'asc' then lower(unaccent(u.name)) end asc nulls last,
+    case when $3::text = 'assignee' and $4::text = 'desc' then lower(unaccent(u.name)) end desc nulls last,
+    case when $3::text = 'status' and $4::text = 'asc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end asc nulls last,
+    case when $3::text = 'status' and $4::text = 'desc' then case when t.closure_type = 'cancelled' then 'cancelado' when t.status = 'queued' then 'na fila' when t.status = 'in_progress' then 'em atendimento' else 'encerrado' end end desc nulls last,
+    case when $4::text = 'asc' then t.id end asc,
+    case when $4::text = 'desc' then t.id end desc
+limit 20 offset $5
 `
 
 type ListOrganizationTicketsParams struct {
 	OrganizationID *int64
 	SectorID       *int64
+	Sort           string
+	Direction      string
+	PageOffset     int32
 }
 
 type ListOrganizationTicketsRow struct {
@@ -1062,9 +1137,14 @@ type ListOrganizationTicketsRow struct {
 	AssigneeName     *string
 }
 
-// History of the organization, newest first. A null sector lists every sector (admin).
 func (q *Queries) ListOrganizationTickets(ctx context.Context, arg ListOrganizationTicketsParams) ([]ListOrganizationTicketsRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationTickets, arg.OrganizationID, arg.SectorID)
+	rows, err := q.db.Query(ctx, listOrganizationTickets,
+		arg.OrganizationID,
+		arg.SectorID,
+		arg.Sort,
+		arg.Direction,
+		arg.PageOffset,
+	)
 	if err != nil {
 		return nil, err
 	}

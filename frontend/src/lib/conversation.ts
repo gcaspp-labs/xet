@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
+import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import { closedTodayKey, type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
@@ -152,18 +153,34 @@ export function useNotes(ticketId: number) {
   })
 }
 
-export function useContactHistory(contactId: number | undefined) {
+export type HistorySort = 'protocol' | 'arrived' | 'contact' | 'sector' | 'assignee' | 'status'
+export const defaultHistoryRequest: PageRequest<HistorySort> = {
+  page: 1,
+  sort: 'arrived',
+  direction: 'desc',
+}
+
+export function useContactHistory(contactId: number | undefined, request = defaultHistoryRequest) {
   return useQuery({
-    queryKey: [...historyKey, 'contact', contactId],
-    queryFn: () => api<HistoryEntry[]>(`/contacts/${contactId}/tickets`),
+    queryKey: [...historyKey, 'contact', contactId, request],
+    queryFn: () =>
+      api<Page<HistoryEntry>>(
+        `/contacts/${contactId}/tickets?${new URLSearchParams(pageParams(request))}`,
+      ),
     enabled: contactId !== undefined,
   })
 }
 
-export function useOrganizationHistory(organizationId: number | undefined) {
+export function useOrganizationHistory(
+  organizationId: number | undefined,
+  request = defaultHistoryRequest,
+) {
   return useQuery({
-    queryKey: [...historyKey, 'organization', organizationId],
-    queryFn: () => api<HistoryEntry[]>(`/organizations/${organizationId}/tickets`),
+    queryKey: [...historyKey, 'organization', organizationId, request],
+    queryFn: () =>
+      api<Page<HistoryEntry>>(
+        `/organizations/${organizationId}/tickets?${new URLSearchParams(pageParams(request))}`,
+      ),
     enabled: organizationId !== undefined,
   })
 }

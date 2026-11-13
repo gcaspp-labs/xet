@@ -87,7 +87,7 @@ func TestCancelFromTheQueueWithoutAssigning(t *testing.T) {
 	if detail.Status != http.StatusOK || detail.Body["closureType"] != "cancelled" {
 		t.Fatalf("detail: status %d, body %v", detail.Status, detail.Body)
 	}
-	history := e.DoList(http.MethodGet, fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
+	history := e.DoPageItems(fmt.Sprintf("/api/contacts/%d/tickets", c.ticket.ContactID), c.anaToken)
 	if len(history) != 1 || history[0]["closureType"] != "cancelled" {
 		t.Fatalf("history = %v", history)
 	}
