@@ -79,9 +79,6 @@ import {
   formatDuration,
   formatFileSize,
   formatMessageTime,
-  formatPhone,
-  organizationLabel,
-  ticketStatusLabel,
 } from '@/lib/format'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { cn } from '@/lib/utils'
@@ -854,11 +851,9 @@ function DetailsTab({
   user: User
   onRegister: () => void
 }) {
-  const status = ticketStatusLabel(ticket.status, ticket.closureType)
   const cancelled = ticket.closureType === 'cancelled'
   // O cancelado não lança o atendimento: não tem formulário de encerramento nem correções.
   const closed = ticket.status === 'closed' && !cancelled
-  const { data: modules = [] } = useTicketModules(ticket.id, closed)
   const { data: corrections } = useCorrections(ticket.id, closed)
   const row = (label: string, value: ReactNode) => (
     <div>
@@ -868,37 +863,13 @@ function DetailsTab({
   )
   return (
     <dl className="flex flex-col gap-3">
-      {row('Protocolo', <span className="mono-num">{ticket.protocol}</span>)}
-      {row('Situação', <Badge tone={status.tone}>{status.label}</Badge>)}
-      {row('Setor', ticket.sector.name)}
-      {row(
-        'Contato',
-        <>
-          {ticket.contact.name}
-          <span className="mono-num block caption text-ink-faint">
-            {ticket.contact.phone ? formatPhone(ticket.contact.phone) : 'Sem telefone'}
-          </span>
-          {needsRegistration(ticket) && (
-            <Button variant="outline" size="sm" className="mt-2" onClick={onRegister}>
-              Cadastrar contato
-            </Button>
-          )}
-        </>,
+      {/* PROTÓTIPO #162: protocolo, situação, setor, contato, órgão, transferência e responsável
+          saíram daqui; estão no resumo do topo. */}
+      {needsRegistration(ticket) && (
+        <Button variant="outline" size="sm" className="self-start" onClick={onRegister}>
+          Cadastrar contato
+        </Button>
       )}
-      {row(
-        'Órgão',
-        ticket.organization
-          ? organizationLabel(ticket.organization.name, ticket.organization.municipality.name)
-          : 'Não cadastrado',
-      )}
-      {ticket.next &&
-        row(
-          'Transferido para',
-          <>
-            {ticket.next.sectorName} · <span className="mono-num">{ticket.next.protocol}</span>
-          </>,
-        )}
-      {row('Responsável', ticket.assignee?.name ?? 'Sem responsável')}
       {row('Chegada', <span className="mono-num">{formatDateTime(ticket.arrivedAt)}</span>)}
       {ticket.assignedAt &&
         row('Assumido em', <span className="mono-num">{formatDateTime(ticket.assignedAt)}</span>)}
@@ -909,21 +880,7 @@ function DetailsTab({
         )}
       {closed && (
         <>
-          {row('Assunto', ticket.subject)}
-          {row(
-            'Resolução',
-            <span className="whitespace-pre-wrap break-words">{ticket.resolution}</span>,
-          )}
-          {row(
-            'Módulos',
-            <span className="flex flex-wrap gap-1">
-              {modules.map((module) => (
-                <Badge key={module.id} variant="tag">
-                  {module.name}
-                </Badge>
-              ))}
-            </span>,
-          )}
+          {/* PROTÓTIPO #162: assunto, resolução e módulos estão no resumo do topo. */}
           {row('Início', <span className="mono-num">{formatDateTime(ticket.startedAt)}</span>)}
           {ticket.endedAt &&
             row('Fim', <span className="mono-num">{formatDateTime(ticket.endedAt)}</span>)}
