@@ -68,7 +68,7 @@ export function TicketHistoryList({
               </Badge>
             </div>
             <p className="caption text-ink-faint">
-              {entry.sectorName} · {entry.contactName}
+              {entry.sectorName}
               {entry.organizationName &&
                 ` · ${organizationLabel(entry.organizationName, entry.municipalityName)}`}
             </p>

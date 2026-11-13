@@ -6,6 +6,7 @@ import {
   CircleAlert,
   CircleCheck,
   FileText,
+  History,
   MessagesSquare,
   Mic,
   Paperclip,
@@ -1043,6 +1044,7 @@ function HistoryTab({ ticket }: { ticket: TicketDetail }) {
               history.open({ kind: 'contact', id: ticket.contact.id, name: ticket.contact.name })
             }
           >
+            <History strokeWidth={1.7} aria-hidden />
             Ver os {contact.data.total} chamados
           </Button>
         )}
@@ -1070,6 +1072,7 @@ function HistoryTab({ ticket }: { ticket: TicketDetail }) {
                 })
               }
             >
+              <History strokeWidth={1.7} aria-hidden />
               Ver os {organization.data.total} chamados
             </Button>
           )}
