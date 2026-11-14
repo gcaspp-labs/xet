@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { expect, request as apiRequest, test } from '@playwright/test'
+import { expect, type Locator, request as apiRequest, test } from '@playwright/test'
 import {
   admin,
   clearSession,
@@ -126,6 +126,16 @@ async function prepare(baseURL: string, subjects: string[], tickets: number) {
   }
   await agentApi.dispose()
   return { sector, agent, supervisor, contacts: contacts.map((contact) => contact.name) }
+}
+
+// Antecipa o início em um minuto: uma alteração que não mexe no assunto nem na resolução.
+async function startEarlier(sheet: Locator) {
+  const start = sheet.getByLabel('Início')
+  const earlier = new Date(new Date(await start.inputValue()).getTime() - 60_000)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  await start.fill(
+    `${earlier.getFullYear()}-${pad(earlier.getMonth() + 1)}-${pad(earlier.getDate())}T${pad(earlier.getHours())}:${pad(earlier.getMinutes())}`,
+  )
 }
 
 test('sugestões dependem dos módulos marcados sem apagar o texto', async ({ page, baseURL }) => {
@@ -630,8 +640,8 @@ test('a correção só pergunta quando o assunto é alterado', async ({ page, ba
   await page.goto(ticketUrl)
   await page.getByRole('button', { name: 'Corrigir' }).click()
   const sheet = page.getByRole('dialog', { name: 'Corrigir atendimento' })
-  await sheet.getByLabel('Falou com').fill('Rita, filha')
-  await sheet.getByLabel('Motivo da correção').fill('Faltou quem atendeu.')
+  await startEarlier(sheet)
+  await sheet.getByLabel('Motivo da correção').fill('Início registrado errado.')
   await sheet.getByRole('button', { name: 'Salvar correção' }).click()
   await expect(page.getByText('Atendimento corrigido')).toBeVisible()
   await expect(sheet).toHaveCount(0)
@@ -1057,8 +1067,8 @@ test('a correção só pergunta sobre a solução quando a resolução é altera
   await page.goto(ticketUrl)
   await page.getByRole('button', { name: 'Corrigir' }).click()
   const sheet = page.getByRole('dialog', { name: 'Corrigir atendimento' })
-  await sheet.getByLabel('Falou com').fill('Rita, filha')
-  await sheet.getByLabel('Motivo da correção').fill('Faltou quem atendeu.')
+  await startEarlier(sheet)
+  await sheet.getByLabel('Motivo da correção').fill('Início registrado errado.')
   await sheet.getByRole('button', { name: 'Salvar correção' }).click()
   await expect(page.getByText('Atendimento corrigido')).toBeVisible()
   await expect(sheet).toHaveCount(0)

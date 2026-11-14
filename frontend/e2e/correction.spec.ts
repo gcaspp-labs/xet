@@ -99,7 +99,6 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
       organizationId: 1,
       startedAt: new Date(Date.now() - 3_600_000).toISOString(),
       endedAt: new Date(Date.now() - 60_000).toISOString(),
-      spokeWith: '',
       reason: 'Teste',
     },
   })
@@ -115,7 +114,7 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   await expect(sheet.getByRole('checkbox', { name: 'Folha' })).toBeChecked()
   await sheet.getByLabel('Assunto').fill('Segunda via do contracheque')
   await sheet.getByRole('checkbox', { name: 'Patrimônio' }).click()
-  await sheet.getByLabel('Falou com').fill('Rita, filha')
+  await expect(sheet.getByLabel('Falou com')).toHaveCount(0)
   await sheet.getByRole('button', { name: 'Salvar correção' }).click()
   await expect(sheet).toContainText('Informe o motivo da correção.')
 
@@ -127,14 +126,14 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   await expect(sheet).toHaveCount(0)
 
   // Os detalhes mostram os dados corrigidos e o histórico de alterações.
-  await expect(details).toContainText('Rita, filha')
+  await expect(details).not.toContainText('Falou com')
   const history = details.getByRole('list', { name: 'Histórico de alterações' })
   const agentName = agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
   await expect(history).toContainText(agentName)
   await expect(history).toContainText('Motivo: Assunto registrado errado.')
   await expect(history).toContainText('Contracheque → Segunda via do contracheque')
   await expect(history).toContainText('Folha, Patrimônio → Folha')
-  await expect(history).toContainText('Não informado → Rita, filha')
+  await expect(history).not.toContainText('Falou com')
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(
     conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
@@ -153,6 +152,50 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   await signIn(page, supervisor, userPassword)
   await page.goto(`/chamados/${ticketId}`)
   await expect(page.getByRole('button', { name: 'Corrigir' })).toBeVisible()
+})
+
+// Até a migração que apaga os dados, a API ainda devolve o "falou com" de correções
+// antigas (dados fictícios): a tela esconde essas mudanças e a correção que só mudou isso.
+test('o histórico de alterações esconde o "falou com" de correções antigas', async ({
+  page,
+  baseURL,
+}) => {
+  const { ticketId, agent } = await closedTicket(baseURL!)
+  const actor = { id: 1, name: 'Atendente Fictício' }
+  await page.route(`**/api/tickets/${ticketId}/corrections`, (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 9001,
+          createdAt: '2026-11-01T12:00:00Z',
+          actor,
+          reason: 'Assunto e quem atendeu.',
+          changes: [
+            { field: 'subject', from: 'Contracheque', to: 'Segunda via' },
+            { field: 'spoke_with', from: null, to: 'Maria, esposa' },
+          ],
+        },
+        {
+          id: 9002,
+          createdAt: '2026-11-02T12:00:00Z',
+          actor,
+          reason: 'Só quem atendeu.',
+          changes: [{ field: 'spoke_with', from: 'Maria, esposa', to: 'Rita, filha' }],
+        },
+      ],
+    }),
+  )
+  await signIn(page, agent, userPassword)
+  await page.goto(`/chamados/${ticketId}`)
+  const history = page
+    .getByRole('region', { name: 'Chamado', exact: true })
+    .getByRole('list', { name: 'Histórico de alterações' })
+  await expect(history.getByRole('listitem')).toHaveCount(1)
+  await expect(history).toContainText('Motivo: Assunto e quem atendeu.')
+  await expect(history).toContainText('Contracheque → Segunda via')
+  await expect(history).not.toContainText('Falou com')
+  await expect(history).not.toContainText('Maria')
+  await expect(history).not.toContainText('Só quem atendeu.')
 })
 
 test('correção exige marcar módulo ativo e preserva os módulos antigos', async ({

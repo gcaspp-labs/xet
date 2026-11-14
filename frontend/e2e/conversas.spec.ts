@@ -133,6 +133,9 @@ test('assumir pela fila abre o chamado e permite consultar assuntos', async ({
   await expect(page.getByRole('tab', { name: 'Fila', exact: true })).toHaveText('Fila')
   await otherContext.close()
   await page.getByRole('button', { name: 'Devolver à fila' }).click()
+  await expect(page.getByRole('dialog', { name: 'Devolver à fila' })).toContainText(
+    'mensagens e histórico continuam no chamado.',
+  )
   await page
     .getByRole('dialog', { name: 'Devolver à fila' })
     .getByRole('button', { name: 'Devolver à fila' })

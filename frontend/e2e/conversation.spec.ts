@@ -124,24 +124,21 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   expect(blocked.status()).toBe(403)
   await expect(conversation).not.toContainText('Resposta indevida')
 
-  // Notas internas: qualquer pessoa do setor escreve; o responsável vê sem recarregar.
-  await other.getByRole('tab', { name: 'Notas' }).click()
-  await other.getByLabel('Nova nota').fill('Cliente pediu retorno até sexta.')
-  await other.getByRole('button', { name: 'Adicionar nota' }).click()
-  await expect(other.getByText('Nota adicionada')).toBeVisible()
-  await page.getByRole('tab', { name: 'Notas' }).click()
-  await expect(page.getByRole('list', { name: 'Notas internas' })).toContainText(
-    'Cliente pediu retorno até sexta.',
-  )
-
-  // "Falou com", só pelo responsável.
-  await page.getByRole('tab', { name: 'Detalhes' }).click()
-  await page.getByLabel('Falou com').fill('Maria, esposa do titular')
-  await page.getByRole('button', { name: 'Salvar' }).click()
-  await expect(page.getByText('Falou com salvo')).toBeVisible()
-  await other.getByRole('tab', { name: 'Detalhes' }).click()
-  await expect(other.getByText('Maria, esposa do titular')).toBeVisible()
-  await expect(other.getByLabel('Falou com')).toHaveCount(0)
+  // Notas internas e "Falou com" saíram: sem aba, sem campo e sem as rotas.
+  for (const screen of [page, other]) {
+    await expect(screen.getByRole('tab', { name: 'Notas' })).toHaveCount(0)
+    await screen.getByRole('tab', { name: 'Detalhes' }).click()
+    await expect(screen.getByLabel('Falou com')).toHaveCount(0)
+    await expect(screen.getByText('Falou com')).toHaveCount(0)
+  }
+  expect((await page.request.get(`/api/tickets/${ticketId}/notes`)).status()).toBe(404)
+  expect(
+    (
+      await page.request.put(`/api/tickets/${ticketId}/spoke-with`, {
+        data: { spokeWith: 'Maria' },
+      })
+    ).status(),
+  ).toBe(404)
 
   // Histórico do contato mostra este chamado.
   await page.getByRole('tab', { name: 'Histórico' }).click()

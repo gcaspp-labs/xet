@@ -226,10 +226,11 @@ test('botão de voltar leva da conversa à lista de atendimentos', async ({
   await page.getByRole('link', { name: 'Clara Cliente' }).click()
   await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(page).toHaveURL(/\/chamados\/\d+$/)
-  for (const name of ['Detalhes', 'Notas', 'Histórico']) {
+  for (const name of ['Detalhes', 'Histórico']) {
     await expect(page.getByRole('tab', { name, exact: true })).toBeVisible()
   }
-  await expect(page.getByText('Falou com', { exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Notas', exact: true })).toHaveCount(0)
+  await expect(page.getByText('Falou com', { exact: true })).toHaveCount(0)
   await expect(page.locator(sidebar).getByRole('link', { name: 'Atendimentos' })).toHaveAttribute(
     'data-active',
     '',
