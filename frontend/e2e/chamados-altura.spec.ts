@@ -1,4 +1,10 @@
-import { expect, type Locator, type Page } from '@playwright/test'
+import {
+  type ElementHandle,
+  expect,
+  type Locator,
+  type Page,
+  type WebSocketRoute,
+} from '@playwright/test'
 import { admin, seedSector, signIn, test, unique, userPassword } from './fixtures'
 
 // Altura da janela na tela Chamados: a página não rola, só as listas e o histórico. As medidas
@@ -62,9 +68,25 @@ async function expectInViewport(page: Page, locator: Locator) {
   expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height)
 }
 
-// O elemento rola sozinho: tem conteúdo além do espaço e o último item é alcançável sem deslocar a
-// página.
-async function expectScrollsAlone(page: Page, scroller: Locator, last: Locator) {
+// A área que rola é o elemento mais próximo (ele mesmo ou um ancestral) com rolagem vertical pelo
+// estilo calculado, sem depender de nomes de classes.
+async function scrollerOf(locator: Locator) {
+  const handle = await locator.evaluateHandle((element) => {
+    for (let node: Element | null = element; node; node = node.parentElement) {
+      const overflow = getComputedStyle(node).overflowY
+      if (overflow === 'auto' || overflow === 'scroll') return node
+    }
+    return null
+  })
+  const element = handle.asElement()
+  expect(element).not.toBeNull()
+  return element as ElementHandle<HTMLElement>
+}
+
+// A área em volta de `inside` rola sozinha: tem conteúdo além do espaço e o último item é
+// alcançável sem deslocar a página.
+async function expectScrollsAlone(page: Page, inside: Locator, last: Locator) {
+  const scroller = await scrollerOf(inside)
   const overflows = await scroller.evaluate(
     (element) => element.scrollHeight > element.clientHeight,
   )
@@ -76,11 +98,18 @@ async function expectScrollsAlone(page: Page, scroller: Locator, last: Locator) 
   expect(await pageScrolls(page)).toBe(false)
 }
 
-// A coluna que rola é o ancestral mais próximo com rolagem vertical.
-function scrollerOf(locator: Locator) {
-  return locator.locator(
-    'xpath=ancestor-or-self::*[contains(concat(" ", normalize-space(@class), " "), " overflow-y-auto ")][1]',
-  )
+// Enche a fila do setor com chamados além da altura da janela.
+async function seedLongQueue(page: Page, sectorId: number) {
+  const { id } = unique()
+  for (let i = 0; i < 16; i++) {
+    await receive(
+      page,
+      sectorId,
+      `5511${id}${i.toString().padStart(2, '0')}`,
+      `Fila ${id} ${i}`,
+      'Olá',
+    )
+  }
 }
 
 async function prepare(page: Page, baseURL: string, who: 'agent' | 'admin' = 'agent') {
@@ -115,7 +144,7 @@ test.describe('desktop 1440×900', () => {
     await expect(mine.getByRole('link').nth(13)).toBeVisible()
     await expectScrollsAlone(page, mine, mine.getByRole('link').last())
     const history = conversation.getByRole('list')
-    await expectScrollsAlone(page, scrollerOf(history), history.getByRole('listitem').last())
+    await expectScrollsAlone(page, history, history.getByRole('listitem').last())
     expect(await pageScrolls(page)).toBe(false)
     await expectInViewport(page, page.getByRole('textbox', { name: 'Mensagem' }))
   })
@@ -138,22 +167,13 @@ test.describe('desktop 1440×900', () => {
   test('a fila rola sozinha quando tem muitos chamados', async ({ page, baseURL }) => {
     const { sector, agent } = await seedSector(baseURL!)
     await signIn(page, agent, userPassword)
-    const { id } = unique()
-    for (let i = 0; i < 16; i++) {
-      await receive(
-        page,
-        sector.id,
-        `5511${id}${i.toString().padStart(2, '0')}`,
-        `Fila ${id} ${i}`,
-        'Olá',
-      )
-    }
+    await seedLongQueue(page, sector.id)
     await page.goto('/chamados')
     const queue = page.getByRole('region', { name: 'Fila e assuntos' })
     const buttons = queue.getByRole('button', { name: /^Assumir chamado de/ })
     await expect(buttons.first()).toBeVisible()
     expect(await pageScrolls(page)).toBe(false)
-    await expectScrollsAlone(page, scrollerOf(buttons.first()), buttons.last())
+    await expectScrollsAlone(page, buttons.first(), buttons.last())
   })
 })
 
@@ -173,7 +193,7 @@ test.describe('1024×768', () => {
     expect(await pageScrolls(page)).toBe(false)
     await expectInViewport(page, page.getByRole('textbox', { name: 'Mensagem' }))
     const history = conversation.getByRole('list')
-    await expectScrollsAlone(page, scrollerOf(history), history.getByRole('listitem').last())
+    await expectScrollsAlone(page, history, history.getByRole('listitem').last())
 
     await selector.getByRole('tab', { name: /^Fila/ }).click()
     const queue = page.getByRole('region', { name: 'Fila e assuntos' })
@@ -181,6 +201,72 @@ test.describe('1024×768', () => {
     await expect(conversation).toBeHidden()
     expect(await pageScrolls(page)).toBe(false)
   })
+
+  test('a Fila com muitos chamados rola sozinha e o último item é alcançável', async ({
+    page,
+    baseURL,
+  }) => {
+    const { sector, agent } = await seedSector(baseURL!)
+    await signIn(page, agent, userPassword)
+    await seedLongQueue(page, sector.id)
+    await page.goto('/chamados')
+    const selector = page.getByRole('tablist', { name: 'Mostrar' })
+    await selector.getByRole('tab', { name: /^Fila/ }).click()
+    const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+    const buttons = queue.getByRole('button', { name: /^Assumir chamado de/ })
+    await expect(buttons).toHaveCount(16)
+    expect(await pageScrolls(page)).toBe(false)
+    await expectScrollsAlone(page, buttons.first(), buttons.last())
+    await expect(buttons.last()).toBeInViewport()
+  })
+})
+
+test.describe('conexão em tempo real interrompida', () => {
+  // Derruba o WebSocket e mantém a API: depois da primeira conexão, cada nova tentativa fecha
+  // logo. O aviso de reconexão ocupa altura acima da tela Chamados.
+  async function dropRealtime(page: Page) {
+    const sockets: WebSocketRoute[] = []
+    let dropped = false
+    await page.routeWebSocket(/\/api\/ws$/, (ws) => {
+      if (dropped) {
+        void ws.close({ code: 1006 })
+        return
+      }
+      sockets.push(ws)
+      ws.connectToServer()
+    })
+    return async () => {
+      dropped = true
+      await expect.poll(() => sockets.length).toBeGreaterThan(0)
+      await sockets[sockets.length - 1].close({ code: 1006 })
+    }
+  }
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`com o aviso, a página não rola e o campo Mensagem fica na janela em ${viewport.width}×${viewport.height}`, async ({
+      page,
+      baseURL,
+    }) => {
+      await page.setViewportSize(viewport)
+      const drop = await dropRealtime(page)
+      const { longTicketId } = await prepare(page, baseURL!)
+      await page.goto(`/chamados/${longTicketId}`)
+      const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+      await expect(conversation).toContainText('Mensagem número 39 do histórico')
+      await drop()
+      const note = page
+        .getByRole('alert')
+        .filter({ hasText: 'Atualização em tempo real interrompida.' })
+      await expect(note).toBeVisible()
+      await expect.poll(() => pageScrolls(page)).toBe(false)
+      await expectInViewport(page, page.getByRole('textbox', { name: 'Mensagem' }))
+      const history = conversation.getByRole('list')
+      await expectScrollsAlone(page, history, history.getByRole('listitem').last())
+    })
+  }
 })
 
 test.describe('celular 390×844', () => {

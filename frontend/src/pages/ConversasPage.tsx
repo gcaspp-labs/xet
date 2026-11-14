@@ -146,7 +146,7 @@ export default function ConversasPage() {
   if (!user || (closed && action === '')) return null
 
   return (
-    <div className="flex h-[calc(100dvh-var(--header-height))] flex-col overflow-clip [&>header]:shrink-0">
+    <div className="flex h-[calc(100dvh-var(--header-height)-var(--realtime-note-height,0px))] flex-col overflow-clip [&>header]:shrink-0">
       <Topbar
         wrapTitle
         breadcrumb={ticket ? `Chamados · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
