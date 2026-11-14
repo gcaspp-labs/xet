@@ -291,7 +291,7 @@ test('em "Maior", na largura do celular, o aviso com ação cabe na tela', async
     .click()
 
   const toast = page.locator('[data-sonner-toast]', { hasText: 'Chamado assumido' })
-  const action = toast.getByRole('link', { name: 'Abrir chamado' })
+  const action = toast.getByRole('link', { name: 'Abrir chamado', exact: true })
   await expect(action).toBeVisible()
   const [toastBox, actionBox] = [await toast.boundingBox(), await action.boundingBox()]
   expect(toastBox!.x).toBeGreaterThanOrEqual(0)

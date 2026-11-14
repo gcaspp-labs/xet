@@ -144,7 +144,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   ).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(details).toContainText('Encerrado')
   await expect(details).toContainText('Contracheque')
   await expect(details).toContainText('Enviada a segunda via.')
@@ -205,7 +205,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
     hasText: `${agentName} cancelou o chamado`,
   })
   await expect(entry).toContainText('Motivo: Golpe do falso boleto.')
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(details).toContainText('Cancelado')
   await expect(details).toContainText('Cancelado em')
   await expect(details).not.toContainText('Histórico de alterações')
@@ -371,7 +371,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   await page.getByRole('link', { name: profile }).click()
   await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(conversation).toContainText('Contato não cadastrado')
   await details.getByRole('button', { name: 'Cadastrar contato' }).click()
 
@@ -537,7 +537,7 @@ test('o link do aviso não troca de chamado com a janela aberta', async ({
     .getByRole('button', { name: `Assumir chamado de ${second}` })
     .click()
   const notice = page.locator('[data-sonner-toast]', { hasText: 'Chamado assumido' })
-  const link = notice.getByRole('link', { name: 'Abrir chamado' })
+  const link = notice.getByRole('link', { name: 'Abrir chamado', exact: true })
   // Sem janela aberta, o link do aviso continua disponível.
   await expect(link).toBeVisible()
   await bell.click()

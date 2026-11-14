@@ -215,7 +215,7 @@ test('assumir pela lista não muda a tela nem apaga o texto em digitação', asy
   await queue.getByRole('button', { name: 'Assumir chamado de Bia Fila' }).click()
   await expect(notice).toBeVisible()
   // Com o mouse em cima, o aviso não some antes de clicar no link.
-  const openConversation = page.getByRole('link', { name: 'Abrir chamado' })
+  const openConversation = page.getByRole('link', { name: 'Abrir chamado', exact: true })
   await openConversation.hover()
   expect(page.url()).toBe(openedAt)
   await expect(page.getByRole('heading', { name: 'Ana Aberta' })).toBeVisible()
@@ -248,7 +248,7 @@ test('assumir pela lista o chamado aberto mostra o novo responsável', async ({
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Caio Aberto' }).click()
   await page.getByRole('link', { name: 'Ver chamado' }).click()
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(details).toContainText('Sem responsável')
   const openedAt = page.url()
 

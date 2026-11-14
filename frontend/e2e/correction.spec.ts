@@ -84,7 +84,7 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   baseURL,
 }) => {
   const { ticketId, agent, otherAgent, supervisor } = await closedTicket(baseURL!)
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
 
   // O atendente que não encerrou não vê a correção, e a API o bloqueia.
   await signIn(page, otherAgent, userPassword)

@@ -193,7 +193,7 @@ await journey('transfer', async (t) => {
       `Transferido de ${sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
     )
     const previous = destinationPage
-      .getByRole('region', { name: 'Chamado' })
+      .getByRole('region', { name: 'Chamado', exact: true })
       .getByRole('region', { name: 'Chamado anterior' })
     await expect(previous).toContainText(sector.name)
     await expect(previous).toContainText('Folha de março')

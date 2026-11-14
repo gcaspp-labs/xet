@@ -118,7 +118,7 @@ await journey('close', async (t) => {
     ).toBeVisible()
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
     await expect(agentPage.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-    const details = agentPage.getByRole('region', { name: 'Chamado' })
+    const details = agentPage.getByRole('region', { name: 'Chamado', exact: true })
     await expect(details).toContainText('Contracheque')
     await expect(details).toContainText('Enviada a segunda via.')
     await expect(details).toContainText('Folha')

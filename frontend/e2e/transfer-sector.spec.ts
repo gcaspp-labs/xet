@@ -88,7 +88,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
 
   // A origem fica encerrada e mostra para onde foi.
   await doneRow.getByRole('link', { name: contact }).click()
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(details).toContainText('Encerrado')
   await expect(details).toContainText('Transferido para')
   await expect(details).toContainText(destination.sector.name)
