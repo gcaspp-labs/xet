@@ -11,9 +11,9 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 - [jornada] Pela API, o responsável anterior recebe 403.
 - [jornada] O supervisor transfere o chamado de outra pessoa.
 - [jornada] A transferência para outro setor exige o formulário, encerra a origem e cria um chamado na fila do destino.
-- [jornada] O destino vê a origem e a conversa anterior, assume e responde pelo adaptador falso.
+- [jornada] O destino vê a origem e o chamado anterior, assume e responde pelo adaptador falso.
 - [não coberto] Devolver à fila (`return.spec.ts`).
-- [não coberto] Abrir a conversa anterior pelo destino, sem poder agir nela (`transfer-sector.spec.ts`).
+- [não coberto] Abrir o chamado anterior pelo destino, sem poder agir nela (`transfer-sector.spec.ts`).
 - [não coberto] Recusa da transferência para um setor onde o contato já tem chamado aberto (só testes de integração).
 - [manual] Primeira mensagem do destino chegando ao celular do contato pelo número do destino. Exige um segundo número de teste.
 
@@ -21,7 +21,7 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 
 **No mesmo setor:**
 
-1. Com o chamado assumido, o responsável clica em "Transferir" no alto da conversa.
+1. Com o chamado assumido, o responsável clica em "Transferir" no alto do chamado.
 2. Escolhe a pessoa em "Transferir para" e confirma.
 3. O aviso "Chamado transferido" aparece, e a caixa de resposta some da tela dele. Na tela do novo responsável, ela aparece sem recarregar.
 

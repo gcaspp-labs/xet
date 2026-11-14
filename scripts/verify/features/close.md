@@ -30,7 +30,7 @@ Encerrar não depende do WhatsApp real: a matriz de `docs/pilot-validation.md` m
 
 **Cancelar:**
 
-1. Na conversa, clica em "Cancelar chamado", informa o motivo e confirma.
+1. No chamado, clica em "Cancelar chamado", informa o motivo e confirma.
 2. A tela volta ao painel, com a linha marcada "Cancelado".
 
 ## Driving it
