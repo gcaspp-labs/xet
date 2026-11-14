@@ -48,3 +48,4 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 ## Histórico
 
 - 2026-11-11: regras migradas do `spec.md` (Formulário de encerramento; Encerramento, retorno e correções).
+- 2026-11-14: campo Início passa a dizer "chamado aberto" em vez de "conversa iniciada" (padronização dos nomes: Chamados, Atendimentos; #185). Só texto.
