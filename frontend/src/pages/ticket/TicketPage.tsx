@@ -928,7 +928,7 @@ function TransferChain({ ticket }: { ticket: TicketDetail }) {
       <span
         aria-hidden
         className={cn(
-          'absolute top-1.5 -left-[18px] size-2.5 rounded-full border-2',
+          'absolute top-1.5 -left-4.5 size-2.5 rounded-full border-2',
           current ? 'border-primary bg-primary' : 'border-line bg-card',
         )}
       />

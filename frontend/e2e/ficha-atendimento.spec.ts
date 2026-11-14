@@ -112,9 +112,9 @@ test('a ficha do atendimento encerrado é só leitura e o Corrigir fica visível
   await details(page).getByRole('tab', { name: 'Detalhes' }).click()
 
   // A correção abre na própria ficha, sem trocar de endereço, e a ficha continua só leitura.
-  const corrigir = page.getByRole('button', { name: 'Corrigir', exact: true })
-  await expect(corrigir).toBeVisible()
-  await corrigir.click()
+  const correctButton = page.getByRole('button', { name: 'Corrigir', exact: true })
+  await expect(correctButton).toBeVisible()
+  await correctButton.click()
   const sheet = page.getByRole('dialog', { name: 'Corrigir atendimento' })
   await expect(sheet).toBeVisible()
   await expect(page).toHaveURL(new RegExp(`/atendimentos/${ticketId}$`))
