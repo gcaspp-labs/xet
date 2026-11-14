@@ -202,7 +202,7 @@ Opcional, com no máximo um módulo por setor do contato. Tirar um setor do cont
 
 ## Atendimento
 
-Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-labs/xet/issues/173)). Até a migração da #175, a tabela `internal_notes` e a coluna `tickets.spoke_with` continuam no banco, sem uso: nada as lê nem grava, e as correções antigas ainda guardam `spoke_with` em `audit_logs`. A migração apaga os três.
+Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-labs/xet/issues/173)): a migração 00026 apagou a tabela `internal_notes`, a coluna `tickets.spoke_with` e o `spoke_with` das correções em `audit_logs` (o registro cuja única alteração era esse campo foi apagado).
 
 ### `tickets` — Chamado
 
