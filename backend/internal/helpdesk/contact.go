@@ -28,7 +28,7 @@ func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactI
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		var err error
-		open, err = q.GetOpenTicketsOfContactForUpdate(ctx, contactID)
+		open, err = db.AsTickets(q.GetOpenTicketsOfContactForUpdate(ctx, contactID))
 		if err != nil {
 			return fmt.Errorf("lock open tickets: %w", err)
 		}
@@ -40,7 +40,7 @@ func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactI
 			if t.OrganizationID != nil {
 				continue
 			}
-			updated, err := q.SetTicketOrganization(ctx, db.SetTicketOrganizationParams{ID: t.ID, OrganizationID: contact.OrganizationID})
+			updated, err := db.AsTicket(q.SetTicketOrganization(ctx, db.SetTicketOrganizationParams{ID: t.ID, OrganizationID: contact.OrganizationID}))
 			if err != nil {
 				return fmt.Errorf("set ticket organization: %w", err)
 			}
@@ -72,7 +72,7 @@ func (s *Service) SaveContactName(ctx context.Context, contactID int64, name str
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		var err error
-		open, err = q.GetOpenTicketsOfContactForUpdate(ctx, contactID)
+		open, err = db.AsTickets(q.GetOpenTicketsOfContactForUpdate(ctx, contactID))
 		if err != nil {
 			return fmt.Errorf("lock open tickets: %w", err)
 		}

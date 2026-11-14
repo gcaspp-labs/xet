@@ -39,7 +39,7 @@ func (c correction) data(reason string) map[string]any {
 		"subject": "Contracheque", "resolution": "Enviada a segunda via.",
 		"moduleIds": c.modules, "organizationId": c.org,
 		"subjectModuleId": c.modules[0], "solutionModuleId": c.modules[0],
-		"startedAt": c.startedAt, "endedAt": c.endedAt, "spokeWith": "", "reason": reason,
+		"startedAt": c.startedAt, "endedAt": c.endedAt, "reason": reason,
 	}
 }
 
@@ -63,6 +63,7 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 	body["moduleIds"] = []int64{c.modules[1]}
 	body["startedAt"] = newStart
 	body["endedAt"] = newEnd
+	// "Falou com" saiu do sistema: o campo é ignorado e nada dele é gravado.
 	body["spokeWith"] = "Maria, esposa"
 	resp := e.correct(c.ticket.ID, c.anaToken, body)
 	if resp.Status != http.StatusOK || resp.Body["status"] != "closed" {
@@ -75,9 +76,19 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 	// Os dados corrigidos substituem os do encerramento; o chamado continua encerrado por Ana.
 	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil).Body
 	if detail["subject"] != "Segunda via do contracheque" || detail["resolution"] != "Enviada a segunda via." ||
-		detail["organization"].(map[string]any)["name"] != "Câmara de Campinas" || detail["spokeWith"] != "Maria, esposa" ||
+		detail["organization"].(map[string]any)["name"] != "Câmara de Campinas" ||
 		detail["closedBy"].(map[string]any)["id"] != float64(c.ana.ID) {
 		t.Fatalf("detail = %v", detail)
+	}
+	if _, ok := detail["spokeWith"]; ok {
+		t.Fatalf("detail has spokeWith: %v", detail)
+	}
+	var spokeWith *string
+	if err := e.Pool.QueryRow(t.Context(), "select spoke_with from tickets where id = $1", c.ticket.ID).Scan(&spokeWith); err != nil {
+		t.Fatal(err)
+	}
+	if spokeWith != nil {
+		t.Fatalf("spoke_with recorded: %q", *spokeWith)
 	}
 	var startedAt, endedAt time.Time
 	if err := e.Pool.QueryRow(t.Context(), "select started_at, ended_at from tickets where id = $1", c.ticket.ID).
@@ -107,16 +118,18 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 	}
 	actions, changes := c.ticketActions()
 	last := changes[len(changes)-1]
-	if actions[len(actions)-1] != "ticket_corrected" || len(last) != 6 {
+	if actions[len(actions)-1] != "ticket_corrected" || len(last) != 5 {
 		t.Fatalf("audit = %v, %v", actions, last)
 	}
 	if _, ok := last["resolution"]; ok {
 		t.Fatalf("unchanged resolution recorded: %v", last)
 	}
 	if last["subject"]["from"] != "Contracheque" || last["subject"]["to"] != "Segunda via do contracheque" ||
-		last["organization_id"]["from"] != float64(c.org) || last["organization_id"]["to"] != float64(other) ||
-		last["spoke_with"]["from"] != nil || last["spoke_with"]["to"] != "Maria, esposa" {
+		last["organization_id"]["from"] != float64(c.org) || last["organization_id"]["to"] != float64(other) {
 		t.Fatalf("changes = %v", last)
+	}
+	if _, ok := last["spoke_with"]; ok {
+		t.Fatalf("spoke_with recorded in the audit: %v", last)
 	}
 	if from, _ := last["module_ids"]["from"].([]any); len(from) != 2 {
 		t.Fatalf("module changes = %v", last["module_ids"])
@@ -133,7 +146,7 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 		m := ch.(map[string]any)
 		fields[m["field"].(string)] = m
 	}
-	if len(fields) != 6 || fields["organization"]["from"] != "Prefeitura de Campinas — Itu" || fields["organization"]["to"] != "Câmara de Campinas — Itu" {
+	if len(fields) != 5 || fields["organization"]["from"] != "Prefeitura de Campinas — Itu" || fields["organization"]["to"] != "Câmara de Campinas — Itu" {
 		t.Fatalf("history changes = %v", fields)
 	}
 	if from, to := fields["modules"]["from"].([]any), fields["modules"]["to"].([]any); len(from) != 2 || from[0] != "Folha" || len(to) != 1 || to[0] != "Patrimônio" {
@@ -142,6 +155,23 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 	if from, _ := time.Parse(time.RFC3339Nano, fields["started_at"]["from"].(string)); !from.Equal(c.startedAt) {
 		t.Fatalf("start history = %v", fields["started_at"])
 	}
+	if _, ok := fields["spoke_with"]; ok {
+		t.Fatalf("spoke_with in the history: %v", fields)
+	}
+
+	// Correção antiga (dados fictícios) com "falou com": a API a devolve como sempre, até a migração que a apaga.
+	if _, err := e.Pool.Exec(t.Context(), `
+		insert into audit_logs (ticket_id, entity_type, entity_id, action, actor_id, reason, changes)
+		values ($1, 'ticket', $1, 'ticket_corrected', $2, 'Quem atendeu.', '{"spoke_with": {"from": null, "to": "Maria, esposa"}}')`,
+		c.ticket.ID, c.ana.ID); err != nil {
+		t.Fatal(err)
+	}
+	history = e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/corrections", c.ticket.ID), c.biaToken)
+	old, _ := history[len(history)-1]["changes"].([]any)
+	if len(history) != 2 || len(old) != 1 || old[0].(map[string]any)["field"] != "spoke_with" || old[0].(map[string]any)["to"] != "Maria, esposa" {
+		t.Fatalf("old correction = %v", history)
+	}
+
 	logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.biaToken)
 	if l := logs[len(logs)-1]; l["action"] != "ticket_corrected" || l["actor"].(map[string]any)["name"] != "ana@exemplo.com" {
 		t.Fatalf("timeline = %v", logs)
@@ -253,8 +283,8 @@ func TestCorrectionFollowsTheClosingRules(t *testing.T) {
 		}
 	}
 
-	// Sem nenhuma alteração, a correção é recusada e nada é gravado.
-	resp := e.correct(c.ticket.ID, c.anaToken, with(base, "subject", "  Contracheque "))
+	// Sem nenhuma alteração, a correção é recusada e nada é gravado. Só o "falou com", que saiu do sistema, não conta como alteração.
+	resp := e.correct(c.ticket.ID, c.anaToken, with(with(base, "subject", "  Contracheque "), "spokeWith", "Maria"))
 	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Nenhum dado foi alterado." {
 		t.Fatalf("no changes: status %d, body %v", resp.Status, resp.Body)
 	}

@@ -32,7 +32,7 @@ func (s *Service) Cancel(ctx context.Context, actor auth.User, ticketID int64, r
 	var ticket db.Ticket
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := q.GetTicketForUpdate(ctx, ticketID)
+		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
@@ -43,7 +43,7 @@ func (s *Service) Cancel(ctx context.Context, actor auth.User, ticketID int64, r
 			return ErrCannotCancel
 		}
 
-		ticket, err = q.CancelTicket(ctx, db.CancelTicketParams{ID: t.ID, ActorID: actor.ID})
+		ticket, err = db.AsTicket(q.CancelTicket(ctx, db.CancelTicketParams{ID: t.ID, ActorID: actor.ID}))
 		if err != nil {
 			return fmt.Errorf("cancel ticket: %w", err)
 		}

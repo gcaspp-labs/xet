@@ -48,7 +48,7 @@ export function ReturnSheet({
       open={open}
       onOpenChange={changeOpen}
       title="Devolver à fila"
-      description="O chamado fica sem responsável e volta à fila do setor; mensagens, notas e histórico continuam no chamado."
+      description="O chamado fica sem responsável e volta à fila do setor; mensagens e histórico continuam no chamado."
       submitLabel="Devolver à fila"
       pending={returnTicket.isPending}
       error={returnTicket.error?.message}

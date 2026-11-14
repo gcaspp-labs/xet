@@ -133,7 +133,7 @@ func normalizeClosing(in Closing) (Closing, error) {
 // crosses the closing, and the contact is locked for share, so its
 // registration does not change meanwhile.
 func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID int64, in Closing, closure db.ClosureType) (db.Ticket, audit.Changes, error) {
-	t, err := q.GetTicketForUpdate(ctx, ticketID)
+	t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
 	if err != nil {
 		return db.Ticket{}, nil, fmt.Errorf("lock ticket: %w", err)
 	}
@@ -173,7 +173,7 @@ func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID i
 		return db.Ticket{}, nil, ErrInvalidPeriod
 	}
 
-	ticket, err := q.CloseTicket(ctx, db.CloseTicketParams{
+	ticket, err := db.AsTicket(q.CloseTicket(ctx, db.CloseTicketParams{
 		ID:             t.ID,
 		ClosureType:    closure,
 		Subject:        &in.Subject,
@@ -181,7 +181,7 @@ func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID i
 		OrganizationID: &in.OrganizationID,
 		StartedAt:      startedAt,
 		EndedAt:        in.EndedAt,
-	})
+	}))
 	if isConstraint(err, "tickets_ended_after_started") {
 		// The database clock ran behind the start checked above.
 		return db.Ticket{}, nil, ErrInvalidPeriod

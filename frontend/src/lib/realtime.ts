@@ -26,7 +26,7 @@ function handle(queryClient: QueryClient, event: RealtimeEvent) {
       void queryClient.invalidateQueries({ queryKey: closedTodayKey(event.sectorId) })
       void queryClient.invalidateQueries({ queryKey: dashboardKey })
       void queryClient.invalidateQueries({ queryKey: dashboardAssigneesKey(event.sectorId) })
-      // Conversa, notas e histórico abertos do chamado.
+      // Conversa e histórico abertos do chamado.
       void queryClient.invalidateQueries({ queryKey: ticketKey(event.ticketId) })
       void queryClient.invalidateQueries({ queryKey: historyKey })
       // O aviso também vem quando o nome ou o cadastro do contato muda.

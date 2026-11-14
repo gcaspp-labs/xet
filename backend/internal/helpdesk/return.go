@@ -26,7 +26,7 @@ func (s *Service) ReturnToQueue(ctx context.Context, actor auth.User, ticketID i
 	var ticket db.Ticket
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := q.GetTicketForUpdate(ctx, ticketID)
+		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
@@ -40,7 +40,7 @@ func (s *Service) ReturnToQueue(ctx context.Context, actor auth.User, ticketID i
 			return ErrCannotReturn
 		}
 
-		ticket, err = q.ReturnTicketToQueue(ctx, t.ID)
+		ticket, err = db.AsTicket(q.ReturnTicketToQueue(ctx, t.ID))
 		if err != nil {
 			return fmt.Errorf("return ticket: %w", err)
 		}

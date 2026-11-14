@@ -273,7 +273,7 @@ func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Messa
 // queued one with the next protocol. The row lock keeps the message from
 // entering a ticket that is being closed or transferred.
 func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.Contact, arrivedAt time.Time) (db.Ticket, error) {
-	ticket, err := q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contact.ID})
+	ticket, err := db.AsTicket(q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contact.ID}))
 	if err == nil {
 		return ticket, nil
 	}
@@ -285,13 +285,13 @@ func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.C
 	if err != nil {
 		return db.Ticket{}, err
 	}
-	ticket, err = q.CreateQueuedTicket(ctx, db.CreateQueuedTicketParams{
+	ticket, err = db.AsTicket(q.CreateQueuedTicket(ctx, db.CreateQueuedTicketParams{
 		Protocol:       protocol,
 		SectorID:       sectorID,
 		ContactID:      contact.ID,
 		OrganizationID: contact.OrganizationID,
 		ArrivedAt:      arrivedAt,
-	})
+	}))
 	if err == nil {
 		return ticket, nil
 	}
@@ -299,7 +299,7 @@ func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.C
 		return db.Ticket{}, fmt.Errorf("create ticket: %w", err)
 	}
 	// A concurrent message opened the ticket first and committed.
-	ticket, err = q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contact.ID})
+	ticket, err = db.AsTicket(q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contact.ID}))
 	if err != nil {
 		return db.Ticket{}, fmt.Errorf("get open ticket: %w", err)
 	}

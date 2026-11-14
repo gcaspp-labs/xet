@@ -51,13 +51,13 @@ func (s *Service) TransferSector(ctx context.Context, actor auth.User, ticketID,
 		if err != nil {
 			return err
 		}
-		next, err = q.CreateTransferredTicket(ctx, db.CreateTransferredTicketParams{
+		next, err = db.AsTicket(q.CreateTransferredTicket(ctx, db.CreateTransferredTicketParams{
 			Protocol:         protocol,
 			SectorID:         target.ID,
 			ContactID:        closed.ContactID,
 			OrganizationID:   closed.OrganizationID,
 			PreviousTicketID: &closed.ID,
-		})
+		}))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrOpenInSector
 		}

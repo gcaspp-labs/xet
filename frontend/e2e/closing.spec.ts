@@ -218,12 +218,6 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
     'Cancelado',
   )
 
-  // Notas internas continuam permitidas.
-  await details.getByRole('tab', { name: 'Notas' }).click()
-  await details.getByLabel('Nova nota').fill('Número bloqueado.')
-  await details.getByRole('button', { name: 'Adicionar nota' }).click()
-  await expect(page.getByText('Nota adicionada')).toBeVisible()
-
   // Nova mensagem do mesmo número abre outro chamado, na fila.
   expect((await receive('Última chance')).ok()).toBeTruthy()
   await page.getByRole('link', { name: 'Atendimentos' }).click()

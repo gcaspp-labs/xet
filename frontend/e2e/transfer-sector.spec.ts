@@ -117,8 +117,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
   await expect(conversation).toContainText('Folha de março')
   await expect(page.getByRole('button', { name: 'Corrigir' })).toHaveCount(0)
-  await details.getByRole('tab', { name: 'Notas' }).click()
-  await expect(details.getByLabel('Nova nota')).toHaveCount(0)
+  await expect(details.getByRole('tab', { name: 'Notas' })).toHaveCount(0)
 
   // Ao assumir, o destino escreve a primeira mensagem pelo próprio número.
   await page.goto(destinationUrl)

@@ -75,7 +75,7 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		// An open ticket is locked, so it cannot be closed meanwhile.
-		open, err := q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contactID})
+		open, err := db.AsTicket(q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contactID}))
 		if err == nil {
 			existing = open.ID
 			return errOpenTicket
@@ -87,13 +87,13 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 		if err != nil {
 			return err
 		}
-		t, err := q.CreateStartedTicket(ctx, db.CreateStartedTicketParams{
+		t, err := db.AsTicket(q.CreateStartedTicket(ctx, db.CreateStartedTicketParams{
 			Protocol:       protocol,
 			SectorID:       sectorID,
 			ContactID:      contactID,
 			OrganizationID: contact.Contact.OrganizationID,
 			AssigneeID:     &actor.ID,
-		})
+		}))
 		if errors.Is(err, pgx.ErrNoRows) {
 			// A message or another agent opened the ticket first and committed.
 			id, err := q.GetOpenTicketID(ctx, db.GetOpenTicketIDParams{SectorID: sectorID, ContactID: contactID})

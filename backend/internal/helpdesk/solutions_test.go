@@ -542,7 +542,7 @@ func TestAddSolutionWhileTheSubjectIsDeletedSavesWithoutAdding(t *testing.T) {
 	if n := e.Count("subject_solutions"); n != 0 {
 		t.Fatalf("solutions = %d", n)
 	}
-	ticket, err := e.Q.GetTicket(t.Context(), c.ticket.ID)
+	ticket, err := db.AsTicket(e.Q.GetTicket(t.Context(), c.ticket.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -707,7 +707,7 @@ func TestEditingOrDeletingASolutionDoesNotChangeTickets(t *testing.T) {
 
 	wantResolutionOnTicket := func(step string) {
 		t.Helper()
-		ticket, err := e.Q.GetTicket(t.Context(), c.ticket.ID)
+		ticket, err := db.AsTicket(e.Q.GetTicket(t.Context(), c.ticket.ID))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -731,7 +731,7 @@ func TestResolutionOverTheLimitDoesNotEnterAndTheFormIsSaved(t *testing.T) {
 	exact := strings.Repeat("é", 10000)
 	wantResolution := func(t *testing.T, e *testEnv, ticketID int64, want string) {
 		t.Helper()
-		ticket, err := e.Q.GetTicket(t.Context(), ticketID)
+		ticket, err := db.AsTicket(e.Q.GetTicket(t.Context(), ticketID))
 		if err != nil {
 			t.Fatal(err)
 		}
