@@ -92,7 +92,7 @@ Comentários no código e nas migrações citam seções antigas deste documento
 - Receber mensagens fora do expediente sem resposta automática.
 - Receber e ouvir áudios, enviar áudio gravado e visualizar imagens e vídeos.
 - Alertar os supervisores na desconexão do número e reconectar por QR code.
-- Assumir pelo painel abre a conversa; ao encerrar, voltar ao painel e ver o atendimento nos realizados do dia.
+- Assumir pelo painel abre o chamado; ao encerrar, voltar ao painel e ver o atendimento nos realizados do dia.
 - Cancelar um chamado de spam sem cadastrar o contato, com motivo e auditoria.
 - Devolver um chamado em atendimento à fila.
 - Receber arquivo acima do limite como aviso, sem perder a mensagem.

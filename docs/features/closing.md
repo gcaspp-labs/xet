@@ -34,7 +34,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 | Órgão | Automático, com base no órgão principal do contato; editável |
 | Atendente | Automático, com base no responsável |
 | Setor | Automático |
-| Início | Automático: chegada da primeira mensagem do cliente ou, em conversa iniciada pelo atendente, envio da primeira mensagem; editável |
+| Início | Automático: chegada da primeira mensagem do cliente ou, em chamado aberto pelo atendente, envio da primeira mensagem; editável |
 | Fim | Preenchido automaticamente e editável |
 
 ## Fora do escopo / limites conhecidos

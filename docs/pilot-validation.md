@@ -35,7 +35,7 @@ Legenda da última coluna: **Automatizado** tem teste passando e falta conferir 
 | 15 | Mensagens fora do expediente sem resposta automática | `TestMessageOutsideOfficeHoursGetsNoAutomaticReply` | Sem teste próprio | Não depende | Automatizado |
 | 16 | Receber e ouvir áudios, enviar áudio gravado, ver imagens e vídeos | `TestMediaIsSavedOnArrival`, `TestRecordedAudioGoesAsVoiceMessage` | `media.spec` | Gravação no servidor com HTTPS; voz chega ao celular com a duração certa; mídias do celular abrem no painel | Pendente |
 | 17 | Alertar supervisores na desconexão e reconectar por QR code | `TestDisconnectionReachesSupervisors`, `TestConnectionSurvivesRestart` | `connection.spec` | Ver "Teste de reconexão" | Pendente |
-| 18 | Assumir abre a conversa; encerrar volta ao painel com o atendimento nos realizados | `TestClosedTodayListsWhatTheSectorClosed` | `panel.spec`, `closing.spec` | Não depende | Automatizado |
+| 18 | Assumir abre o chamado; encerrar volta ao painel com o atendimento nos realizados | `TestClosedTodayListsWhatTheSectorClosed` | `panel.spec`, `closing.spec` | Não depende | Automatizado |
 | 19 | Cancelar spam sem cadastrar o contato, com motivo e auditoria | `TestCancelFromTheQueueWithoutAssigning`, `TestCancelRequiresReason` | `closing.spec` | Não depende | Automatizado |
 | 20 | Devolver chamado em atendimento à fila | `TestReturnToQueueAndSomeoneElseAssigns` | `return.spec` | Não depende | Automatizado |
 | 21 | Arquivo acima do limite vira aviso, sem perder a mensagem | `TestUnavailableMediaBecomesNotice` | `media.spec` | Enviar arquivo acima de 100 MB | Pendente |
