@@ -552,14 +552,6 @@ type ContactSector struct {
 	SectorID  int64
 }
 
-type InternalNote struct {
-	ID        int64
-	TicketID  int64
-	AuthorID  int64
-	Body      string
-	CreatedAt time.Time
-}
-
 type LoginAttempt struct {
 	Scope         string
 	Subject       string
@@ -681,7 +673,6 @@ type Ticket struct {
 	Status           TicketStatus
 	PreviousTicketID *int64
 	CreatedByID      *int64
-	SpokeWith        *string
 	ArrivedAt        time.Time
 	AssignedAt       *time.Time
 	StartedAt        time.Time

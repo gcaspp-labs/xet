@@ -83,13 +83,6 @@ func TestCorrectionRecordsAuthorReasonAndChanges(t *testing.T) {
 	if _, ok := detail["spokeWith"]; ok {
 		t.Fatalf("detail has spokeWith: %v", detail)
 	}
-	var spokeWith *string
-	if err := e.Pool.QueryRow(t.Context(), "select spoke_with from tickets where id = $1", c.ticket.ID).Scan(&spokeWith); err != nil {
-		t.Fatal(err)
-	}
-	if spokeWith != nil {
-		t.Fatalf("spoke_with recorded: %q", *spokeWith)
-	}
 	var startedAt, endedAt time.Time
 	if err := e.Pool.QueryRow(t.Context(), "select started_at, ended_at from tickets where id = $1", c.ticket.ID).
 		Scan(&startedAt, &endedAt); err != nil {
