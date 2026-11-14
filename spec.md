@@ -32,7 +32,7 @@ As regras de cada funcionalidade, como o sistema funciona hoje, ficam em `docs/f
 | Importar contatos do WhatsApp | [contact-import.md](docs/features/contact-import.md) | Traz para o cadastro os contatos salvos na agenda do número do setor. É sempre uma ação manual, feita por qualquer papel. |
 | Recebimento e distribuição | [queue.md](docs/features/queue.md) | Como as mensagens viram chamados na fila do setor e como alguém assume. Inclui o painel e os atendimentos realizados no dia. |
 | Notificações | [notifications.md](docs/features/notifications.md) | O sino do cabeçalho e os alertas do navegador avisam dos chamados na fila e dos números desconectados. |
-| Conversa | [conversation.md](docs/features/conversation.md) | A troca de mensagens com o cliente dentro do chamado: texto, arquivos, áudio, situação de entrega, notas internas e histórico. |
+| Conversa | [conversation.md](docs/features/conversation.md) | A troca de mensagens com o cliente dentro do chamado: texto, arquivos, áudio, situação de entrega e histórico. |
 | Iniciar conversa | [start-conversation.md](docs/features/start-conversation.md) | A equipe busca um contato e começa a conversa pelo número do próprio setor. Iniciar já conta como assumir o chamado. |
 | Transferências | [transfers.md](docs/features/transfers.md) | Passar o chamado para outra pessoa do setor, devolvê-lo à fila ou levá-lo a outro setor, sem perder o histórico. |
 | Encerramento e correções | [closing.md](docs/features/closing.md) | O formulário que registra cada atendimento ao finalizar e a correção posterior dos dados, sempre com auditoria. |

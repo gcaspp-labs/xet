@@ -12,7 +12,7 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 | Conexão do número | `internal/helpdesk` | — (colunas do WhatsApp em Setor) | Ligar e desligar o número de WhatsApp de cada setor |
 | Acesso | `internal/core/auth`, `internal/core/users` | Usuário, Sessão, Tentativas de login | Login, papéis e permissões; cadastro de usuários e senhas |
 | Cadastro de clientes | `internal/core/directory` | Município, Órgão, Contato | Pessoas atendidas, os órgãos a que pertencem e os municípios desses órgãos |
-| Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Nota interna, Contador de protocolo, Assunto, Solução | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções; listas de assuntos e soluções do formulário |
+| Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Contador de protocolo, Assunto, Solução | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções; listas de assuntos e soluções do formulário |
 | Mensagens | `internal/helpdesk` | Mensagem, Arquivo | Histórico de mensagens e anexos |
 | Mensageria | `internal/helpdesk/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
 | Auditoria | `internal/core/audit` | Registro de auditoria | Histórico de alterações relevantes |
@@ -45,8 +45,6 @@ erDiagram
     tickets ||--o{ messages : contém
     users ||--o{ messages : "autor (envio pelo sistema)"
     media_files ||--o| messages : anexo
-    tickets ||--o{ internal_notes : contém
-    users ||--o{ internal_notes : autor
     tickets ||--o{ audit_logs : ""
     users ||--o{ audit_logs : "autor da ação"
 ```
@@ -204,6 +202,8 @@ Opcional, com no máximo um módulo por setor do contato. Tirar um setor do cont
 
 ## Atendimento
 
+Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-labs/xet/issues/173)). Até a migração da #175, a tabela `internal_notes` e a coluna `tickets.spoke_with` continuam no banco, sem uso: nada as lê nem grava, e as correções antigas ainda guardam `spoke_with` em `audit_logs`. A migração apaga os três.
+
 ### `tickets` — Chamado
 
 | Coluna | Tipo | Regras |
@@ -216,7 +216,6 @@ Opcional, com no máximo um módulo por setor do contato. Tirar um setor do cont
 | `status` | ticket_status | Obrigatório |
 | `previous_ticket_id` | bigint → `tickets` | Chamado de origem em transferência entre setores; único |
 | `created_by_id` | bigint → `users` | Preenchido quando o atendente iniciou a conversa |
-| `spoke_with` | text | "Falou com", para telefones usados por mais de uma pessoa |
 | `arrived_at` | timestamptz | Obrigatório; primeira mensagem do chamado |
 | `assigned_at` | timestamptz | Primeira vez que alguém assumiu; não muda em transferências nem ao devolver à fila; vazio em chamado cancelado direto da fila |
 | `started_at` | timestamptz | Obrigatório; padrão `arrived_at`; editável no encerramento |
@@ -245,18 +244,6 @@ Restrições:
 | --- | --- | --- |
 | `ticket_id` | bigint → `tickets` | Chave primária composta |
 | `module_id` | bigint → `modules` | Chave primária composta; o módulo deve ser do setor do chamado |
-
-### `internal_notes` — Nota interna
-
-| Coluna | Tipo | Regras |
-| --- | --- | --- |
-| `ticket_id` | bigint → `tickets` | Obrigatório |
-| `author_id` | bigint → `users` | Obrigatório |
-| `body` | text | Obrigatório |
-
-Índice: `(ticket_id, created_at)` para exibir as notas do chamado.
-
-Notas não são editadas nem excluídas. Qualquer pessoa com acesso ao setor do chamado escreve notas, mesmo sem ser o responsável e após o encerramento. Ficam visíveis para quem pode ver o chamado e, após transferência entre setores, para o setor de destino.
 
 ### `subjects` — Assunto da lista do módulo
 
@@ -315,12 +302,12 @@ stateDiagram-v2
 | Encerramento | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável, e o contato travado para leitura (`for share`) e cadastrado: preenche os campos de encerramento com `closure_type = 'resolved'`, `closed_at = now()`, `closed_by_id` = responsável e `ended_at` informado ou `now()`; grava `ticket_modules` (módulos ativos do setor) e a auditoria `ticket_closed` na mesma transação |
 | Transferência entre setores | Com as mesmas travas e conferências do encerramento (somente o responsável), encerra com o formulário completo e `closure_type = 'transferred'`; cria chamado `queued` no destino (outro setor ativo) com `previous_ticket_id`, mesmo contato, o órgão do formulário e `arrived_at` = momento da transferência. Se o contato já tiver chamado aberto no destino (índice único parcial), a transação é desfeita e a transferência recusada. Auditoria `ticket_transferred_sector` na origem, na mesma transação. Os eventos dos dois setores são publicados depois do commit |
 | Cadastro do contato | Na mesma transação do cadastro, os chamados abertos do contato com `organization_id` vazio recebem o órgão do contato (travados com `for update`), com auditoria `ticket_organization_linked` em cada um |
-| Correção | Com o chamado travado (`for update`) e `closed`, por quem encerrou (`closed_by_id`), supervisor do setor ou administrador: altera `subject`, `resolution`, `organization_id`, `started_at`, `ended_at` e `spoke_with` e acrescenta ou remove linhas de `ticket_modules` (acrescentadas só entre os módulos ativos do setor; as já gravadas podem ficar mesmo inativas); auditoria `ticket_corrected` com `reason` na mesma transação. Sem nenhuma alteração, nada é gravado |
+| Correção | Com o chamado travado (`for update`) e `closed`, por quem encerrou (`closed_by_id`), supervisor do setor ou administrador: altera `subject`, `resolution`, `organization_id`, `started_at` e `ended_at` e acrescenta ou remove linhas de `ticket_modules` (acrescentadas só entre os módulos ativos do setor; as já gravadas podem ficar mesmo inativas); auditoria `ticket_corrected` com `reason` na mesma transação. Sem nenhuma alteração, nada é gravado |
 | Devolver à fila | Com o chamado travado (`for update`) e `in_progress`, pelo responsável, supervisor do setor ou administrador: `status = 'queued'`, `assignee_id` vazio, `assigned_at` mantido; auditoria `ticket_returned` na mesma transação |
 | Cancelamento | Com o chamado travado (`for update`) e aberto, conforme as permissões: `closure_type = 'cancelled'`, `closed_at` e `ended_at` = agora (`ended_at` nunca antes de `started_at`, que vem do relógio do celular), `closed_by_id` = quem cancelou; vindo da fila, `assignee_id` = quem cancelou, porque chamado encerrado exige responsável (`assigned_at` fica vazio). Não exige contato cadastrado nem `ticket_modules`; auditoria `ticket_cancelled` com `reason` na mesma transação. Chamado cancelado não é corrigido |
 | Mensagem após encerramento | Cria novo chamado (não reabre) |
 
-Chamados não são reabertos. O destino de uma transferência entre setores vê o histórico seguindo a cadeia de `previous_ticket_id`: quem tem acesso ao setor de um chamado lê também todos os chamados anteriores da cadeia (detalhe, mensagens, arquivos, notas, módulos e correções), sem poder agir neles. A origem vê o setor e o protocolo do chamado seguinte, sem acesso a ele.
+Chamados não são reabertos. O destino de uma transferência entre setores vê o histórico seguindo a cadeia de `previous_ticket_id`: quem tem acesso ao setor de um chamado lê também todos os chamados anteriores da cadeia (detalhe, mensagens, arquivos, módulos e correções), sem poder agir neles. A origem vê o setor e o protocolo do chamado seguinte, sem acesso a ele.
 
 ## Mensagens
 
@@ -399,7 +386,7 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `ticket_transferred_sector` | Transferência entre setores (no chamado de origem): `changes` como no `ticket_closed`, com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados, `started_at` e `organization_id`, mais `next_ticket_id` e `sector_id` (de origem para destino) |
 | `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |
 | `ticket_closed` | Encerramento: `changes` com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados no formulário, `started_at` (de `arrived_at` para o informado) e `organization_id` |
-| `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at`, `ended_at` e `spoke_with` |
+| `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at` e `ended_at` |
 | `ticket_cancelled` | Cancelamento (exige `reason`): `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
 | `ticket_returned` | Devolver à fila: `changes` com `status` e `assignee_id` |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
