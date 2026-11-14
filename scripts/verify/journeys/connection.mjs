@@ -126,7 +126,7 @@ await journey('connection', async (t) => {
     'Atendente não vê a conexão nem o aviso no sino, e a rota o devolve ao painel',
     async () => {
       const agentPage = await t.signIn(sector.agents[0])
-      await expect(agentPage.getByRole('heading', { name: 'Chamados', exact: true })).toBeVisible()
+      await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
       await expect(agentPage.getByRole('link', { name: 'Conexão' })).toBeHidden()
       await expect(agentPage.getByRole('button', { name: /^Notificações/ })).toHaveAccessibleName(
         'Notificações',
