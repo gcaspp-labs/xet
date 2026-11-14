@@ -28,7 +28,7 @@ export async function login(page: Page, email: string, password: string) {
 export async function signIn(page: Page, email: string, password: string) {
   await login(page, email, password)
   await expect(page).not.toHaveURL(/\/login$/)
-  await page.goto('/atendimento')
+  await page.goto('/atendimentos')
   await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 }
 
@@ -263,4 +263,73 @@ export async function expectClosableDialog(page: Page, dialog: Locator, open: ()
   await expect(dialog).toBeVisible()
   await page.mouse.click(10, 300)
   await expect(dialog).toBeHidden()
+}
+
+type Response = { ok(): boolean; json(): Promise<unknown> }
+
+export const ok = (response: Response) => expect(response.ok()).toBeTruthy()
+
+export const json = async <T>(response: Response) => {
+  ok(response)
+  return (await response.json()) as T
+}
+
+// Atendimento de um contato cadastrado, encerrado pelo atendente pela API, e
+// um segundo atendente do setor, que não encerrou.
+export async function seedClosedTicket(baseURL: string) {
+  const { sector, agent, supervisor } = await seedSector(baseURL)
+  const { id, phone } = unique()
+  const [organization] = await seedDirectory(
+    baseURL,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: `Rita ${id}`, phone, organization: 0, sector: sector.id }],
+  )
+
+  const api = await request.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
+  ok(await api.post(`/api/sectors/${sector.id}/connection`))
+  ok(await api.post(`/api/test/messaging/sectors/${sector.id}/pair`))
+  const modules: { id: number }[] = []
+  for (const name of ['Folha', 'Patrimônio']) {
+    modules.push(
+      await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name } })),
+    )
+  }
+  const otherAgent = `agent2.${id}@e2e.test`
+  ok(
+    await api.post('/api/users', {
+      data: {
+        name: `agent2 ${id}`,
+        email: otherAgent,
+        role: 'agent',
+        sectorId: sector.id,
+        password: userPassword,
+      },
+    }),
+  )
+  ok(
+    await api.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+      data: { externalMessageId: `E2E-${id}`, phone, contactName: 'Rita', body: 'Contracheque' },
+    }),
+  )
+  await api.dispose()
+
+  const agentApi = await request.newContext({ baseURL })
+  ok(await agentApi.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const [ticket] = await json<{ id: number }[]>(
+    await agentApi.get(`/api/sectors/${sector.id}/tickets`),
+  )
+  ok(await agentApi.post(`/api/tickets/${ticket.id}/assign`))
+  ok(
+    await agentApi.post(`/api/tickets/${ticket.id}/close`, {
+      data: {
+        subject: 'Contracheque',
+        resolution: 'Enviada a segunda via.',
+        moduleIds: modules.map((module) => module.id),
+        organizationId: organization.id,
+      },
+    }),
+  )
+  await agentApi.dispose()
+  return { ticketId: ticket.id, agent, otherAgent, supervisor, sector, modules }
 }

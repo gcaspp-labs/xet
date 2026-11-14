@@ -4,92 +4,23 @@ import {
   admin,
   clearSession,
   expectLockedDialog,
-  seedDirectory,
-  seedSector,
+  json,
+  ok,
+  seedClosedTicket,
   signIn,
-  unique,
   userPassword,
 } from './fixtures'
-
-type Response = { ok(): boolean; json(): Promise<unknown> }
-
-const ok = (response: Response) => expect(response.ok()).toBeTruthy()
-
-const json = async <T>(response: Response) => {
-  ok(response)
-  return (await response.json()) as T
-}
-
-// Atendimento de um contato cadastrado, encerrado pelo atendente pela API, e
-// um segundo atendente do setor, que não encerrou.
-async function closedTicket(baseURL: string) {
-  const { sector, agent, supervisor } = await seedSector(baseURL)
-  const { id, phone } = unique()
-  const [organization] = await seedDirectory(
-    baseURL,
-    [{ name: `Prefeitura ${id}` }],
-    [{ name: `Rita ${id}`, phone, organization: 0, sector: sector.id }],
-  )
-
-  const api = await apiRequest.newContext({ baseURL })
-  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
-  ok(await api.post(`/api/sectors/${sector.id}/connection`))
-  ok(await api.post(`/api/test/messaging/sectors/${sector.id}/pair`))
-  const modules: { id: number }[] = []
-  for (const name of ['Folha', 'Patrimônio']) {
-    modules.push(
-      await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name } })),
-    )
-  }
-  const otherAgent = `agent2.${id}@e2e.test`
-  ok(
-    await api.post('/api/users', {
-      data: {
-        name: `agent2 ${id}`,
-        email: otherAgent,
-        role: 'agent',
-        sectorId: sector.id,
-        password: userPassword,
-      },
-    }),
-  )
-  ok(
-    await api.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
-      data: { externalMessageId: `E2E-${id}`, phone, contactName: 'Rita', body: 'Contracheque' },
-    }),
-  )
-  await api.dispose()
-
-  const agentApi = await apiRequest.newContext({ baseURL })
-  ok(await agentApi.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
-  const [ticket] = await json<{ id: number }[]>(
-    await agentApi.get(`/api/sectors/${sector.id}/tickets`),
-  )
-  ok(await agentApi.post(`/api/tickets/${ticket.id}/assign`))
-  ok(
-    await agentApi.post(`/api/tickets/${ticket.id}/close`, {
-      data: {
-        subject: 'Contracheque',
-        resolution: 'Enviada a segunda via.',
-        moduleIds: modules.map((module) => module.id),
-        organizationId: organization.id,
-      },
-    }),
-  )
-  await agentApi.dispose()
-  return { ticketId: ticket.id, agent, otherAgent, supervisor, sector, modules }
-}
 
 test('correção do atendimento encerrado exige motivo e fica na auditoria', async ({
   page,
   baseURL,
 }) => {
-  const { ticketId, agent, otherAgent, supervisor } = await closedTicket(baseURL!)
+  const { ticketId, agent, otherAgent, supervisor } = await seedClosedTicket(baseURL!)
   const details = page.getByRole('region', { name: 'Chamado', exact: true })
 
   // O atendente que não encerrou não vê a correção, e a API o bloqueia.
   await signIn(page, otherAgent, userPassword)
-  await page.goto(`/chamados/${ticketId}`)
+  await page.goto(`/atendimentos/${ticketId}`)
   await expect(details).toContainText('Contracheque')
   await expect(page.getByRole('button', { name: 'Corrigir' })).toHaveCount(0)
   const blocked = await page.request.post(`/api/tickets/${ticketId}/correct`, {
@@ -108,7 +39,7 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
 
   // Quem encerrou corrige; sem motivo, a correção é recusada.
   await signIn(page, agent, userPassword)
-  await page.goto(`/chamados/${ticketId}`)
+  await page.goto(`/atendimentos/${ticketId}`)
   await page.getByRole('button', { name: 'Corrigir' }).click()
   const sheet = page.getByRole('dialog', { name: 'Corrigir atendimento' })
   await expect(sheet.getByLabel('Assunto')).toHaveValue('Contracheque')
@@ -151,7 +82,7 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
 
   // O supervisor do setor também corrige.
   await signIn(page, supervisor, userPassword)
-  await page.goto(`/chamados/${ticketId}`)
+  await page.goto(`/atendimentos/${ticketId}`)
   await expect(page.getByRole('button', { name: 'Corrigir' })).toBeVisible()
 })
 
@@ -163,7 +94,7 @@ test('o histórico de alterações esconde o "falou com" de correções antigas'
   page,
   baseURL,
 }) => {
-  const { ticketId, agent } = await closedTicket(baseURL!)
+  const { ticketId, agent } = await seedClosedTicket(baseURL!)
   expect(Number.isSafeInteger(ticketId)).toBeTruthy()
   expect(agent).toMatch(/^[\w.@+-]+$/)
   const legacy = (reason: string, changes: object, createdAt: string) =>
@@ -213,7 +144,7 @@ test('o histórico de alterações esconde o "falou com" de correções antigas'
   )
 
   await signIn(page, agent, userPassword)
-  await page.goto(`/chamados/${ticketId}`)
+  await page.goto(`/atendimentos/${ticketId}`)
   const history = page
     .getByRole('region', { name: 'Chamado', exact: true })
     .getByRole('list', { name: 'Histórico de alterações' })
@@ -229,7 +160,7 @@ test('correção exige marcar módulo ativo e preserva os módulos antigos', asy
   page,
   baseURL,
 }) => {
-  const { ticketId, agent, sector, modules } = await closedTicket(baseURL!)
+  const { ticketId, agent, sector, modules } = await seedClosedTicket(baseURL!)
   const api = await apiRequest.newContext({ baseURL })
   ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
   for (const [index, name] of ['Folha', 'Patrimônio'].entries()) {
@@ -243,7 +174,7 @@ test('correção exige marcar módulo ativo e preserva os módulos antigos', asy
     await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Novo sistema' } }),
   )
   await signIn(page, agent, userPassword)
-  await page.goto(`/chamados/${ticketId}`)
+  await page.goto(`/atendimentos/${ticketId}`)
   await page.getByRole('button', { name: 'Corrigir' }).click()
   const sheet = page.getByRole('dialog', { name: 'Corrigir atendimento' })
   await sheet.getByLabel('Assunto').fill('Novo assunto')
@@ -264,9 +195,9 @@ test('correção exige marcar módulo ativo e preserva os módulos antigos', asy
 })
 
 test('a janela de correção tem bloqueio', async ({ page, baseURL }) => {
-  const { ticketId, agent } = await closedTicket(baseURL!)
+  const { ticketId, agent } = await seedClosedTicket(baseURL!)
   await signIn(page, agent, userPassword)
-  await page.goto(`/chamados/${ticketId}`)
+  await page.goto(`/atendimentos/${ticketId}`)
   await page.getByRole('button', { name: 'Corrigir' }).click()
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Corrigir atendimento' }), {
     field: 'Motivo da correção',

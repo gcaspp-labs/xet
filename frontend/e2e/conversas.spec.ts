@@ -59,14 +59,14 @@ test('Chamados funciona no menu recolhido e no celular', async ({ page, baseURL 
   const mobileLink = page.getByRole('link', { name: 'Chamados', exact: true })
   await expect(mobileLink).toBeVisible()
   await mobileLink.click()
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
 })
 
 test('menu Chamados abre a tela sem chamados', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Chamados', exact: true }).click()
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Fila' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Chamados', exact: true })).toHaveAttribute(
@@ -96,7 +96,7 @@ test('assumir pela fila abre o chamado e permite consultar assuntos', async ({
   await page
     .getByRole('button', { name: 'Assumir chamado de Cliente da fila com nome bastante comprido' })
     .click()
-  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
   const title = page.getByRole('heading', { name: 'Cliente da fila com nome bastante comprido' })
   await expect(title).toBeVisible()
   expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
@@ -140,7 +140,7 @@ test('assumir pela fila abre o chamado e permite consultar assuntos', async ({
     .getByRole('dialog', { name: 'Devolver à fila' })
     .getByRole('button', { name: 'Devolver à fila' })
     .click()
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Fila, 1 a assumir' })).toHaveAttribute(
     'aria-selected',
@@ -218,7 +218,7 @@ test('cancelar na tela Chamados retorna ao estado sem chamado aberto', async ({
   const dialog = page.getByRole('dialog', { name: 'Cancelar chamado' })
   await dialog.getByLabel('Motivo').fill('Atendimento iniciado por engano')
   await dialog.getByRole('button', { name: 'Cancelar chamado' }).click()
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
 })
 
@@ -297,7 +297,7 @@ test('disputa na fila mostra aviso e remove o chamado já assumido', async ({
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page.getByRole('button', { name: 'Assumir chamado de Cliente disputado' }).click()
-  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
   await contested.click()
   await expect(
     other
@@ -373,7 +373,7 @@ for (const action of ['Encerrar', 'Outro setor', 'Transferir'] as const) {
         .click()
       await sheet.getByRole('button', { name: 'Não adicionar' }).click()
     }
-    await expect(page).toHaveURL(/\/conversas$/)
+    await expect(page).toHaveURL(/\/chamados$/)
     await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
   })
 }

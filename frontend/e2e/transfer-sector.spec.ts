@@ -58,7 +58,6 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   // Na origem, o responsável preenche o formulário completo e escolhe o destino.
   await signIn(page, origin.agent, userPassword)
   await page.getByRole('link', { name: contact }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await page.getByRole('button', { name: 'Outro setor' }).click()
@@ -77,9 +76,9 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await expect(page.getByText('Chamado transferido para outro setor')).toBeVisible()
 
   // Volta a Chamados sem chamado aberto; o painel mantém os realizados.
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
-  await page.goto('/atendimento')
+  await page.goto('/atendimentos')
   const doneRow = page
     .getByRole('region', { name: 'Realizados hoje' })
     .getByRole('row', { name: new RegExp(contact) })
@@ -104,17 +103,16 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   // O destino recebe o chamado na fila, com a origem e a conversa anterior.
   await signIn(page, destination.agent, userPassword)
   await page.getByRole('link', { name: contact }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(conversation).toContainText(
     `Transferido de ${origin.sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
   )
-  const previous = details.getByRole('region', { name: 'Chamado anterior' })
-  await expect(previous).toContainText(origin.sector.name)
-  await expect(previous).toContainText('Folha de março')
-  await expect(previous).toContainText('Encaminhado ao setor responsável.')
-  await expect(previous).toContainText(`Transferido por ${originName}`)
   const destinationUrl = page.url()
-  await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
+  // O chamado anterior (da origem) abre em Atendimentos, só para leitura.
+  const destinationTicket = await page.request.get(
+    `/api/tickets/${destinationUrl.split('/').pop()}`,
+  )
+  const { previous: link } = (await destinationTicket.json()) as { previous: { id: number } }
+  await page.goto(`/atendimentos/${link.id}`)
   await expect(conversation).toContainText('Folha de março')
   await expect(page.getByRole('button', { name: 'Corrigir' })).toHaveCount(0)
   await expect(details.getByRole('tab', { name: 'Notas' })).toHaveCount(0)
@@ -130,4 +128,24 @@ test('transferência entre setores encerra a origem e o destino continua com o h
       .getByRole('listitem', { name: 'Mensagem enviada' })
       .filter({ hasText: 'Olá, aqui é o setor de destino.' }),
   ).toContainText('Enviada')
+
+  // Encerrado o chamado do destino, a ficha mostra a origem e o link leva ao chamado anterior,
+  // em Atendimentos.
+  const destinationId = destinationUrl.split('/').pop()
+  expect(
+    (
+      await page.request.post(`/api/tickets/${destinationId}/cancel`, {
+        data: { reason: 'Encerrado no teste.' },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await expect(page).toHaveURL(new RegExp(`/atendimentos/${destinationId}$`))
+  const previous = details.getByRole('region', { name: 'Chamado anterior' })
+  await expect(previous).toContainText(origin.sector.name)
+  await expect(previous).toContainText('Folha de março')
+  await expect(previous).toContainText('Encaminhado ao setor responsável.')
+  await expect(previous).toContainText(`Transferido por ${originName}`)
+  await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
+  await expect(page).toHaveURL(new RegExp(`/atendimentos/${link.id}$`))
+  await expect(conversation).toContainText('Folha de março')
 })

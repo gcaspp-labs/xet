@@ -61,7 +61,7 @@ test('nova mensagem aparece no painel sem recarregar e o atendente assume o cham
   await row.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   // Assumir abre a conversa, já com a caixa de resposta.
-  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
 
   await page.getByRole('link', { name: 'Atendimentos' }).click()
@@ -96,7 +96,7 @@ test('o mesmo atendente conduz vários chamados ao mesmo tempo', async ({
   for (const contactName of names) {
     await receive(request, sector.id, { phone: unique().phone, contactName, body: 'Bom dia' })
     await queue.getByRole('button', { name: `Assumir chamado de ${contactName}` }).click()
-    await expect(page).toHaveURL(/\/conversas\/\d+$/)
+    await expect(page).toHaveURL(/\/chamados\/\d+$/)
     await page.getByRole('link', { name: 'Atendimentos' }).click()
   }
 
@@ -134,7 +134,7 @@ test('a linha inteira do chamado abre o chamado e o botão de assumir continua c
     .getByText('Bruno Segundo')
     .last()
     .click({ force: true })
-  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
   await expect(page.getByRole('heading', { name: 'Bruno Segundo' })).toBeVisible()
   await expect(conversation).toContainText('Chamado na fila.')
   await page.goBack()

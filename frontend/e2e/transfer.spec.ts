@@ -70,7 +70,7 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   await expect(page.getByText('Chamado transferido')).toBeVisible()
 
   // A transferência volta a Chamados sem chamado aberto.
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
   await expect(conversation).toHaveCount(0)
   await page.goto(ticketUrl)
 

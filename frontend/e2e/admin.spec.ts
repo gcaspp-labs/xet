@@ -327,7 +327,7 @@ test('administrador redefine a senha de um usuário', async ({ page, browser, ba
   const context = await browser.newContext()
   const agentPage = await context.newPage()
   await login(agentPage, agent, 'Nova#Senha9')
-  await expect(agentPage).toHaveURL(/\/conversas$/)
+  await expect(agentPage).toHaveURL(/\/chamados$/)
   await context.close()
 })
 
@@ -410,7 +410,7 @@ test('atendente não acessa a administração', async ({ page, baseURL }) => {
   }
   for (const path of ['/modulos', '/admin/setores', '/admin/usuarios']) {
     await page.goto(path)
-    await expect(page).toHaveURL(/\/conversas$/)
+    await expect(page).toHaveURL(/\/chamados$/)
   }
 
   // O backend recusa mesmo chamando a API diretamente.

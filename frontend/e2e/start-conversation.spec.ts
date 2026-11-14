@@ -70,7 +70,6 @@ test('atendente busca um contato e inicia o chamado pelo número do setor', asyn
     `${agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')} abriu e assumiu o chamado`,
   )
   const ticketUrl = page.url()
-  await expect(page.getByText(`Prefeitura ${id} — ${defaultMunicipality}`)).toBeVisible()
   await page.getByRole('link', { name: 'Atendimentos' }).click()
   await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText(
     `Prefeitura ${id} — ${defaultMunicipality}`,
