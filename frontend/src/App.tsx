@@ -13,7 +13,7 @@ import ConnectionPage from '@/pages/connection/ConnectionPage'
 import ContactsPage from '@/pages/directory/ContactsPage'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
 // PROTÓTIPO #188
-import { AtendimentoDetailPrototype, NotFoundPage } from '@/prototype/NotFoundPrototype'
+import { AtendimentoDetailPrototype, ChamadoDetailPrototype, NotFoundPage } from '@/prototype/NotFoundPrototype'
 
 // Rotas que exigem sessão; sem sessão, vai para o login.
 function RequireAuth() {
@@ -52,7 +52,7 @@ export default function App() {
           <Route path="/atendimentos" element={<PanelPage />} />
           <Route path="/atendimentos/:ticketId" element={<AtendimentoDetailPrototype />} />
           <Route path="/chamados" element={<ConversasPage />} />
-          <Route path="/chamados/:ticketId" element={<ConversasPage />} />
+          <Route path="/chamados/:ticketId" element={<ChamadoDetailPrototype />} />
           <Route path="/atendimento" element={<NotFoundPage />} />
           <Route path="/conversas" element={<NotFoundPage />} />
           <Route path="/conversas/:ticketId" element={<NotFoundPage />} />
@@ -68,9 +68,10 @@ export default function App() {
             <Route path="/admin/setores" element={<SectorsPage />} />
             <Route path="/admin/usuarios" element={<UsersPage />} />
           </Route>
+          {/* PROTÓTIPO #188: endereço desconhecido, logado, mostra Não encontrado no layout; sem sessão, RequireAuth leva ao /login. */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

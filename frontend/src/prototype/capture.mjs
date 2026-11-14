@@ -21,6 +21,8 @@ await shot('inexistente-atendimentos-999', '/atendimentos/999')
 await shot('rota-antiga-conversas-300', '/conversas/300')
 await shot('rota-antiga-atendimento', '/atendimento')
 await shot('sem-acesso-403-sem-mudanca', '/atendimentos/777')
+await shot('desconhecido-qualquer-coisa', '/qualquer-coisa')
+await shot('inexistente-chamados-999', '/chamados/999')
 // Com página anterior: no Dashboard, abre um link interno que ainda aponta para /conversas/:id;
 // Voltar volta ao Dashboard. (Só conferência, não muda o visual.)
 {
