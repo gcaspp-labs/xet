@@ -1,0 +1,485 @@
+// PROTÓTIPO #164 — descartável, não vai para a main.
+// Versão aprovada (A, barra de filtros) da lista de atendimentos, em `/atendimentos`
+// (no lugar do painel). `?perfil=admin` mostra o administrador (coluna e filtro de setor;
+// responsável e módulo travados até escolher um setor). Dados fictícios, tudo em memória.
+//   A (barra de filtros): busca e filtros com rótulo numa faixa acima da tabela.
+// Ajuste da spec #173: só chamados encerrados (Encerrado, Transferido, Cancelado), data e
+// período pelo encerramento, sem o seletor de Situação, sem botão Novo chamado; a linha abre
+// a ficha só leitura em /atendimentos/:id (#177).
+
+import { Inbox } from 'lucide-react'
+import { type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router'
+import { Pagination } from '@/components/Pagination'
+import { SearchBox } from '@/components/SearchBox'
+import { SortableTableHead } from '@/components/SortableTableHead'
+import { PageContent, Topbar } from '@/components/Topbar'
+import {
+  Autocomplete,
+  AutocompleteContent,
+  AutocompleteInput,
+  AutocompleteItem,
+  AutocompleteList,
+} from '@/components/ui/autocomplete'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useCurrentUser } from '@/lib/auth'
+import { normalizeSearch } from '@/lib/format'
+import {
+  allSubjects,
+  modules,
+  people,
+  type ProtoTicket,
+  sectors,
+  situationLabels,
+  tickets,
+  today,
+} from './atendimentoData'
+
+const pageSize = 20
+const all = 'all'
+
+// ---------- estado no endereço ----------
+
+type Period = 'all' | 'today' | '7d' | '30d' | 'custom'
+const periodChoices: { value: Period; label: string }[] = [
+  { value: 'all', label: 'Todo o período' },
+  { value: 'today', label: 'Hoje' },
+  { value: '7d', label: '7 dias' },
+  { value: '30d', label: '30 dias' },
+  { value: 'custom', label: 'Datas' },
+]
+
+function useListState(isAdmin: boolean) {
+  const [params, setParams] = useSearchParams()
+  const update = (next: Record<string, string | null>) =>
+    setParams((current) => {
+      const copy = new URLSearchParams(current)
+      for (const [k, v] of Object.entries(next)) {
+        if (v === null || v === '') copy.delete(k)
+        else copy.set(k, v)
+      }
+      // Qualquer mudança de filtro volta à página 1.
+      if (!('pagina' in next)) copy.delete('pagina')
+      return copy
+    })
+  const sector = isAdmin ? params.get('setor') : '1'
+  const state = {
+    q: params.get('q') ?? '',
+    period: (params.get('periodo') as Period) ?? 'all',
+    from: params.get('de') ?? '',
+    to: params.get('ate') ?? '',
+    sector,
+    assignee: sector ? params.get('responsavel') : null,
+    module: sector ? params.get('modulo') : null,
+    subject: params.get('assunto') ?? '',
+    page: Math.max(1, Number(params.get('pagina')) || 1),
+    column: params.get('ordem') ?? 'data',
+    direction: (params.get('direcao') ?? (params.get('ordem') ? 'asc' : 'desc')) as
+      | 'asc'
+      | 'desc',
+  }
+  return {
+    ...state,
+    isAdmin,
+    setQ: (v: string) => update({ q: v }),
+    setPeriod: (v: Period) => update({ periodo: v === 'all' ? null : v }),
+    setDate: (k: 'de' | 'ate', v: string) => update({ [k]: v }),
+    // Trocar o setor limpa responsável e módulo.
+    setSector: (v: string | null) => update({ setor: v, responsavel: null, modulo: null }),
+    setAssignee: (v: string | null) => update({ responsavel: v }),
+    setModule: (v: string | null) => update({ modulo: v }),
+    setSubject: (v: string) => update({ assunto: v }),
+    setPage: (p: number) => update({ pagina: p === 1 ? null : String(p) }),
+    toggleSort: (c: string) => {
+      const dir =
+        state.column === c ? (state.direction === 'asc' ? 'desc' : 'asc') : c === 'data' ? 'desc' : 'asc'
+      update({ ordem: c, direcao: dir })
+    },
+    clearAll: () =>
+      setParams((current) => {
+        const copy = new URLSearchParams()
+        for (const k of ['perfil']) {
+          const v = current.get(k)
+          if (v) copy.set(k, v)
+        }
+        return copy
+      }),
+  }
+}
+type ListState = ReturnType<typeof useListState>
+
+const brDay = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+
+function applyFilters(s: ListState) {
+  const q = normalizeSearch(s.q.trim())
+  const subj = normalizeSearch(s.subject.trim())
+  const todayKey = brDay(today)
+  const daysAgo = (n: number) => brDay(new Date(today.getTime() - n * 86_400_000))
+  return tickets.filter((t) => {
+    if (s.sector && t.sectorId !== Number(s.sector)) return false
+    const day = brDay(t.date)
+    if (s.period === 'today' && day !== todayKey) return false
+    if (s.period === '7d' && day < daysAgo(6)) return false
+    if (s.period === '30d' && day < daysAgo(29)) return false
+    if (s.period === 'custom' && ((s.from && day < s.from) || (s.to && day > s.to))) return false
+    if (s.assignee && t.assignee !== people.find((p) => String(p.id) === s.assignee)?.name)
+      return false
+    if (s.module) {
+      const name = modules.find((m) => String(m.id) === s.module)?.name
+      if (!name || !t.modules.includes(name)) return false
+    }
+    if (subj && !normalizeSearch(t.subject ?? '').includes(subj)) return false
+    if (
+      q &&
+      ![t.protocol, t.contact.name, t.contact.phone.replace(/\D/g, ''), t.organization ?? ''].some(
+        (f) => normalizeSearch(f).includes(q.replace(/[()\s-]/g, '') || q) || normalizeSearch(f).includes(q),
+      )
+    )
+      return false
+    return true
+  })
+}
+
+const sortKeys: Record<string, (t: ProtoTicket) => string | number> = {
+  protocolo: (t) => t.protocol,
+  data: (t) => t.date.getTime(),
+  contato: (t) => t.contact.name,
+  orgao: (t) => t.organization ?? '',
+  setor: (t) => t.sectorName,
+  responsavel: (t) => t.assignee ?? '',
+  assunto: (t) => t.subject ?? '',
+  situacao: (t) => situationLabels[t.situation].label,
+}
+
+function useRows(s: ListState) {
+  const filtered = applyFilters(s)
+  const key = sortKeys[s.column] ?? sortKeys.data
+  const sorted = [...filtered].sort((a, b) => {
+    const x = key(a)
+    const y = key(b)
+    const c = typeof x === 'number' ? x - (y as number) : String(x).localeCompare(String(y), 'pt-BR')
+    return s.direction === 'asc' ? c : -c
+  })
+  const pages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const page = Math.min(s.page, pages)
+  return { rows: sorted.slice((page - 1) * pageSize, page * pageSize), total: sorted.length, page }
+}
+
+// ---------- peças comuns (células e campos) ----------
+
+function formatWhen(d: Date) {
+  const time = d.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  if (brDay(d) === brDay(today)) return `Hoje ${time}`
+  return `${d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })} ${time}`
+}
+
+function SituationPill({ t }: { t: ProtoTicket }) {
+  const s = situationLabels[t.situation]
+  return (
+    <span className="flex flex-col gap-0.5">
+      <Badge tone={s.tone}>{s.label}</Badge>
+      {t.transferredTo && <span className="caption text-ink-faint">para {t.transferredTo}</span>}
+    </span>
+  )
+}
+
+function ModulesCell({ t }: { t: ProtoTicket }) {
+  return t.modules.length ? (
+    <span className="flex max-w-[105px] flex-col gap-1">
+      {t.modules.map((m) => (
+        <Badge key={m} variant="tag" className="block max-w-full truncate" title={m}>
+          {m}
+        </Badge>
+      ))}
+    </span>
+  ) : (
+    <span className="text-ink-faint">—</span>
+  )
+}
+
+function Faint({ children }: { children: ReactNode }) {
+  return <span className="text-ink-faint">{children}</span>
+}
+
+function RowLink({ t, children }: { t: ProtoTicket; children: ReactNode }) {
+  return (
+    <Link
+      to={`/atendimentos/${t.id}`}
+      className="body-strong underline-offset-2 after:absolute after:inset-0 hover:text-accent-strong hover:underline"
+    >
+      {children}
+    </Link>
+  )
+}
+
+function EmptyRows() {
+  return (
+    <Empty>
+      <EmptyMedia>
+        <Inbox strokeWidth={1.7} aria-hidden />
+      </EmptyMedia>
+      <EmptyDescription>Nenhum chamado encontrado.</EmptyDescription>
+    </Empty>
+  )
+}
+
+function Choose({
+  id,
+  label,
+  allLabel,
+  options,
+  value,
+  disabled,
+  onChange,
+  className,
+}: {
+  id: string
+  label?: string
+  allLabel: string
+  options: { value: string; label: string }[]
+  value: string | null
+  disabled?: boolean
+  onChange: (v: string | null) => void
+  className?: string
+}) {
+  const items = [{ value: all, label: allLabel }, ...options]
+  const select = (
+    <Select
+      items={items}
+      value={value ?? all}
+      disabled={disabled}
+      onValueChange={(v) => v && onChange(v === all ? null : v)}
+    >
+      <SelectTrigger id={id} aria-label={label ? undefined : allLabel}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((i) => (
+          <SelectItem key={i.value} value={i.value}>
+            {i.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+  return label ? (
+    <Field className={className}>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      {select}
+    </Field>
+  ) : (
+    <div className={className}>{select}</div>
+  )
+}
+
+function SubjectField({ s, id, label = true }: { s: ListState; id: string; label?: boolean }) {
+  const scoped = s.sector
+    ? allSubjects.filter((name) => tickets.some((t) => t.subject === name && t.sectorId === Number(s.sector)))
+    : allSubjects
+  const typed = normalizeSearch(s.subject.trim())
+  const matches = scoped.filter((n) => normalizeSearch(n).includes(typed))
+  const input = (
+    <Autocomplete items={scoped} filteredItems={matches} value={s.subject} onValueChange={(v) => s.setSubject(v)}>
+      <AutocompleteInput id={id} placeholder="Parte do assunto" aria-label={label ? undefined : 'Assunto'} />
+      <AutocompleteContent>
+        <AutocompleteList>
+          {(name: string) => (
+            <AutocompleteItem key={name} value={name}>
+              {name}
+            </AutocompleteItem>
+          )}
+        </AutocompleteList>
+      </AutocompleteContent>
+    </Autocomplete>
+  )
+  return label ? (
+    <Field className="w-full sm:w-[calc(220px*var(--text-scale))]">
+      <FieldLabel htmlFor={id}>Assunto</FieldLabel>
+      {input}
+    </Field>
+  ) : (
+    input
+  )
+}
+
+const sectorOptions = sectors.map((x) => ({ value: String(x.id), label: x.name }))
+function assigneeOptions(s: ListState) {
+  return people
+    .filter((p) => s.sector && p.sectorId === Number(s.sector))
+    .map((p) => ({ value: String(p.id), label: p.name }))
+}
+function moduleOptions(s: ListState) {
+  return modules
+    .filter((m) => s.sector && m.sectorId === Number(s.sector))
+    .map((m) => ({ value: String(m.id), label: m.name }))
+}
+
+function PeriodChips({ s }: { s: ListState }) {
+  return (
+    <ToggleGroup
+      aria-label="Período"
+      value={[s.period]}
+      onValueChange={(v: string[]) => v[0] && s.setPeriod(v[0] as Period)}
+    >
+      {periodChoices.map((c) => (
+        <ToggleGroupItem key={c.value} value={c.value}>
+          {c.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  )
+}
+
+function DateRange({ s, prefix }: { s: ListState; prefix: string }) {
+  if (s.period !== 'custom') return null
+  return (
+    <>
+      <Field className="w-full sm:w-[calc(160px*var(--text-scale))]">
+        <FieldLabel htmlFor={`${prefix}-de`}>Início</FieldLabel>
+        <Input id={`${prefix}-de`} type="date" value={s.from} onChange={(e) => s.setDate('de', e.target.value)} />
+      </Field>
+      <Field className="w-full sm:w-[calc(160px*var(--text-scale))]">
+        <FieldLabel htmlFor={`${prefix}-ate`}>Fim</FieldLabel>
+        <Input id={`${prefix}-ate`} type="date" value={s.to} onChange={(e) => s.setDate('ate', e.target.value)} />
+      </Field>
+    </>
+  )
+}
+
+const lockedHint = 'Escolha um setor'
+
+// ---------- Versão A: barra de filtros acima da tabela ----------
+
+function VariantA({ s }: { s: ListState }) {
+  const { rows, total, page } = useRows(s)
+  return (
+    <>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SearchBox value={s.q} onChange={s.setQ} label="Buscar chamados" placeholder="Protocolo, contato, telefone ou órgão" />
+          <PeriodChips s={s} />
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <DateRange s={s} prefix="a" />
+          {s.isAdmin && (
+            <Choose
+              id="a-setor"
+              label="Setor"
+              allLabel="Todos os setores"
+              options={sectorOptions}
+              value={s.sector}
+              onChange={s.setSector}
+              className="w-full sm:w-[calc(190px*var(--text-scale))]"
+            />
+          )}
+          <Choose
+            id="a-resp"
+            label="Responsável"
+            allLabel={s.sector ? 'Todos os responsáveis' : lockedHint}
+            options={assigneeOptions(s)}
+            value={s.assignee}
+            disabled={!s.sector}
+            onChange={s.setAssignee}
+            className="w-full sm:w-[calc(190px*var(--text-scale))]"
+          />
+          <Choose
+            id="a-modulo"
+            label="Módulo"
+            allLabel={s.sector ? 'Todos os módulos' : lockedHint}
+            options={moduleOptions(s)}
+            value={s.module}
+            disabled={!s.sector}
+            onChange={s.setModule}
+            className="w-full sm:w-[calc(190px*var(--text-scale))]"
+          />
+          <SubjectField s={s} id="a-assunto" />
+        </div>
+      </div>
+      <Card className="gap-0 py-0">
+        {rows.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableTableHead label="Protocolo" column="protocolo" list={s} />
+                <SortableTableHead label="Data" column="data" list={s} />
+                <SortableTableHead label="Contato" column="contato" list={s} />
+                <SortableTableHead label="Órgão" column="orgao" list={s} />
+                {s.isAdmin && <SortableTableHead label="Setor" column="setor" list={s} />}
+                <SortableTableHead label="Responsável" column="responsavel" list={s} />
+                <SortableTableHead label="Assunto" column="assunto" list={s} />
+                <TableHead>Módulos</TableHead>
+                <SortableTableHead label="Situação" column="situacao" list={s} />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((t) => (
+                <TableRow key={t.id} className="relative">
+                  <TableCell className="mono-num caption whitespace-nowrap">
+                    <RowLink t={t}>{t.protocol}</RowLink>
+                  </TableCell>
+                  <TableCell className="mono-num caption whitespace-nowrap">{formatWhen(t.date)}</TableCell>
+                  <TableCell className="max-w-[120px]">
+                    <p className="truncate">{t.contact.name}</p>
+                    <p className="mono-num caption text-ink-faint">{t.contact.phone}</p>
+                  </TableCell>
+                  <TableCell className="max-w-[110px] truncate" title={t.organization ?? undefined}>{t.organization ?? <Faint>Não cadastrado</Faint>}</TableCell>
+                  {s.isAdmin && <TableCell className="max-w-[110px] truncate">{t.sectorName}</TableCell>}
+                  <TableCell className="max-w-[100px] truncate">{t.assignee ?? <Faint>—</Faint>}</TableCell>
+                  <TableCell className="max-w-[110px] truncate" title={t.subject ?? undefined}>{t.subject ?? <Faint>—</Faint>}</TableCell>
+                  <TableCell>
+                    <ModulesCell t={t} />
+                  </TableCell>
+                  <TableCell>
+                    <SituationPill t={t} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <EmptyRows />
+        )}
+        <Pagination page={page} pageSize={pageSize} total={total} noun={['chamado', 'chamados']} onPage={s.setPage} />
+      </Card>
+    </>
+  )
+}
+
+export default function AtendimentoPrototype() {
+  const { data: user } = useCurrentUser()
+  const s = useListState(user?.role === 'admin')
+  if (!user) return null
+  return (
+    <>
+      <Topbar breadcrumb={s.isAdmin ? 'Todos os setores' : 'Suporte Sistemas'} title="Atendimentos" />
+      <PageContent>
+        <VariantA s={s} />
+      </PageContent>
+    </>
+  )
+}
+
