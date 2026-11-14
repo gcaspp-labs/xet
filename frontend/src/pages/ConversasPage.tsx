@@ -13,8 +13,8 @@ import {
   UserCheck,
   UserRoundCog,
 } from 'lucide-react'
-import { useState } from 'react'
-import { Link, NavLink, useNavigate, useParams } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, useLocation, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
@@ -23,6 +23,7 @@ import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
+import NotFoundPage from '@/pages/NotFoundPage'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -38,10 +39,11 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSectors } from '@/lib/admin'
+import { isNotFound } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
 import { ticketKey, useAssignTicket, useTicket, useTicketModules } from '@/lib/conversation'
 import { formatMessageTime, organizationLabel } from '@/lib/format'
-import { lastMessagePreview, ticketsQuery, type TicketSummary } from '@/lib/tickets'
+import { lastMessagePreview, parseTicketId, ticketsQuery, type TicketSummary } from '@/lib/tickets'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import {
   canCancel,
@@ -75,7 +77,9 @@ function TicketLine({ ticket }: { ticket: TicketSummary }) {
 
 export default function ConversasPage() {
   const { ticketId: param } = useParams()
-  const ticketId = param ? Number(param) : undefined
+  // Sem id é a tela sem seleção; com id que não é número, Não encontrado (sem chamar a API).
+  const invalidId = param !== undefined && parseTicketId(param) === null
+  const ticketId = parseTicketId(param) ?? undefined
   const { data: user } = useCurrentUser()
   const { data: sectors = [] } = useSectors()
   const visible = sectors.filter((sector) => user?.role === 'admin' || sector.id === user?.sectorId)
@@ -118,8 +122,22 @@ export default function ConversasPage() {
   )
   const showSubjects = !!ticket && !!user && canClose(ticket, user)
   const currentTab = showSubjects ? tab : 'queue'
-  const leave = () => void navigate('/conversas')
-  if (!user) return null
+  const leave = () => void navigate('/chamados')
+  const location = useLocation()
+  // Chamado encerrado (cancelado e transferido incluídos) não é desta tela: vai para Atendimentos,
+  // substituindo o endereço no histórico. Vale para link antigo e para quem está com o chamado aberto
+  // quando outra pessoa o encerra. Mas quem encerra, cancela ou transfere pela própria tela volta a
+  // /chamados, e isso prevalece: não redireciona com um formulário aberto (a consulta já veio
+  // encerrada antes de o formulário fechar) nem se a navegação da própria pessoa já foi pedida (o
+  // endereço do navegador muda na hora, a tela do roteador depois).
+  const closed = ticket?.status === 'closed' && ticket.id === ticketId
+  useEffect(() => {
+    if (closed && action === '' && window.location.pathname === location.pathname) {
+      void navigate(`/atendimentos/${ticketId}`, { replace: true })
+    }
+  }, [closed, action, ticketId, location.pathname, navigate])
+  if (invalidId || isNotFound(ticketError)) return <NotFoundPage />
+  if (!user || (closed && action === '')) return null
 
   return (
     <>
@@ -248,27 +266,27 @@ export default function ConversasPage() {
             ticket={ticket}
             open={action === 'cancel'}
             onOpenChange={(open) => !open && setAction('')}
-            successTo="/conversas"
+            successTo="/chamados"
           />
           <ReturnSheet
             ticket={ticket}
             open={action === 'return'}
             onOpenChange={(open) => !open && setAction('')}
-            successTo="/conversas"
+            successTo="/chamados"
           />
           <ClosingSheet
             key={closingKey}
             ticket={ticket}
             open={action === 'close'}
             onOpenChange={(open) => !open && setAction('')}
-            successTo="/conversas"
+            successTo="/chamados"
           />
           <ClosingSheet
             key={`sector-${closingKey}`}
             ticket={ticket}
             open={action === 'sector'}
             onOpenChange={(open) => !open && setAction('')}
-            successTo="/conversas"
+            successTo="/chamados"
             transfer
           />
           <TransferSheet
@@ -305,7 +323,7 @@ export default function ConversasPage() {
                 {mine.map((item) => (
                   <li key={item.id}>
                     <NavLink
-                      to={`/conversas/${item.id}`}
+                      to={`/chamados/${item.id}`}
                       className="flex flex-col gap-1 border-l-3 border-transparent px-4 py-2.5 hover:bg-muted aria-[current=page]:border-primary aria-[current=page]:bg-accent-soft"
                     >
                       <TicketLine ticket={item} />
@@ -406,7 +424,7 @@ export default function ConversasPage() {
                             {
                               onSuccess: () => {
                                 setTab('queue')
-                                void navigate(`/conversas/${item.id}`)
+                                void navigate(`/chamados/${item.id}`)
                               },
                             },
                           )

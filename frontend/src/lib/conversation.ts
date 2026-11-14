@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import { closedTodayKey, type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
@@ -120,6 +120,11 @@ export function useTicket(ticketId: number, enabled = true) {
     enabled,
     queryKey: ticketKey(ticketId),
     queryFn: () => api<TicketDetail>(`/tickets/${ticketId}`),
+    // 404 e 403 são respostas definitivas: repetir só deixa a tela em branco por vários segundos.
+    // Erro de rede ou do servidor segue com as tentativas padrão (3).
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && (error.status === 404 || error.status === 403)) &&
+      failureCount < 3,
   })
 }
 

@@ -7,6 +7,9 @@ export class ApiError extends Error {
   }
 }
 
+// O endereço pede algo que não existe (404): vira a tela Não encontrado, não um erro solto.
+export const isNotFound = (error: unknown) => error instanceof ApiError && error.status === 404
+
 // Chama a API do backend; erros chegam como { error: "mensagem" } em português.
 // Um FormData (envio de arquivo) vai como multipart; o resto, como JSON.
 export async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {

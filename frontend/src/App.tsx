@@ -3,6 +3,7 @@ import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
+import NotFoundPage from '@/pages/NotFoundPage'
 import PanelPage from '@/pages/PanelPage'
 import ConversasPage from '@/pages/ConversasPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
@@ -28,7 +29,7 @@ function RequireAuth() {
 
 function Home() {
   const { data: user } = useCurrentUser()
-  return <Navigate to={user?.role === 'agent' ? '/conversas' : '/dashboard'} replace />
+  return <Navigate to={user?.role === 'agent' ? '/chamados' : '/dashboard'} replace />
 }
 
 // Rotas restritas a papéis; os demais voltam ao início. O backend também recusa.
@@ -47,10 +48,10 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/atendimento" element={<PanelPage />} />
-          <Route path="/chamados/:ticketId" element={<TicketPage />} />
-          <Route path="/conversas" element={<ConversasPage />} />
-          <Route path="/conversas/:ticketId" element={<ConversasPage />} />
+          <Route path="/atendimentos" element={<PanelPage />} />
+          <Route path="/atendimentos/:ticketId" element={<TicketPage />} />
+          <Route path="/chamados" element={<ConversasPage />} />
+          <Route path="/chamados/:ticketId" element={<ConversasPage />} />
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>
@@ -63,9 +64,10 @@ export default function App() {
             <Route path="/admin/setores" element={<SectorsPage />} />
             <Route path="/admin/usuarios" element={<UsersPage />} />
           </Route>
+          {/* Endereço desconhecido, logado (inclusive os antigos, sem alias): Não encontrado no layout. */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
