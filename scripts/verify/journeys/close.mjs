@@ -89,7 +89,7 @@ await journey('close', async (t) => {
       await sheet.getByRole('button', { name: 'Encerrar' }).click()
       await sheet.getByRole('button', { name: 'Não adicionar' }).click()
       await expect(agentPage.getByText('Chamado encerrado', { exact: true })).toBeVisible()
-      await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+      await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
       const doneRow = agentPage
         .getByRole('region', { name: 'Realizados hoje' })
         .getByRole('row', { name: new RegExp(paulo.name) })
@@ -118,7 +118,7 @@ await journey('close', async (t) => {
     ).toBeVisible()
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
     await expect(agentPage.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-    const details = agentPage.getByRole('region', { name: 'Chamado' })
+    const details = agentPage.getByRole('region', { name: 'Chamado', exact: true })
     await expect(details).toContainText('Contracheque')
     await expect(details).toContainText('Enviada a segunda via.')
     await expect(details).toContainText('Folha')
@@ -131,7 +131,7 @@ await journey('close', async (t) => {
     'Nova mensagem do cliente abre outro chamado, sem reabrir',
     async () => {
       await phone.receive(paulo, 'Agora é sobre férias')
-      await agentPage.getByRole('link', { name: 'Atendimento' }).click()
+      await agentPage.getByRole('link', { name: 'Atendimentos' }).click()
       const queue = agentPage.getByRole('region', { name: 'Fila do setor' })
       await expect(queue.getByRole('link', { name: paulo.name })).toHaveCount(1)
       await expect(queue).toContainText('Agora é sobre férias')

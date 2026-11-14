@@ -14,7 +14,7 @@ await journey('receive-and-assign', async (t) => {
   const mariaRow = queue.getByRole('row', { name: /Maria Cliente/ })
 
   await t.step('Atendente entra e vê a fila vazia', async () => {
-    await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+    await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
     await expect(queue.getByText('Nenhum chamado na fila.')).toBeVisible()
     await t.shot(agentPage, 'fila-vazia')
   })
@@ -59,8 +59,8 @@ await journey('receive-and-assign', async (t) => {
   const staleAssign = staleQueue.getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
   await expect(staleAssign).toBeVisible()
 
-  const ticketId = await t.step('Atendente assume pela fila e cai na conversa', async () => {
-    await agentPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+  const ticketId = await t.step('Atendente assume pela fila e cai no chamado', async () => {
+    await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
     await agentPage.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
     await expect(agentPage).toHaveURL(/\/conversas\/\d+$/)
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
@@ -104,7 +104,7 @@ await journey('receive-and-assign', async (t) => {
   })
 
   await t.step('Painel mostra o chamado com o responsável, fora da fila', async () => {
-    await agentPage.getByRole('link', { name: 'Atendimento' }).click()
+    await agentPage.getByRole('link', { name: 'Atendimentos' }).click()
     const mine = agentPage.getByRole('region', { name: 'Em atendimento' })
     await expect(mine.getByRole('row', { name: /Maria Cliente/ })).toContainText('Você')
     await expect(queue.getByRole('row', { name: /Maria Cliente/ })).toHaveCount(0)
@@ -123,7 +123,7 @@ await journey('receive-and-assign', async (t) => {
   await t.step('Outro setor não vê a fila nem abre o chamado', async () => {
     const other = await t.seedSector({ connected: false })
     const otherPage = await t.signIn(other.agents[0])
-    await expect(otherPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+    await expect(otherPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
     await expect(
       otherPage.getByRole('region', { name: 'Fila do setor' }).getByText('Nenhum chamado na fila.'),
     ).toBeVisible()

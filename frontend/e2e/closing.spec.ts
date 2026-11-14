@@ -117,7 +117,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
 
-  // Volta a Conversas sem chamado aberto; o painel mantém os realizados.
+  // Volta a Chamados sem chamado aberto; o painel mantém os realizados.
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
   await page.goto('/atendimento')
@@ -144,7 +144,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   ).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(details).toContainText('Encerrado')
   await expect(details).toContainText('Contracheque')
   await expect(details).toContainText('Enviada a segunda via.')
@@ -154,7 +154,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
 
   // Nova mensagem do cliente abre outro chamado, na fila.
   expect((await receive('Agora é sobre férias')).ok()).toBeTruthy()
-  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await page.getByRole('link', { name: 'Atendimentos' }).click()
   const queue = page.getByRole('region', { name: 'Fila do setor' })
   await expect(queue.getByRole('link', { name: 'Paulo Cliente' })).toHaveCount(1)
   await expect(queue).toContainText('Agora é sobre férias')
@@ -187,7 +187,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
   await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
 
-  // Volta a Conversas sem chamado aberto; o painel mantém os realizados.
+  // Volta a Chamados sem chamado aberto; o painel mantém os realizados.
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
   await page.goto('/atendimento')
@@ -205,7 +205,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
     hasText: `${agentName} cancelou o chamado`,
   })
   await expect(entry).toContainText('Motivo: Golpe do falso boleto.')
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(details).toContainText('Cancelado')
   await expect(details).toContainText('Cancelado em')
   await expect(details).not.toContainText('Histórico de alterações')
@@ -226,7 +226,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
 
   // Nova mensagem do mesmo número abre outro chamado, na fila.
   expect((await receive('Última chance')).ok()).toBeTruthy()
-  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await page.getByRole('link', { name: 'Atendimentos' }).click()
   const queue = page.getByRole('region', { name: 'Fila do setor' })
   await expect(queue.getByRole('link', { name: 'Paula Golpe' })).toHaveCount(1)
   await expect(queue).toContainText('Última chance')
@@ -371,7 +371,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   await page.getByRole('link', { name: profile }).click()
   await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(conversation).toContainText('Contato não cadastrado')
   await details.getByRole('button', { name: 'Cadastrar contato' }).click()
 
@@ -537,7 +537,7 @@ test('o link do aviso não troca de chamado com a janela aberta', async ({
     .getByRole('button', { name: `Assumir chamado de ${second}` })
     .click()
   const notice = page.locator('[data-sonner-toast]', { hasText: 'Chamado assumido' })
-  const link = notice.getByRole('link', { name: 'Abrir conversa' })
+  const link = notice.getByRole('link', { name: 'Abrir chamado', exact: true })
   // Sem janela aberta, o link do aviso continua disponível.
   await expect(link).toBeVisible()
   await bell.click()
@@ -549,7 +549,7 @@ test('o link do aviso não troca de chamado com a janela aberta', async ({
   // Ponto em que o link fica sobre o botão: é ali que a pessoa tenta clicar.
   const close = sheet.getByRole('button', { name: 'Encerrar' })
   // Busca pelo elemento, não pelo papel: o link oculto segue no lugar, mas sai da árvore de acessibilidade.
-  const linkElement = notice.locator('a', { hasText: 'Abrir conversa' })
+  const linkElement = notice.locator('a', { hasText: 'Abrir chamado' })
   const overlap = async () => {
     const [a, b] = [await close.boundingBox(), await linkElement.boundingBox()]
     if (!a || !b) return null

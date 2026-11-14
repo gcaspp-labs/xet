@@ -34,7 +34,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 | Órgão | Automático, com base no órgão principal do contato; editável |
 | Atendente | Automático, com base no responsável |
 | Setor | Automático |
-| Início | Automático: chegada da primeira mensagem do cliente ou, em conversa iniciada pelo atendente, envio da primeira mensagem; editável |
+| Início | Automático: chegada da primeira mensagem do cliente ou, em chamado aberto pelo atendente, envio da primeira mensagem; editável |
 | Fim | Preenchido automaticamente e editável |
 
 ## Fora do escopo / limites conhecidos
@@ -48,3 +48,4 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 ## Histórico
 
 - 2026-11-11: regras migradas do `spec.md` (Formulário de encerramento; Encerramento, retorno e correções).
+- 2026-11-14: campo Início passa a dizer "chamado aberto" em vez de "conversa iniciada" (padronização dos nomes: Chamados, Atendimentos; #185). Só texto.

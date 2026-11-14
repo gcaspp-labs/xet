@@ -172,7 +172,7 @@ await journey('transfer', async (t) => {
     await sheet.getByRole('button', { name: 'Transferir' }).click()
     await sheet.getByRole('button', { name: 'Não adicionar' }).click()
     await expect(agentPage.getByText('Chamado transferido para outro setor')).toBeVisible()
-    await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+    await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
     const doneRow = agentPage
       .getByRole('region', { name: 'Realizados hoje' })
       .getByRole('row', { name: new RegExp(lucia.name) })
@@ -182,7 +182,7 @@ await journey('transfer', async (t) => {
 
   const destinationPage = await t.signIn(destination.agents[0])
 
-  await t.step('Destino recebe na fila, com a origem e a conversa anterior', async () => {
+  await t.step('Destino recebe na fila, com a origem e o chamado anterior', async () => {
     await destinationPage.getByRole('link', { name: lucia.name }).click()
     await destinationPage.getByRole('link', { name: 'Ver chamado' }).click()
     const destinationConversation = destinationPage.getByRole('region', {
@@ -193,7 +193,7 @@ await journey('transfer', async (t) => {
       `Transferido de ${sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
     )
     const previous = destinationPage
-      .getByRole('region', { name: 'Chamado' })
+      .getByRole('region', { name: 'Chamado', exact: true })
       .getByRole('region', { name: 'Chamado anterior' })
     await expect(previous).toContainText(sector.name)
     await expect(previous).toContainText('Folha de março')

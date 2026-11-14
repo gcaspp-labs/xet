@@ -1,4 +1,4 @@
-// Acesso à tela Conversas pelo menu, com dados fictícios.
+// Acesso à tela Chamados pelo menu, com dados fictícios.
 import { expect, journey } from '../scripts/journey-lib.mjs'
 
 await journey('conversas-menu', async (t) => {
@@ -6,15 +6,15 @@ await journey('conversas-menu', async (t) => {
   const agent = sector.agents[0]
   const page = await t.signIn(agent)
 
-  await t.step('Abrir Conversas pelo menu', async () => {
-    await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await t.step('Abrir Chamados pelo menu', async () => {
+    await page.getByRole('link', { name: 'Chamados', exact: true }).click()
     await expect(page).toHaveURL(/\/conversas$/)
     await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Fila' })).toBeVisible()
     await t.shot(page, 'conversas-vazia')
   })
 
-  await t.step('Abrir uma conversa e conferir os temas', async () => {
+  await t.step('Abrir um chamado e conferir os temas', async () => {
     const customer = t.customer('Cliente de teste')
     await t.phone(sector.id).receive(customer, 'Bom dia, preciso de ajuda')
     await expect(page.getByRole('button', { name: 'Assumir chamado de Cliente de teste' })).toBeVisible()

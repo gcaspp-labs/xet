@@ -59,7 +59,7 @@ func (h *Handler) startConversation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Contato não encontrado.")
 		return
 	case errors.Is(err, ErrContactWithoutPhone):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "Este contato não tem telefone. Informe o telefone no cadastro para iniciar a conversa.")
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Este contato não tem telefone. Informe o telefone no cadastro para iniciar o chamado.")
 		return
 	case err != nil:
 		h.ticketError(w, r, err)

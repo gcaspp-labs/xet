@@ -114,7 +114,7 @@ async function setOption(page: Page, name: string, checked: boolean) {
 const browserOption = 'Notificação do navegador'
 const soundOption = 'Som'
 
-test('aba em segundo plano notifica só com o nome, aba visível não, e o clique abre a conversa', async ({
+test('aba em segundo plano notifica só com o nome, aba visível não, e o clique abre o chamado', async ({
   page,
   context,
   request,
@@ -555,7 +555,7 @@ test('permissão só é pedida ao ativar, e a negada mostra o motivo', async ({ 
     }
   })
   await signIn(page, supervisor, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   expect(await page.evaluate(() => window.__requests)).toBe(0)
 
   await page.getByRole('button', { name: 'Configurações' }).click()

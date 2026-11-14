@@ -195,14 +195,14 @@ test('administrador alterna entre todos os setores e um setor; atendente e módu
   await expect(moduleFilter).toBeDisabled()
 })
 
-test('atendente não vê o item e, pelo endereço, volta a Conversas', async ({ page, baseURL }) => {
+test('atendente não vê o item e, pelo endereço, volta a Chamados', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
 
   await page.goto('/dashboard')
-  await expect(page.getByRole('heading', { name: 'Conversas' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados', exact: true })).toBeVisible()
   await expect(page).toHaveURL(/\/conversas$/)
 })
 
@@ -491,8 +491,8 @@ test('sem acesso ao armazenamento, recolher vale até recarregar', async ({ page
   await expect(kpi(page, 'Na fila')).toHaveCount(0)
 
   // Trocar de tela não perde a escolha.
-  await page.getByRole('link', { name: 'Atendimento' }).click()
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await page.getByRole('link', { name: 'Atendimentos' }).click()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   await page.getByRole('link', { name: 'Dashboard' }).click()
   await expect(page.getByRole('button', { name: 'Abrir Agora' })).toBeVisible()
   await expect(kpi(page, 'Na fila')).toHaveCount(0)

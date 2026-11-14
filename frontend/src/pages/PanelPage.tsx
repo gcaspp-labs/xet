@@ -333,12 +333,12 @@ export default function PanelPage() {
     <>
       <Topbar
         breadcrumb={sector?.name}
-        title="Atendimento"
+        title="Atendimentos"
         action={
           sector && (
             <Button onClick={() => setStarting(true)}>
               <MessageSquarePlus strokeWidth={1.7} aria-hidden />
-              Nova conversa
+              Novo chamado
             </Button>
           )
         }

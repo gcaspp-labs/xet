@@ -226,7 +226,7 @@ export function canCorrect(ticket: TicketDetail, user: User) {
 
 function assignmentText(log: AssignmentLog) {
   if (log.action === 'ticket_started') {
-    return `${log.toName} iniciou a conversa e assumiu o chamado`
+    return `${log.toName} abriu e assumiu o chamado`
   }
   if (log.action === 'ticket_assigned') {
     return `${log.toName} assumiu o chamado`
@@ -852,7 +852,7 @@ function PreviousTicket({ previous }: { previous: NonNullable<TicketDetail['prev
           {previous.resolution}
         </p>
         <Link to={`/chamados/${previous.id}`} className="text-primary hover:underline">
-          Ver conversa anterior
+          Ver chamado anterior
         </Link>
       </div>
     </section>
@@ -1112,7 +1112,7 @@ export default function TicketPage() {
   if (error) {
     return (
       <>
-        <Topbar back={back} breadcrumb="Atendimento" title="Chamado" />
+        <Topbar back={back} breadcrumb="Atendimentos" title="Chamado" />
         <div className="px-4 py-4 md:px-[30px] md:py-[30px]">
           <Alert variant="warning">
             <CircleAlert strokeWidth={1.7} aria-hidden />

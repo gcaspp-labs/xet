@@ -7,12 +7,12 @@ Mensagem de um contato vira chamado na fila do setor, e uma pessoa do setor assu
 - [jornada] Mensagem de número desconhecido abre chamado na fila, com protocolo, marcado como não cadastrado, sem recarregar a tela.
 - [jornada] Reentrega da mesma mensagem (mesmo `externalMessageId`) não gera efeito.
 - [jornada] Segunda mensagem do contato entra no mesmo chamado.
-- [jornada] Assumir pela aba Fila de Conversas e pelo painel Atendimento abre a conversa, já com a caixa de resposta.
+- [jornada] Assumir pela aba Fila de Chamados e pelo painel Atendimentos abre o chamado, já com a caixa de resposta.
 - [jornada] Quem está com a tela desatualizada perde a disputa e recebe o aviso na fila.
 - [jornada] Duas pessoas assumindo ao mesmo tempo: uma recebe 200 e a outra 409, com um registro só na auditoria.
 - [jornada] O chamado assumido sai da fila e aparece em "Em atendimento".
 - [jornada] Pessoa de outro setor não vê a fila e recebe 403 ao pedir o chamado pela API.
-- [não coberto] Assumir pela lista da tela da conversa, sem mudar de tela (`conversation.spec.ts`).
+- [não coberto] Assumir pela lista da tela do chamado, sem mudar de tela (`conversation.spec.ts`).
 - [não coberto] Vários chamados com a mesma pessoa, sem limite (`panel.spec.ts`).
 - [não coberto] Aviso de queda do tempo real e volta automática (`panel.spec.ts`).
 - [não coberto] Grupos ignorados e mensagem enviada pelo celular do setor (só testes de integração).
@@ -22,8 +22,8 @@ Mensagem de um contato vira chamado na fila do setor, e uma pessoa do setor assu
 ## How to get to it
 
 1. Um contato manda uma mensagem para o número do setor.
-2. O atendente entra em `/login` e cai no painel "Atendimento". O cartão "Fila do setor" lista os chamados com o contato, o protocolo e a última mensagem.
-3. Ele abre Conversas pelo menu e clica em "Assumir" na aba Fila. A tela vai para `/conversas/<id>`, com a conversa e a caixa de resposta.
+2. O atendente entra em `/login` e cai no painel "Atendimentos". O cartão "Fila do setor" lista os chamados com o contato, o protocolo e a última mensagem.
+3. Ele abre Chamados pelo menu e clica em "Assumir" na aba Fila. A tela vai para `/conversas/<id>`, com o chamado e a caixa de resposta.
 4. De volta ao painel, o chamado está em "Em atendimento", marcado "Você". Para outro contato na fila, clica em "Assumir" no painel e também chega a `/conversas/<id>`.
 
 ## Driving it
@@ -39,7 +39,7 @@ scripts/verify/scripts/drive.sh receive-and-assign
 
 ## Gotchas
 
-- O botão mostra só "Assumir" na tela, mas o nome acessível é "Assumir chamado de Nome". Na tela da conversa, o botão principal é `{ name: 'Assumir', exact: true }`.
+- O botão mostra só "Assumir" na tela, mas o nome acessível é "Assumir chamado de Nome". Na tela do chamado, o botão principal é `{ name: 'Assumir', exact: true }`.
 - A sessão com `blockRealtime` precisa entrar **depois** de a mensagem chegar: a fila é lida ao abrir a tela e, sem o WebSocket, não muda mais. Entrando antes, ela nunca verá o chamado.
 - A rota `receive` não confere se o setor está conectado: a mensagem entra mesmo com o número caído. Não use essa rota como prova de conexão; ela prova o tratamento da mensagem.
 - `receive` responde 204 também na reentrega. A prova da idempotência é a contagem no banco, e não a resposta.

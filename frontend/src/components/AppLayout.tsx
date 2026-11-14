@@ -73,13 +73,13 @@ const homeItems: NavItem[] = [
 const helpdeskItems: NavItem[] = [
   {
     to: '/atendimento',
-    label: 'Atendimento',
+    label: 'Atendimentos',
     icon: MessagesSquare,
     roles: ['agent', 'supervisor', 'admin'],
   },
   {
     to: '/conversas',
-    label: 'Conversas',
+    label: 'Chamados',
     icon: MessageSquareText,
     roles: ['agent', 'supervisor', 'admin'],
   },

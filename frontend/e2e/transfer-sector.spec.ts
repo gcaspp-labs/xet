@@ -76,7 +76,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado transferido para outro setor')).toBeVisible()
 
-  // Volta a Conversas sem chamado aberto; o painel mantém os realizados.
+  // Volta a Chamados sem chamado aberto; o painel mantém os realizados.
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
   await page.goto('/atendimento')
@@ -88,7 +88,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
 
   // A origem fica encerrada e mostra para onde foi.
   await doneRow.getByRole('link', { name: contact }).click()
-  const details = page.getByRole('region', { name: 'Chamado' })
+  const details = page.getByRole('region', { name: 'Chamado', exact: true })
   await expect(details).toContainText('Encerrado')
   await expect(details).toContainText('Transferido para')
   await expect(details).toContainText(destination.sector.name)
@@ -114,7 +114,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await expect(previous).toContainText('Encaminhado ao setor responsável.')
   await expect(previous).toContainText(`Transferido por ${originName}`)
   const destinationUrl = page.url()
-  await previous.getByRole('link', { name: 'Ver conversa anterior' }).click()
+  await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
   await expect(conversation).toContainText('Folha de março')
   await expect(page.getByRole('button', { name: 'Corrigir' })).toHaveCount(0)
   await details.getByRole('tab', { name: 'Notas' }).click()

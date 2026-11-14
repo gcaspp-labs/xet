@@ -17,7 +17,7 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 11. Órgãos são cadastrados manualmente. Contatos são cadastrados manualmente ou importados do WhatsApp do setor (ver [contact-import.md](contact-import.md)).
 12. Cada telefone corresponde a um único contato. Quando um telefone é usado por mais de uma pessoa, o atendente anota no chamado com quem falou.
 13. A busca localiza órgãos e contatos por nome, município, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
-14. A lista de contatos e a busca de "Nova conversa" filtram também por município e por órgão. O filtro de município mostra só os que têm órgão cadastrado; escolhido o município, o filtro de órgão mostra só os dele.
+14. A lista de contatos e a busca de "Novo chamado" filtram também por município e por órgão. O filtro de município mostra só os que têm órgão cadastrado; escolhido o município, o filtro de órgão mostra só os dele.
 15. Mensagens de números desconhecidos entram normalmente na fila.
 16. A mensagem recebida é ligada ao contato pelo identificador do WhatsApp gravado nele. Na primeira mensagem de um contato cadastrado à mão, ainda sem esse identificador, vale o telefone, com ou sem o nono dígito do celular (5511987654321 e 551187654321), e o identificador passa a ser gravado.
 17. Número desconhecido gera um contato não cadastrado, com o nome do perfil do WhatsApp ou, sem ele, o telefone.
@@ -30,13 +30,13 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 24. O contato pode pertencer a vários setores. O setor organiza a lista e não restringe o acesso: o cadastro é único para todos os setores.
 25. No cadastro manual, ao menos um setor é obrigatório, com o setor de quem cadastra já marcado; o administrador escolhe.
 26. Atendentes e supervisores marcam ou desmarcam apenas o próprio setor e o módulo dele. Os demais setores e módulos do contato aparecem só para leitura e são preservados ao salvar. O administrador altera qualquer um.
-27. A lista de contatos abre em "Meu setor", com opção de ver todos, e a busca de "Nova conversa" usa o mesmo filtro. O administrador abre em todos.
+27. A lista de contatos abre em "Meu setor", com opção de ver todos, e a busca de "Novo chamado" usa o mesmo filtro. O administrador abre em todos.
 28. O contato entra no setor sozinho ao escrever para o número dele, ao receber uma conversa iniciada por ele, em mensagem enviada pelo celular do setor ou ao ser transferido para ele.
 29. O módulo no contato é opcional, e o contato tem no máximo um em cada setor. Os módulos filtram a lista, e o do setor do chamado vem marcado no formulário de encerramento.
 30. A lista de contatos mostra os setores do contato e o módulo em cada um.
 31. As alterações de setores e módulos do contato, inclusive as automáticas, ficam registradas na auditoria.
 32. A lista de contatos é paginada e ordena por Contato (padrão) ou por Órgão, como em [interface.md](interface.md). Nomes iguais mantêm sempre a mesma ordem, e contatos sem órgão ficam no fim da ordem por órgão. O total conta cada contato uma vez, mesmo em vários setores.
-33. Na tela Contatos, a busca e os filtros também ficam no endereço (`?busca=`, `?setor=`, `?modulo=`, `?municipio=`, `?orgao=`). A busca de "Nova conversa" mostra os 20 primeiros resultados.
+33. Na tela Contatos, a busca e os filtros também ficam no endereço (`?busca=`, `?setor=`, `?modulo=`, `?municipio=`, `?orgao=`). A busca de "Novo chamado" mostra os 20 primeiros resultados.
 34. A lista de órgãos é paginada e ordena por Órgão (padrão), Município ou CNPJ, como em [interface.md](interface.md), com a busca no endereço (`?busca=`). Nomes iguais mantêm sempre a mesma ordem, e órgãos sem CNPJ ficam no fim da ordem por CNPJ.
 35. Os seletores de órgão (filtros, cadastro e importação de contatos, encerramento) mostram os 20 primeiros resultados da busca e avisam quando há mais, pedindo para refinar.
 
@@ -53,3 +53,4 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 - 2026-11-11: lista de órgãos paginada e ordenável (#127).
 - 2026-11-11: lista de contatos paginada e ordenável (#126).
 - 2026-11-11: regras migradas do `spec.md` (Órgãos e contatos; Órgãos e contatos › Setores e módulos do contato).
+- 2026-11-14: a janela "Nova conversa" passa a "Novo chamado" nas regras 14, 27 e 33, só texto (ticket [#185](https://github.com/gcaspp-labs/xet/issues/185)).

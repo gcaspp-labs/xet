@@ -58,8 +58,8 @@ await journey('connection', async (t) => {
       ).toBeVisible()
       await expect(qr).toBeHidden()
       await t.shot(page, 'conectado')
-      await page.getByRole('link', { name: 'Atendimento' }).click()
-      await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+      await page.getByRole('link', { name: 'Atendimentos' }).click()
+      await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
       await expect(bell).toHaveAccessibleName('Notificações')
       await bell.click()
       await expect(notice).toBeHidden()
@@ -75,7 +75,7 @@ await journey('connection', async (t) => {
     await t.shot(page, 'queda-no-sino')
     await notice.click()
     await expect(page.getByText(formatted)).toBeVisible()
-    await page.getByRole('link', { name: 'Atendimento' }).click()
+    await page.getByRole('link', { name: 'Atendimentos' }).click()
   })
 
   await t.step('Desvinculado pelo celular: a tela pede um novo QR code', async () => {
@@ -126,7 +126,7 @@ await journey('connection', async (t) => {
     'Atendente não vê a conexão nem o aviso no sino, e a rota o devolve ao painel',
     async () => {
       const agentPage = await t.signIn(sector.agents[0])
-      await expect(agentPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+      await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
       await expect(agentPage.getByRole('link', { name: 'Conexão' })).toBeHidden()
       await expect(agentPage.getByRole('button', { name: /^Notificações/ })).toHaveAccessibleName(
         'Notificações',

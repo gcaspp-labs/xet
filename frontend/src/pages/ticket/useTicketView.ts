@@ -29,7 +29,7 @@ export function useTicketView(ticketId: number) {
   return [view, setView] as const
 }
 
-// Na tela Conversas só a busca de Assuntos é lembrada, por chamado e apenas na memória da página.
+// Na tela Chamados só a busca de Assuntos é lembrada, por chamado e apenas na memória da página.
 // A aba volta a ser a Fila a cada troca de conversa.
 export function useConversasSearch(ticketId: number) {
   const query = useSyncExternalStore(

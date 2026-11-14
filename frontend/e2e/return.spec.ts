@@ -74,7 +74,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   ).toBeTruthy()
   await page.setViewportSize({ width: 1280, height: 720 })
 
-  // O responsável devolve e volta a Conversas sem chamado aberto.
+  // O responsável devolve e volta a Chamados sem chamado aberto.
   await page.getByRole('button', { name: 'Devolver à fila' }).click()
   const sheet = page.getByRole('dialog', { name: 'Devolver à fila' })
   await sheet.getByRole('button', { name: 'Devolver à fila' }).click()

@@ -75,7 +75,7 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
       className="h-[calc(100dvh-150px-var(--header-height))]"
     >
       <CardHeader>
-        <CardTitle id="conversation-list-title">Conversas do setor</CardTitle>
+        <CardTitle id="conversation-list-title">Chamados do setor</CardTitle>
       </CardHeader>
       {/* Fora da seção da fila: quem perdeu a disputa pelo último chamado ainda vê o motivo. */}
       {assign.error && (
@@ -87,7 +87,7 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
         </div>
       )}
       {tickets.length > 0 ? (
-        <nav aria-label="Conversas abertas" className="flex-1 overflow-y-auto">
+        <nav aria-label="Chamados abertos" className="flex-1 overflow-y-auto">
           {queued.length > 0 && (
             <section aria-labelledby="conversation-queue-title" className="border-b border-line">
               <h3 id="conversation-queue-title" className="overline px-4 py-2 text-ink-soft">
@@ -114,7 +114,7 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
                                     to={`/chamados/${ticket.id}`}
                                     className="body-strong ml-auto whitespace-nowrap text-accent-strong underline underline-offset-2"
                                   >
-                                    Abrir conversa
+                                    Abrir chamado
                                   </Link>
                                 ),
                               }),
@@ -143,7 +143,7 @@ export function ConversationList({ sectorId, user }: { sectorId: number; user: U
           <EmptyMedia>
             <MessagesSquare strokeWidth={1.7} aria-hidden />
           </EmptyMedia>
-          <EmptyDescription>Nenhuma conversa aberta.</EmptyDescription>
+          <EmptyDescription>Nenhum chamado aberto.</EmptyDescription>
         </Empty>
       )}
     </Card>

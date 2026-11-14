@@ -8,14 +8,14 @@ O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regr
 - **Atendente:** assume chamados da fila e responde aos que estão com ele.
 - **Supervisor:** faz o mesmo e, no próprio setor, conecta o número, transfere e devolve chamados de outras pessoas.
 - **Administrador:** cadastra setores e usuários e vê todos os setores. Nas jornadas, só prepara os dados.
-- **Chamado:** uma conversa com um contato num setor. Situação no banco: `queued` (fila), `in_progress` (em atendimento) ou `closed`. Só há um aberto por contato e setor.
+- **Chamado:** o atendimento de um contato num setor, com a conversa pelo WhatsApp. Situação no banco: `queued` (fila), `in_progress` (em atendimento) ou `closed`. Só há um aberto por contato e setor.
 - **Contato:** a pessoa do outro lado. Número desconhecido vira contato não cadastrado, e o cadastro é exigido para encerrar.
 
 ## Fluxos
 
 | Fluxo              | Arquivo                                        | Jornada              | Regras em `docs/features/`                     | Testes parecidos em `frontend/e2e`                              | Rode quando a mudança tocar em                                            |
 | ------------------ | ---------------------------------------------- | -------------------- | ---------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Menu Conversas | [conversas-menu.md](conversas-menu.md) | `conversas-menu` | `queue.md` | `conversas.spec.ts` | acesso à tela Conversas pelo menu |
+| Menu Chamados | [conversas-menu.md](conversas-menu.md) | `conversas-menu` | `queue.md` | `conversas.spec.ts` | acesso à tela Chamados pelo menu |
 | Receber e assumir  | [receive-and-assign.md](receive-and-assign.md) | `receive-and-assign` | `queue.md`                                     | `panel.spec.ts`, `conversation.spec.ts`                         | fila, painel, assumir, tempo real, recepção de mensagens                  |
 | Responder          | [reply.md](reply.md)                           | `reply`              | `conversation.md`                              | `conversation.spec.ts`, `media.spec.ts`                         | tela da conversa, envio, situação da mensagem, anexos                     |
 | Consultar assuntos | [consult-subjects.md](consult-subjects.md)     | `consult-subjects`   | `subjects.md`                                  | `subjects.spec.ts`                                              | consulta de assuntos durante o atendimento                                |

@@ -45,39 +45,37 @@ function assumeIn(page: Page, name: string) {
   return page.getByRole('button', { name: `Assumir chamado de ${name}` })
 }
 
-test('Conversas funciona no menu recolhido e no celular', async ({ page, baseURL }) => {
+test('Chamados funciona no menu recolhido e no celular', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
   await page.getByRole('button', { name: 'Recolher menu' }).click()
-  const link = page.getByRole('link', { name: 'Conversas', exact: true })
+  const link = page.getByRole('link', { name: 'Chamados', exact: true })
   await link.hover()
-  await expect(
-    page.locator('[data-slot="tooltip-content"]', { hasText: 'Conversas' }),
-  ).toBeVisible()
+  await expect(page.locator('[data-slot="tooltip-content"]', { hasText: 'Chamados' })).toBeVisible()
   await link.click()
   await expect(link).toHaveAttribute('aria-current', 'page')
   await page.setViewportSize({ width: 390, height: 800 })
   await page.getByRole('banner').getByRole('button', { name: 'Abrir menu' }).click()
-  const mobileLink = page.getByRole('link', { name: 'Conversas', exact: true })
+  const mobileLink = page.getByRole('link', { name: 'Chamados', exact: true })
   await expect(mobileLink).toBeVisible()
   await mobileLink.click()
   await expect(page).toHaveURL(/\/conversas$/)
 })
 
-test('menu Conversas abre a tela sem atendimentos', async ({ page, baseURL }) => {
+test('menu Chamados abre a tela sem chamados', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Fila' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Conversas', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Chamados', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   )
 })
 
-test('assumir pela fila abre a conversa e permite consultar assuntos', async ({
+test('assumir pela fila abre o chamado e permite consultar assuntos', async ({
   page,
   request,
   baseURL,
@@ -94,7 +92,7 @@ test('assumir pela fila abre a conversa e permite consultar assuntos', async ({
   })
   expect(received.ok()).toBeTruthy()
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page
     .getByRole('button', { name: 'Assumir chamado de Cliente da fila com nome bastante comprido' })
     .click()
@@ -110,7 +108,7 @@ test('assumir pela fila abre a conversa e permite consultar assuntos', async ({
   for (const name of ['Detalhes', 'Notas', 'Histórico', 'Falou com']) {
     await expect(page.getByRole('tab', { name })).toHaveCount(0)
   }
-  await expect(page.getByRole('link', { name: 'Conversas', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Chamados', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   )
@@ -130,7 +128,7 @@ test('assumir pela fila abre a conversa e permite consultar assuntos', async ({
   await otherPage.goto(page.url())
   await expect(otherPage.getByRole('tab', { name: 'Assuntos' })).toHaveCount(0)
   await expect(otherPage.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-  await otherPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await otherPage.getByRole('link', { name: 'Chamados', exact: true }).click()
   await otherPage.getByRole('button', { name: 'Assumir chamado de Outro cliente' }).click()
   await expect(page.getByRole('tab', { name: 'Fila', exact: true })).toHaveText('Fila')
   await otherContext.close()
@@ -165,11 +163,11 @@ test('lista só atendimentos próprios, ordena pela atividade e permite alternar
   const first = unique().phone
   await receive('Primeiro cliente', first, 'Mensagem inicial')
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page.getByRole('button', { name: 'Assumir chamado de Primeiro cliente' }).click()
   await receive('Segundo cliente', unique().phone, 'Segunda mensagem')
   await page.getByRole('button', { name: 'Assumir chamado de Segundo cliente' }).click()
-  const mine = page.getByRole('navigation', { name: 'Meus atendimentos' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
   await expect(mine.getByRole('link')).toHaveCount(2)
   await expect(mine.getByRole('link').first()).toContainText('Segundo cliente')
   await expect(mine.getByRole('link').first()).toHaveAttribute('aria-current', 'page')
@@ -183,16 +181,16 @@ test('lista só atendimentos próprios, ordena pela atividade e permite alternar
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
     'Nova atividade',
   )
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await expect(page.getByText('Selecione um atendimento')).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Assuntos' })).toHaveCount(0)
   await page.context().clearCookies()
   await signIn(page, supervisor, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await expect(page.getByText('Você não tem atendimentos ativos.')).toBeVisible()
 })
 
-test('cancelar na tela Conversas retorna ao estado sem conversa', async ({
+test('cancelar na tela Chamados retorna ao estado sem chamado aberto', async ({
   page,
   request,
   baseURL,
@@ -211,7 +209,7 @@ test('cancelar na tela Conversas retorna ao estado sem conversa', async ({
     ).ok(),
   ).toBeTruthy()
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page.getByRole('button', { name: 'Assumir chamado de Cliente cancelado' }).click()
   await page.getByRole('button', { name: 'Cancelar chamado' }).click()
   const dialog = page.getByRole('dialog', { name: 'Cancelar chamado' })
@@ -247,21 +245,21 @@ test('supervisor e administrador assumem na fila dos setores permitidos', async 
     ).toBeTruthy()
   }
   await signIn(page, first.supervisor, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await expect(
     page.getByRole('button', { name: 'Assumir chamado de Cliente de outro setor' }),
   ).toHaveCount(0)
   await page.getByRole('button', { name: 'Assumir chamado de Cliente do setor' }).click()
-  await expect(page.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(
+  await expect(page.getByRole('navigation', { name: 'Meus chamados' })).toContainText(
     'Cliente do setor',
   )
   const adminContext = await browser.newContext()
   const adminPage = await adminContext.newPage()
   await signIn(adminPage, admin.email, admin.password)
-  await adminPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await adminPage.getByRole('link', { name: 'Chamados', exact: true }).click()
   await expect(adminPage.getByText('Você não tem atendimentos ativos.')).toBeVisible()
   await adminPage.getByRole('button', { name: 'Assumir chamado de Cliente de outro setor' }).click()
-  await expect(adminPage.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(
+  await expect(adminPage.getByRole('navigation', { name: 'Meus chamados' })).toContainText(
     'Cliente de outro setor',
   )
   await adminContext.close()
@@ -290,11 +288,11 @@ test('disputa na fila mostra aviso e remove o chamado já assumido', async ({
   const other = await context.newPage()
   await other.routeWebSocket(/\/api\/ws$/, () => {})
   await signIn(other, supervisor, userPassword)
-  await other.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await other.getByRole('link', { name: 'Chamados', exact: true }).click()
   const contested = other.getByRole('button', { name: 'Assumir chamado de Cliente disputado' })
   await expect(contested).toBeVisible()
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page.getByRole('button', { name: 'Assumir chamado de Cliente disputado' }).click()
   await expect(page).toHaveURL(/\/conversas\/\d+$/)
   await contested.click()
@@ -308,7 +306,7 @@ test('disputa na fila mostra aviso e remove o chamado já assumido', async ({
 })
 
 for (const action of ['Encerrar', 'Outro setor', 'Transferir'] as const) {
-  test(`${action} na tela Conversas volta à lista sem conversa aberta`, async ({
+  test(`${action} na tela Chamados volta à lista sem chamado aberto`, async ({
     page,
     request,
     baseURL,
@@ -348,7 +346,7 @@ for (const action of ['Encerrar', 'Outro setor', 'Transferir'] as const) {
       ).ok(),
     ).toBeTruthy()
     await signIn(page, origin.agent, userPassword)
-    await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+    await page.getByRole('link', { name: 'Chamados', exact: true }).click()
     await page.getByRole('button', { name: `Assumir chamado de ${contact}` }).click()
     await page.getByRole('button', { name: action, exact: true }).click()
     if (action === 'Transferir') {
@@ -407,9 +405,9 @@ test('fila do administrador ignora setores inativos e preserva os demais perfis'
 
   // Quem atende no setor inativo assume antes de ele ser desativado: o chamado próprio segue na lista.
   await signIn(page, inactive.agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page.getByRole('button', { name: `Assumir chamado de ${ownName}` }).click()
-  await expect(page.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(ownName)
+  await expect(page.getByRole('navigation', { name: 'Meus chamados' })).toContainText(ownName)
   await clearSession(page)
 
   // A API não desativa setores; usa o banco isolado criado por make test-e2e.
@@ -431,7 +429,7 @@ test('fila do administrador ignora setores inativos e preserva os demais perfis'
   const adminContext = await browser.newContext()
   const adminPage = await adminContext.newPage()
   await signIn(adminPage, admin.email, admin.password)
-  await adminPage.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await adminPage.getByRole('link', { name: 'Chamados', exact: true }).click()
   await expect(assumeIn(adminPage, activeName)).toBeVisible()
   await expect(assumeIn(adminPage, inactiveName)).toHaveCount(0)
   // O contador do administrador não conta o chamado do setor inativo: a aba mostra só os ativos
@@ -444,8 +442,8 @@ test('fila do administrador ignora setores inativos e preserva os demais perfis'
   // Atendente do setor inativo mantém a fila e a lista própria como hoje.
   await clearSession(page)
   await signIn(page, inactive.agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
-  await expect(page.getByRole('navigation', { name: 'Meus atendimentos' })).toContainText(ownName)
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Meus chamados' })).toContainText(ownName)
   await expect(assumeIn(page, inactiveName)).toBeVisible()
   await adminContext.close()
 })
@@ -472,8 +470,8 @@ test('a busca de Assuntos é lembrada por chamado e a Fila abre ao trocar', asyn
     ).toBeTruthy()
   }
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
-  const mine = page.getByRole('navigation', { name: 'Meus atendimentos' })
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
   const search = page.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })
   const vacation = page.getByText('Regra de férias do setor')
   const timeclock = page.getByText('Regra do ponto eletrônico')
@@ -539,7 +537,7 @@ test('a busca de Assuntos é lembrada por chamado e a Fila abre ao trocar', asyn
   await expect(page).toHaveURL(/\/login$/)
   await login(page, agent, userPassword)
   await expect(page).not.toHaveURL(/\/login$/)
-  await page.getByRole('link', { name: 'Conversas', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await mine.getByRole('link', { name: /Cliente B/ }).click()
   await openSubjects()
   await expect(search).toHaveValue('')
