@@ -54,6 +54,12 @@ export function useRealtime() {
     let reconnecting = false
     let stopped = false
 
+    // PROTÓTIPO #188: sem backend, finge a conexão aberta.
+    if (import.meta.env.DEV) {
+      setOnline(true)
+      return
+    }
+
     const connect = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       socket = new WebSocket(`${protocol}//${window.location.host}/api/ws`)

@@ -72,13 +72,13 @@ const homeItems: NavItem[] = [
 // A interface só reflete as permissões; o backend recusa o acesso de quem não pode.
 const helpdeskItems: NavItem[] = [
   {
-    to: '/atendimento',
+    to: '/atendimentos',
     label: 'Atendimentos',
     icon: MessagesSquare,
     roles: ['agent', 'supervisor', 'admin'],
   },
   {
-    to: '/conversas',
+    to: '/chamados',
     label: 'Chamados',
     icon: MessageSquareText,
     roles: ['agent', 'supervisor', 'admin'],
@@ -117,8 +117,8 @@ function NavGroup({ label, items, role }: { label?: string; items: NavItem[]; ro
                 tooltip={item.label}
                 isActive={
                   pathname === item.to ||
-                  (item.to === '/atendimento' && pathname.startsWith('/chamados/')) ||
-                  (item.to === '/conversas' && pathname.startsWith('/conversas/'))
+                  (item.to === '/atendimentos' && pathname.startsWith('/atendimentos/')) ||
+                  (item.to === '/chamados' && pathname.startsWith('/chamados/'))
                 }
                 render={<NavLink to={item.to} onClick={() => setOpenMobile(false)} />}
               >

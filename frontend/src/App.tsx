@@ -12,7 +12,8 @@ import UsersPage from '@/pages/admin/UsersPage'
 import ConnectionPage from '@/pages/connection/ConnectionPage'
 import ContactsPage from '@/pages/directory/ContactsPage'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
-import TicketPage from '@/pages/ticket/TicketPage'
+// PROTÓTIPO #188
+import { AtendimentoDetailPrototype, NotFoundPage } from '@/prototype/NotFoundPrototype'
 
 // Rotas que exigem sessão; sem sessão, vai para o login.
 function RequireAuth() {
@@ -47,10 +48,14 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/atendimento" element={<PanelPage />} />
-          <Route path="/chamados/:ticketId" element={<TicketPage />} />
-          <Route path="/conversas" element={<ConversasPage />} />
-          <Route path="/conversas/:ticketId" element={<ConversasPage />} />
+          {/* PROTÓTIPO #188: rotas canônicas só no que a tela Não encontrado precisa. */}
+          <Route path="/atendimentos" element={<PanelPage />} />
+          <Route path="/atendimentos/:ticketId" element={<AtendimentoDetailPrototype />} />
+          <Route path="/chamados" element={<ConversasPage />} />
+          <Route path="/chamados/:ticketId" element={<ConversasPage />} />
+          <Route path="/atendimento" element={<NotFoundPage />} />
+          <Route path="/conversas" element={<NotFoundPage />} />
+          <Route path="/conversas/:ticketId" element={<NotFoundPage />} />
           <Route path="/contatos" element={<ContactsPage />} />
           <Route path="/orgaos" element={<OrganizationsPage />} />
           <Route element={<RequireRole roles={['supervisor', 'admin']} />}>
