@@ -87,9 +87,12 @@ test('transferência entre setores encerra a origem e o destino continua com o h
 
   // A origem fica encerrada e mostra para onde foi.
   await doneRow.getByRole('link', { name: contact }).click()
-  const details = page.getByRole('region', { name: 'Chamado', exact: true })
+  const details = page.getByRole('region', { name: 'Atendimento', exact: true })
   await expect(details).toContainText('Encerrado')
-  await expect(details).toContainText('Transferido para')
+  await expect(details).toContainText('Destino · chamado novo neste setor')
+  await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText(
+    `Transferido para ${destination.sector.name}`,
+  )
   await expect(details).toContainText(destination.sector.name)
   const originName = origin.agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
@@ -144,7 +147,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await expect(previous).toContainText(origin.sector.name)
   await expect(previous).toContainText('Folha de março')
   await expect(previous).toContainText('Encaminhado ao setor responsável.')
-  await expect(previous).toContainText(`Transferido por ${originName}`)
+  await expect(previous).toContainText(`transferido por ${originName}`)
   await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
   await expect(page).toHaveURL(new RegExp(`/atendimentos/${link.id}$`))
   await expect(conversation).toContainText('Folha de março')

@@ -215,7 +215,7 @@ test('/atendimentos/:id de chamado ativo mostra Não encontrado com Voltar', asy
   await expect(page).toHaveURL(/\/chamados$/)
 })
 
-test('/atendimentos/:id de chamado encerrado abre a tela do chamado, com o histórico por situação', async ({
+test('/atendimentos/:id de chamado encerrado abre a ficha só leitura, com o histórico por situação', async ({
   page,
   baseURL,
 }) => {

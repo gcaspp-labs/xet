@@ -1,4 +1,3 @@
-import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRightLeft,
   Ban,
@@ -7,6 +6,7 @@ import {
   CircleCheck,
   FileText,
   History,
+  Lock,
   MessagesSquare,
   Mic,
   Paperclip,
@@ -15,7 +15,6 @@ import {
   SendHorizontal,
   Trash2,
   Undo2,
-  UserCheck,
   UserRoundCog,
   X,
 } from 'lucide-react'
@@ -27,19 +26,12 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { toast } from 'sonner'
+import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
-import { CancelSheet } from '@/components/CancelSheet'
-import { ClosingSheet } from '@/components/ClosingSheet'
-import { RegisterContactSheet } from '@/components/ContactSheet'
-import { ConversationList } from '@/components/ConversationList'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
-import { ReturnSheet } from '@/components/ReturnSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
 import type { HistoryReturnState } from '@/lib/history-return'
 import { Topbar } from '@/components/Topbar'
-import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -57,8 +49,6 @@ import {
   type TicketDetail,
   maxFileSize,
   newRequestId,
-  ticketKey,
-  useAssignFromTicket,
   useAssignments,
   useContactHistory,
   useCorrections,
@@ -83,7 +73,6 @@ import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 import NotFoundPage from '@/pages/NotFoundPage'
-import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import { useTicketView } from '@/pages/ticket/useTicketView'
 
 const messageStatusLabels: Record<
@@ -800,36 +789,7 @@ function CorrectionHistory({ corrections: all }: { corrections: Correction[] }) 
   )
 }
 
-// Origem de uma transferência entre setores: resumo e acesso à conversa
-// anterior, só para leitura.
-function PreviousTicket({ previous }: { previous: NonNullable<TicketDetail['previous']> }) {
-  return (
-    <section aria-label="Chamado anterior">
-      <h3 className="overline text-ink-soft">Chamado anterior</h3>
-      <div className="mt-1 flex flex-col gap-1 rounded-(--radius-7) border border-line-soft bg-card px-3 py-2">
-        <p>
-          {previous.sectorName} · <span className="mono-num">{previous.protocol}</span>
-        </p>
-        {previous.closedByName && (
-          <p className="caption text-ink-faint">Transferido por {previous.closedByName}</p>
-        )}
-        <p>
-          <span className="label text-ink-soft">Assunto: </span>
-          {previous.subject}
-        </p>
-        <p className="whitespace-pre-wrap break-words">
-          <span className="label text-ink-soft">Resolução: </span>
-          {previous.resolution}
-        </p>
-        <Link to={`/atendimentos/${previous.id}`} className="text-primary hover:underline">
-          Ver chamado anterior
-        </Link>
-      </div>
-    </section>
-  )
-}
-
-function DetailsTab({ ticket, onRegister }: { ticket: TicketDetail; onRegister: () => void }) {
+function DetailsTab({ ticket }: { ticket: TicketDetail }) {
   const status = ticketStatusLabel(ticket.status, ticket.closureType)
   const cancelled = ticket.closureType === 'cancelled'
   // O cancelado não lança o atendimento: não tem formulário de encerramento nem correções.
@@ -844,6 +804,7 @@ function DetailsTab({ ticket, onRegister }: { ticket: TicketDetail; onRegister: 
   )
   return (
     <dl className="flex flex-col gap-3">
+      {(ticket.previous || ticket.next) && <TransferChain ticket={ticket} />}
       {row('Protocolo', <span className="mono-num">{ticket.protocol}</span>)}
       {row('Situação', <Badge tone={status.tone}>{status.label}</Badge>)}
       {row('Setor', ticket.sector.name)}
@@ -854,11 +815,6 @@ function DetailsTab({ ticket, onRegister }: { ticket: TicketDetail; onRegister: 
           <span className="mono-num block caption text-ink-faint">
             {ticket.contact.phone ? formatPhone(ticket.contact.phone) : 'Sem telefone'}
           </span>
-          {needsRegistration(ticket) && (
-            <Button variant="outline" size="sm" className="mt-2" onClick={onRegister}>
-              Cadastrar contato
-            </Button>
-          )}
         </>,
       )}
       {row(
@@ -867,13 +823,6 @@ function DetailsTab({ ticket, onRegister }: { ticket: TicketDetail; onRegister: 
           ? organizationLabel(ticket.organization.name, ticket.organization.municipality.name)
           : 'Não cadastrado',
       )}
-      {ticket.next &&
-        row(
-          'Transferido para',
-          <>
-            {ticket.next.sectorName} · <span className="mono-num">{ticket.next.protocol}</span>
-          </>,
-        )}
       {row('Responsável', ticket.assignee?.name ?? 'Sem responsável')}
       {row('Chegada', <span className="mono-num">{formatDateTime(ticket.arrivedAt)}</span>)}
       {ticket.assignedAt &&
@@ -906,7 +855,6 @@ function DetailsTab({ ticket, onRegister }: { ticket: TicketDetail; onRegister: 
         </>
       )}
       {corrections && <CorrectionHistory corrections={corrections} />}
-      {ticket.previous && <PreviousTicket previous={ticket.previous} />}
     </dl>
   )
 }
@@ -971,8 +919,149 @@ function HistoryTab({ ticket }: { ticket: TicketDetail }) {
   )
 }
 
+// Cadeia de transferências entre setores, no topo de Detalhes: a origem abre em /atendimentos/:id
+// (só leitura), este atendimento e o destino, que só mostra setor e protocolo.
+function TransferChain({ ticket }: { ticket: TicketDetail }) {
+  const { previous, next } = ticket
+  const step = (children: ReactNode, current = false) => (
+    <li className="relative pb-3 last:pb-0">
+      <span
+        aria-hidden
+        className={cn(
+          'absolute top-1.5 -left-4.5 size-2.5 rounded-full border-2',
+          current ? 'border-primary bg-primary' : 'border-line bg-card',
+        )}
+      />
+      {children}
+    </li>
+  )
+  return (
+    <section aria-label="Cadeia de transferências">
+      <h3 className="overline text-ink-soft">Transferências</h3>
+      <ol className="mt-2 flex flex-col border-l border-line-soft pl-3">
+        {previous &&
+          step(
+            <section aria-label="Chamado anterior" className="flex flex-col gap-0.5">
+              <p>
+                {previous.sectorName} · <span className="mono-num">{previous.protocol}</span>
+              </p>
+              <p className="caption text-ink-faint">
+                Origem
+                {previous.closedByName && ` · transferido por ${previous.closedByName}`}
+              </p>
+              {previous.subject && (
+                <p className="caption">
+                  <span className="text-ink-soft">Assunto: </span>
+                  {previous.subject}
+                </p>
+              )}
+              {previous.resolution && (
+                <p className="caption whitespace-pre-wrap break-words">
+                  <span className="text-ink-soft">Resolução: </span>
+                  {previous.resolution}
+                </p>
+              )}
+              <Link
+                to={`/atendimentos/${previous.id}`}
+                className="caption text-primary hover:underline"
+              >
+                Ver chamado anterior
+              </Link>
+            </section>,
+          )}
+        {step(
+          <p>
+            {ticket.sector.name} · <span className="mono-num">{ticket.protocol}</span>
+            <span className="caption block text-ink-faint">Este atendimento</span>
+          </p>,
+          true,
+        )}
+        {next &&
+          step(
+            <p>
+              {next.sectorName} · <span className="mono-num">{next.protocol}</span>
+              <span className="caption block text-ink-faint">
+                Destino · chamado novo neste setor
+              </span>
+            </p>,
+          )}
+      </ol>
+    </section>
+  )
+}
+
+// Como o atendimento terminou, para o rodapé da conversa só leitura.
+function readOnlyNote(ticket: TicketDetail) {
+  const at = ticket.closedAt ? formatDateTime(ticket.closedAt) : ''
+  const by = ticket.closedBy ? ` por ${ticket.closedBy.name}` : ''
+  if (ticket.closureType === 'cancelled') {
+    return `Cancelado em ${at}${by}.`
+  }
+  if (ticket.closureType === 'transferred') {
+    return `Transferido para ${ticket.next?.sectorName ?? 'outro setor'} em ${at}${by}.`
+  }
+  return `Encerrado em ${at}${by}.`
+}
+
+// A conversa completa, só para leitura: sem campo de mensagem, áudio, anexo nem Reenviar, com os
+// avisos de sistema e de correção na ordem do tempo. A tela Chamados segue com a ConversationCard.
+function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
+  const { data: messages = [] } = useMessages(ticket.id)
+  const { data: logs = [] } = useAssignments(ticket.id)
+  const list = useRef<HTMLDivElement>(null)
+
+  // Abre no fim: o desfecho e as correções ficam à vista.
+  useEffect(() => {
+    list.current?.scrollTo({ top: list.current.scrollHeight })
+  }, [messages.length, logs.length])
+
+  return (
+    <Card
+      role="region"
+      aria-label="Conversa"
+      className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
+    >
+      <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
+        {messages.length > 0 || logs.length > 0 ? (
+          <ol className="flex flex-col gap-2">
+            {timeline(messages, logs).map((item) =>
+              item.kind === 'message' ? (
+                <MessageBubble
+                  key={`message-${item.message.id}`}
+                  message={item.message}
+                  canRetry={false}
+                  retrying={false}
+                  onRetry={() => {}}
+                />
+              ) : (
+                <AssignmentEntry key={`log-${item.log.id}`} log={item.log} />
+              ),
+            )}
+          </ol>
+        ) : (
+          <Empty>
+            <EmptyMedia>
+              <MessagesSquare strokeWidth={1.7} aria-hidden />
+            </EmptyMedia>
+            <EmptyDescription>Nenhuma mensagem.</EmptyDescription>
+          </Empty>
+        )}
+      </div>
+      <div
+        role="status"
+        aria-label="Só leitura"
+        className="caption flex items-center gap-2 border-t border-line-soft bg-muted px-4 py-3 text-ink-soft"
+      >
+        <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+        <span>
+          <span className="font-medium text-foreground">Só leitura.</span> {readOnlyNote(ticket)}
+        </span>
+      </div>
+    </Card>
+  )
+}
+
 export default function TicketPage() {
-  const navigate = useNavigate()
   const location = useLocation()
   const origin = location.state as Partial<HistoryReturnState> | null
   const back = origin?.historyReturn
@@ -981,20 +1070,9 @@ export default function TicketPage() {
   const param = useParams().ticketId
   const validId = parseTicketId(param) !== null
   const ticketId = Number(param)
-  const queryClient = useQueryClient()
   const { data: user } = useCurrentUser()
   const { data: ticket, error } = useTicket(ticketId, validId)
-  const assign = useAssignFromTicket(ticketId, ticket?.sector.id)
-  const [transferring, setTransferring] = useState(false)
-  const [closing, setClosing] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
-  const [returning, setReturning] = useState(false)
-  const [transferringSector, setTransferringSector] = useState(false)
-  // Nova chave a cada abertura: o formulário começa limpo, com o fim sugerido no momento.
-  const [closingKey, setClosingKey] = useState(0)
   const [correcting, setCorrecting] = useState(false)
-  const [registering, setRegistering] = useState(false)
-  const openRegistration = () => setRegistering(true)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
   const [view, setView] = useTicketView(ticketId)
 
@@ -1021,8 +1099,11 @@ export default function TicketPage() {
     return null
   }
 
-  const showSubjects = canClose(ticket, user)
-  const subjectsOpen = showSubjects && view.tab === 'subjects'
+  // Na ficha só existem Detalhes e Histórico (a aba Assuntos não existe aqui).
+  const tab =
+    new URLSearchParams(location.search).has('historico') || view.tab === 'history'
+      ? 'history'
+      : 'details'
 
   return (
     <>
@@ -1031,163 +1112,37 @@ export default function TicketPage() {
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={
-          <div className="flex flex-wrap justify-end gap-2">
-            {canCancel(ticket, user) && (
-              <Button variant="destructive" onClick={() => setCancelling(true)}>
-                <Ban strokeWidth={1.7} aria-hidden />
-                Cancelar chamado
-              </Button>
-            )}
-            {canReturn(ticket, user) && (
-              <Button variant="outline" onClick={() => setReturning(true)}>
-                <Undo2 strokeWidth={1.7} aria-hidden />
-                Devolver à fila
-              </Button>
-            )}
-            {ticket.status === 'queued' && (
-              <Button
-                disabled={assign.isPending}
-                onClick={() =>
-                  assign.mutate(undefined, { onSuccess: () => toast.success('Chamado assumido') })
-                }
-              >
-                <UserCheck strokeWidth={1.7} aria-hidden />
-                Assumir
-              </Button>
-            )}
-            {canTransfer(ticket, user) && (
-              <Button
-                variant={canClose(ticket, user) ? 'outline' : 'default'}
-                onClick={() => setTransferring(true)}
-              >
-                <UserRoundCog strokeWidth={1.7} aria-hidden />
-                Transferir
-              </Button>
-            )}
-            {canCorrect(ticket, user) && (
-              <Button onClick={() => setCorrecting(true)}>
-                <PencilLine strokeWidth={1.7} aria-hidden />
-                Corrigir
-              </Button>
-            )}
-            {canClose(ticket, user) && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setClosingKey((key) => key + 1)
-                  setTransferringSector(true)
-                }}
-              >
-                <ArrowRightLeft strokeWidth={1.7} aria-hidden />
-                Outro setor
-              </Button>
-            )}
-            {canClose(ticket, user) && (
-              <Button
-                onClick={() => {
-                  setClosingKey((key) => key + 1)
-                  setClosing(true)
-                }}
-              >
-                <CircleCheck strokeWidth={1.7} aria-hidden />
-                Encerrar
-              </Button>
-            )}
-          </div>
+          // Única ação da ficha, visível e sem menu ⋯; nunca em chamado cancelado.
+          canCorrect(ticket, user) && (
+            <Button onClick={() => setCorrecting(true)}>
+              <PencilLine strokeWidth={1.7} aria-hidden />
+              Corrigir
+            </Button>
+          )
         }
-      />
-      {/* Sempre montado: o botão some quando o chamado é cancelado ou encerrado. */}
-      <CancelSheet ticket={ticket} open={cancelling} onOpenChange={setCancelling} />
-      <ReturnSheet ticket={ticket} open={returning} onOpenChange={setReturning} />
-      <ClosingSheet key={closingKey} ticket={ticket} open={closing} onOpenChange={setClosing} />
-      <ClosingSheet
-        key={`transfer-${closingKey}`}
-        ticket={ticket}
-        open={transferringSector}
-        onOpenChange={setTransferringSector}
-        transfer
       />
       {/* Montado só aberto: começa com os dados atuais do atendimento. */}
       {correcting && recordedModules && (
         <CorrectionSheet ticket={ticket} recorded={recordedModules} onOpenChange={setCorrecting} />
       )}
-      {/* Sempre montado: quem transfere o próprio chamado perde o botão ao concluir. */}
-      <TransferSheet
-        ticket={ticket}
-        open={transferring}
-        onOpenChange={setTransferring}
-        onSuccess={() => void navigate('/chamados')}
-      />
-      {registering && (
-        <RegisterContactSheet
-          contactId={ticket.contact.id}
-          organizationOptional
-          onOpenChange={setRegistering}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ticketKey(ticket.id) })}
-        />
-      )}
       {/* A tela de conversas usa a largura toda (design.md). */}
-      <div
-        className={cn(
-          'grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px]',
-          subjectsOpen
-            ? 'lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[280px_minmax(0,1fr)_420px]'
-            : 'lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[280px_minmax(0,1fr)_340px]',
-        )}
-      >
-        {assign.error && (
-          <Alert variant="warning" className="lg:col-span-2 xl:col-span-3">
-            <CircleAlert strokeWidth={1.7} aria-hidden />
-            <AlertDescription>{assign.error.message}</AlertDescription>
-          </Alert>
-        )}
-        {/* Abaixo de 1280px a lista some; o painel continua sendo o caminho entre conversas. */}
-        <div className="hidden xl:block">
-          {/* Lendo um chamado anterior de outro setor, a lista continua sendo a do próprio setor. */}
-          <ConversationList
-            sectorId={
-              worksIn(ticket, user) ? ticket.sector.id : (user.sectorId ?? ticket.sector.id)
-            }
-            user={user}
-          />
-        </div>
-        <ConversationCard ticket={ticket} user={user} onRegister={openRegistration} />
-        <Card
-          role="region"
-          aria-labelledby="ticket-info-title"
-          className={cn(subjectsOpen && 'lg:h-[calc(100dvh-150px-var(--header-height))]')}
-        >
+      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px]">
+        <ReadOnlyConversation ticket={ticket} />
+        <Card role="region" aria-labelledby="ticket-info-title">
           <CardHeader>
-            <CardTitle id="ticket-info-title">Chamado</CardTitle>
+            <CardTitle id="ticket-info-title">Atendimento</CardTitle>
           </CardHeader>
           <Tabs
-            value={
-              new URLSearchParams(location.search).has('historico')
-                ? 'history'
-                : view.tab === 'subjects' && !showSubjects
-                  ? 'details'
-                  : view.tab
-            }
-            onValueChange={(tab) => setView({ tab: String(tab) })}
+            value={tab}
+            onValueChange={(next) => setView({ tab: String(next) })}
             className="min-h-0 flex-1 px-5 pb-5"
           >
             <TabsList>
               <TabsTrigger value="details">Detalhes</TabsTrigger>
               <TabsTrigger value="history">Histórico</TabsTrigger>
-              {showSubjects && <TabsTrigger value="subjects">Assuntos</TabsTrigger>}
             </TabsList>
-            {showSubjects && (
-              <TabsContent value="subjects" className="flex min-h-0 flex-col overflow-y-auto">
-                <SubjectsTab
-                  key={ticket.id}
-                  ticketId={ticket.id}
-                  query={view.query}
-                  onQueryChange={(query) => setView({ query })}
-                />
-              </TabsContent>
-            )}
             <TabsContent value="details">
-              <DetailsTab ticket={ticket} onRegister={openRegistration} />
+              <DetailsTab ticket={ticket} />
             </TabsContent>
             <TabsContent value="history">
               <HistoryTab ticket={ticket} />
