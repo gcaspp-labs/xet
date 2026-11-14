@@ -51,6 +51,7 @@ import {
   canTransfer,
   ConversationCard,
 } from '@/pages/ticket/TicketPage'
+import { useConversasSearch } from '@/pages/ticket/useTicketView'
 
 type SectorTicket = TicketSummary & { sectorId: number }
 const height = 'xl:h-[calc(100dvh-150px-var(--header-height))]'
@@ -95,7 +96,7 @@ export default function ConversasPage() {
   const sectorId = user?.sectorId ?? chosen ?? sectors[0]?.id
   const sector = sectors.find((item) => item.id === sectorId)
   const sectorItems = sectors.map((item) => ({ value: item.id.toString(), label: item.name }))
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useConversasSearch(ticketId ?? 0)
   const [action, setAction] = useState('')
   const [closingKey, setClosingKey] = useState(0)
   const tickets: SectorTicket[] = visible.flatMap((sector, i) =>
