@@ -8,6 +8,7 @@ import {
   signIn,
   unique,
   userPassword,
+  chooseAction,
 } from './fixtures'
 
 // Setor conectado, com um módulo, e um chamado de contato não cadastrado na fila.
@@ -50,7 +51,7 @@ test('as janelas do atendimento têm bloqueio', async ({ page, baseURL }) => {
     field: 'Assunto',
   })
 
-  await page.getByRole('button', { name: 'Outro setor' }).click()
+  await chooseAction(page, 'Outro setor')
   await expectLockedDialog(
     page,
     page.getByRole('dialog', { name: 'Transferir para outro setor' }),
@@ -59,18 +60,18 @@ test('as janelas do atendimento têm bloqueio', async ({ page, baseURL }) => {
     },
   )
 
-  await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await chooseAction(page, 'Cancelar chamado')
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Cancelar chamado' }), {
     field: 'Motivo',
     cancel: 'Voltar',
   })
 
-  await page.getByRole('button', { name: 'Devolver à fila' }).click()
+  await chooseAction(page, 'Devolver à fila')
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Devolver à fila' }))
 
   // Sem texto a digitar, a escolha do seletor é o que precisa continuar.
   const supervisorName = supervisor.replace(/^supervisor\.(\d+)@.*$/, 'supervisor $1')
-  await page.getByRole('button', { name: 'Transferir', exact: true }).click()
+  await chooseAction(page, 'Transferir')
   const transfer = page.getByRole('dialog', { name: 'Transferir chamado' })
   const target = transfer.getByRole('combobox', { name: 'Transferir para' })
   await target.click()
@@ -368,7 +369,7 @@ for (const theme of ['light', 'dark'] as const) {
         }
 
         // Curto: cancelar.
-        await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+        await chooseAction(page, 'Cancelar chamado')
         const short = page.getByRole('dialog', { name: 'Cancelar chamado' })
         await capture('curto', short)
         await short.getByRole('button', { name: 'Voltar', exact: true }).click()

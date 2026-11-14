@@ -40,7 +40,6 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   // O atendente assume o chamado pela tela da conversa.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Maria Cliente' }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await expect(page.getByRole('heading', { name: 'Maria Cliente' })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
@@ -206,7 +205,6 @@ test('mensagem que falhou é reenviada pelo responsável', async ({ page, reques
   })
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'João Cliente' }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 

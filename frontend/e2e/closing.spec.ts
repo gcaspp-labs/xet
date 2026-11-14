@@ -8,6 +8,7 @@ import {
   signIn,
   unique,
   userPassword,
+  chooseAction,
 } from './fixtures'
 
 // Liga o número do setor pelo adaptador falso e cadastra um órgão e os módulos do setor.
@@ -62,7 +63,6 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
 
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Paulo Cliente' }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 
@@ -178,8 +178,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   // Na fila, o atendente cancela sem assumir e sem cadastrar o contato.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Paula Golpe' }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
-  await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await chooseAction(page, 'Cancelar chamado')
   const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
   await expect(sheet).toContainText('Informe o motivo do cancelamento.')
@@ -233,7 +232,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
 
   // No celular, as ações do responsável cabem na tela sem rolagem lateral.
   await page.setViewportSize({ width: 375, height: 812 })
-  await expect(page.getByRole('button', { name: 'Cancelar chamado' })).toBeInViewport()
+  await expect(page.getByRole('button', { name: 'Mais ações' })).toBeInViewport()
   await expect(page.getByRole('button', { name: 'Encerrar' })).toBeInViewport()
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -263,14 +262,14 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   await expect(colleaguePage.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
     'Peça a transferência',
   )
-  await expect(colleaguePage.getByRole('button', { name: 'Cancelar chamado' })).toHaveCount(0)
+  await expect(colleaguePage.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
   await colleagueContext.close()
 
   const supervisorContext = await browser.newContext()
   const supervisorPage = await supervisorContext.newPage()
   await signIn(supervisorPage, supervisor, userPassword)
   await supervisorPage.goto(url)
-  await supervisorPage.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await chooseAction(supervisorPage, 'Cancelar chamado')
   const supervisorSheet = supervisorPage.getByRole('dialog', { name: 'Cancelar chamado' })
   await supervisorSheet.getByLabel('Motivo').fill('Número bloqueado.')
   await supervisorSheet.getByRole('button', { name: 'Cancelar chamado' }).click()
@@ -363,7 +362,6 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   // Na fila, sem assumir, o atendente vê o aviso e o botão junto do contato.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: profile }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Contato não cadastrado')
   await conversation.getByRole('button', { name: 'Cadastrar contato' }).click()
@@ -587,10 +585,9 @@ test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request
   // O cancelamento dispensa o cadastro: o contato continua sem cadastro, e o chamado sem aviso.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Contato não cadastrado')
-  await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await chooseAction(page, 'Cancelar chamado')
   const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
   await sheet.getByLabel('Motivo').fill('Engano.')
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()

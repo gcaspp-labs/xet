@@ -333,3 +333,9 @@ export async function seedClosedTicket(baseURL: string) {
   await agentApi.dispose()
   return { ticketId: ticket.id, agent, otherAgent, supervisor, sector, modules }
 }
+
+// Abre o menu "Mais ações" (⋯) do cabeçalho de Chamados e escolhe um item.
+export async function chooseAction(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Mais ações' }).click()
+  await page.getByRole('menuitem', { name, exact: true }).click()
+}
