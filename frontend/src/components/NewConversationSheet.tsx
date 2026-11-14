@@ -155,7 +155,7 @@ export function NewConversationSheet({
           if (started.existing) {
             toast(`${existingNotice} A mensagem não foi enviada.`)
           } else {
-            toast.success('Conversa iniciada')
+            toast.success('Chamado iniciado')
           }
           goTo(started.ticketId)
         },
@@ -170,7 +170,7 @@ export function NewConversationSheet({
         locked
         open={open}
         onOpenChange={onOpenChange}
-        title="Nova conversa"
+        title="Novo chamado"
         description="A mensagem sai pelo número do setor e o chamado fica com você."
         submitLabel="Enviar"
         pending={!contact || start.isPending}

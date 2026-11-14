@@ -138,7 +138,7 @@ export function NotificationBell({ user }: { user: User }) {
                                   to={`/conversas/${ticket.id}`}
                                   className="body-strong ml-auto whitespace-nowrap text-accent-strong underline underline-offset-2"
                                 >
-                                  Abrir conversa
+                                  Abrir chamado
                                 </Link>
                               ),
                             }),

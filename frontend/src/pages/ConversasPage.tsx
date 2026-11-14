@@ -110,7 +110,7 @@ export default function ConversasPage() {
         new Date(a.lastMessage?.sentAt ?? a.arrivedAt).getTime(),
     )
   // A fila do administrador só tem setores ativos, como o sino; atendente e supervisor seguem com o
-  // próprio setor, e "Meus atendimentos" não é filtrada.
+  // próprio setor, e "Meus chamados" não é filtrada.
   const activeSectorIds = new Set(sectors.filter((item) => item.active).map((item) => item.id))
   const queue = tickets.filter(
     (item) =>
@@ -125,8 +125,8 @@ export default function ConversasPage() {
     <>
       <Topbar
         wrapTitle
-        breadcrumb={ticket ? `Conversas · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
-        title={ticket?.contact.name ?? 'Conversas'}
+        breadcrumb={ticket ? `Chamados · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
+        title={ticket?.contact.name ?? 'Chamados'}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {user.role === 'admin' && sectors.length > 0 && (
@@ -153,7 +153,7 @@ export default function ConversasPage() {
             {sector && (
               <Button onClick={() => setStarting(true)}>
                 <MessageSquarePlus strokeWidth={1.7} aria-hidden />
-                Nova conversa
+                Novo chamado
               </Button>
             )}
             {ticket && (
@@ -297,10 +297,10 @@ export default function ConversasPage() {
       <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] xl:grid-cols-[260px_minmax(0,1fr)_320px]">
         <Card role="region" aria-labelledby="my-conversations-title" className={height}>
           <CardHeader>
-            <CardTitle id="my-conversations-title">Meus atendimentos ({mine.length})</CardTitle>
+            <CardTitle id="my-conversations-title">Meus chamados ({mine.length})</CardTitle>
           </CardHeader>
           {mine.length ? (
-            <nav aria-label="Meus atendimentos" className="flex-1 overflow-y-auto">
+            <nav aria-label="Meus chamados" className="flex-1 overflow-y-auto">
               <ul className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
                 {mine.map((item) => (
                   <li key={item.id}>
@@ -343,7 +343,7 @@ export default function ConversasPage() {
                   {mine.length ? 'Selecione um atendimento' : 'Sem atendimentos disponíveis'}
                 </span>
                 {mine.length
-                  ? 'Escolha uma conversa à esquerda para continuar.'
+                  ? 'Escolha um chamado à esquerda para continuar.'
                   : 'Assuma um chamado na Fila, à direita.'}
               </EmptyDescription>
             </Empty>
