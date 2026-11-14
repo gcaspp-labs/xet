@@ -10,7 +10,7 @@ test('abre e cancela novo chamado na tela Chamados vazia', async ({ page, baseUR
   await expect(sheet).toBeVisible()
   await sheet.getByRole('button', { name: 'Cancelar' }).click()
   await expect(sheet).toBeHidden()
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
 })
 
 test('cancela com chamado selecionado e inicia outro pelo próprio setor', async ({
@@ -41,7 +41,7 @@ test('cancela com chamado selecionado e inicia outro pelo próprio setor', async
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page.getByRole('button', { name: 'Assumir chamado de Cliente selecionado' }).click()
-  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
   const selectedUrl = page.url()
   await page.getByRole('button', { name: 'Novo chamado' }).click()
   const sheet = page.getByRole('dialog', { name: 'Novo chamado' })

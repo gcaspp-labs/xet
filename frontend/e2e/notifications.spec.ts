@@ -138,9 +138,9 @@ test('assumir pelo sino não muda a tela e "Abrir chamado" leva à tela Chamados
 
   // O link do aviso abre a conversa assumida na tela Chamados.
   const openConversation = page.getByRole('link', { name: 'Abrir chamado', exact: true })
-  await expect(openConversation).toHaveAttribute('href', /^\/conversas\/\d+$/)
+  await expect(openConversation).toHaveAttribute('href', /^\/chamados\/\d+$/)
   await openConversation.click()
-  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
   await expect(
     page.getByRole('region', { name: 'Conversa', exact: true }).getByText('Carla Fila'),
   ).toBeVisible()
@@ -169,7 +169,7 @@ test('assumir pelo sino não muda a tela e "Abrir chamado" leva à tela Chamados
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   expect(page.url()).toBe(ticketPage)
   await page.getByRole('link', { name: 'Abrir chamado', exact: true }).click()
-  await expect(page).toHaveURL(/\/conversas\/\d+$/)
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
   await expect(mine.getByRole('link', { name: /Eva Fila/ })).toHaveAttribute('aria-current', 'page')
 })
 
@@ -197,9 +197,9 @@ test('item sai quando outra pessoa assume e volta quando o chamado é devolvido 
 
   // Devolver à fila: o item volta nas duas janelas.
   const openConversation = other.getByRole('link', { name: 'Abrir chamado', exact: true })
-  await expect(openConversation).toHaveAttribute('href', /^\/conversas\/\d+$/)
+  await expect(openConversation).toHaveAttribute('href', /^\/chamados\/\d+$/)
   await openConversation.click()
-  await expect(other).toHaveURL(/\/conversas\/\d+$/)
+  await expect(other).toHaveURL(/\/chamados\/\d+$/)
   await other.getByRole('button', { name: 'Devolver à fila' }).click()
   const drawer = other.getByRole('dialog', { name: 'Devolver à fila' })
   await drawer.getByRole('button', { name: 'Devolver à fila' }).click()

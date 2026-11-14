@@ -46,7 +46,7 @@ export function ClosingSheet({
   open,
   onOpenChange,
   transfer = false,
-  successTo = '/conversas',
+  successTo = '/chamados',
 }: {
   ticket: TicketDetail
   open: boolean

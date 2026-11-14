@@ -78,8 +78,11 @@ import {
   organizationLabel,
   ticketStatusLabel,
 } from '@/lib/format'
+import { isNotFound } from '@/lib/api'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
+import { parseTicketId } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
+import NotFoundPage from '@/pages/NotFoundPage'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import { useTicketView } from '@/pages/ticket/useTicketView'
 
@@ -94,7 +97,7 @@ const messageStatusLabels: Record<
   failed: { label: 'Falhou', tone: 'danger' },
 }
 
-const backToList = { to: '/atendimento', label: 'Voltar à lista' }
+const backToList = { to: '/atendimentos', label: 'Voltar à lista' }
 
 const fileLabels: Record<string, string> = {
   image: 'Imagem',
@@ -818,7 +821,7 @@ function PreviousTicket({ previous }: { previous: NonNullable<TicketDetail['prev
           <span className="label text-ink-soft">Resolução: </span>
           {previous.resolution}
         </p>
-        <Link to={`/chamados/${previous.id}`} className="text-primary hover:underline">
+        <Link to={`/atendimentos/${previous.id}`} className="text-primary hover:underline">
           Ver chamado anterior
         </Link>
       </div>
@@ -975,10 +978,12 @@ export default function TicketPage() {
   const back = origin?.historyReturn
     ? { to: origin.historyReturn, label: 'Voltar ao histórico', state: origin.historyBefore }
     : backToList
-  const ticketId = Number(useParams().ticketId)
+  const param = useParams().ticketId
+  const validId = parseTicketId(param) !== null
+  const ticketId = Number(param)
   const queryClient = useQueryClient()
   const { data: user } = useCurrentUser()
-  const { data: ticket, error } = useTicket(ticketId)
+  const { data: ticket, error } = useTicket(ticketId, validId)
   const assign = useAssignFromTicket(ticketId, ticket?.sector.id)
   const [transferring, setTransferring] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -993,6 +998,12 @@ export default function TicketPage() {
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
   const [view, setView] = useTicketView(ticketId)
 
+  // Esta tela é só de chamado encerrado: id inválido, inexistente (404) ou ainda ativo é Não
+  // encontrado. O 403 e os erros de rede ou do servidor seguem com o erro de hoje. A decisão fica
+  // aqui dentro, sem trocar de componente, para a tela não desmontar enquanto a consulta recarrega.
+  if (!validId || isNotFound(error) || (ticket && ticket.status !== 'closed')) {
+    return <NotFoundPage />
+  }
   if (error) {
     return (
       <>
@@ -1105,7 +1116,7 @@ export default function TicketPage() {
         ticket={ticket}
         open={transferring}
         onOpenChange={setTransferring}
-        onSuccess={() => void navigate('/conversas')}
+        onSuccess={() => void navigate('/chamados')}
       />
       {registering && (
         <RegisterContactSheet

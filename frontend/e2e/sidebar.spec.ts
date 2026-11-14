@@ -1,5 +1,5 @@
-import { expect, request as apiRequest, test, type Page } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { expect, test, type Page } from '@playwright/test'
+import { admin, seedClosedTicket, seedSector, signIn, userPassword } from './fixtures'
 
 const sidebar = '[data-slot=sidebar-inner]'
 
@@ -198,34 +198,14 @@ test('no celular, Usuários em Configurações fecha a gaveta', async ({ page })
   await expect(page.getByRole('link', { name: 'Contatos' })).toBeHidden()
 })
 
-test('botão de voltar leva da conversa à lista de atendimentos', async ({
+test('botão de voltar leva do chamado encerrado à lista de atendimentos', async ({
   page,
-  request,
   baseURL,
 }) => {
-  const { sector, agent } = await seedSector(baseURL!)
-  const api = await apiRequest.newContext({ baseURL })
-  await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
-  expect((await api.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
-  await api.dispose()
-  const messaging = `/api/test/messaging/sectors/${sector.id}`
-  expect((await request.post(`${messaging}/pair`)).ok()).toBeTruthy()
-  const { phone, id } = unique()
-  const received = await request.post(`${messaging}/receive`, {
-    data: {
-      externalMessageId: `E2E-${id}`,
-      phone,
-      contactName: 'Clara Cliente',
-      type: 'text',
-      body: 'Bom dia',
-    },
-  })
-  expect(received.ok()).toBeTruthy()
+  const { ticketId, agent } = await seedClosedTicket(baseURL!)
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Clara Cliente' }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
-  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  await page.goto(`/atendimentos/${ticketId}`)
   for (const name of ['Detalhes', 'Histórico']) {
     await expect(page.getByRole('tab', { name, exact: true })).toBeVisible()
   }
@@ -240,6 +220,6 @@ test('botão de voltar leva da conversa à lista de atendimentos', async ({
   ).not.toHaveAttribute('data-active')
 
   await page.getByRole('link', { name: 'Voltar à lista' }).click()
-  await expect(page).toHaveURL(/\/atendimento$/)
+  await expect(page).toHaveURL(/\/atendimentos$/)
   await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 })

@@ -108,7 +108,7 @@ export function DashboardLists({
                               {
                                 onSuccess: () => {
                                   toast.success('Chamado assumido')
-                                  void navigate(`/conversas/${ticket.id}`)
+                                  void navigate(`/chamados/${ticket.id}`)
                                 },
                               },
                             )

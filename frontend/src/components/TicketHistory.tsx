@@ -16,6 +16,7 @@ import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { type HistoryEntry, useContactHistory, useOrganizationHistory } from '@/lib/conversation'
 import { formatDateTime, organizationLabel, ticketStatusLabel } from '@/lib/format'
 import { historyReturnState } from '@/lib/history-return'
+import { ticketPath } from '@/lib/tickets'
 import { useQueryState, type SortDirection } from '@/lib/paging'
 import type { HistorySort } from '@/lib/conversation'
 
@@ -54,7 +55,7 @@ export function TicketHistoryList({
           <li key={entry.id} className="flex flex-col gap-1 py-2.5">
             <div className="flex items-center gap-2">
               <Link
-                to={`/chamados/${entry.id}`}
+                to={ticketPath(entry)}
                 state={historyReturnState(location)}
                 onClick={onOpen}
                 className="mono-num body-strong text-accent-strong underline-offset-2 hover:underline"
@@ -211,7 +212,7 @@ export function HistorySheet({
                         <TableRow key={entry.id}>
                           <TableCell>
                             <Link
-                              to={`/chamados/${entry.id}`}
+                              to={ticketPath(entry)}
                               state={historyReturnState(location)}
                               className="mono-num body-strong text-accent-strong underline-offset-2 hover:underline"
                             >

@@ -107,7 +107,7 @@ test('listas ao vivo permitem abrir e assumir chamados', async ({ page, baseURL 
   await expect(page).toHaveURL(/\/chamados\/\d+/)
   await page.goto('/dashboard')
   await queue.getByRole('button', { name: `Assumir chamado de ${first}` }).click()
-  await expect(page).toHaveURL(/\/conversas\/\d+/)
+  await expect(page).toHaveURL(/\/chamados\/\d+/)
   await page.goto('/dashboard')
   await expect(queue.getByText(first)).toHaveCount(0)
   await expect(progress.getByText(first)).toBeVisible()
@@ -203,7 +203,7 @@ test('atendente não vê o item e, pelo endereço, volta a Chamados', async ({ p
 
   await page.goto('/dashboard')
   await expect(page.getByRole('heading', { name: 'Chamados', exact: true })).toBeVisible()
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
 })
 
 test('chamado novo muda "Na fila" e "Recebidos" sem recarregar', async ({ page, baseURL }) => {

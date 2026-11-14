@@ -49,22 +49,17 @@ import {
   useClosedToday,
   useTickets,
   useWorkload,
+  ticketPath,
 } from '@/lib/tickets'
 
 // O link se estica sobre a linha, que precisa ser `relative`: a linha inteira abre
 // o chamado, e o teclado e o leitor de tela continuam num link de verdade.
-function ContactCell({
-  ticket,
-  conversations = false,
-}: {
-  ticket: TicketSummary | ClosedTicket
-  conversations?: boolean
-}) {
+function ContactCell({ ticket, to }: { ticket: TicketSummary | ClosedTicket; to: string }) {
   const { contact } = ticket
   return (
     <TableCell>
       <Link
-        to={`/${conversations ? 'conversas' : 'chamados'}/${ticket.id}`}
+        to={to}
         className="body-strong underline-offset-2 after:absolute after:inset-0 hover:text-accent-strong hover:underline"
       >
         {contact.name}
@@ -130,7 +125,7 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
           <TableBody>
             {tickets.map((ticket) => (
               <TableRow key={ticket.id} className="relative">
-                <ContactCell ticket={ticket} conversations />
+                <ContactCell ticket={ticket} to={ticketPath(ticket)} />
                 <MessageCell ticket={ticket} />
                 <TableCell>
                   <Button
@@ -145,7 +140,7 @@ function QueueCard({ sectorId, tickets }: { sectorId: number; tickets: TicketSum
                         {
                           onSuccess: () => {
                             toast.success('Chamado assumido')
-                            void navigate(`/conversas/${ticket.id}`)
+                            void navigate(`/chamados/${ticket.id}`)
                           },
                         },
                       )
@@ -195,7 +190,7 @@ function InProgressCard({ tickets, user }: { tickets: TicketSummary[]; user: Use
           <TableBody>
             {sorted.map((ticket) => (
               <TableRow key={ticket.id} className="relative">
-                <ContactCell ticket={ticket} conversations />
+                <ContactCell ticket={ticket} to={ticketPath(ticket)} />
                 <TableCell className="whitespace-nowrap">
                   {ticket.assignee?.id === user.id ? (
                     <Badge tone="success">Você</Badge>
@@ -241,7 +236,7 @@ function ClosedTodayCard({ sectorId, user }: { sectorId: number; user: User }) {
           <TableBody>
             {tickets.map((ticket) => (
               <TableRow key={ticket.id} className="relative">
-                <ContactCell ticket={ticket} />
+                <ContactCell ticket={ticket} to={`/atendimentos/${ticket.id}`} />
                 <TableCell className="whitespace-nowrap">
                   {ticket.closedBy.id === user.id ? (
                     <Badge tone="success">Você</Badge>

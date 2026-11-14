@@ -23,6 +23,15 @@ export type TicketSummary = {
   } | null
 }
 
+// Endereço do chamado pela situação: ativo abre em Chamados; encerrado, em Atendimentos.
+export const ticketPath = (ticket: { id: number; status: 'queued' | 'in_progress' | 'closed' }) =>
+  ticket.status === 'closed' ? `/atendimentos/${ticket.id}` : `/chamados/${ticket.id}`
+
+// Número do chamado no endereço; `null` quando não é um id válido (ex.: /chamados/abc).
+export function parseTicketId(param: string | undefined) {
+  return param !== undefined && /^[1-9]\d{0,14}$/.test(param) ? Number(param) : null
+}
+
 export type Workload = {
   id: number
   name: string

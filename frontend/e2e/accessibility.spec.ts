@@ -464,9 +464,6 @@ for (const theme of ['light', 'dark'] as const) {
     await expectContrast(page, 'falha no envio')
     expect(await contrastOf(page, '[aria-label="Mensagem recebida"]')).toBeGreaterThanOrEqual(7)
     expect(await contrastOf(page, '[aria-label="Mensagem enviada"]')).toBeGreaterThanOrEqual(7)
-    await page.getByRole('link', { name: 'Ver chamado' }).click()
-    await expect(page.locator('[data-slot="badge"]').first()).toBeVisible()
-    expect(await contrastOf(page, '[data-slot="badge"]')).toBeGreaterThanOrEqual(7)
 
     // Formulário de encerramento, com os erros de validação em cor de perigo.
     await page.getByRole('button', { name: 'Encerrar' }).click()
@@ -533,7 +530,7 @@ test('na largura do celular, em "Maior", a página não rola para o lado', async
   await expectNoPageScroll(adminPage, 'login')
   await signIn(adminPage, admin.email, admin.password)
   for (const [path, title] of [
-    ['/atendimento', 'Atendimentos'],
+    ['/atendimentos', 'Atendimentos'],
     ['/dashboard', 'Dashboard'],
     ['/contatos', 'Contatos'],
     ['/orgaos', 'Órgãos'],
@@ -613,7 +610,7 @@ test('o medidor de contraste aponta os textos fracos do tema normal', async ({ p
 test('a escolha de uma aba vale nas outras', async ({ context, page }) => {
   await signIn(page, admin.email, admin.password)
   const other = await context.newPage()
-  await other.goto('/atendimento')
+  await other.goto('/atendimentos')
   await expect(other.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 
   await chooseInMenu(page, 'menuitemradio', 'Grande')

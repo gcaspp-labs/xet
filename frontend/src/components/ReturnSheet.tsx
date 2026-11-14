@@ -10,7 +10,7 @@ export function ReturnSheet({
   ticket,
   open,
   onOpenChange,
-  successTo = '/conversas',
+  successTo = '/chamados',
 }: {
   ticket: TicketDetail
   open: boolean

@@ -47,15 +47,16 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   const toasts = await recordToasts(page)
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Joana Devolvida' }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const url = page.url()
   await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Devolver à fila' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
-  const details = page.getByRole('region', { name: 'Chamado', exact: true })
-  const assignedAtRow = details.locator('div', { hasText: /^Assumido em/ }).locator('dd')
-  const assignedAt = await assignedAtRow.innerText()
+  const ticketPath = `/api/tickets/${url.split('/').pop()}`
+  const assignedAtOf = async () =>
+    ((await (await page.request.get(ticketPath)).json()) as { assignedAt: string }).assignedAt
+  const assignedAt = await assignedAtOf()
+  expect(assignedAt).toBeTruthy()
 
   // Outro atendente acompanha sem poder devolver.
   const colleagueContext = await browser.newContext()
@@ -79,7 +80,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   const sheet = page.getByRole('dialog', { name: 'Devolver à fila' })
   await sheet.getByRole('button', { name: 'Devolver à fila' }).click()
   await expect.poll(toasts).toContain('Chamado devolvido à fila')
-  await expect(page).toHaveURL(/\/conversas$/)
+  await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
 
   // O colega vê a devolução sem recarregar e assume.
@@ -97,7 +98,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
 
   // O momento em que foi assumido pela primeira vez não muda.
   await page.goto(url)
-  await expect(assignedAtRow).toHaveText(assignedAt)
+  expect(await assignedAtOf()).toBe(assignedAt)
   await expect(page.getByRole('button', { name: 'Devolver à fila' })).toHaveCount(0)
 
   // O supervisor devolve o chamado de outro atendente.
@@ -110,7 +111,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   const supSheet = sup.getByRole('dialog', { name: 'Devolver à fila' })
   await supSheet.getByRole('button', { name: 'Devolver à fila' }).click()
   await expect.poll(supToasts).toContain('Chamado devolvido à fila')
-  await expect(sup).toHaveURL(/\/conversas$/)
+  await expect(sup).toHaveURL(/\/chamados$/)
   await expect(colleagueConversation).toContainText(
     `${supName} devolveu à fila o chamado de ${colleagueName}`,
   )

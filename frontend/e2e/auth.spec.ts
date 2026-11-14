@@ -101,19 +101,19 @@ for (const role of ['admin', 'supervisor', 'agent'] as const) {
     const sector = await seedSector(baseURL!)
     const email = role === 'admin' ? admin.email : sector[role]
     await login(page, email, role === 'admin' ? admin.password : userPassword)
-    const home = role === 'agent' ? '/conversas' : '/dashboard'
+    const home = role === 'agent' ? '/chamados' : '/dashboard'
     await expect(page).toHaveURL(new RegExp(`${home}$`))
     await page.goto('/')
     await expect(page).toHaveURL(new RegExp(`${home}$`))
     await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
-    await expect(page).toHaveURL(/\/atendimento$/)
+    await expect(page).toHaveURL(/\/atendimentos$/)
     await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
     await page.goto('/contatos')
     await expect(page.getByRole('heading', { name: 'Contatos' })).toBeVisible()
     if (role === 'agent') {
       await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
       await page.goto('/dashboard')
-      await expect(page).toHaveURL(/\/conversas$/)
+      await expect(page).toHaveURL(/\/chamados$/)
       expect((await page.request.get('/api/dashboard')).status()).toBe(403)
     }
   })
