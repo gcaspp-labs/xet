@@ -17,7 +17,6 @@ type correctRequest struct {
 	OrganizationID   int64     `json:"organizationId" validate:"required"`
 	StartedAt        time.Time `json:"startedAt" validate:"required"`
 	EndedAt          time.Time `json:"endedAt" validate:"required"`
-	SpokeWith        string    `json:"spokeWith" validate:"max=200"`
 	Reason           string    `json:"reason" validate:"max=2000"`
 	AddSubject       bool      `json:"addSubject"`
 	SubjectModuleID  *int64    `json:"subjectModuleId"`

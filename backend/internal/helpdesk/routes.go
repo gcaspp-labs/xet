@@ -80,9 +80,6 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/tickets/{ticketID}", h.getTicket)
 	r.Get("/tickets/{ticketID}/messages", h.listMessages)
 	r.Post("/tickets/{ticketID}/messages", h.sendMessage)
-	r.Put("/tickets/{ticketID}/spoke-with", h.setSpokeWith)
-	r.Get("/tickets/{ticketID}/notes", h.listNotes)
-	r.Post("/tickets/{ticketID}/notes", h.createNote)
 	r.Post("/messages/{messageID}/retry", h.retryMessage)
 	r.Get("/media/{mediaID}", h.getMedia)
 	// Histórico: chamados dos setores do usuário (todos, para o administrador).

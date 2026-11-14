@@ -844,7 +844,7 @@ func TestDashboardReflectsCorrections(t *testing.T) {
 	ended := started.Add(20 * time.Minute)
 	resp := d.e.correct(ticket.ID, d.supToken, map[string]any{
 		"subject": "Dúvida", "resolution": "Resolvida.", "moduleIds": []int64{d.modB}, "organizationId": d.orgB,
-		"startedAt": started, "endedAt": ended, "spokeWith": "", "reason": "Órgão errado",
+		"startedAt": started, "endedAt": ended, "reason": "Órgão errado",
 	})
 	if resp.Status != http.StatusOK {
 		t.Fatalf("correct: status %d, body %v", resp.Status, resp.Body)

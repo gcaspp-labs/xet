@@ -197,8 +197,8 @@ func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Ticke
 const correctTicket = `-- name: CorrectTicket :one
 update tickets
 set subject = $1, resolution = $2, organization_id = $3,
-    started_at = $4, ended_at = $5, spoke_with = $6
-where id = $7
+    started_at = $4, ended_at = $5
+where id = $6
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
 `
 
@@ -208,7 +208,6 @@ type CorrectTicketParams struct {
 	OrganizationID *int64
 	StartedAt      time.Time
 	EndedAt        *time.Time
-	SpokeWith      *string
 	ID             int64
 }
 
@@ -221,7 +220,6 @@ func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (T
 		arg.OrganizationID,
 		arg.StartedAt,
 		arg.EndedAt,
-		arg.SpokeWith,
 		arg.ID,
 	)
 	var i Ticket
@@ -601,7 +599,7 @@ func (q *Queries) GetTicket(ctx context.Context, id int64) (Ticket, error) {
 
 const getTicketDetail = `-- name: GetTicketDetail :one
 select
-    t.id, t.protocol, t.status, t.sector_id, s.name as sector_name, t.spoke_with,
+    t.id, t.protocol, t.status, t.sector_id, s.name as sector_name,
     t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name, o.municipality_id, m.name as municipality_name,
@@ -631,7 +629,6 @@ type GetTicketDetailRow struct {
 	Status               TicketStatus
 	SectorID             int64
 	SectorName           string
-	SpokeWith            *string
 	ArrivedAt            time.Time
 	AssignedAt           *time.Time
 	StartedAt            time.Time
@@ -672,7 +669,6 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.Status,
 		&i.SectorID,
 		&i.SectorName,
-		&i.SpokeWith,
 		&i.ArrivedAt,
 		&i.AssignedAt,
 		&i.StartedAt,
@@ -1362,47 +1358,6 @@ type SetTicketOrganizationParams struct {
 
 func (q *Queries) SetTicketOrganization(ctx context.Context, arg SetTicketOrganizationParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, setTicketOrganization, arg.OrganizationID, arg.ID)
-	var i Ticket
-	err := row.Scan(
-		&i.ID,
-		&i.Protocol,
-		&i.SectorID,
-		&i.ContactID,
-		&i.OrganizationID,
-		&i.AssigneeID,
-		&i.Status,
-		&i.PreviousTicketID,
-		&i.CreatedByID,
-		&i.SpokeWith,
-		&i.ArrivedAt,
-		&i.AssignedAt,
-		&i.StartedAt,
-		&i.EndedAt,
-		&i.ClosedAt,
-		&i.ClosedByID,
-		&i.ClosureType,
-		&i.Subject,
-		&i.Resolution,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const setTicketSpokeWith = `-- name: SetTicketSpokeWith :one
-update tickets
-set spoke_with = $1
-where id = $2
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, spoke_with, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
-`
-
-type SetTicketSpokeWithParams struct {
-	SpokeWith *string
-	ID        int64
-}
-
-func (q *Queries) SetTicketSpokeWith(ctx context.Context, arg SetTicketSpokeWithParams) (Ticket, error) {
-	row := q.db.QueryRow(ctx, setTicketSpokeWith, arg.SpokeWith, arg.ID)
 	var i Ticket
 	err := row.Scan(
 		&i.ID,

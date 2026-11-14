@@ -96,12 +96,6 @@ func TestCancelFromTheQueueWithoutAssigning(t *testing.T) {
 		done[0]["closedBy"].(map[string]any)["id"] != float64(bia) {
 		t.Fatalf("closed today = %v", done)
 	}
-
-	// Notas internas continuam permitidas.
-	note := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notes", c.ticket.ID), c.anaToken, map[string]any{"body": "Número bloqueado."})
-	if note.Status >= http.StatusMultipleChoices {
-		t.Fatalf("note: status %d, body %v", note.Status, note.Body)
-	}
 }
 
 func TestCancelPermissions(t *testing.T) {

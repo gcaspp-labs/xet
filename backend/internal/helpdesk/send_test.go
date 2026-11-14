@@ -698,7 +698,9 @@ func TestPendingMessagesFailOnRestart(t *testing.T) {
 	}
 }
 
-func TestInternalNotesAndSpokeWith(t *testing.T) {
+// Notas internas e "Falou com" saíram do sistema: as rotas deixam de existir
+// e o detalhe do chamado não traz mais o campo.
+func TestInternalNotesAndSpokeWithRemoved(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e := c.e
@@ -706,52 +708,32 @@ func TestInternalNotesAndSpokeWith(t *testing.T) {
 	notesPath := fmt.Sprintf("/api/tickets/%d/notes", c.ticket.ID)
 	spokePath := fmt.Sprintf("/api/tickets/%d/spoke-with", c.ticket.ID)
 
-	// Qualquer pessoa do setor escreve notas, mesmo sem ser a responsável.
-	for _, token := range []string{c.biaToken, c.supToken, c.anaToken} {
-		if r := e.Do(http.MethodPost, notesPath, token, map[string]string{"body": "Cliente pediu retorno à tarde"}); r.Status != http.StatusCreated {
-			t.Fatalf("create note: status %d, body %v", r.Status, r.Body)
+	for name, token := range map[string]string{"assignee": c.anaToken, "supervisor": c.supToken, "admin": c.adminToken} {
+		if r := e.Do(http.MethodPost, notesPath, token, map[string]string{"body": "Cliente pediu retorno à tarde"}); r.Status != http.StatusNotFound {
+			t.Fatalf("create note by %s: status %d", name, r.Status)
 		}
-	}
-	if r := e.Do(http.MethodPost, notesPath, c.rhToken, map[string]string{"body": "Nota"}); r.Status != http.StatusForbidden {
-		t.Fatalf("note from another sector: status %d", r.Status)
-	}
-	if r := e.Do(http.MethodPost, notesPath, c.biaToken, map[string]string{"body": "  "}); r.Status != http.StatusUnprocessableEntity {
-		t.Fatalf("blank note: status %d", r.Status)
-	}
-	notes := e.DoList(http.MethodGet, notesPath, c.adminToken)
-	if len(notes) != 3 || notes[0]["author"].(map[string]any)["name"] != "bia@exemplo.com" || notes[0]["body"] != "Cliente pediu retorno à tarde" {
-		t.Fatalf("notes = %v", notes)
-	}
-	if status, _, _ := e.get(notesPath, c.rhToken); status != http.StatusForbidden {
-		t.Fatalf("notes from another sector: status %d", status)
-	}
-	// Notas não vão para o cliente.
-	if sent := e.WhatsApp.SentMessages(); len(sent) != 0 {
-		t.Fatalf("notes reached WhatsApp: %+v", sent)
-	}
-
-	// "Falou com" é preenchido só pelo responsável.
-	for name, token := range map[string]string{"agent of the sector": c.biaToken, "supervisor": c.supToken, "other sector": c.rhToken} {
-		if r := e.Do(http.MethodPut, spokePath, token, map[string]string{"spokeWith": "Maria"}); r.Status != http.StatusForbidden {
+		if status, _, _ := e.get(notesPath, token); status != http.StatusNotFound {
+			t.Fatalf("list notes by %s: status %d", name, status)
+		}
+		if r := e.Do(http.MethodPut, spokePath, token, map[string]string{"spokeWith": "Maria"}); r.Status != http.StatusNotFound {
 			t.Fatalf("spoke with by %s: status %d", name, r.Status)
 		}
 	}
-	if r := e.Do(http.MethodPut, spokePath, c.anaToken, map[string]string{"spokeWith": " Maria, esposa do titular "}); r.Status != http.StatusOK {
-		t.Fatalf("spoke with: status %d", r.Status)
+	if n := e.Count("internal_notes"); n != 0 {
+		t.Fatalf("internal_notes rows = %d", n)
 	}
-	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil)
-	if detail.Status != http.StatusOK || detail.Body["spokeWith"] != "Maria, esposa do titular" ||
-		detail.Body["assignee"].(map[string]any)["name"] != "ana@exemplo.com" || detail.Body["protocol"] != c.ticket.Protocol {
-		t.Fatalf("ticket detail: status %d, body %v", detail.Status, detail.Body)
+	var spokeWith *string
+	if err := e.Pool.QueryRow(t.Context(), "select spoke_with from tickets where id = $1", c.ticket.ID).Scan(&spokeWith); err != nil {
+		t.Fatal(err)
+	}
+	if spokeWith != nil {
+		t.Fatalf("spoke_with recorded: %q", *spokeWith)
 	}
 
-	// Encerrado: "falou com" só muda pela correção; notas continuam.
-	e.closeTicket(c.ticket.ID, c.ana.ID, e.Organization(c.supToken, "Prefeitura", ""))
-	if r := e.Do(http.MethodPut, spokePath, c.anaToken, map[string]string{"spokeWith": "João"}); r.Status != http.StatusConflict {
-		t.Fatalf("spoke with on closed ticket: status %d", r.Status)
-	}
-	if r := e.Do(http.MethodPost, notesPath, c.biaToken, map[string]string{"body": "Retornou depois"}); r.Status != http.StatusCreated {
-		t.Fatalf("note on closed ticket: status %d", r.Status)
+	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil)
+	if _, ok := detail.Body["spokeWith"]; ok || detail.Status != http.StatusOK ||
+		detail.Body["assignee"].(map[string]any)["name"] != "ana@exemplo.com" || detail.Body["protocol"] != c.ticket.Protocol {
+		t.Fatalf("ticket detail: status %d, body %v", detail.Status, detail.Body)
 	}
 }
 

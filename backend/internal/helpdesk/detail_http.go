@@ -14,7 +14,6 @@ type ticketDetailResponse struct {
 	Protocol     string                  `json:"protocol"`
 	Status       db.TicketStatus         `json:"status"`
 	Sector       httpx.Ref               `json:"sector"`
-	SpokeWith    *string                 `json:"spokeWith"`
 	ArrivedAt    time.Time               `json:"arrivedAt"`
 	AssignedAt   *time.Time              `json:"assignedAt"`
 	StartedAt    time.Time               `json:"startedAt"`
@@ -62,7 +61,7 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 	out := ticketDetailResponse{
 		ID: t.ID, Protocol: t.Protocol, Status: t.Status,
 		Sector:    httpx.Ref{ID: t.SectorID, Name: t.SectorName},
-		SpokeWith: t.SpokeWith, ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt,
+		ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt,
 		StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt,
 		Subject: t.Subject, Resolution: t.Resolution,
 		Contact: ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},

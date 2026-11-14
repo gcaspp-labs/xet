@@ -132,16 +132,13 @@ func TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket(t *testing.T) {
 		prev["subject"] != "Contracheque" || prev["resolution"] != "Enviada a segunda via." || prev["closedByName"] != "ana@exemplo.com" {
 		t.Fatalf("destination detail = %v", detail)
 	}
-	for _, path := range []string{"", "/messages", "/assignments", "/notes", "/modules", "/corrections"} {
+	for _, path := range []string{"", "/messages", "/assignments", "/modules", "/corrections"} {
 		if status, _, _ := e.get(fmt.Sprintf("/api/tickets/%d%s", c.ticket.ID, path), c.rhToken); status != http.StatusOK {
 			t.Fatalf("destination reading origin%s: status %d", path, status)
 		}
 	}
 	if got := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/messages", c.ticket.ID), c.rhToken); len(got) != 1 {
 		t.Fatalf("origin messages = %v", got)
-	}
-	if r := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notes", c.ticket.ID), c.rhToken, map[string]string{"body": "Nota"}); r.Status != http.StatusForbidden {
-		t.Fatalf("note on origin from destination: status %d", r.Status)
 	}
 	body := c.data()
 	body["subject"] = "Outro"

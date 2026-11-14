@@ -28,7 +28,6 @@ type Correction struct {
 	OrganizationID   int64
 	StartedAt        time.Time
 	EndedAt          time.Time
-	SpokeWith        string
 	Reason           string
 	AddSubject       bool
 	SubjectModuleID  *int64 `json:"subjectModuleId"`
@@ -46,7 +45,7 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
 		return db.Ticket{}, err
 	}
-	in.SpokeWith, in.Reason = strings.TrimSpace(in.SpokeWith), strings.TrimSpace(in.Reason)
+	in.Reason = strings.TrimSpace(in.Reason)
 	if in.Reason == "" {
 		return db.Ticket{}, ErrReasonRequired
 	}
@@ -135,7 +134,6 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 			OrganizationID: &in.OrganizationID,
 			StartedAt:      in.StartedAt,
 			EndedAt:        &in.EndedAt,
-			SpokeWith:      optional(in.SpokeWith),
 		})
 		if isConstraint(err, "tickets_ended_after_started") {
 			return ErrInvalidPeriod
@@ -153,7 +151,6 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 		}
 		changes.Set("started_at", t.StartedAt.UTC(), ticket.StartedAt.UTC())
 		changes.Set("ended_at", t.EndedAt.UTC(), ticket.EndedAt.UTC())
-		changes.Set("spoke_with", t.SpokeWith, ticket.SpokeWith)
 		if changes.Empty() {
 			return ErrNoChanges
 		}
@@ -201,8 +198,9 @@ type CorrectionLog struct {
 
 // FieldChange is the previous and new value of a corrected field. Field is
 // one of subject, resolution, organization, modules, started_at, ended_at and
-// spoke_with; organization is a name with its municipality, modules a list of names and the times
-// are time.Time.
+// spoke_with; organization is a name with its municipality, modules a list of
+// names and the times are time.Time. Only old corrections carry spoke_with
+// (new ones no longer record it); the migration that erases them is #175.
 type FieldChange struct {
 	Field string
 	From  any
