@@ -16,7 +16,7 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
   baseURL,
 }) => {
   const { ticketId, agent, otherAgent, supervisor } = await seedClosedTicket(baseURL!)
-  const details = page.getByRole('region', { name: 'Chamado', exact: true })
+  const details = page.getByRole('region', { name: 'Atendimento', exact: true })
 
   // O atendente que não encerrou não vê a correção, e a API o bloqueia.
   await signIn(page, otherAgent, userPassword)
@@ -146,7 +146,7 @@ test('o histórico de alterações esconde o "falou com" de correções antigas'
   await signIn(page, agent, userPassword)
   await page.goto(`/atendimentos/${ticketId}`)
   const history = page
-    .getByRole('region', { name: 'Chamado', exact: true })
+    .getByRole('region', { name: 'Atendimento', exact: true })
     .getByRole('list', { name: 'Histórico de alterações' })
   await expect(history.getByRole('listitem')).toHaveCount(1)
   await expect(history).toContainText('Motivo: Assunto e quem atendeu.')

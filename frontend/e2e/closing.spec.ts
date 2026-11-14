@@ -136,7 +136,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   // A linha reabre o chamado: o registro aparece nos detalhes e ninguém mais responde.
   await doneRow.getByRole('cell', { name: 'Encerrado' }).click({ force: true })
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
-  await expect(conversation).toContainText('Chamado encerrado.')
+  await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText('Encerrado em')
   await expect(
     conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
       hasText: `${agentName} encerrou o chamado`,
@@ -144,7 +144,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   ).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-  const details = page.getByRole('region', { name: 'Chamado', exact: true })
+  const details = page.getByRole('region', { name: 'Atendimento', exact: true })
   await expect(details).toContainText('Encerrado')
   await expect(details).toContainText('Contracheque')
   await expect(details).toContainText('Enviada a segunda via.')
@@ -199,13 +199,13 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   // A conversa mostra quem cancelou e o motivo; não há correção nem nova ação.
   await doneRow.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
-  await expect(conversation).toContainText('Chamado cancelado.')
+  await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText('Cancelado em')
   const agentName = agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
   const entry = conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
     hasText: `${agentName} cancelou o chamado`,
   })
   await expect(entry).toContainText('Motivo: Golpe do falso boleto.')
-  const details = page.getByRole('region', { name: 'Chamado', exact: true })
+  const details = page.getByRole('region', { name: 'Atendimento', exact: true })
   await expect(details).toContainText('Cancelado')
   await expect(details).toContainText('Cancelado em')
   await expect(details).not.toContainText('Histórico de alterações')
@@ -600,7 +600,7 @@ test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request
   await page.goto('/atendimentos')
   const row = page.getByRole('region', { name: 'Realizados hoje' }).getByRole('row', { name })
   await row.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
-  await expect(conversation).toContainText('Chamado cancelado.')
+  await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText('Cancelado em')
   await expect(conversation).not.toContainText('Contato não cadastrado')
   await expect(page.getByRole('button', { name: 'Cadastrar contato' })).toHaveCount(0)
 })
