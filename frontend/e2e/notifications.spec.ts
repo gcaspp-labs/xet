@@ -115,7 +115,7 @@ test('o botão do sino tem borda visível e o contador continua legível', async
   expect(onTop).toBe(true)
 })
 
-test('assumir pelo sino não muda a tela e "Abrir conversa" leva à tela Conversas', async ({
+test('assumir pelo sino não muda a tela e "Abrir chamado" leva à tela Chamados', async ({
   page,
   request,
   baseURL,
@@ -125,7 +125,7 @@ test('assumir pelo sino não muda a tela e "Abrir conversa" leva à tela Convers
   await receive(request, sector.id, 'Davi Fila')
   await receive(request, sector.id, 'Eva Fila')
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   const openedAt = page.url()
 
   await bellOf(page).click()
@@ -136,20 +136,20 @@ test('assumir pelo sino não muda a tela e "Abrir conversa" leva à tela Convers
   await expect(popover.getByText('Carla Fila')).toHaveCount(0)
   await expect(bellOf(page)).toHaveAccessibleName('Notificações, 2 pendentes')
 
-  // O link do aviso abre a conversa assumida na tela Conversas.
-  const openConversation = page.getByRole('link', { name: 'Abrir conversa' })
+  // O link do aviso abre a conversa assumida na tela Chamados.
+  const openConversation = page.getByRole('link', { name: 'Abrir chamado' })
   await expect(openConversation).toHaveAttribute('href', /^\/conversas\/\d+$/)
   await openConversation.click()
   await expect(page).toHaveURL(/\/conversas\/\d+$/)
   await expect(
     page.getByRole('region', { name: 'Conversa', exact: true }).getByText('Carla Fila'),
   ).toBeVisible()
-  const mine = page.getByRole('navigation', { name: 'Meus atendimentos' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
   await expect(mine.getByRole('link', { name: /Carla Fila/ })).toHaveAttribute(
     'aria-current',
     'page',
   )
-  await expect(page.getByRole('link', { name: 'Conversas', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Chamados', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   )
@@ -160,7 +160,7 @@ test('assumir pelo sino não muda a tela e "Abrir conversa" leva à tela Convers
   await expect(page.getByRole('heading', { name: 'Davi Fila' })).toBeVisible()
   await expect(popover).toBeHidden()
 
-  // Em outra tela (a do chamado) assumir também não navega, e o link leva à tela Conversas.
+  // Em outra tela (a do chamado) assumir também não navega, e o link leva à tela Chamados.
   const ticketPage = page.url()
   // O aviso da Carla pode ainda estar na tela: espera sumir para o link ser o da Eva.
   await expect(page.getByText('Chamado assumido')).toHaveCount(0, { timeout: 15_000 })
@@ -168,7 +168,7 @@ test('assumir pelo sino não muda a tela e "Abrir conversa" leva à tela Convers
   await popover.getByRole('button', { name: 'Assumir chamado de Eva Fila' }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   expect(page.url()).toBe(ticketPage)
-  await page.getByRole('link', { name: 'Abrir conversa' }).click()
+  await page.getByRole('link', { name: 'Abrir chamado' }).click()
   await expect(page).toHaveURL(/\/conversas\/\d+$/)
   await expect(mine.getByRole('link', { name: /Eva Fila/ })).toHaveAttribute('aria-current', 'page')
 })
@@ -196,7 +196,7 @@ test('item sai quando outra pessoa assume e volta quando o chamado é devolvido 
   await expect(bellOf(page)).toHaveAccessibleName('Notificações')
 
   // Devolver à fila: o item volta nas duas janelas.
-  const openConversation = other.getByRole('link', { name: 'Abrir conversa' })
+  const openConversation = other.getByRole('link', { name: 'Abrir chamado' })
   await expect(openConversation).toHaveAttribute('href', /^\/conversas\/\d+$/)
   await openConversation.click()
   await expect(other).toHaveURL(/\/conversas\/\d+$/)
@@ -343,7 +343,7 @@ test('atendente de outro setor não vê o chamado e não vê número desconectad
   const second = await seedSector(baseURL!)
   await receive(request, first.sector.id, 'Ivo Outro Setor')
   await signIn(page, second.agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 
   // O setor do atendente não tem número conectado, mas só supervisor e administrador são avisados.
   await bellOf(page).click()

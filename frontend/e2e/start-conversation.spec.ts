@@ -22,7 +22,7 @@ async function connectSector(baseURL: string, request: APIRequestContext, sector
   expect((await request.post(`/api/test/messaging/sectors/${sectorId}/pair`)).ok()).toBeTruthy()
 }
 
-test('atendente busca um contato e inicia a conversa pelo número do setor', async ({
+test('atendente busca um contato e inicia o chamado pelo número do setor', async ({
   page,
   browser,
   request,
@@ -39,8 +39,8 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
   )
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('button', { name: 'Nova conversa' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
   await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(name)
   // O município aparece ao lado do órgão na busca, no painel e no chamado.
   await expect(sheet.getByRole('button', { name: new RegExp(name) })).toContainText(
@@ -52,7 +52,7 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
 
   // O chamado nasce com o atendente, que já conduz a conversa.
   await expect(page).toHaveURL(/\/chamados\/\d+$/)
-  await expect(page.getByText('Conversa iniciada')).toBeVisible()
+  await expect(page.getByText('Chamado iniciado')).toBeVisible()
   await expect(page.getByRole('heading', { name })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const firstMessage = conversation
@@ -64,26 +64,26 @@ test('atendente busca um contato e inicia a conversa pelo número do setor', asy
     /agent \d+:\nBom dia, sua guia está pronta\./,
   )
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
-  // Iniciar a conversa conta como assumir o chamado e fica registrado, antes da
+  // Iniciar o chamado conta como assumir o chamado e fica registrado, antes da
   // primeira mensagem.
   await expect(conversation.getByRole('listitem').first()).toContainText(
-    `${agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')} iniciou a conversa e assumiu o chamado`,
+    `${agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')} abriu e assumiu o chamado`,
   )
   const ticketUrl = page.url()
   await expect(page.getByText(`Prefeitura ${id} — ${defaultMunicipality}`)).toBeVisible()
-  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await page.getByRole('link', { name: 'Atendimentos' }).click()
   await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText(
     `Prefeitura ${id} — ${defaultMunicipality}`,
   )
   await page.goto(ticketUrl)
 
-  // Outro integrante do setor que inicia conversa com o mesmo contato é levado ao
+  // Outro integrante do setor que abre um chamado com o mesmo contato é levado ao
   // chamado existente, sem permissão de resposta.
   const otherContext = await browser.newContext()
   const other = await otherContext.newPage()
   await signIn(other, supervisor, userPassword)
-  await other.getByRole('button', { name: 'Nova conversa' }).click()
-  const otherSheet = other.getByRole('dialog', { name: 'Nova conversa' })
+  await other.getByRole('button', { name: 'Novo chamado' }).click()
+  const otherSheet = other.getByRole('dialog', { name: 'Novo chamado' })
   await otherSheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(name)
   await otherSheet.getByRole('button', { name: new RegExp(name) }).click()
   await expect(other).toHaveURL(ticketUrl)
@@ -118,8 +118,8 @@ test('contato com chamado na fila leva ao chamado existente', async ({
   ).toBeTruthy()
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('button', { name: 'Nova conversa' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
   await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(phone)
   await sheet.getByRole('button', { name: new RegExp(name) }).click()
 
@@ -130,7 +130,7 @@ test('contato com chamado na fila leva ao chamado existente', async ({
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
 })
 
-test('atendente cadastra o contato em "Nova conversa" e envia a primeira mensagem', async ({
+test('atendente cadastra o contato em "Novo chamado" e envia a primeira mensagem', async ({
   page,
   request,
   baseURL,
@@ -146,8 +146,8 @@ test('atendente cadastra o contato em "Nova conversa" e envia a primeira mensage
   )
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('button', { name: 'Nova conversa' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
   await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(`Marta ${id}`)
   await expect(sheet.getByText('Nenhum contato encontrado.')).toBeVisible()
   await sheet.getByRole('button', { name: 'Novo contato' }).click()
@@ -194,7 +194,7 @@ test('atendente cadastra o contato em "Nova conversa" e envia a primeira mensage
   await sheet.getByRole('button', { name: 'Enviar' }).click()
 
   await expect(page).toHaveURL(/\/chamados\/\d+$/)
-  await expect(page.getByText('Conversa iniciada')).toBeVisible()
+  await expect(page.getByText('Chamado iniciado')).toBeVisible()
   await expect(page.getByRole('heading', { name: `Marta ${id}` })).toBeVisible()
   await expect(
     page
@@ -204,7 +204,7 @@ test('atendente cadastra o contato em "Nova conversa" e envia a primeira mensage
   ).toContainText('Enviada')
 })
 
-test('a busca de nova conversa abre em "Meu setor", com opção de ver todos', async ({
+test('a busca de Novo chamado abre em "Meu setor", com opção de ver todos', async ({
   page,
   baseURL,
 }) => {
@@ -220,8 +220,8 @@ test('a busca de nova conversa abre em "Meu setor", com opção de ver todos', a
     ],
   )
   await signIn(page, own.agent, userPassword)
-  await page.getByRole('button', { name: 'Nova conversa' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
   await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(id)
   await expect(sheet.getByRole('button', { name: new RegExp(`Iara ${id}`) })).toBeVisible()
   await expect(sheet.getByRole('button', { name: new RegExp(`Jonas ${id}`) })).toHaveCount(0)
@@ -231,7 +231,7 @@ test('a busca de nova conversa abre em "Meu setor", com opção de ver todos', a
   await expect(sheet.getByRole('button', { name: new RegExp(`Jonas ${id}`) })).toBeVisible()
 })
 
-test('a busca de nova conversa filtra por município e órgão', async ({ page, baseURL }) => {
+test('a busca de Novo chamado filtra por município e órgão', async ({ page, baseURL }) => {
   const { sector, agent } = await seedSector(baseURL!)
   const { id } = unique()
   await seedDirectory(
@@ -248,8 +248,8 @@ test('a busca de nova conversa filtra por município e órgão', async ({ page, 
     ],
   )
   await signIn(page, agent, userPassword)
-  await page.getByRole('button', { name: 'Nova conversa' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
   const contacts = sheet.getByRole('list', { name: 'Contatos' }).getByRole('button')
   const results = contacts.filter({ hasText: id })
   await expect(results).toHaveCount(3)

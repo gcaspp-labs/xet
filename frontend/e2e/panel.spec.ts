@@ -29,7 +29,7 @@ test('nova mensagem aparece no painel sem recarregar e o atendente assume o cham
 }) => {
   const { sector, agent, supervisor } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   const queue = card(page, 'Fila do setor')
   await expect(queue.getByText('Nenhum chamado na fila.')).toBeVisible()
 
@@ -64,7 +64,7 @@ test('nova mensagem aparece no painel sem recarregar e o atendente assume o cham
   await expect(page).toHaveURL(/\/conversas\/\d+$/)
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
 
-  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await page.getByRole('link', { name: 'Atendimentos' }).click()
   await expect(queue.getByText('Nenhum chamado na fila.')).toBeVisible()
   const mine = card(page, 'Em atendimento').getByRole('row', { name: /Maria Cliente/ })
   await expect(mine).toContainText('Você')
@@ -97,7 +97,7 @@ test('o mesmo atendente conduz vários chamados ao mesmo tempo', async ({
     await receive(request, sector.id, { phone: unique().phone, contactName, body: 'Bom dia' })
     await queue.getByRole('button', { name: `Assumir chamado de ${contactName}` }).click()
     await expect(page).toHaveURL(/\/conversas\/\d+$/)
-    await page.getByRole('link', { name: 'Atendimento' }).click()
+    await page.getByRole('link', { name: 'Atendimentos' }).click()
   }
 
   await expect(queue.getByText('Nenhum chamado na fila.')).toBeVisible()
@@ -113,7 +113,7 @@ test('o mesmo atendente conduz vários chamados ao mesmo tempo', async ({
   ).toHaveText('3')
 })
 
-test('a linha inteira do chamado abre a conversa e o botão de assumir continua clicável', async ({
+test('a linha inteira do chamado abre o chamado e o botão de assumir continua clicável', async ({
   page,
   request,
   baseURL,

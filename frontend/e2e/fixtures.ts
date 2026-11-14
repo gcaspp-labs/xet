@@ -29,7 +29,7 @@ export async function signIn(page: Page, email: string, password: string) {
   await login(page, email, password)
   await expect(page).not.toHaveURL(/\/login$/)
   await page.goto('/atendimento')
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 }
 
 // Troca de usuário: sai da página antes de limpar os cookies. Uma requisição ainda em andamento

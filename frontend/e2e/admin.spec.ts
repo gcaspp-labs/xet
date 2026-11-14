@@ -53,7 +53,7 @@ test('administrador cadastra a Contabilidade e seus usuários', async ({ page, b
     const context = await browser.newContext()
     const userPage = await context.newPage()
     await login(userPage, person.email, userPassword)
-    await expect(userPage.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+    await expect(userPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
     await context.close()
   }
 })
@@ -392,7 +392,7 @@ test('administrador gerencia módulos de qualquer setor', async ({ page, baseURL
 test('atendente não acessa a administração', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 
   await expect(page.getByText('Administração')).toHaveCount(0)
   for (const name of ['Módulos', 'Setores', 'Usuários']) {

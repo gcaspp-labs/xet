@@ -216,7 +216,7 @@ async function chooseInMenu(page: Page, role: 'menuitemradio' | 'menuitemcheckbo
 test('tamanho do texto muda o texto medido e sobrevive ao recarregar', async ({ page }) => {
   await signIn(page, admin.email, admin.password)
   const html = page.locator('html')
-  const heading = page.getByRole('heading', { name: 'Atendimento' })
+  const heading = page.getByRole('heading', { name: 'Atendimentos' })
   await expect(heading).toBeVisible()
   expect(await fontSize(page, 'body')).toBe(14)
   expect(await fontSize(page, 'h1')).toBe(19)
@@ -249,7 +249,7 @@ test('tamanho do texto muda o texto medido e sobrevive ao recarregar', async ({ 
 test('o aviso temporário acompanha o tamanho escolhido', async ({ page, baseURL }) => {
   const { sector, agent } = await connectedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 
   for (const [label, expected] of [
     ['Padrão', 13],
@@ -280,7 +280,7 @@ test('em "Maior", na largura do celular, o aviso com ação cabe na tela', async
   const page = await context.newPage()
   await prefer(page, { size: 'larger' })
   await signIn(page, agent, userPassword)
-  // No painel, assumir leva à conversa e o aviso vem sem ação; pelo sino, ele traz "Abrir conversa".
+  // No painel, assumir leva à conversa e o aviso vem sem ação; pelo sino, ele traz "Abrir chamado".
   await page
     .getByRole('banner')
     .getByRole('button', { name: /^Notificações/ })
@@ -291,7 +291,7 @@ test('em "Maior", na largura do celular, o aviso com ação cabe na tela', async
     .click()
 
   const toast = page.locator('[data-sonner-toast]', { hasText: 'Chamado assumido' })
-  const action = toast.getByRole('link', { name: 'Abrir conversa' })
+  const action = toast.getByRole('link', { name: 'Abrir chamado' })
   await expect(action).toBeVisible()
   const [toastBox, actionBox] = [await toast.boundingBox(), await action.boundingBox()]
   expect(toastBox!.x).toBeGreaterThanOrEqual(0)
@@ -386,7 +386,7 @@ test('alto contraste muda as cores nos temas claro e escuro e combina com o tama
 
   await chooseInMenu(page, 'menuitemradio', 'Maior')
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   await expect(body).toHaveCSS('background-color', 'rgb(255, 255, 255)')
   await expect(body).toHaveCSS('font-size', '18.2px')
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -491,7 +491,7 @@ for (const theme of ['light', 'dark'] as const) {
     const page = await context.newPage()
     await prefer(page, { theme, contrast: true })
     await signIn(page, supervisor, userPassword)
-    await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 
     // Foco em 3px, com contraste medido contra o fundo; vale até para os campos de texto.
     const bell = page.getByRole('banner').getByRole('button', { name: /^Notificações/ })
@@ -533,7 +533,7 @@ test('na largura do celular, em "Maior", a página não rola para o lado', async
   await expectNoPageScroll(adminPage, 'login')
   await signIn(adminPage, admin.email, admin.password)
   for (const [path, title] of [
-    ['/atendimento', 'Atendimento'],
+    ['/atendimento', 'Atendimentos'],
     ['/dashboard', 'Dashboard'],
     ['/contatos', 'Contatos'],
     ['/orgaos', 'Órgãos'],
@@ -605,7 +605,7 @@ test('em "Maior", no computador, as ações do painel e o título da conversa fi
 test('o medidor de contraste aponta os textos fracos do tema normal', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await signIn(page, admin.email, admin.password)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   const { failures } = await auditContrast(page, 7)
   expect(failures.length).toBeGreaterThan(0)
 })
@@ -614,7 +614,7 @@ test('a escolha de uma aba vale nas outras', async ({ context, page }) => {
   await signIn(page, admin.email, admin.password)
   const other = await context.newPage()
   await other.goto('/atendimento')
-  await expect(other.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(other.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 
   await chooseInMenu(page, 'menuitemradio', 'Grande')
   await chooseInMenu(page, 'menuitemcheckbox', 'Alto contraste')

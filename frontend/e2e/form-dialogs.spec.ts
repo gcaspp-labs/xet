@@ -120,13 +120,13 @@ test('cancelar o cadastro aberto pelo encerramento volta à janela com os dados 
   await expectLockedDialog(page, closing, { field: 'Assunto' })
 })
 
-test('nova conversa e o cadastro aberto por ela têm bloqueio', async ({ page, baseURL }) => {
+test('novo chamado e o cadastro aberto por ela têm bloqueio', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   const query = `Sem resultado ${unique().id}`
   await signIn(page, agent, userPassword)
 
-  const open = () => page.getByRole('button', { name: 'Nova conversa' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Nova conversa' })
+  const open = () => page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
   await open()
   await expectLockedDialog(page, sheet, { field: 'Buscar contato' })
 

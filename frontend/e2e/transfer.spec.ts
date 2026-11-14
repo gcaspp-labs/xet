@@ -69,7 +69,7 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   await sheet.getByRole('button', { name: 'Transferir' }).click()
   await expect(page.getByText('Chamado transferido')).toBeVisible()
 
-  // A transferência volta a Conversas sem chamado aberto.
+  // A transferência volta a Chamados sem chamado aberto.
   await expect(page).toHaveURL(/\/conversas$/)
   await expect(conversation).toHaveCount(0)
   await page.goto(ticketUrl)

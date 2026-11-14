@@ -23,7 +23,7 @@ test('tema escolhido persiste ao recarregar e vale na tela de login', async ({ p
   await expect(html).toHaveCSS('color-scheme', 'dark')
 
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   await expect(body).toHaveCSS('background-color', darkPaper)
 
   await page.getByRole('button', { name: 'Configurações' }).click()

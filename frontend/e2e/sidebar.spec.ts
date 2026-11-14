@@ -114,7 +114,7 @@ test('atendente vê só os itens do seu papel, sem Usuários em Configurações'
   await expect
     .poll(() => menuGroups(page))
     .toEqual([
-      ['Helpdesk', 'Atendimento', 'Conversas', 'Contatos'],
+      ['Helpdesk', 'Atendimentos', 'Chamados', 'Contatos'],
       ['Cadastro', 'Órgãos'],
     ])
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -133,7 +133,7 @@ test('supervisor vê também Conexão, Módulos e Assuntos, com o breadcrumb do 
     .poll(() => menuGroups(page))
     .toEqual([
       [undefined, 'Dashboard'],
-      ['Helpdesk', 'Atendimento', 'Conversas', 'Contatos', 'Conexão'],
+      ['Helpdesk', 'Atendimentos', 'Chamados', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos'],
     ])
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -160,7 +160,7 @@ test('administrador vê tudo, com Usuários só em Configurações, e o breadcru
     .poll(() => menuGroups(page))
     .toEqual([
       [undefined, 'Dashboard'],
-      ['Helpdesk', 'Atendimento', 'Conversas', 'Contatos', 'Conexão'],
+      ['Helpdesk', 'Atendimentos', 'Chamados', 'Contatos', 'Conexão'],
       ['Cadastro', 'Órgãos', 'Módulos', 'Assuntos', 'Setores'],
     ])
   await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0)
@@ -230,15 +230,15 @@ test('botão de voltar leva da conversa à lista de atendimentos', async ({
     await expect(page.getByRole('tab', { name, exact: true })).toBeVisible()
   }
   await expect(page.getByText('Falou com', { exact: true })).toBeVisible()
-  await expect(page.locator(sidebar).getByRole('link', { name: 'Atendimento' })).toHaveAttribute(
+  await expect(page.locator(sidebar).getByRole('link', { name: 'Atendimentos' })).toHaveAttribute(
     'data-active',
     '',
   )
-  await expect(page.locator(sidebar).getByRole('link', { name: 'Conversas' })).not.toHaveAttribute(
-    'data-active',
-  )
+  await expect(
+    page.locator(sidebar).getByRole('link', { name: 'Chamados', exact: true }),
+  ).not.toHaveAttribute('data-active')
 
   await page.getByRole('link', { name: 'Voltar à lista' }).click()
   await expect(page).toHaveURL(/\/atendimento$/)
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
 })

@@ -105,9 +105,9 @@ for (const role of ['admin', 'supervisor', 'agent'] as const) {
     await expect(page).toHaveURL(new RegExp(`${home}$`))
     await page.goto('/')
     await expect(page).toHaveURL(new RegExp(`${home}$`))
-    await page.getByRole('link', { name: 'Atendimento', exact: true }).click()
+    await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
     await expect(page).toHaveURL(/\/atendimento$/)
-    await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
     await page.goto('/contatos')
     await expect(page.getByRole('heading', { name: 'Contatos' })).toBeVisible()
     if (role === 'agent') {

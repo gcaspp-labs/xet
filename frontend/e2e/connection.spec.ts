@@ -60,8 +60,8 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   await expect(qr).toBeHidden()
 
   await expect(bell).toHaveAccessibleName('Notificações')
-  await page.getByRole('link', { name: 'Atendimento' }).click()
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await page.getByRole('link', { name: 'Atendimentos' }).click()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   await bell.click()
   await expect(page.getByText('Nenhuma notificação.')).toBeVisible()
   await page.keyboard.press('Escape')
@@ -76,7 +76,7 @@ test('supervisor conecta o número pelo QR code e é avisado da desconexão', as
   await bell.click()
   await expect(item).toBeVisible()
   await page.keyboard.press('Escape')
-  await page.getByRole('link', { name: 'Atendimento' }).click()
+  await page.getByRole('link', { name: 'Atendimentos' }).click()
 
   // Desvinculado pelo celular: a tela pede um novo QR code.
   await phone(request, sector.id, 'logout')
@@ -192,7 +192,7 @@ test('atendente não vê a conexão nem o aviso de desconexão', async ({ page, 
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
 
-  await expect(page.getByRole('heading', { name: 'Atendimento' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Conexão' })).toBeHidden()
   await expect(page.getByText(/desconectado\./)).toBeHidden()
   await page.goto('/conexao')
