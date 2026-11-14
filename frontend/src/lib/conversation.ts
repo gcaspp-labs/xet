@@ -14,7 +14,6 @@ export type TicketDetail = {
   protocol: string
   status: 'queued' | 'in_progress' | 'closed'
   sector: { id: number; name: string }
-  spokeWith: string | null
   arrivedAt: string
   assignedAt: string | null
   startedAt: string
@@ -60,13 +59,6 @@ export type Message = {
   } | null
 }
 
-export type Note = {
-  id: number
-  body: string
-  createdAt: string
-  author: { id: number; name: string }
-}
-
 export type HistoryEntry = {
   id: number
   protocol: string
@@ -107,7 +99,6 @@ export type AssignmentLog = {
 export const ticketKey = (ticketId: number) => ['tickets', ticketId]
 const messagesKey = (ticketId: number) => ['tickets', ticketId, 'messages']
 const assignmentsKey = (ticketId: number) => ['tickets', ticketId, 'assignments']
-const notesKey = (ticketId: number) => ['tickets', ticketId, 'notes']
 const closingFormKey = (ticketId: number) => ['tickets', ticketId, 'closing-form']
 const modulesKey = (ticketId: number) => ['tickets', ticketId, 'modules']
 const correctionsKey = (ticketId: number) => ['tickets', ticketId, 'corrections']
@@ -143,13 +134,6 @@ export function useAssignments(ticketId: number) {
   return useQuery({
     queryKey: assignmentsKey(ticketId),
     queryFn: () => api<AssignmentLog[]>(`/tickets/${ticketId}/assignments`),
-  })
-}
-
-export function useNotes(ticketId: number) {
-  return useQuery({
-    queryKey: notesKey(ticketId),
-    queryFn: () => api<Note[]>(`/tickets/${ticketId}/notes`),
   })
 }
 
@@ -230,24 +214,6 @@ export function useRetryMessage(ticketId: number) {
     mutationFn: (messageId: number) =>
       api<SentMessage>(`/messages/${messageId}/retry`, { method: 'POST' }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
-  })
-}
-
-export function useSaveSpokeWith(ticketId: number) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (spokeWith: string) =>
-      api<void>(`/tickets/${ticketId}/spoke-with`, { method: 'PUT', body: { spokeWith } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
-  })
-}
-
-export function useAddNote(ticketId: number) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (body: string) =>
-      api<Note>(`/tickets/${ticketId}/notes`, { method: 'POST', body: { body } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: notesKey(ticketId) }),
   })
 }
 
@@ -407,7 +373,6 @@ export type CorrectionInput = {
   organizationId: number
   startedAt: string
   endedAt: string
-  spokeWith: string
   reason: string
   addSubject?: boolean
   addSolution?: boolean
@@ -416,7 +381,8 @@ export type CorrectionInput = {
 }
 
 // Campo corrigido com o valor anterior e o novo: órgão pelo nome, módulos
-// pela lista de nomes e horários em ISO 8601.
+// pela lista de nomes e horários em ISO 8601. O "spoke_with" só vem em
+// correções antigas e a tela o esconde, até a migração que apaga esses dados.
 export type CorrectionChange = {
   field:
     'subject' | 'resolution' | 'organization' | 'modules' | 'started_at' | 'ended_at' | 'spoke_with'

@@ -6,7 +6,6 @@ import { z } from 'zod'
 import { ClosingFields } from '@/components/ClosingFields'
 import { FormDialog } from '@/components/FormDialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useClosingQuestions } from '@/hooks/use-closing-questions'
 import { checkPeriod, closingShape, localInput, sameText } from '@/lib/closing'
@@ -15,7 +14,6 @@ import { type TicketDetail, useClosingForm, useCorrectTicket } from '@/lib/conve
 const schema = z
   .object({
     ...closingShape,
-    spokeWith: z.string(),
     reason: z.string().trim().min(1, 'Informe o motivo da correção.'),
   })
   .superRefine(checkPeriod)
@@ -24,7 +22,7 @@ type FormValues = z.input<typeof schema>
 type Values = z.output<typeof schema>
 
 // Janela de correção do atendimento encerrado (spec.md, Encerramento, retorno
-// e correções): os dados do encerramento e o "falou com", com motivo
+// e correções): os dados do encerramento, com motivo
 // obrigatório. Só é montado aberto, já com os módulos gravados; o backend
 // confere quem pode corrigir e as regras de novo.
 export function CorrectionSheet({
@@ -57,7 +55,6 @@ export function CorrectionSheet({
       moduleIds: recorded.map((module) => module.id),
       organization: ticket.organization ? { ...ticket.organization, cnpj: null } : null,
       ...original,
-      spokeWith: ticket.spokeWith ?? '',
       reason: '',
     },
   })
@@ -93,7 +90,6 @@ export function CorrectionSheet({
           values.endedAt !== original.endedAt
             ? new Date(values.endedAt).toISOString()
             : (ticket.endedAt ?? new Date(values.endedAt).toISOString()),
-        spokeWith: values.spokeWith,
         reason: values.reason,
         addSubject,
         addSolution,
@@ -181,15 +177,6 @@ export function CorrectionSheet({
       <FormProvider {...methods}>
         <ClosingFields idPrefix="correction" modules={modules} subjects={form?.subjects ?? []} />
       </FormProvider>
-      <Field>
-        <FieldLabel htmlFor="correction-spoke-with">Falou com</FieldLabel>
-        <Input
-          id="correction-spoke-with"
-          maxLength={200}
-          placeholder="Quem atendeu neste telefone"
-          {...register('spokeWith')}
-        />
-      </Field>
       <Field data-invalid={!!errors.reason}>
         <FieldLabel htmlFor="correction-reason">Motivo da correção</FieldLabel>
         <Textarea

@@ -13,7 +13,6 @@ import {
   PencilLine,
   RotateCw,
   SendHorizontal,
-  StickyNote,
   Trash2,
   Undo2,
   UserCheck,
@@ -46,8 +45,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { Field, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { type User, useCurrentUser } from '@/lib/auth'
@@ -61,16 +58,13 @@ import {
   maxFileSize,
   newRequestId,
   ticketKey,
-  useAddNote,
   useAssignFromTicket,
   useAssignments,
   useContactHistory,
   useCorrections,
   useMessages,
-  useNotes,
   useOrganizationHistory,
   useRetryMessage,
-  useSaveSpokeWith,
   useSendMessage,
   useTicket,
   useTicketModules,
@@ -730,56 +724,24 @@ export function ConversationCard({
   )
 }
 
-function SpokeWithField({ ticket, editable }: { ticket: TicketDetail; editable: boolean }) {
-  const save = useSaveSpokeWith(ticket.id)
-  const [value, setValue] = useState(ticket.spokeWith ?? '')
+type ShownField = Exclude<CorrectionChange['field'], 'spoke_with'>
 
-  if (!editable) {
-    return (
-      <div>
-        <dt className="label text-ink-soft">Falou com</dt>
-        <dd>{ticket.spokeWith ?? 'Não informado'}</dd>
-      </div>
-    )
-  }
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        save.mutate(value, { onSuccess: () => toast.success('Falou com salvo') })
-      }}
-    >
-      <Field>
-        <FieldLabel htmlFor="spoke-with">Falou com</FieldLabel>
-        <div className="flex gap-2">
-          <Input
-            id="spoke-with"
-            maxLength={200}
-            placeholder="Quem atendeu neste telefone"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
-          <Button type="submit" variant="outline" disabled={save.isPending}>
-            Salvar
-          </Button>
-        </div>
-      </Field>
-      {save.error && <p className="caption mt-1 text-danger">{save.error.message}</p>}
-    </form>
-  )
-}
-
-const correctionFields: Record<CorrectionChange['field'], string> = {
+const correctionFields: Record<ShownField, string> = {
   subject: 'Assunto',
   resolution: 'Resolução',
   organization: 'Órgão',
   modules: 'Módulos',
   started_at: 'Início',
   ended_at: 'Fim',
-  spoke_with: 'Falou com',
 }
 
-function correctionValue(field: CorrectionChange['field'], value: CorrectionChange['from']) {
+type ShownChange = CorrectionChange & { field: ShownField }
+
+function isShown(change: CorrectionChange): change is ShownChange {
+  return change.field !== 'spoke_with'
+}
+
+function correctionValue(field: ShownField, value: CorrectionChange['from']) {
   if (value === null || value.length === 0) {
     return 'Não informado'
   }
@@ -791,7 +753,12 @@ function correctionValue(field: CorrectionChange['field'], value: CorrectionChan
 
 // Histórico de alterações do atendimento encerrado: autor, data, motivo e
 // valores anteriores e novos de cada campo corrigido.
-function CorrectionHistory({ corrections }: { corrections: Correction[] }) {
+// As mudanças de "Falou com" de correções antigas não aparecem, e a correção que
+// só mudou isso sai da lista (a API as devolve até a migração que apaga esses dados).
+function CorrectionHistory({ corrections: all }: { corrections: Correction[] }) {
+  const corrections = all
+    .map((c) => ({ ...c, changes: c.changes.filter(isShown) }))
+    .filter((c) => c.changes.length > 0)
   return (
     <section>
       <h3 className="overline text-ink-soft">Histórico de alterações</h3>
@@ -859,15 +826,7 @@ function PreviousTicket({ previous }: { previous: NonNullable<TicketDetail['prev
   )
 }
 
-function DetailsTab({
-  ticket,
-  user,
-  onRegister,
-}: {
-  ticket: TicketDetail
-  user: User
-  onRegister: () => void
-}) {
+function DetailsTab({ ticket, onRegister }: { ticket: TicketDetail; onRegister: () => void }) {
   const status = ticketStatusLabel(ticket.status, ticket.closureType)
   const cancelled = ticket.closureType === 'cancelled'
   // O cancelado não lança o atendimento: não tem formulário de encerramento nem correções.
@@ -943,84 +902,9 @@ function DetailsTab({
             row('Fim', <span className="mono-num">{formatDateTime(ticket.endedAt)}</span>)}
         </>
       )}
-      <SpokeWithField
-        key={ticket.spokeWith ?? ''}
-        ticket={ticket}
-        editable={conducts(ticket, user)}
-      />
       {corrections && <CorrectionHistory corrections={corrections} />}
       {ticket.previous && <PreviousTicket previous={ticket.previous} />}
     </dl>
-  )
-}
-
-function NotesTab({ ticketId, canWrite }: { ticketId: number; canWrite: boolean }) {
-  const { data: notes = [] } = useNotes(ticketId)
-  const add = useAddNote(ticketId)
-  const [body, setBody] = useState('')
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="caption text-ink-faint">Visíveis só para a equipe; não vão para o cliente.</p>
-      {notes.length > 0 ? (
-        <ol aria-label="Notas internas" className="flex flex-col gap-2">
-          {notes.map((note) => (
-            <li
-              key={note.id}
-              className="rounded-(--radius-7) border border-line-soft bg-card px-3 py-2"
-            >
-              <p className="caption text-ink-faint">
-                {note.author.name} ·{' '}
-                <span className="mono-num">{formatDateTime(note.createdAt)}</span>
-              </p>
-              <p className="whitespace-pre-wrap break-words">{note.body}</p>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <Empty>
-          <EmptyMedia>
-            <StickyNote strokeWidth={1.7} aria-hidden />
-          </EmptyMedia>
-          <EmptyDescription>Nenhuma nota.</EmptyDescription>
-        </Empty>
-      )}
-      {canWrite && (
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!body.trim()) {
-              return
-            }
-            add.mutate(body.trim(), {
-              onSuccess: () => {
-                setBody('')
-                toast.success('Nota adicionada')
-              },
-            })
-          }}
-        >
-          <Field>
-            <FieldLabel htmlFor="note-body">Nova nota</FieldLabel>
-            <Textarea
-              id="note-body"
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-            />
-          </Field>
-          {add.error && <p className="caption text-danger">{add.error.message}</p>}
-          <Button
-            type="submit"
-            variant="outline"
-            className="self-end"
-            disabled={add.isPending || !body.trim()}
-          >
-            Adicionar nota
-          </Button>
-        </form>
-      )}
-    </div>
   )
 }
 
@@ -1278,7 +1162,6 @@ export default function TicketPage() {
           >
             <TabsList>
               <TabsTrigger value="details">Detalhes</TabsTrigger>
-              <TabsTrigger value="notes">Notas</TabsTrigger>
               <TabsTrigger value="history">Histórico</TabsTrigger>
               {showSubjects && <TabsTrigger value="subjects">Assuntos</TabsTrigger>}
             </TabsList>
@@ -1293,10 +1176,7 @@ export default function TicketPage() {
               </TabsContent>
             )}
             <TabsContent value="details">
-              <DetailsTab ticket={ticket} user={user} onRegister={openRegistration} />
-            </TabsContent>
-            <TabsContent value="notes">
-              <NotesTab ticketId={ticket.id} canWrite={worksIn(ticket, user)} />
+              <DetailsTab ticket={ticket} onRegister={openRegistration} />
             </TabsContent>
             <TabsContent value="history">
               <HistoryTab ticket={ticket} />
