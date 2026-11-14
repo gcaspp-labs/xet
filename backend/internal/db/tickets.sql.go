@@ -60,34 +60,11 @@ type AssignTicketParams struct {
 	ID         int64
 }
 
-type AssignTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // Conditional update: only a queued ticket is assigned, so among concurrent
 // attempts only one returns a row.
-func (q *Queries) AssignTicket(ctx context.Context, arg AssignTicketParams) (AssignTicketRow, error) {
+func (q *Queries) AssignTicket(ctx context.Context, arg AssignTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, assignTicket, arg.AssigneeID, arg.ID)
-	var i AssignTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -126,36 +103,13 @@ type CancelTicketParams struct {
 	ID      int64
 }
 
-type CancelTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // The caller holds the lock of the ticket and checked it may be cancelled. A
 // ticket from the queue takes who cancelled as assignee, since a closed ticket
 // needs one (tickets_assigned), and assigned_at stays empty. The start comes
 // from the clock of the phone and may be ahead of the database.
-func (q *Queries) CancelTicket(ctx context.Context, arg CancelTicketParams) (CancelTicketRow, error) {
+func (q *Queries) CancelTicket(ctx context.Context, arg CancelTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, cancelTicket, arg.ActorID, arg.ID)
-	var i CancelTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -200,31 +154,8 @@ type CloseTicketParams struct {
 	ID             int64
 }
 
-type CloseTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // The caller holds the lock of the ticket and checked it may be closed.
-func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (CloseTicketRow, error) {
+func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, closeTicket,
 		arg.ClosureType,
 		arg.Subject,
@@ -234,7 +165,7 @@ func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Close
 		arg.EndedAt,
 		arg.ID,
 	)
-	var i CloseTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -277,32 +208,9 @@ type CorrectTicketParams struct {
 	ID             int64
 }
 
-type CorrectTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // Correction of a closed ticket. The caller holds the lock of the ticket and
 // checked it may be corrected.
-func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (CorrectTicketRow, error) {
+func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, correctTicket,
 		arg.Subject,
 		arg.Resolution,
@@ -311,7 +219,7 @@ func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (C
 		arg.EndedAt,
 		arg.ID,
 	)
-	var i CorrectTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -400,32 +308,9 @@ type CreateQueuedTicketParams struct {
 	ArrivedAt      time.Time
 }
 
-type CreateQueuedTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // A concurrent message may open the ticket first; then no row is returned
 // and the caller locks the existing one.
-func (q *Queries) CreateQueuedTicket(ctx context.Context, arg CreateQueuedTicketParams) (CreateQueuedTicketRow, error) {
+func (q *Queries) CreateQueuedTicket(ctx context.Context, arg CreateQueuedTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, createQueuedTicket,
 		arg.Protocol,
 		arg.SectorID,
@@ -433,7 +318,7 @@ func (q *Queries) CreateQueuedTicket(ctx context.Context, arg CreateQueuedTicket
 		arg.OrganizationID,
 		arg.ArrivedAt,
 	)
-	var i CreateQueuedTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -474,33 +359,10 @@ type CreateStartedTicketParams struct {
 	AssigneeID     *int64
 }
 
-type CreateStartedTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // Conversation started by an agent: the ticket is born assigned to them. A
 // ticket opened meanwhile for the contact in the sector wins; then no row is
 // returned and the caller directs the agent to it.
-func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTicketParams) (CreateStartedTicketRow, error) {
+func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, createStartedTicket,
 		arg.Protocol,
 		arg.SectorID,
@@ -508,7 +370,7 @@ func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTick
 		arg.OrganizationID,
 		arg.AssigneeID,
 	)
-	var i CreateStartedTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -549,33 +411,10 @@ type CreateTransferredTicketParams struct {
 	PreviousTicketID *int64
 }
 
-type CreateTransferredTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // Ticket of the destination of a transfer between sectors. An open ticket of
 // the contact in the destination wins; then no row is returned and the
 // caller refuses the transfer.
-func (q *Queries) CreateTransferredTicket(ctx context.Context, arg CreateTransferredTicketParams) (CreateTransferredTicketRow, error) {
+func (q *Queries) CreateTransferredTicket(ctx context.Context, arg CreateTransferredTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, createTransferredTicket,
 		arg.Protocol,
 		arg.SectorID,
@@ -583,7 +422,7 @@ func (q *Queries) CreateTransferredTicket(ctx context.Context, arg CreateTransfe
 		arg.OrganizationID,
 		arg.PreviousTicketID,
 	)
-	var i CreateTransferredTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -620,32 +459,9 @@ type GetOpenTicketForUpdateParams struct {
 	ContactID int64
 }
 
-type GetOpenTicketForUpdateRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
-func (q *Queries) GetOpenTicketForUpdate(ctx context.Context, arg GetOpenTicketForUpdateParams) (GetOpenTicketForUpdateRow, error) {
+func (q *Queries) GetOpenTicketForUpdate(ctx context.Context, arg GetOpenTicketForUpdateParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, getOpenTicketForUpdate, arg.SectorID, arg.ContactID)
-	var i GetOpenTicketForUpdateRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -695,40 +511,17 @@ order by id
 for update
 `
 
-type GetOpenTicketsOfContactForUpdateRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // Open tickets of the contact in every sector, locked in id order. Locking the
 // tickets before the contact keeps the order used by the closing.
-func (q *Queries) GetOpenTicketsOfContactForUpdate(ctx context.Context, contactID int64) ([]GetOpenTicketsOfContactForUpdateRow, error) {
+func (q *Queries) GetOpenTicketsOfContactForUpdate(ctx context.Context, contactID int64) ([]Ticket, error) {
 	rows, err := q.db.Query(ctx, getOpenTicketsOfContactForUpdate, contactID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetOpenTicketsOfContactForUpdateRow
+	var items []Ticket
 	for rows.Next() {
-		var i GetOpenTicketsOfContactForUpdateRow
+		var i Ticket
 		if err := rows.Scan(
 			&i.ID,
 			&i.Protocol,
@@ -766,32 +559,9 @@ select id, protocol, sector_id, contact_id, organization_id, assignee_id, status
 where id = $1
 `
 
-type GetTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
-func (q *Queries) GetTicket(ctx context.Context, id int64) (GetTicketRow, error) {
+func (q *Queries) GetTicket(ctx context.Context, id int64) (Ticket, error) {
 	row := q.db.QueryRow(ctx, getTicket, id)
-	var i GetTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -928,32 +698,9 @@ where id = $1
 for update
 `
 
-type GetTicketForUpdateRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
-func (q *Queries) GetTicketForUpdate(ctx context.Context, id int64) (GetTicketForUpdateRow, error) {
+func (q *Queries) GetTicketForUpdate(ctx context.Context, id int64) (Ticket, error) {
 	row := q.db.QueryRow(ctx, getTicketForUpdate, id)
-	var i GetTicketForUpdateRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -1555,34 +1302,11 @@ where id = $1
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at
 `
 
-type ReturnTicketToQueueRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // The caller holds the lock of the ticket and checked it is in progress.
 // assigned_at stays: it is the first time someone took the ticket.
-func (q *Queries) ReturnTicketToQueue(ctx context.Context, id int64) (ReturnTicketToQueueRow, error) {
+func (q *Queries) ReturnTicketToQueue(ctx context.Context, id int64) (Ticket, error) {
 	row := q.db.QueryRow(ctx, returnTicketToQueue, id)
-	var i ReturnTicketToQueueRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -1620,32 +1344,9 @@ type SetTicketOrganizationParams struct {
 	ID             int64
 }
 
-type SetTicketOrganizationRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
-func (q *Queries) SetTicketOrganization(ctx context.Context, arg SetTicketOrganizationParams) (SetTicketOrganizationRow, error) {
+func (q *Queries) SetTicketOrganization(ctx context.Context, arg SetTicketOrganizationParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, setTicketOrganization, arg.OrganizationID, arg.ID)
-	var i SetTicketOrganizationRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,
@@ -1683,33 +1384,10 @@ type TransferTicketParams struct {
 	ID         int64
 }
 
-type TransferTicketRow struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
 // The caller holds the lock of the ticket and checked it is in progress.
-func (q *Queries) TransferTicket(ctx context.Context, arg TransferTicketParams) (TransferTicketRow, error) {
+func (q *Queries) TransferTicket(ctx context.Context, arg TransferTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, transferTicket, arg.AssigneeID, arg.ID)
-	var i TransferTicketRow
+	var i Ticket
 	err := row.Scan(
 		&i.ID,
 		&i.Protocol,

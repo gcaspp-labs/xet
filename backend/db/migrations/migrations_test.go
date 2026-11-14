@@ -278,3 +278,74 @@ func TestNicknamesAreFilledFromNames(t *testing.T) {
 		}
 	}
 }
+
+// A migração 26 apaga Notas internas e "Falou com", inclusive o spoke_with das
+// correções em audit_logs, sem tocar no resto da auditoria.
+func TestInternalNotesAndSpokeWithAreDropped(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 25); err != nil {
+		t.Fatalf("up to 25: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into contacts (name, registered) values ('Maria', false);
+		insert into users (name, nickname, email, password_hash, role, sector_id) values ('Ana', 'Ana', 'ana@exemplo.com', 'x', 'agent', 1);
+		insert into tickets (protocol, sector_id, contact_id, status, spoke_with, arrived_at, started_at)
+		values ('2026-000001', 1, 1, 'queued', 'Maria, esposa', now(), now());
+		insert into internal_notes (ticket_id, author_id, body) values (1, 1, 'Cliente pediu retorno à tarde');
+		insert into audit_logs (ticket_id, entity_type, entity_id, action, actor_id, reason, changes) values
+		  (1, 'ticket', 1, 'ticket_corrected', 1, 'Só quem atendeu.', '{"spoke_with": {"from": null, "to": "Maria, esposa"}}'),
+		  (1, 'ticket', 1, 'ticket_corrected', 1, 'Assunto e quem atendeu.', '{"spoke_with": {"from": null, "to": "João"}, "subject": {"from": "A", "to": "B"}}'),
+		  (1, 'ticket', 1, 'ticket_corrected', 1, 'Só o assunto.', '{"subject": {"from": "B", "to": "C"}}'),
+		  (1, 'ticket', 1, 'ticket_transferred', 1, null, '{"spoke_with": "intocado"}');`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := p.UpTo(ctx, 26); err != nil {
+		t.Fatalf("up to 26: %v", err)
+	}
+
+	var exists int
+	if err := db.QueryRowContext(ctx, `
+		select (select count(*) from information_schema.tables where table_schema = 'public' and table_name = 'internal_notes')
+		     + (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'tickets' and column_name = 'spoke_with')`).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if exists != 0 {
+		t.Fatalf("internal_notes or tickets.spoke_with still exist")
+	}
+
+	rows, err := db.QueryContext(ctx, `select action || ' | ' || reason_text || ' | ' || changes::text from (
+		select action, coalesce(reason, '-') as reason_text, changes, id from audit_logs) a order by id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, line)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		`ticket_corrected | Assunto e quem atendeu. | {"subject": {"to": "B", "from": "A"}}`,
+		`ticket_corrected | Só o assunto. | {"subject": {"to": "C", "from": "B"}}`,
+		`ticket_transferred | - | {"spoke_with": "intocado"}`,
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("audit_logs after migration:\n got %q\nwant %q", got, want)
+	}
+}

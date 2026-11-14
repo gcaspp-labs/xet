@@ -719,16 +719,6 @@ func TestInternalNotesAndSpokeWithRemoved(t *testing.T) {
 			t.Fatalf("spoke with by %s: status %d", name, r.Status)
 		}
 	}
-	if n := e.Count("internal_notes"); n != 0 {
-		t.Fatalf("internal_notes rows = %d", n)
-	}
-	var spokeWith *string
-	if err := e.Pool.QueryRow(t.Context(), "select spoke_with from tickets where id = $1", c.ticket.ID).Scan(&spokeWith); err != nil {
-		t.Fatal(err)
-	}
-	if spokeWith != nil {
-		t.Fatalf("spoke_with recorded: %q", *spokeWith)
-	}
 
 	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.biaToken, nil)
 	if _, ok := detail.Body["spokeWith"]; ok || detail.Status != http.StatusOK ||
