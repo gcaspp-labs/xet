@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { expect, request as apiRequest, test } from '@playwright/test'
 import {
   admin,
@@ -155,36 +156,62 @@ test('correção do atendimento encerrado exige motivo e fica na auditoria', asy
 })
 
 // Até a migração que apaga os dados, a API ainda devolve o "falou com" de correções
-// antigas (dados fictícios): a tela esconde essas mudanças e a correção que só mudou isso.
+// antigas: a tela esconde essas mudanças e a correção que só mudou isso. Os registros
+// antigos (dados fictícios) entram no banco isolado criado por make test-e2e, e a página
+// consulta a API real.
 test('o histórico de alterações esconde o "falou com" de correções antigas', async ({
   page,
   baseURL,
 }) => {
   const { ticketId, agent } = await closedTicket(baseURL!)
-  const actor = { id: 1, name: 'Atendente Fictício' }
-  await page.route(`**/api/tickets/${ticketId}/corrections`, (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 9001,
-          createdAt: '2026-11-01T12:00:00Z',
-          actor,
-          reason: 'Assunto e quem atendeu.',
-          changes: [
-            { field: 'subject', from: 'Contracheque', to: 'Segunda via' },
-            { field: 'spoke_with', from: null, to: 'Maria, esposa' },
-          ],
-        },
-        {
-          id: 9002,
-          createdAt: '2026-11-02T12:00:00Z',
-          actor,
-          reason: 'Só quem atendeu.',
-          changes: [{ field: 'spoke_with', from: 'Maria, esposa', to: 'Rita, filha' }],
-        },
-      ],
-    }),
+  expect(Number.isSafeInteger(ticketId)).toBeTruthy()
+  expect(agent).toMatch(/^[\w.@+-]+$/)
+  const legacy = (reason: string, changes: object, createdAt: string) =>
+    `INSERT INTO audit_logs (ticket_id, entity_type, entity_id, action, actor_id, reason, changes, created_at)
+     VALUES (${ticketId}, 'ticket', ${ticketId}, 'ticket_corrected',
+             (SELECT id FROM users WHERE email = '${agent}'),
+             '${reason}', '${JSON.stringify(changes)}'::jsonb, '${createdAt}')`
+  execFileSync('docker', [
+    'exec',
+    'xet-e2e-db',
+    'psql',
+    '-U',
+    'xet',
+    '-d',
+    'xet',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-c',
+    legacy(
+      'Assunto e quem atendeu.',
+      {
+        subject: { from: 'Contracheque', to: 'Segunda via' },
+        spoke_with: { from: null, to: 'Maria, esposa' },
+      },
+      '2026-11-01T12:00:00Z',
+    ),
+    '-c',
+    legacy(
+      'Só quem atendeu.',
+      { spoke_with: { from: 'Maria, esposa', to: 'Rita, filha' } },
+      '2026-11-02T12:00:00Z',
+    ),
+  ])
+
+  // A API real ainda devolve as duas correções antigas, com o "falou com".
+  const api = await apiRequest.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const corrections = await json<{ reason: string; changes: { field: string }[] }[]>(
+    await api.get(`/api/tickets/${ticketId}/corrections`),
   )
+  await api.dispose()
+  expect(corrections.map((c) => c.reason)).toEqual(
+    expect.arrayContaining(['Assunto e quem atendeu.', 'Só quem atendeu.']),
+  )
+  expect(corrections.flatMap((c) => c.changes.map((change) => change.field))).toContain(
+    'spoke_with',
+  )
+
   await signIn(page, agent, userPassword)
   await page.goto(`/chamados/${ticketId}`)
   const history = page

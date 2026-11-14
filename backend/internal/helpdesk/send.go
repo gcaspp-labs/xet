@@ -110,7 +110,7 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 	var msg db.Message
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := q.GetTicketForUpdate(ctx, ticketID)
+		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
@@ -216,7 +216,7 @@ func (s *Service) Retry(ctx context.Context, provider messaging.Provider, actor 
 	var msg db.Message
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := q.GetTicketForUpdate(ctx, current.TicketID)
+		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, current.TicketID))
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}

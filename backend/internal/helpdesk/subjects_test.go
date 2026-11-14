@@ -449,7 +449,7 @@ func TestSubjectOverTheLimitDoesNotEnterAndTheFormIsSaved(t *testing.T) {
 		if n := c.e.Count("subjects"); n != 0 {
 			t.Fatalf("subjects = %d", n)
 		}
-		ticket, err := c.e.Q.GetTicket(t.Context(), c.ticket.ID)
+		ticket, err := db.AsTicket(c.e.Q.GetTicket(t.Context(), c.ticket.ID))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -575,7 +575,7 @@ func TestEditingOrDeletingASubjectDoesNotChangeTickets(t *testing.T) {
 
 	wantSubjectOnTicket := func(step string) {
 		t.Helper()
-		ticket, err := e.Q.GetTicket(t.Context(), c.ticket.ID)
+		ticket, err := db.AsTicket(e.Q.GetTicket(t.Context(), c.ticket.ID))
 		if err != nil {
 			t.Fatal(err)
 		}

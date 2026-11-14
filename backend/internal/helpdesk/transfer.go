@@ -32,7 +32,7 @@ func (s *Service) Transfer(ctx context.Context, actor auth.User, ticketID, targe
 	changed := false
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := q.GetTicketForUpdate(ctx, ticketID)
+		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
@@ -60,7 +60,7 @@ func (s *Service) Transfer(ctx context.Context, actor auth.User, ticketID, targe
 			return ErrInvalidTarget
 		}
 
-		ticket, err = q.TransferTicket(ctx, db.TransferTicketParams{ID: t.ID, AssigneeID: &target.ID})
+		ticket, err = db.AsTicket(q.TransferTicket(ctx, db.TransferTicketParams{ID: t.ID, AssigneeID: &target.ID}))
 		if err != nil {
 			return fmt.Errorf("transfer ticket: %w", err)
 		}

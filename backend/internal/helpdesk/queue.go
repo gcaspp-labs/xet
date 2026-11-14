@@ -71,7 +71,7 @@ func (s *Service) Assign(ctx context.Context, actor auth.User, ticketID int64) (
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		var err error
-		ticket, err = q.AssignTicket(ctx, db.AssignTicketParams{ID: ticketID, AssigneeID: &actor.ID})
+		ticket, err = db.AsTicket(q.AssignTicket(ctx, db.AssignTicketParams{ID: ticketID, AssigneeID: &actor.ID}))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errNotQueued
 		}
@@ -95,7 +95,7 @@ func (s *Service) Assign(ctx context.Context, actor auth.User, ticketID int64) (
 
 // notQueued explains why the ticket could not be assigned.
 func (s *Service) notQueued(ctx context.Context, actor auth.User, ticketID int64) (db.Ticket, error) {
-	ticket, err := s.q.GetTicket(ctx, ticketID)
+	ticket, err := db.AsTicket(s.q.GetTicket(ctx, ticketID))
 	if err != nil {
 		return db.Ticket{}, fmt.Errorf("get ticket: %w", err)
 	}

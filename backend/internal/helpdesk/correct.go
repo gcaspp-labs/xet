@@ -64,7 +64,7 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 	var ticket db.Ticket
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := q.GetTicketForUpdate(ctx, ticketID)
+		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
@@ -127,14 +127,14 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 			}
 		}
 
-		ticket, err = q.CorrectTicket(ctx, db.CorrectTicketParams{
+		ticket, err = db.AsTicket(q.CorrectTicket(ctx, db.CorrectTicketParams{
 			ID:             t.ID,
 			Subject:        &in.Subject,
 			Resolution:     &in.Resolution,
 			OrganizationID: &in.OrganizationID,
 			StartedAt:      in.StartedAt,
 			EndedAt:        &in.EndedAt,
-		})
+		}))
 		if isConstraint(err, "tickets_ended_after_started") {
 			return ErrInvalidPeriod
 		}

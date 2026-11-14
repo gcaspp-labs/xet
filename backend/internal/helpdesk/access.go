@@ -14,7 +14,7 @@ import (
 
 // accessible returns the ticket when the user may see its sector.
 func (s *Service) accessible(ctx context.Context, actor auth.User, ticketID int64) (db.Ticket, error) {
-	t, err := s.q.GetTicket(ctx, ticketID)
+	t, err := db.AsTicket(s.q.GetTicket(ctx, ticketID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.Ticket{}, ErrNotFound
 	}
@@ -31,7 +31,7 @@ func (s *Service) accessible(ctx context.Context, actor auth.User, ticketID int6
 // accessible or a later ticket of the chain of transfers between sectors is
 // (spec.md, Transferências). Acting on the ticket still needs accessible.
 func (s *Service) viewable(ctx context.Context, actor auth.User, ticketID int64) (db.Ticket, error) {
-	t, err := s.q.GetTicket(ctx, ticketID)
+	t, err := db.AsTicket(s.q.GetTicket(ctx, ticketID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.Ticket{}, ErrNotFound
 	}
