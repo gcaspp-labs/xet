@@ -438,9 +438,13 @@ test('fila do administrador ignora setores inativos e preserva os demais perfis'
   // O contador do administrador não conta o chamado do setor inativo: a aba mostra só os ativos
   // (o banco é compartilhado, então confere a contagem pelo que a lista exibe).
   const queue = adminPage.getByRole('tab', { name: /^Fila/ })
-  const shown = await adminPage.getByRole('button', { name: /^Assumir chamado de/ }).count()
-  await expect(queue).toHaveAccessibleName(`Fila, ${shown} a assumir`)
-  expect(shown).toBeGreaterThan(0)
+  // Outros testes mexem na fila em paralelo: compara de novo até a aba e a lista concordarem.
+  await expect
+    .poll(async () => {
+      const shown = await adminPage.getByRole('button', { name: /^Assumir chamado de/ }).count()
+      return shown > 0 && (await queue.getAttribute('aria-label')) === `Fila, ${shown} a assumir`
+    })
+    .toBe(true)
 
   // Atendente do setor inativo mantém a fila e a lista própria como hoje.
   await clearSession(page)
