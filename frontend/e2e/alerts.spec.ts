@@ -15,6 +15,7 @@ declare global {
       focuses: number
     }
     __requests: number
+    __socketOpen: boolean
     __stored: Record<string, string | null>
   }
 }
@@ -83,6 +84,37 @@ async function spyOnAlerts(page: Page) {
       get: () => (sessionStorage.getItem('test-hidden') ? 'hidden' : 'visible'),
     })
   })
+}
+
+// Marca quando o canal de avisos em tempo real abre. O teste que recarrega a página espera por
+// isso: o chamado que chega antes de o canal abrir não gera aviso nenhum.
+async function trackSocket(page: Page) {
+  await page.addInitScript(() => {
+    window.__socketOpen = false
+    const Real = window.WebSocket
+    class Tracked extends Real {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        this.addEventListener('open', () => {
+          window.__socketOpen = true
+        })
+      }
+    }
+    window.WebSocket = Tracked
+  })
+}
+
+// Recarrega e só volta quando a fila do setor já foi carregada e o canal de avisos está aberto.
+// "Nenhum chamado esperando." aparece antes disso, mas um chamado que chega nesse intervalo entra
+// na primeira carga, sem aviso, ou nem chega à tela.
+async function reloadWhenLive(page: Page) {
+  const queue = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' && /\/api\/sectors\/\d+\/tickets$/.test(response.url()),
+  )
+  await page.reload()
+  await (await queue).finished()
+  await page.waitForFunction(() => window.__socketOpen)
 }
 
 async function setHidden(page: Page, hidden: boolean) {
@@ -268,12 +300,13 @@ test('som sem interação com a página não quebra nada', async ({ page, reques
   const { sector, agent } = await connectedSector(baseURL!, request)
   const errors: Error[] = []
   page.on('pageerror', (error) => errors.push(error))
+  await trackSocket(page)
   await signIn(page, agent, userPassword)
   await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, soundOption, true)
 
   // Recarregar zera a interação com a página.
-  await page.reload()
+  await reloadWhenLive(page)
   await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await receive(request, sector.id, 'Jonas Mudo')
   await expect(page.getByText('Chamado recebido: Jonas Mudo')).toBeVisible()

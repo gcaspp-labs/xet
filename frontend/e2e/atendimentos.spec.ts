@@ -343,6 +343,7 @@ test('busca e filtros no servidor, sem diferenciar acentos e maiúsculas, guarda
   await expect(bodyRows(page)).toHaveCount(4)
   await page.getByRole('button', { name: 'Datas' }).click()
   await page.getByLabel('Início').fill('2020-01-01')
+  await expect(page.getByLabel('Início')).toHaveValue('2020-01-01')
   await page.getByLabel('Fim').fill('2020-01-31')
   await expect(page.getByText('Nenhum chamado encontrado.')).toBeVisible()
   await expect(page).toHaveURL(/periodo=datas/)
@@ -351,14 +352,23 @@ test('busca e filtros no servidor, sem diferenciar acentos e maiúsculas, guarda
   await page.getByLabel('Início').fill('2020-02-01')
   await expect(page.getByText('Período invertido')).toBeVisible()
   await page.getByLabel('Início').fill('2020-01-01')
+  await expect(page.getByLabel('Início')).toHaveValue('2020-01-01')
   await page.getByLabel('Fim').fill('')
+  await expect(page.getByLabel('Fim')).toHaveValue('')
   await expect(bodyRows(page)).toHaveCount(4)
 
   // Tudo junto, e o endereço guarda: recarregar traz a mesma lista e os mesmos campos.
+  // A tela monta o endereço novo a partir do que já desenhou, então cada mudança espera a tela
+  // mostrar a anterior: uma mudança feita antes disso apagaria a anterior do endereço.
   await page.getByRole('button', { name: '7 dias' }).click()
+  await expect(page.getByRole('button', { name: '7 dias' })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('combobox', { name: 'Módulo' }).fill('folha')
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('combobox', { name: 'Módulo' })).toHaveValue('folha')
   await choose(page, 'Responsável', h.firstName)
+  await expect(page.getByRole('combobox', { name: 'Responsável' })).toHaveText(
+    new RegExp(h.firstName),
+  )
   await search.fill(`prefeitura de itu ${h.id}`)
   await expect(bodyRows(page)).toHaveCount(1)
   await expect(bodyRows(page).first()).toContainText(rita.name)
@@ -534,6 +544,9 @@ test('administrador vê o setor, e responsável e módulo só abrem depois de es
   await expect(assignee).toBeEnabled()
   await expect(module).toBeEnabled()
   await choose(page, 'Responsável', h.secondName)
+  // A tela monta o endereço novo a partir do que já desenhou: o módulo só vem depois de ela
+  // mostrar o responsável, ou o apagaria do endereço.
+  await expect(assignee).toHaveText(new RegExp(h.secondName))
   await module.fill('folha')
   await page.keyboard.press('Escape')
   await expect(bodyRows(page)).toHaveCount(1)
