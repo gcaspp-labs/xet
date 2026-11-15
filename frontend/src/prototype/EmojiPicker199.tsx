@@ -1,12 +1,10 @@
 // PROTÓTIPO #199: descartável, não vai para a main.
-// Três versões do seletor de emojis no campo de mensagem, trocadas por ?variant=A|B|C,
-// na rota /chamados/:id (chamado meu em atendimento: /chamados/300).
-// A: balão sobre o botão, grade por categoria. B: painel encaixado acima do campo,
-// como o WhatsApp Web. C: lista com busca primeiro (emoji + nome), sem grade.
+// Versão A aprovada em 15/11/2026 (balão com grade): seletor de emojis no campo de mensagem,
+// na rota /chamados/:id (chamado meu em atendimento: /chamados/300). B e C foram descartadas
+// (ficam no commit 6ba81a9).
 // Dados de emoji: amostra fixa em português, só para as capturas (a implementação usa a biblioteca escolhida).
-import { ChevronLeft, ChevronRight, Search, Smile, X } from 'lucide-react'
-import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { Search, Smile } from 'lucide-react'
+import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -115,7 +113,6 @@ const categories: Category[] = [
   },
 ]
 
-const quick = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 const all = categories.flatMap((c) => c.items)
 const normalize = (s: string) =>
   s
@@ -127,11 +124,6 @@ const searchEmojis = (q: string) => {
   if (!t) return all
   const hits = all.filter((x) => normalize(`${x.n} ${x.k ?? ''}`).includes(t))
   return [...hits.filter((x) => normalize(x.n).startsWith(t)), ...hits.filter((x) => !normalize(x.n).startsWith(t))]
-}
-
-export function usePrototypeVariant() {
-  const [params] = useSearchParams()
-  return (params.get('variant') ?? 'A').toUpperCase()
 }
 
 // ——— Grade navegável pelo teclado (A e B) ———
@@ -372,194 +364,9 @@ export function PickerA({ onPick, open, onOpenChange, returnFocus }: PickerProps
   )
 }
 
-// ——— B: painel encaixado acima do campo ———
-export function PickerBButton({ open, onOpenChange }: Omit<PickerProps, 'onPick'>) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      aria-label={open ? 'Fechar emojis' : 'Inserir emoji'}
-      aria-expanded={open}
-      aria-controls="painel-emojis"
-      onClick={() => onOpenChange(!open)}
-      className={cn(open && 'bg-accent-soft text-accent-strong')}
-    >
-      {open ? <X strokeWidth={1.7} aria-hidden /> : <Smile strokeWidth={1.7} aria-hidden />}
-    </Button>
-  )
-}
-
-export function PickerBPanel({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
-  const [query, setQuery] = useState('')
-  const jump = useJump()
-  const first = () => searchEmojis(query)[0]
-  return (
-    <section
-      id="painel-emojis"
-      aria-label="Seletor de emojis"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
-      className="flex flex-col rounded-(--radius-12) border border-line bg-surface"
-    >
-      <div className="flex items-center gap-3 border-b border-line-soft px-2 pt-1.5 pb-1">
-        <CategoryTabs onJump={jump.jump} current={query ? undefined : jump.current} />
-        <div className="ml-auto w-64">
-          <SearchField value={query} onChange={setQuery} onEnter={() => first() && onPick(first().e)} />
-        </div>
-      </div>
-      <div className="h-[232px] overflow-y-auto">
-        <EmojiGrid query={query} columns={14} size="lg" onPick={onPick} categoryRef={jump.register} />
-      </div>
-    </section>
-  )
-}
-
-// ——— C: lista com busca primeiro ———
-export function PickerC({ onPick, open, onOpenChange, returnFocus }: PickerProps) {
-  const [query, setQuery] = useState('')
-  const [active, setActive] = useState(0)
-  const results = useMemo(() => searchEmojis(query), [query])
-  useEffect(() => setActive(0), [query])
-  const list = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [active])
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setActive((a) => Math.min(results.length - 1, a + 1))
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActive((a) => Math.max(0, a - 1))
-    }
-    if (event.key === 'Enter' && results[active]) {
-      event.preventDefault()
-      onPick(results[active].e)
-    }
-  }
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o)
-        if (!o) setQuery('')
-      }}
-    >
-      <PopoverTrigger
-        render={
-          <Button variant="ghost" size="icon" aria-label="Inserir emoji" aria-expanded={open} />
-        }
-      >
-        <Smile strokeWidth={1.7} aria-hidden />
-      </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-[300px]" aria-label="Seletor de emojis" finalFocus={returnFocus}>
-        <div className="flex flex-col gap-2 border-b border-line-soft p-2" onKeyDown={onKeyDown}>
-          <Input
-            autoFocus
-            role="combobox"
-            aria-expanded
-            aria-controls="lista-emojis"
-            aria-activedescendant={results[active] ? `emoji-${active}` : undefined}
-            aria-label="Buscar emoji"
-            placeholder="Digite para buscar, ex.: coração"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {!query && (
-            <div className="flex items-center justify-between" aria-label="Mais usados">
-              {quick.map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  aria-label={all.find((x) => x.e === q)?.n}
-                  onClick={() => onPick(q)}
-                  className="grid size-9 place-items-center rounded-(--radius-7) text-[22px] hover:bg-accent-soft focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div ref={list} id="lista-emojis" role="listbox" aria-label="Emojis" className="h-[232px] overflow-y-auto p-1">
-          {results.length ? (
-            results.map((x, i) => (
-              <div
-                key={x.e}
-                id={`emoji-${i}`}
-                data-index={i}
-                role="option"
-                aria-selected={i === active}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => onPick(x.e)}
-                className={cn(
-                  'flex h-9 cursor-pointer items-center gap-3 rounded-(--radius-7) px-2',
-                  i === active && 'bg-accent-soft',
-                )}
-              >
-                <span className="w-7 text-center text-[20px]">{x.e}</span>
-                <span className="truncate">{x.n}</span>
-              </div>
-            ))
-          ) : (
-            <p role="status" className="px-3 py-8 text-center text-ink-soft">
-              Nenhum emoji encontrado para “{query}”.
-            </p>
-          )}
-        </div>
-        <div className="caption flex h-8 items-center border-t border-line-soft px-3 text-ink-faint">
-          ↑ ↓ navegam · Enter insere · Esc fecha
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
 type PickerProps = {
   onPick: (e: string) => void
   open: boolean
   onOpenChange: (o: boolean) => void
   returnFocus?: RefObject<HTMLElement | null>
-}
-
-// ——— Barra flutuante de troca de versão (só desenvolvimento) ———
-const labels: Record<string, string> = {
-  A: 'A (balão com grade)',
-  B: 'B (painel acima do campo)',
-  C: 'C (lista com busca)',
-}
-export function PrototypeSwitcher(): ReactNode {
-  const [params, setParams] = useSearchParams()
-  const current = (params.get('variant') ?? 'A').toUpperCase()
-  const keys = Object.keys(labels)
-  const go = (delta: number) => {
-    const next = keys[(keys.indexOf(current) + delta + keys.length) % keys.length]
-    const p = new URLSearchParams(params)
-    p.set('variant', next)
-    setParams(p, { replace: true })
-  }
-  useEffect(() => {
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      const t = event.target as HTMLElement
-      if (t.closest('input, textarea, [contenteditable]')) return
-      if (event.key === 'ArrowLeft') go(-1)
-      if (event.key === 'ArrowRight') go(1)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
-  if (!import.meta.env.DEV || params.get('captura') === '1') return null
-  return (
-    <div className="fixed bottom-4 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#111] px-2 py-1 font-mono text-[12px] text-[#ff0] shadow-lg">
-      <button type="button" aria-label="Versão anterior" onClick={() => go(-1)}>
-        <ChevronLeft className="size-4" />
-      </button>
-      <span>PROTÓTIPO · {labels[current] ?? current}</span>
-      <button type="button" aria-label="Próxima versão" onClick={() => go(1)}>
-        <ChevronRight className="size-4" />
-      </button>
-    </div>
-  )
 }

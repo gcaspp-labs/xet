@@ -5,7 +5,7 @@ import { chromium } from 'playwright'
 const [, , out] = process.argv
 const base = 'http://127.0.0.1:5199'
 const browser = await chromium.launch()
-for (const v of ['A', 'B', 'C']) {
+for (const v of ['A']) {
   for (const step of ['aberto', 'busca', 'inserido']) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
     await page.goto(`${base}/chamados/300?as=agent&variant=${v}&captura=1`)
@@ -20,7 +20,6 @@ for (const v of ['A', 'B', 'C']) {
     if (step === 'busca' && v === 'A') await page.getByRole('button', { name: 'coração azul' }).hover()
     if (step === 'inserido') {
       await page.keyboard.press('Enter')
-      if (v === 'B') await page.keyboard.press('Escape')
     }
     await page.waitForTimeout(400)
     await page.screenshot({ path: `${out}/199-${v}-${step}.png` })
