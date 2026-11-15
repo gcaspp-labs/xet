@@ -202,8 +202,8 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
   const locked = !filter.hasSector
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-(--space-12)">
+      <div className="flex flex-wrap items-center justify-between gap-(--space-12)">
         <SearchBox
           value={filter.query}
           onChange={filter.setQuery}
@@ -228,7 +228,7 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
           ))}
         </ToggleGroup>
       </div>
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-(--space-12)">
         {filter.period === 'custom' && (
           <>
             <Field className="w-full sm:w-[calc(160px*var(--text-scale))]">
@@ -287,7 +287,7 @@ function Faint({ children }: { children: ReactNode }) {
 function SituationCell({ ticket }: { ticket: ClosedTicket }) {
   const type = ticket.closureType ?? 'resolved'
   return (
-    <span className="flex flex-col gap-0.5">
+    <span className="flex flex-col gap-(--space-4)">
       <Badge tone={type === 'cancelled' ? 'danger' : 'neutral'}>{closureTypeLabels[type]}</Badge>
       {ticket.transferredTo && (
         <span className="caption text-ink-faint">para {ticket.transferredTo.name}</span>
@@ -298,7 +298,7 @@ function SituationCell({ ticket }: { ticket: ClosedTicket }) {
 
 function ModulesCell({ modules }: { modules: string[] }) {
   return modules.length > 0 ? (
-    <span className="flex max-w-[105px] flex-col gap-1">
+    <span className="flex max-w-[105px] flex-col gap-(--space-4)">
       {modules.map((module) => (
         <Badge key={module} variant="tag" className="block max-w-full truncate" title={module}>
           {module}
