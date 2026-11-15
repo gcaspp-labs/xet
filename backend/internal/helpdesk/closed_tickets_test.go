@@ -105,7 +105,7 @@ func (e *testEnv) DoStrings(path, token string) []string {
 type closedList struct {
 	sectorTransfer
 	bia, sup, rhUser int64
-	a, b, c, d, f    int64 // Contabilidade: today, yesterday, 10 days ago, 40 days ago (transferred)
+	a, b, c, d       int64 // Contabilidade: today, yesterday, 10 days ago, 40 days ago (transferred)
 	rhDone           int64 // RH, closed today
 	rhNext           int64 // RH, queued, born from d
 	maria, joao, rui int64
@@ -563,11 +563,7 @@ func TestClosedTicketSubjectSuggestions(t *testing.T) {
 	c := newClosedList(t)
 	e := c.e
 	suggestions := func(token, query string) ([]string, int) {
-		var out []string
-		for _, item := range e.DoStrings("/api/closed-tickets/subjects"+query, token) {
-			out = append(out, item)
-		}
-		return out, http.StatusOK
+		return e.DoStrings("/api/closed-tickets/subjects"+query, token), http.StatusOK
 	}
 	want := func(got []string, status int, subjects ...string) {
 		t.Helper()
