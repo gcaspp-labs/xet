@@ -80,7 +80,7 @@ await journey('nome-da-jornada', async (t) => {
   const page = await t.signIn(sector.agents[0])
   await t.step('Mensagem chega à fila sem recarregar', async () => {
     await phone.receive(t.customer('Maria Cliente'), 'Bom dia')
-    await expect(page.getByRole('region', { name: 'Fila do setor' })).toContainText('Bom dia')
+    await expect(page.getByRole('region', { name: 'Fila e assuntos' })).toContainText('Bom dia')
     await t.shot(page, 'mensagem-na-fila')
   })
   await t.step('Estado final no banco', async () => {
@@ -102,6 +102,7 @@ await journey('nome-da-jornada', async (t) => {
 | `t.shot(página, nome)` | Captura de tela numerada, ligada ao passo |
 | `t.observe(título, valor)` | Registra um estado final no resumo |
 | `t.admin` | Sessão de API do administrador, para preparar dados |
+| `t.apiAs(usuário)` | Sessão de API de uma pessoa do setor (atendente ou supervisor), para preparar dados que dependem dela, como assumir e encerrar chamados. Fecha ao fim da jornada |
 | `t.apiOk(requisição, descrição)` | Espera a resposta e falha com "Pré-condição não atendida" se ela não for 2xx |
 
 Use papéis e nomes visíveis (`getByRole`, `getByLabel`), como em `frontend/e2e/`, nunca coordenadas. Toda jornada termina num passo que confere o estado final no banco, e não só a tela.

@@ -58,6 +58,7 @@ class Journey {
     this.observations = []
     this.problems = []
     this.sessions = []
+    this.apiSessions = []
     this.shotCount = 0
     this.error = null
     this.currentStep = null
@@ -158,6 +159,20 @@ class Journey {
       const target = path.join(this.dir, `video-${user.key ?? 'sessao'}-${++this.shotCount}.webm`)
       renameSync(await video.path(), target)
     }
+  }
+
+  // Sessão de API de uma pessoa do setor, para preparar dados pelo que ela pode fazer (assumir,
+  // encerrar). É pré-condição, não o que se prova; fecha sozinha ao fim da jornada.
+  async apiAs(user) {
+    const context = await request.newContext({ baseURL })
+    this.apiSessions.push(context)
+    await this.apiOk(
+      context.post('/api/auth/login', {
+        data: { email: user.email, password: user.password ?? userPassword },
+      }),
+      `login de ${user.email}`,
+    )
+    return context
   }
 
   async apiOk(responsePromise, what) {
@@ -346,6 +361,9 @@ class Journey {
   async close() {
     for (const session of this.sessions.splice(0)) {
       await this.endSession(session)
+    }
+    for (const context of this.apiSessions.splice(0)) {
+      await context.dispose().catch(() => {})
     }
     await this.admin?.dispose().catch(() => {})
     await this.browser?.close().catch(() => {})
