@@ -28,8 +28,8 @@ type closedTicketResponse struct {
 }
 
 // closedTicketsFilter reads ?q=, ?period= (today, 7d or 30d) or ?from= and ?to=
-// (YYYY-MM-DD, either may be missing), ?sectorId=, ?assigneeId=, ?moduleId= and
-// ?subject=. Without a period, it is every period. A situation is refused: the
+// (YYYY-MM-DD, either may be missing), ?sectorId=, ?assigneeId=, ?module= and
+// ?subject= (the last two are texts the name contains). Without a period, it is every period. A situation is refused: the
 // history only has closed tickets.
 func closedTicketsFilter(w http.ResponseWriter, r *http.Request) (ClosedTicketsFilter, bool) {
 	query := r.URL.Query()
@@ -37,7 +37,7 @@ func closedTicketsFilter(w http.ResponseWriter, r *http.Request) (ClosedTicketsF
 		httpx.WriteError(w, http.StatusBadRequest, "A lista só tem chamados encerrados: não há filtro de situação.")
 		return ClosedTicketsFilter{}, false
 	}
-	filter := ClosedTicketsFilter{Search: query.Get("q"), Subject: query.Get("subject")}
+	filter := ClosedTicketsFilter{Search: query.Get("q"), Module: query.Get("module"), Subject: query.Get("subject")}
 
 	period, rawFrom, rawTo := query.Get("period"), query.Get("from"), query.Get("to")
 	switch {
@@ -76,11 +76,10 @@ func closedTicketsFilter(w http.ResponseWriter, r *http.Request) (ClosedTicketsF
 		}
 	}
 
-	var okSector, okAssignee, okModule bool
+	var okSector, okAssignee bool
 	filter.SectorID, okSector = dashboardFilterID(r, "sectorId")
 	filter.AssigneeID, okAssignee = dashboardFilterID(r, "assigneeId")
-	filter.ModuleID, okModule = dashboardFilterID(r, "moduleId")
-	if !okSector || !okAssignee || !okModule {
+	if !okSector || !okAssignee {
 		httpx.WriteError(w, http.StatusBadRequest, "Filtro inválido.")
 		return filter, false
 	}

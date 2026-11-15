@@ -126,6 +126,45 @@ function FilterSelect({
   )
 }
 
+// Os módulos do setor são poucos e já vêm com os filtros: as sugestões saem dessa lista,
+// pelo texto contido, sem diferenciar acentos nem maiúsculas.
+function ModuleField({
+  filter,
+  modules,
+  disabled,
+}: {
+  filter: ClosedTicketsFilter
+  modules: { name: string }[]
+  disabled: boolean
+}) {
+  const names = [...new Set(modules.map((module) => module.name))]
+  return (
+    <Field className="w-full sm:w-[calc(190px*var(--text-scale))]">
+      <FieldLabel htmlFor="atendimentos-modulo">Módulo</FieldLabel>
+      <Autocomplete
+        items={names}
+        value={filter.module}
+        disabled={disabled}
+        onValueChange={(next) => filter.setModule(next)}
+      >
+        <AutocompleteInput
+          id="atendimentos-modulo"
+          placeholder={disabled ? lockedHint : 'Parte do módulo'}
+        />
+        <AutocompleteContent>
+          <AutocompleteList>
+            {(name: string) => (
+              <AutocompleteItem key={name} value={name}>
+                {name}
+              </AutocompleteItem>
+            )}
+          </AutocompleteList>
+        </AutocompleteContent>
+      </Autocomplete>
+    </Field>
+  )
+}
+
 function withStatus(option: { name: string; active: boolean }) {
   return option.active ? option.name : `${option.name} (inativo)`
 }
@@ -234,18 +273,7 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
           disabled={locked}
           onChange={filter.setAssignee}
         />
-        <FilterSelect
-          id="atendimentos-modulo"
-          label="Módulo"
-          allLabel={locked ? lockedHint : 'Todos os módulos'}
-          options={(options?.modules ?? []).map((module) => ({
-            value: String(module.id),
-            label: withStatus(module),
-          }))}
-          value={filter.moduleId}
-          disabled={locked}
-          onChange={filter.setModule}
-        />
+        <ModuleField filter={filter} modules={options?.modules ?? []} disabled={locked} />
         <SubjectField filter={filter} />
       </div>
     </div>
@@ -312,7 +340,11 @@ function TicketRow({ ticket, isAdmin }: { ticket: ClosedTicket; isAdmin: boolean
       <TableCell className="max-w-[110px] truncate" title={organization}>
         {ticket.organizationName ?? <Faint>Não cadastrado</Faint>}
       </TableCell>
-      {isAdmin && <TableCell className="max-w-[110px] truncate">{ticket.sector.name}</TableCell>}
+      {isAdmin && (
+        <TableCell className="max-w-[110px] truncate" title={ticket.sector.name}>
+          {ticket.sector.name}
+        </TableCell>
+      )}
       <TableCell className="max-w-[100px] truncate" title={ticket.assignee?.name}>
         {ticket.assignee?.name ?? <Faint>—</Faint>}
       </TableCell>

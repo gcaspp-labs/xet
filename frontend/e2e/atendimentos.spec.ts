@@ -297,14 +297,28 @@ test('busca e filtros no servidor, sem diferenciar acentos e maiúsculas, guarda
   await choose(page, 'Responsável', 'Todos os responsáveis')
   await expect(bodyRows(page)).toHaveCount(4)
 
-  // Módulo: basta um dos módulos do chamado.
-  await choose(page, 'Módulo', 'Folha')
+  // Módulo: texto contido, com sugestões, sem acentos nem maiúsculas; basta um dos módulos do chamado.
+  const module = page.getByRole('combobox', { name: 'Módulo' })
+  await module.fill('FOL')
+  await expect(page.getByRole('option', { name: 'Folha' })).toBeVisible()
+  await expect(page.getByRole('option', { name: 'Patrimônio' })).toHaveCount(0)
+  await page.getByRole('option', { name: 'Folha' }).click()
+  await expect(page).toHaveURL(/modulo=Folha/)
   await expect(bodyRows(page)).toHaveCount(2)
-  await choose(page, 'Módulo', 'Patrimônio')
+  await module.fill('patrimonio')
+  await expect(page.getByRole('option', { name: 'Patrimônio' })).toBeVisible()
+  await page.keyboard.press('Escape')
   await expect(bodyRows(page)).toHaveCount(2)
   await expect(bodyRows(page).first()).toContainText(marcos.name)
   await expect(bodyRows(page).last()).toContainText(paulo.name)
-  await choose(page, 'Módulo', 'Todos os módulos')
+  // Um texto que está no nome de mais de um módulo traz os chamados de qualquer um deles, uma vez só.
+  await module.fill('o')
+  await page.keyboard.press('Escape')
+  await expect(bodyRows(page)).toHaveCount(3)
+  await module.fill('')
+  await page.keyboard.press('Escape')
+  await expect(bodyRows(page)).toHaveCount(4)
+  await expect(page).not.toHaveURL(/modulo/)
 
   // Assunto: texto contido, com sugestões, sem acentos nem maiúsculas.
   const subject = page.getByRole('combobox', { name: 'Assunto' })
@@ -342,7 +356,8 @@ test('busca e filtros no servidor, sem diferenciar acentos e maiúsculas, guarda
 
   // Tudo junto, e o endereço guarda: recarregar traz a mesma lista e os mesmos campos.
   await page.getByRole('button', { name: '7 dias' }).click()
-  await choose(page, 'Módulo', 'Folha')
+  await page.getByRole('combobox', { name: 'Módulo' }).fill('folha')
+  await page.keyboard.press('Escape')
   await choose(page, 'Responsável', h.firstName)
   await search.fill(`prefeitura de itu ${h.id}`)
   await expect(bodyRows(page)).toHaveCount(1)
@@ -351,7 +366,7 @@ test('busca e filtros no servidor, sem diferenciar acentos e maiúsculas, guarda
   await expect(bodyRows(page)).toHaveCount(1)
   await expect(bodyRows(page).first()).toContainText(rita.name)
   await expect(search).toHaveValue(`prefeitura de itu ${h.id}`)
-  await expect(page.getByRole('combobox', { name: 'Módulo' })).toHaveText(/Folha/)
+  await expect(page.getByRole('combobox', { name: 'Módulo' })).toHaveValue('folha')
   await expect(page.getByRole('combobox', { name: 'Responsável' })).toHaveText(
     new RegExp(h.firstName),
   )
@@ -395,6 +410,15 @@ test('colunas ordenam no servidor e a ordem fica no endereço', async ({ page, b
   await header('Contato').click()
   await expect(page).toHaveURL(/direcao=desc/)
   await order(rita, paulo, marcos, lucia)
+  // Voltar para Data, vindo de outra coluna, começa crescente; a abertura decrescente é só a inicial.
+  await header('Data').click()
+  await expect(page).not.toHaveURL(/ordem=/)
+  await expect(page).toHaveURL(/direcao=asc/)
+  await expect(page.getByRole('columnheader', { name: 'Data' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+  await order(rita, paulo, lucia, marcos)
 
   // Situação: Cancelado, Encerrado e Encerrado, Transferido.
   await header('Situação').click()
@@ -499,7 +523,7 @@ test('administrador vê o setor, e responsável e módulo só abrem depois de es
   await expect(assignee).toBeDisabled()
   await expect(assignee).toHaveText(/Escolha um setor/)
   await expect(module).toBeDisabled()
-  await expect(module).toHaveText(/Escolha um setor/)
+  await expect(module).toHaveAttribute('placeholder', 'Escolha um setor')
   await expect(page.getByRole('table').getByRole('columnheader', { name: 'Setor' })).toBeVisible()
 
   // Um setor: a lista é dele, e os dois filtros abrem.
@@ -510,15 +534,16 @@ test('administrador vê o setor, e responsável e módulo só abrem depois de es
   await expect(assignee).toBeEnabled()
   await expect(module).toBeEnabled()
   await choose(page, 'Responsável', h.secondName)
-  await choose(page, 'Módulo', 'Folha')
+  await module.fill('folha')
+  await page.keyboard.press('Escape')
   await expect(bodyRows(page)).toHaveCount(1)
   await expect(page).toHaveURL(/responsavel=\d+/)
-  await expect(page).toHaveURL(/modulo=\d+/)
+  await expect(page).toHaveURL(/modulo=folha/)
 
   // Trocar de setor limpa os dois.
   await choose(page, 'Setor', h.destination.sector.name)
   await expect(assignee).toHaveText(/Todos os responsáveis/)
-  await expect(module).toHaveText(/Todos os módulos/)
+  await expect(module).toHaveValue('')
   await expect(page).not.toHaveURL(/responsavel|modulo/)
   await expect(page.getByText('Nenhum chamado encontrado.')).toBeVisible()
 
@@ -529,8 +554,10 @@ test('administrador vê o setor, e responsável e módulo só abrem depois de es
   await expect(page).not.toHaveURL(/setor=/)
 
   // Endereço com responsável e sem setor não vale: a API recusaria, e a tela ignora.
-  await page.goto('/atendimentos?responsavel=1&modulo=1')
+  await page.goto('/atendimentos?responsavel=1&modulo=folha')
   await expect(assignee).toBeDisabled()
+  await expect(module).toBeDisabled()
+  await expect(module).toHaveValue('')
   await expect(page.getByRole('alert').filter({ hasText: 'Filtro inválido' })).toHaveCount(0)
   await h.firstApi.dispose()
   await h.secondApi.dispose()

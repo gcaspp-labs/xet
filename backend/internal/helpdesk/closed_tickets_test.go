@@ -211,11 +211,10 @@ func TestClosedTicketsScopeBySector(t *testing.T) {
 	}
 	c.expect(c.adminToken, qs("sectorId", fmt.Sprint(c.rh)), "9001-000005")
 
-	// Assignee and module belong to a sector: the admin needs one, and it must be theirs.
+	// Assignee and module belong to a sector: the admin needs one, and the assignee must be of it.
 	c.refuse(c.adminToken, qs("assigneeId", fmt.Sprint(c.ana.ID)), http.StatusBadRequest)
-	c.refuse(c.adminToken, qs("moduleId", fmt.Sprint(c.modules[0])), http.StatusBadRequest)
+	c.refuse(c.adminToken, qs("module", "folha"), http.StatusBadRequest)
 	c.refuse(c.adminToken, qs("sectorId", fmt.Sprint(c.rh), "assigneeId", fmt.Sprint(c.ana.ID)), http.StatusBadRequest)
-	c.refuse(c.supToken, qs("moduleId", fmt.Sprint(c.rhModule)), http.StatusBadRequest)
 	c.refuse(c.supToken, qs("assigneeId", fmt.Sprint(c.rhUser)), http.StatusBadRequest)
 	c.refuse(c.adminToken, qs("sectorId", "9999"), http.StatusBadRequest)
 	c.refuse(c.adminToken, qs("sectorId", "x"), http.StatusBadRequest)
@@ -297,9 +296,12 @@ func TestClosedTicketsSearchAndFilters(t *testing.T) {
 	c.expect(c.adminToken, qs("sectorId", id(c.sector.ID), "assigneeId", id(c.sup)), "9001-000003")
 
 	// Module: any module of the ticket matches.
-	c.expect(c.supToken, qs("moduleId", id(c.modules[0])), "9001-000001", "9001-000002")
-	c.expect(c.supToken, qs("moduleId", id(c.modules[1])), "9001-000002", "9001-000004")
-	c.expect(c.adminToken, qs("sectorId", id(c.rh), "moduleId", id(c.rhModule)), "9001-000005")
+	c.expect(c.supToken, qs("module", "fol"), "9001-000001", "9001-000002")
+	c.expect(c.supToken, qs("module", "PATRIMONIO"), "9001-000002", "9001-000004")
+	c.expect(c.supToken, qs("module", "zzz"))
+	// A text in the name of more than one module: every ticket with any of them, once.
+	c.expect(c.supToken, qs("module", "o"), "9001-000001", "9001-000002", "9001-000004")
+	c.expect(c.adminToken, qs("sectorId", id(c.rh), "module", "folha"), "9001-000005")
 
 	// Subject: contains, ignoring accents and case.
 	c.expect(c.supToken, qs("subject", "contra"), "9001-000001")
@@ -310,7 +312,7 @@ func TestClosedTicketsSearchAndFilters(t *testing.T) {
 
 	// The filters combine.
 	c.expect(c.supToken, qs("q", "campinas", "assigneeId", id(c.ana.ID), "period", "7d"), "9001-000001")
-	c.expect(c.supToken, qs("moduleId", id(c.modules[0]), "subject", "ferias", "assigneeId", id(c.bia)), "9001-000002")
+	c.expect(c.supToken, qs("module", "folha", "subject", "ferias", "assigneeId", id(c.bia)), "9001-000002")
 }
 
 func TestClosedTicketsSortAndPage(t *testing.T) {
@@ -562,31 +564,24 @@ func TestClosedTicketSubjectSuggestions(t *testing.T) {
 	t.Parallel()
 	c := newClosedList(t)
 	e := c.e
-	suggestions := func(token, query string) ([]string, int) {
-		return e.DoStrings("/api/closed-tickets/subjects"+query, token), http.StatusOK
+	suggestions := func(token, query string) []string {
+		return e.DoStrings("/api/closed-tickets/subjects"+query, token)
 	}
-	want := func(got []string, status int, subjects ...string) {
+	want := func(got []string, subjects ...string) {
 		t.Helper()
-		if status != http.StatusOK || !slices.Equal(got, subjects) {
-			t.Errorf("suggestions = %v (%d), want %v", got, status, subjects)
+		if !slices.Equal(got, subjects) {
+			t.Errorf("suggestions = %v, want %v", got, subjects)
 		}
 	}
 	// The sector of the user: contains, without accents or case, in alphabetical order.
-	got, status := suggestions(c.supToken, "")
-	want(got, status, "Contracheque atrasado", "Férias", "Imposto de renda")
-	got, status = suggestions(c.supToken, qs("q", "FERIAS"))
-	want(got, status, "Férias")
-	got, status = suggestions(c.supToken, qs("q", "e"))
-	want(got, status, "Contracheque atrasado", "Férias", "Imposto de renda")
-	got, status = suggestions(c.supToken, qs("q", "admiss"))
-	want(got, status)
-	got, status = suggestions(c.rhToken, "")
-	want(got, status, "Admissão")
+	want(suggestions(c.supToken, ""), "Contracheque atrasado", "Férias", "Imposto de renda")
+	want(suggestions(c.supToken, qs("q", "FERIAS")), "Férias")
+	want(suggestions(c.supToken, qs("q", "e")), "Contracheque atrasado", "Férias", "Imposto de renda")
+	want(suggestions(c.supToken, qs("q", "admiss")))
+	want(suggestions(c.rhToken, ""), "Admissão")
 	// The admin sees every sector, or the one chosen.
-	got, status = suggestions(c.adminToken, "")
-	want(got, status, "Admissão", "Contracheque atrasado", "Férias", "Imposto de renda")
-	got, status = suggestions(c.adminToken, qs("sectorId", fmt.Sprint(c.rh)))
-	want(got, status, "Admissão")
+	want(suggestions(c.adminToken, ""), "Admissão", "Contracheque atrasado", "Férias", "Imposto de renda")
+	want(suggestions(c.adminToken, qs("sectorId", fmt.Sprint(c.rh))), "Admissão")
 	if resp := e.Do(http.MethodGet, "/api/closed-tickets/subjects"+qs("sectorId", fmt.Sprint(c.rh)), c.anaToken, nil); resp.Status != http.StatusForbidden {
 		t.Errorf("other sector: status %d", resp.Status)
 	}

@@ -66,7 +66,7 @@ function positiveId(raw: string | null) {
 }
 
 // Busca e filtros guardados no endereço (?busca=, ?periodo=, ?de=, ?ate=, ?setor=,
-// ?responsavel=, ?modulo=, ?assunto=), para voltar à mesma lista; mudar qualquer um volta
+// ?responsavel=, ?modulo=, ?assunto=; módulo e assunto são texto contido), para voltar à mesma lista; mudar qualquer um volta
 // à página 1. Atendente e supervisor ficam no próprio setor, seja o que for que o endereço
 // diga; responsável e módulo pertencem a um setor, então o administrador só os usa depois
 // de escolher um, e trocar de setor limpa os dois.
@@ -79,7 +79,7 @@ export function useClosedTicketsFilter() {
   // O servidor usa o setor da pessoa quando não vem nenhum.
   const hasSector = isAdmin ? sectorId !== undefined : user !== undefined
   const assigneeId = hasSector ? positiveId(params.get('responsavel')) : undefined
-  const moduleId = hasSector ? positiveId(params.get('modulo')) : undefined
+  const module = hasSector ? (params.get('modulo') ?? '') : ''
   const query = params.get('busca') ?? ''
   const subject = params.get('assunto') ?? ''
 
@@ -113,21 +113,21 @@ export function useClosedTicketsFilter() {
     if (assigneeId !== undefined) {
       next.set('assigneeId', String(assigneeId))
     }
-    if (moduleId !== undefined) {
-      next.set('moduleId', String(moduleId))
+    if (module.trim()) {
+      next.set('module', module.trim())
     }
     if (subject.trim()) {
       next.set('subject', subject.trim())
     }
     return next
-  }, [query, period, from, to, sectorId, assigneeId, moduleId, subject])
+  }, [query, period, from, to, sectorId, assigneeId, module, subject])
 
   return {
     isAdmin,
     hasSector,
     sectorId,
     assigneeId,
-    moduleId,
+    module,
     query,
     subject,
     period,
@@ -148,8 +148,8 @@ export function useClosedTicketsFilter() {
       }),
     setAssignee: (value: number | undefined) =>
       update({ responsavel: value === undefined ? null : String(value), pagina: null }),
-    setModule: (value: number | undefined) =>
-      update({ modulo: value === undefined ? null : String(value), pagina: null }),
+    setModule: (value: string) =>
+      update({ modulo: value === '' ? null : value, pagina: null }, true),
     setPeriod: (value: PeriodChoice) =>
       update({
         periodo: value === 'all' ? null : periodParams[value],

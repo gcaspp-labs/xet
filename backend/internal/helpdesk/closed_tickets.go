@@ -25,7 +25,7 @@ type ClosedTicketsFilter struct {
 	ClosedFrom, ClosedUntil *time.Time
 	SectorID                *int64
 	AssigneeID              *int64
-	ModuleID                *int64
+	Module                  string
 	Subject                 string
 }
 
@@ -56,11 +56,17 @@ func searchDigits(search string) *string {
 // ClosedTickets lists the closed tickets the user may see (their own sector,
 // or every sector for an admin) with the search, the filters and the order of
 // the page. The sector, the assignee and the module are checked as in the
-// dashboard: an assignee or a module needs a sector and belongs to it.
+// dashboard: an assignee needs a sector and belongs to it. The module is a text
+// the name of any module of the ticket may contain; as the module list is the
+// one of a sector, it needs a sector too.
 func (s *Service) ClosedTickets(ctx context.Context, actor auth.User, filter ClosedTicketsFilter, page paging.Request) ([]db.ListClosedTicketsPageRow, int64, paging.Request, error) {
-	scope, err := s.checkDashboardFilter(ctx, actor, DashboardFilter{SectorID: filter.SectorID, AssigneeID: filter.AssigneeID, ModuleID: filter.ModuleID})
+	scope, err := s.checkDashboardFilter(ctx, actor, DashboardFilter{SectorID: filter.SectorID, AssigneeID: filter.AssigneeID})
 	if err != nil {
 		return nil, 0, page, err
+	}
+	module := nonEmpty(filter.Module)
+	if module != nil && scope.SectorID == nil {
+		return nil, 0, page, ErrInvalidDashboardFilter
 	}
 	search := nonEmpty(filter.Search)
 	var digits *string
@@ -68,7 +74,7 @@ func (s *Service) ClosedTickets(ctx context.Context, actor auth.User, filter Clo
 		digits = searchDigits(*search)
 	}
 	total, err := s.q.CountClosedTicketsPage(ctx, db.CountClosedTicketsPageParams{
-		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, ModuleID: scope.ModuleID,
+		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, Module: module,
 		ClosedFrom: filter.ClosedFrom, ClosedUntil: filter.ClosedUntil,
 		Subject: nonEmpty(filter.Subject), Search: search, SearchDigits: digits,
 	})
@@ -77,7 +83,7 @@ func (s *Service) ClosedTickets(ctx context.Context, actor auth.User, filter Clo
 	}
 	page = page.Clamp(total)
 	rows, err := s.q.ListClosedTicketsPage(ctx, db.ListClosedTicketsPageParams{
-		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, ModuleID: scope.ModuleID,
+		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, Module: module,
 		ClosedFrom: filter.ClosedFrom, ClosedUntil: filter.ClosedUntil,
 		Subject: nonEmpty(filter.Subject), Search: search, SearchDigits: digits,
 		Sort: page.Sort, Direction: historyDirection(page), PageOffset: page.Offset(),

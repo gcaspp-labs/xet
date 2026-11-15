@@ -49,9 +49,9 @@ export function useQueryState() {
 // Página e ordem da lista guardadas no endereço (?pagina=, ?ordem=, ?direcao=), com o
 // nome da coluna na tela ligado ao nome na API. Sem parâmetro, a ordem é a da coluna
 // padrão, na direção padrão (crescente, a não ser que a lista diga outra), e a página 1.
-// Cada coluna começa crescente, menos a padrão, que começa na direção padrão; o endereço
-// só guarda a direção quando ela difere da inicial da coluna. Valor desconhecido cai na
-// ordem padrão inteira, como na API.
+// Ao clicar em outra coluna, ela começa crescente; a coluna padrão só começa na direção
+// padrão na abertura da lista. O endereço só guarda a direção quando ela difere da
+// inicial da coluna. Valor desconhecido cai na ordem padrão inteira, como na API.
 export function usePagedList<Sort extends string>(
   columns: Record<string, Sort>,
   defaultColumn: string,
@@ -82,10 +82,11 @@ export function usePagedList<Sort extends string>(
         update({ pagina: served === 1 ? null : String(served) }, true)
       }
     },
-    // Clicar na coluna ativa inverte a direção; outra coluna começa na direção inicial dela.
+    // Clicar na coluna ativa inverte a direção; outra coluna começa crescente, a padrão
+    // também (a direção padrão só vale na abertura da lista).
     toggleSort: (next: string) => {
       const nextDirection: SortDirection =
-        column === next ? (direction === 'asc' ? 'desc' : 'asc') : firstDirection(next)
+        column === next ? (direction === 'asc' ? 'desc' : 'asc') : 'asc'
       update({
         ordem: next === defaultColumn ? null : next,
         direcao: nextDirection === firstDirection(next) ? null : nextDirection,

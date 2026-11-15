@@ -15,8 +15,10 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
-  and (sqlc.narg(module_id)::bigint is null
-      or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id)))
+  and (sqlc.narg(module)::text is null
+      or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
+          where tm.ticket_id = t.id
+            and strpos(lower(unaccent(md.name)), lower(unaccent(sqlc.narg(module)::text))) > 0))
   and (sqlc.narg(closed_from)::timestamptz is null or t.closed_at >= sqlc.narg(closed_from)::timestamptz)
   and (sqlc.narg(closed_until)::timestamptz is null or t.closed_at < sqlc.narg(closed_until)::timestamptz)
   and (sqlc.narg(subject)::text is null
@@ -48,8 +50,10 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
-  and (sqlc.narg(module_id)::bigint is null
-      or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id)))
+  and (sqlc.narg(module)::text is null
+      or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
+          where tm.ticket_id = t.id
+            and strpos(lower(unaccent(md.name)), lower(unaccent(sqlc.narg(module)::text))) > 0))
   and (sqlc.narg(closed_from)::timestamptz is null or t.closed_at >= sqlc.narg(closed_from)::timestamptz)
   and (sqlc.narg(closed_until)::timestamptz is null or t.closed_at < sqlc.narg(closed_until)::timestamptz)
   and (sqlc.narg(subject)::text is null

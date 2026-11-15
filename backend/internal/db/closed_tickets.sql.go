@@ -23,8 +23,10 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and ($1::bigint is null or t.sector_id = $1)
   and ($2::bigint is null or t.assignee_id = $2)
-  and ($3::bigint is null
-      or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = $3))
+  and ($3::text is null
+      or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
+          where tm.ticket_id = t.id
+            and strpos(lower(unaccent(md.name)), lower(unaccent($3::text))) > 0))
   and ($4::timestamptz is null or t.closed_at >= $4::timestamptz)
   and ($5::timestamptz is null or t.closed_at < $5::timestamptz)
   and ($6::text is null
@@ -39,7 +41,7 @@ where t.status = 'closed'
 type CountClosedTicketsPageParams struct {
 	SectorID     *int64
 	AssigneeID   *int64
-	ModuleID     *int64
+	Module       *string
 	ClosedFrom   *time.Time
 	ClosedUntil  *time.Time
 	Subject      *string
@@ -55,7 +57,7 @@ func (q *Queries) CountClosedTicketsPage(ctx context.Context, arg CountClosedTic
 	row := q.db.QueryRow(ctx, countClosedTicketsPage,
 		arg.SectorID,
 		arg.AssigneeID,
-		arg.ModuleID,
+		arg.Module,
 		arg.ClosedFrom,
 		arg.ClosedUntil,
 		arg.Subject,
@@ -125,8 +127,10 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and ($1::bigint is null or t.sector_id = $1)
   and ($2::bigint is null or t.assignee_id = $2)
-  and ($3::bigint is null
-      or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = $3))
+  and ($3::text is null
+      or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
+          where tm.ticket_id = t.id
+            and strpos(lower(unaccent(md.name)), lower(unaccent($3::text))) > 0))
   and ($4::timestamptz is null or t.closed_at >= $4::timestamptz)
   and ($5::timestamptz is null or t.closed_at < $5::timestamptz)
   and ($6::text is null
@@ -161,7 +165,7 @@ limit 20 offset $11
 type ListClosedTicketsPageParams struct {
 	SectorID     *int64
 	AssigneeID   *int64
-	ModuleID     *int64
+	Module       *string
 	ClosedFrom   *time.Time
 	ClosedUntil  *time.Time
 	Subject      *string
@@ -197,7 +201,7 @@ func (q *Queries) ListClosedTicketsPage(ctx context.Context, arg ListClosedTicke
 	rows, err := q.db.Query(ctx, listClosedTicketsPage,
 		arg.SectorID,
 		arg.AssigneeID,
-		arg.ModuleID,
+		arg.Module,
 		arg.ClosedFrom,
 		arg.ClosedUntil,
 		arg.Subject,
