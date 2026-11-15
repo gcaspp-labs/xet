@@ -19,8 +19,8 @@ Passar o chamado para outra pessoa do setor, devolvê-lo à fila ou levá-lo a o
 13. O destino é outro setor ativo. Se o contato já tiver chamado aberto no destino, a transferência é recusada e nada é encerrado.
 14. O novo chamado entra na fila do destino com o mesmo contato e o órgão informado no formulário, e chega no momento da transferência.
 15. O destino responde pelo próprio número de WhatsApp. A mensagem de abertura sai quando o chamado for assumido, não na transferência, e o atendente do destino a escreve livremente.
-16. O chamado do destino mostra a origem (setor, protocolo, assunto, resolução e quem transferiu), com acesso ao chamado anterior completo (link "Ver chamado anterior"), com notas, só para leitura.
-17. Os usuários do destino veem toda a cadeia de chamados anteriores, mas não escrevem notas nem agem neles.
+16. O chamado do destino mostra a origem (setor, protocolo, assunto, resolução e quem transferiu), com acesso ao chamado anterior completo (link "Ver chamado anterior", que abre `/atendimentos/:id`), só para leitura.
+17. Os usuários do destino veem toda a cadeia de chamados anteriores, mas não agem neles.
 18. O chamado de origem mostra para qual setor e protocolo foi transferido, sem acesso ao chamado do destino. A conversa da origem mostra quem transferiu e quando.
 
 ## Fora do escopo / limites conhecidos
@@ -35,3 +35,4 @@ Passar o chamado para outra pessoa do setor, devolvê-lo à fila ou levá-lo a o
 
 - 2026-11-11: regras migradas do `spec.md` (Transferências › Entre atendentes do mesmo setor; Transferências › Devolver à fila; Transferências › Entre setores).
 - 2026-11-14: o link da regra 16 passa a "Ver chamado anterior", só texto (ticket [#185](https://github.com/gcaspp-labs/xet/issues/185)).
+- 2026-11-15: regras 16 e 17 alteradas; spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190), [#192](https://github.com/gcaspp-labs/xet/pull/192). A 16 dizia "O chamado do destino mostra a origem (setor, protocolo, assunto, resolução e quem transferiu), com acesso ao chamado anterior completo (link "Ver chamado anterior"), com notas, só para leitura."; a 17, "Os usuários do destino veem toda a cadeia de chamados anteriores, mas não escrevem notas nem agem neles.".

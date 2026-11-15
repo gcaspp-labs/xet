@@ -15,7 +15,7 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 9. O contato é a pessoa que conversa pelo WhatsApp, com nome e telefone, vinculada a um órgão principal pré-cadastrado. É raro um contato representar mais de um órgão.
 10. Cada chamado fica vinculado ao contato e ao órgão. O órgão vem do cadastro do contato e pode ser alterado no formulário de encerramento, só para aquele chamado.
 11. Órgãos são cadastrados manualmente. Contatos são cadastrados manualmente ou importados do WhatsApp do setor (ver [contact-import.md](contact-import.md)).
-12. Cada telefone corresponde a um único contato. Quando um telefone é usado por mais de uma pessoa, o atendente anota no chamado com quem falou.
+12. Cada telefone corresponde a um único contato. Quando um telefone é usado por mais de uma pessoa, o sistema não as distingue: todas aparecem no mesmo contato.
 13. A busca localiza órgãos e contatos por nome, município, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
 14. A lista de contatos e a busca de "Novo chamado" filtram também por município e por órgão. O filtro de município mostra só os que têm órgão cadastrado; escolhido o município, o filtro de órgão mostra só os dele.
 15. Mensagens de números desconhecidos entram normalmente na fila.
@@ -54,3 +54,4 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 - 2026-11-11: lista de contatos paginada e ordenável (#126).
 - 2026-11-11: regras migradas do `spec.md` (Órgãos e contatos; Órgãos e contatos › Setores e módulos do contato).
 - 2026-11-14: a janela "Nova conversa" passa a "Novo chamado" nas regras 14, 27 e 33, só texto (ticket [#185](https://github.com/gcaspp-labs/xet/issues/185)).
+- 2026-11-15: regra 12 alterada; spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190). Dizia "Cada telefone corresponde a um único contato. Quando um telefone é usado por mais de uma pessoa, o atendente anota no chamado com quem falou.".
