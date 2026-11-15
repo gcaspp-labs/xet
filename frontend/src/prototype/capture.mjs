@@ -23,14 +23,15 @@ const reply = async (page, id) => {
   await li.getByRole('button', { name: 'Responder' }).click()
 }
 const middle = (page, t = 300) => page.locator(`#msg-${t}05`).evaluate((el) => el.scrollIntoView({ block: 'center' }))
-for (const v of ['A', 'B', 'C']) {
-  const url = `/chamados/300?variant=${v}&captura=1`
+// Versão aprovada (antiga A): nomes sem letra de versão.
+{
+  const v = 'aprovada'
+  const url = `/chamados/300?captura=1`
   await shot(`${v}-citacoes`, url, middle)
   await shot(`${v}-fim`, url)
   await shot(`${v}-preparo`, url, async (page) => {
     await reply(page, 30003)
     await page.getByRole('textbox', { name: 'Mensagem' }).fill('Ouvi sim, já anotei o pedido.')
-    if (v === 'C') await page.locator('#msg-30008 div').first().hover()
   })
   await shot(`${v}-enviada`, url, async (page) => {
     await reply(page, 30003)
@@ -40,7 +41,7 @@ for (const v of ['A', 'B', 'C']) {
     await page.waitForTimeout(600)
     await page.mouse.move(5, 5)
   })
-  await shot(`${v}-sem-permissao`, `/chamados/500?variant=${v}&captura=1`, async (page) => {
+  await shot(`${v}-sem-permissao`, `/chamados/500?captura=1`, async (page) => {
     await middle(page, 500)
     await page.locator('#msg-50005 div').first().hover()
   })
