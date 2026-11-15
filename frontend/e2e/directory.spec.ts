@@ -47,6 +47,11 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
 
   await page.getByRole('link', { name: 'Órgãos' }).click()
   await expect(page.getByRole('heading', { name: 'Órgãos' })).toBeVisible()
+  // A tabela é compartilhada entre testes e paginada por nome: sem filtrar pelo id, o órgão
+  // novo pode cair fora da primeira página.
+  const search = page.getByLabel('Buscar órgãos')
+  await search.fill(id)
+  await expect(page.getByText('Nenhum órgão encontrado.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Novo órgão' }).click()
   const drawer = page.getByRole('dialog', { name: 'Novo órgão' })
@@ -104,7 +109,6 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await expect(page.getByRole('row', { name: new RegExp(`CAMARA ${id}`) })).toContainText('Salto')
 
   // A busca encontra o órgão pelo município, sem acento.
-  const search = page.getByLabel('Buscar órgãos')
   const found = page.getByRole('row').filter({ hasText: id })
   await search.fill('peruibe')
   await expect(found).toHaveCount(1)
