@@ -28,6 +28,8 @@ import {
 } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
+// PROTÓTIPO #203: citações em três versões (?variant=A|B|C).
+import { QuoteShell, DraftQuote, clearDraft, PrototypeSwitcher, variant as prototypeVariant } from '@/prototype/Quotes203'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
@@ -315,11 +317,13 @@ function MessageBubble({
   const prefix =
     outbound && message.origin === 'agent' ? message.body?.match(/^\*([^*\n]+:)\*(?:\n|$)/) : null
 
-  return (
-    <li
-      aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
+  // PROTÓTIPO #203: o balão vira uma função com espaços para a citação de cada versão.
+  const bubble = ({ top, footer, overlay }: { top?: ReactNode; footer?: ReactNode; overlay?: ReactNode }) => (
+    <div
       className={cn(
-        'flex max-w-[78%] flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+        'relative flex flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+        prototypeVariant() === 'A' ? 'min-w-0' : 'max-w-[78%]',
+        overlay && 'group/msg',
         modern
           ? outbound
             ? 'self-end rounded-br-(--radius-6) border-primary bg-primary text-primary-foreground'
@@ -329,6 +333,7 @@ function MessageBubble({
             : 'self-start border-line-soft bg-card',
       )}
     >
+      {overlay}
       {author && (
         <p
           className={cn(
@@ -339,6 +344,7 @@ function MessageBubble({
           {author}
         </p>
       )}
+      {top}
       <MessageMedia message={message} />
       {message.type === 'media_unavailable' && (
         <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
@@ -361,6 +367,7 @@ function MessageBubble({
         )
       )}
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {footer}
         <span
           className={cn(
             'mono-num caption',
@@ -400,6 +407,15 @@ function MessageBubble({
           )}
         </div>
       )}
+    </div>
+  )
+  return (
+    <li
+      id={`msg-${message.id}`}
+      aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
+      className={cn('flex flex-col gap-1', outbound ? 'items-end' : 'items-start')}
+    >
+      <QuoteShell message={message} canAct={canRetry} outbound={outbound} modern={modern} bubble={bubble} />
     </li>
   )
 }
@@ -416,6 +432,8 @@ function Composer({ ticketId }: { ticketId: number }) {
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const messageInput = useRef<HTMLTextAreaElement>(null)
+  // PROTÓTIPO #203: trocar de chamado limpa a citação em preparo.
+  useEffect(() => clearDraft, [ticketId])
 
   const insertEmoji = (emoji: string) => {
     const input = messageInput.current
@@ -480,6 +498,7 @@ function Composer({ ticketId }: { ticketId: number }) {
       {
         onSuccess: () => {
           requestId.current = null
+          clearDraft()
           if (voice) {
             changeVoice(null)
           } else {
@@ -508,6 +527,7 @@ function Composer({ ticketId }: { ticketId: number }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+      <DraftQuote ticketId={ticketId} />
       {file && !voice && (
         <div className="flex items-center gap-2 self-start rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-1.5">
           <Paperclip strokeWidth={1.7} className="size-[15px]" aria-hidden />
@@ -711,6 +731,7 @@ export function ConversationCard({
           </Empty>
         )}
       </div>
+      <PrototypeSwitcher />
       {retry.error && (
         <div className="px-3 pb-2">
           <Alert variant="warning">
