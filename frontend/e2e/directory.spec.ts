@@ -66,6 +66,9 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await drawer.getByRole('button', { name: 'Cadastrar órgão' }).click()
   await expect(page.getByText('Órgão salvo')).toBeVisible()
   await expect(drawer).toBeHidden()
+  // A tabela é compartilhada entre testes: sem a busca, a linha pode cair numa página adiante.
+  const search = page.getByLabel('Buscar órgãos')
+  await search.fill(id)
   const row = page.getByRole('row', { name: new RegExp(`Prefeitura ${id}`) })
   await expect(row).toContainText(formatCnpj(numeric))
   await expect(row).toContainText('Peruíbe')
@@ -104,7 +107,6 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await expect(page.getByRole('row', { name: new RegExp(`CAMARA ${id}`) })).toContainText('Salto')
 
   // A busca encontra o órgão pelo município, sem acento.
-  const search = page.getByLabel('Buscar órgãos')
   const found = page.getByRole('row').filter({ hasText: id })
   await search.fill('peruibe')
   await expect(found).toHaveCount(1)

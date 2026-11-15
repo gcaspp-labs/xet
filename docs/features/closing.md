@@ -18,7 +18,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 12. Os assuntos e as soluções do formulário vêm das listas do setor (ver [subjects.md](subjects.md)).
 13. Chamados encerrados não são reabertos. Uma mensagem nova depois do encerramento cria outro chamado (ver [queue.md](queue.md)).
 14. Os dados de um atendimento encerrado são corrigidos pelo atendente que o encerrou e pelos supervisores e administradores do setor. Os demais atendentes não corrigem.
-15. A correção altera os dados do formulário (assunto, resolução, módulos, órgão, início e fim) e o "falou com", com as mesmas regras do encerramento.
+15. A correção altera os dados do formulário (assunto, resolução, módulos, órgão, início e fim), com as mesmas regras do encerramento.
 16. Módulos que já estavam no chamado podem continuar nele mesmo que tenham sido desativados depois; módulos acrescentados na correção precisam estar ativos no setor.
 17. A correção exige um motivo. Uma correção que não altera nenhum dado é recusada, sem registro.
 18. O sistema registra autor, data, motivo e as alterações (valores anteriores e novos). O chamado mostra o histórico de alterações nos detalhes, e a conversa mostra, na ordem do tempo, quem corrigiu e quando.
@@ -49,3 +49,4 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 
 - 2026-11-11: regras migradas do `spec.md` (Formulário de encerramento; Encerramento, retorno e correções).
 - 2026-11-14: campo Início passa a dizer "chamado aberto" em vez de "conversa iniciada" (padronização dos nomes: Chamados, Atendimentos; #185). Só texto.
+- 2026-11-15: regra 15 alterada, sem o "falou com"; spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190). Dizia "A correção altera os dados do formulário (assunto, resolução, módulos, órgão, início e fim) e o "falou com", com as mesmas regras do encerramento.". O histórico de alterações antigo também deixa de mostrar o "falou com" (regra 18 sem mudança).

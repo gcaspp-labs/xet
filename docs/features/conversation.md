@@ -1,6 +1,6 @@
 # Conversa
 
-A troca de mensagens com o cliente dentro do chamado: texto, arquivos, áudio, situação de entrega, notas internas e histórico. Aparece na tela Chamados (ver [queue.md](queue.md)) e na tela do chamado.
+A troca de mensagens com o cliente dentro do chamado: texto, arquivos, áudio, situação de entrega e histórico. Aparece na tela Chamados e no detalhe do atendimento, só para leitura (ver [queue.md](queue.md)).
 
 ## Regras
 
@@ -17,12 +17,9 @@ A troca de mensagens com o cliente dentro do chamado: texto, arquivos, áudio, s
 11. Cada mensagem enviada mostra a situação de entrega: enviando, enviada, entregue, lida ou falhou.
 12. A situação de entrega só avança: uma confirmação atrasada de entrega não desfaz a leitura, e uma mensagem com falha volta a avançar se o WhatsApp confirmar a entrega.
 13. Mensagem que falhou (número desconectado, erro do WhatsApp ou serviço reiniciado durante o envio) não é reenviada automaticamente: o responsável usa "Reenviar", que tenta a mesma mensagem de novo, sem duplicá-la no WhatsApp.
-14. Notas internas são escritas por qualquer pessoa com acesso ao setor do chamado, mesmo sem ser o responsável e também em chamado encerrado. Não são enviadas ao cliente, nem editadas ou excluídas.
-15. O campo "falou com" é preenchido pelo responsável enquanto o chamado está aberto; depois do encerramento, muda só pela correção.
 16. O histórico do contato e o do órgão listam os chamados, abertos e encerrados, dos setores a que o usuário tem acesso (todos, para o administrador), do mais recente ao mais antigo.
-17. Cada chamado do histórico abre a conversa completa, só para leitura quando o usuário não é o responsável.
-18. Na tela Chamados, a área de mensagens tem fundo diferente do cartão, e os balões se distinguem entre si: o enviado em cor de destaque, com texto claro, e o recebido na cor do cartão, com borda. Os avisos do sistema (assumiu, transferiu, encerrou) aparecem com borda tracejada e sem preenchimento, para não parecerem mensagens. O contraste vale nos temas claro, escuro e alto contraste, e no alto contraste o texto tem ao menos 7:1. A tela do chamado mantém as cores anteriores.
-19. No topo da conversa, na tela Chamados, "Ver chamado" abre a tela do chamado, com Detalhes, Notas, Histórico e o campo "Falou com", que não aparecem em Chamados.
+17. Cada chamado do histórico abre a conversa completa em `/atendimentos/:id`, se estiver encerrado, ou em `/chamados/:id`, se estiver ativo, só para leitura quando o usuário não é o responsável.
+18. Na tela Chamados, a área de mensagens tem fundo diferente do cartão, e os balões se distinguem entre si: o enviado em cor de destaque, com texto claro, e o recebido na cor do cartão, com borda. Os avisos do sistema (assumiu, transferiu, encerrou) aparecem com borda tracejada e sem preenchimento, para não parecerem mensagens. O contraste vale nos temas claro, escuro e alto contraste, e no alto contraste o texto tem ao menos 7:1.
 
 ## Fora do escopo / limites conhecidos
 
@@ -30,10 +27,11 @@ A troca de mensagens com o cliente dentro do chamado: texto, arquivos, áudio, s
 
 ## Relacionado
 
-- Dados: `messages`, `media_files`, `internal_notes`. ADRs: 0001, 0003.
+- Dados: `messages`, `media_files`. ADRs: 0001, 0003.
 
 ## Histórico
 
 - 2026-11-11: regras migradas do `spec.md` (Conversa; Usuários e acesso).
 - 2026-11-12: regras 18 e 19 acrescentadas (contraste dos balões e link Ver chamado na tela Conversas); mudança da spec #144, PR #151.
 - 2026-11-14: nomes da interface padronizados, só texto (ticket [#185](https://github.com/gcaspp-labs/xet/issues/185)): a tela Conversas passa a Chamados (regras 18 e 19) e a regra 2 cita "novo chamado".
+- 2026-11-15: spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190), [#192](https://github.com/gcaspp-labs/xet/pull/192), [#194](https://github.com/gcaspp-labs/xet/pull/194). Removidas as regras 14 ("Notas internas são escritas por qualquer pessoa com acesso ao setor do chamado, mesmo sem ser o responsável e também em chamado encerrado. Não são enviadas ao cliente, nem editadas ou excluídas."), 15 ("O campo "falou com" é preenchido pelo responsável enquanto o chamado está aberto; depois do encerramento, muda só pela correção.") e 19 ("No topo da conversa, na tela Chamados, "Ver chamado" abre a tela do chamado, com Detalhes, Notas, Histórico e o campo "Falou com", que não aparecem em Chamados."); a regra 17 dizia "Cada chamado do histórico abre a conversa completa, só para leitura quando o usuário não é o responsável."; a regra 18 deixou de citar a tela do chamado, que não mostra mais a conversa de chamado ativo.

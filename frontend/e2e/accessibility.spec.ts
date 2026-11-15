@@ -435,6 +435,13 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('textbox', { name: 'Mensagem' }).press('Enter')
     await expect(page.getByRole('listitem', { name: 'Mensagem enviada' })).toBeVisible()
     await expectContrast(page, 'conversa')
+    // Seletor de emojis aberto: busca, abas, grade e nome do emoji em foco.
+    await page.getByRole('button', { name: 'Inserir emoji' }).click()
+    await expect(page.getByRole('searchbox', { name: 'Buscar emoji' })).toBeFocused()
+    await expect(page.getByLabel('Emojis').getByRole('button').first()).toBeVisible()
+    await expectContrast(page, 'seletor de emojis')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeFocused()
     await page.getByLabel('Arquivo para enviar').setInputFiles({
       name: 'documento.txt',
       mimeType: 'text/plain',
