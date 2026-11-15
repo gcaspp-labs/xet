@@ -1,5 +1,5 @@
 import { expect, request as apiRequest, test, type APIRequestContext } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, seedSector, signIn, unique, userPassword, openQueued } from './fixtures'
 
 // Liga o número do setor pelo adaptador falso: conectar e o celular ler o QR code.
 async function connectSector(baseURL: string, sectorId: number) {
@@ -39,7 +39,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
 
   // O atendente assume o chamado pela tela da conversa.
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Maria Cliente' }).click()
+  await openQueued(page, 'Maria Cliente')
   await expect(page.getByRole('heading', { name: 'Maria Cliente' })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
@@ -176,7 +176,7 @@ test('assumir pelo botão do chamado na fila mostra o novo responsável', async 
     body: 'Olá',
   })
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Caio Aberto' }).click()
+  await openQueued(page, 'Caio Aberto')
   await expect(page).toHaveURL(/\/chamados\/\d+$/)
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Chamado na fila. Assuma o chamado para responder.')
@@ -204,7 +204,7 @@ test('mensagem que falhou é reenviada pelo responsável', async ({ page, reques
     body: 'Olá',
   })
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'João Cliente' }).click()
+  await openQueued(page, 'João Cliente')
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 

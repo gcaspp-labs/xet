@@ -8,6 +8,7 @@ import {
   unique,
   userPassword,
   chooseAction,
+  openQueued,
 } from './fixtures'
 
 // Liga os números dos setores pelo adaptador falso e cadastra os módulos da origem.
@@ -58,7 +59,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
 
   // Na origem, o responsável preenche o formulário completo e escolhe o destino.
   await signIn(page, origin.agent, userPassword)
-  await page.getByRole('link', { name: contact }).click()
+  await openQueued(page, contact)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   await chooseAction(page, 'Outro setor')
@@ -80,14 +81,13 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
   await page.goto('/atendimentos')
-  const doneRow = page
-    .getByRole('region', { name: 'Realizados hoje' })
-    .getByRole('row', { name: new RegExp(contact) })
+  const doneRow = page.getByRole('row', { name: new RegExp(contact) })
   await expect(doneRow).toContainText('Transferido')
-  await expect(doneRow).toContainText('Você')
+  await expect(doneRow).toContainText(`para ${destination.sector.name}`)
+  await expect(doneRow).toContainText(origin.agent.replace(/^agent\.(\d+)@.*$/, 'agent $1'))
 
   // A origem fica encerrada e mostra para onde foi.
-  await doneRow.getByRole('link', { name: contact }).click()
+  await doneRow.getByRole('cell', { name: 'Transferido' }).click({ force: true })
   const details = page.getByRole('region', { name: 'Atendimento', exact: true })
   await expect(details).toContainText('Encerrado')
   await expect(details).toContainText('Destino · chamado novo neste setor')
@@ -106,7 +106,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
 
   // O destino recebe o chamado na fila, com a origem e a conversa anterior.
   await signIn(page, destination.agent, userPassword)
-  await page.getByRole('link', { name: contact }).click()
+  await openQueued(page, contact)
   await expect(conversation).toContainText(
     `Transferido de ${origin.sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
   )

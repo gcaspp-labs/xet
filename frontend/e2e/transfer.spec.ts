@@ -1,5 +1,13 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword, chooseAction } from './fixtures'
+import {
+  admin,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+  chooseAction,
+  openQueued,
+} from './fixtures'
 
 // Liga o número do setor pelo adaptador falso e cria um segundo atendente.
 async function prepare(baseURL: string, sectorId: number) {
@@ -43,7 +51,7 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
 
   // O atendente assume e transfere para o colega.
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Joana Cliente' }).click()
+  await openQueued(page, 'Joana Cliente')
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })

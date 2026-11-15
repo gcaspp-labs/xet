@@ -50,10 +50,13 @@ func (h *Handler) Routes(r chi.Router) {
 		r.Delete("/{subjectID}/solutions/{solutionID}", h.deleteSolution)
 	})
 
-	// Painel: chamados abertos, carga de cada atendente e realizados hoje, para todos os papéis do setor.
+	// Painel: chamados abertos e carga de cada atendente, para todos os papéis do setor.
 	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/tickets", h.listTickets)
 	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/workload", h.workload)
-	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/closed-today", h.listClosedToday)
+	// Atendimentos: histórico dos chamados encerrados. O serviço confere o setor pedido: o próprio, ou qualquer um para o administrador.
+	r.Get("/closed-tickets", h.listClosedTickets)
+	r.Get("/closed-tickets/filters", h.closedTicketFilterOptions)
+	r.Get("/closed-tickets/subjects", h.listClosedTicketSubjects)
 	// Dashboard: supervisor do próprio setor e administrador. O serviço confere o setor pedido nos filtros.
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))

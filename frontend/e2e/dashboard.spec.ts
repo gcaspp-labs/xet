@@ -1,4 +1,4 @@
-import { expect, request as apiRequest, test, type Page } from '@playwright/test'
+import { expect, request as apiRequest, test, type Locator, type Page } from '@playwright/test'
 import { admin, seedDirectory, seedSector, signIn, unique, userPassword } from './fixtures'
 
 type Sector = { id: number; name: string }
@@ -81,6 +81,51 @@ async function createModule(baseURL: string, sector: Sector, name: string) {
   return module
 }
 
+// Nome do atendente criado por seedSector, a partir do e-mail (`agent.<id>@e2e.test`).
+const nameOf = (email: string) => email.replace(/^(\w+)\.(\d+)@.*$/, '$1 $2')
+
+// Sessão pela API como o usuário informado.
+async function sessionOf(baseURL: string, email: string) {
+  const api = await apiRequest.newContext({ baseURL })
+  const login = await api.post('/api/auth/login', { data: { email, password: userPassword } })
+  expect(login.ok()).toBeTruthy()
+  return api
+}
+
+type ListedTicket = { id: number; status: string; protocol: string; contact: { name: string } }
+
+// Chamado ativo do setor com o contato informado, como o usuário o vê.
+async function ticketOf(baseURL: string, sectorId: number, email: string, contactName: string) {
+  const api = await sessionOf(baseURL, email)
+  const tickets = (await (
+    await api.get(`/api/sectors/${sectorId}/tickets`)
+  ).json()) as ListedTicket[]
+  await api.dispose()
+  const ticket = tickets.find((item) => item.contact.name === contactName)
+  expect(ticket, `chamado de ${contactName}`).toBeDefined()
+  return ticket!
+}
+
+// Assume pela API, como o usuário informado, o chamado do contato indicado.
+async function assignContact(baseURL: string, sectorId: number, email: string, name: string) {
+  const { id } = await ticketOf(baseURL, sectorId, email, name)
+  const api = await sessionOf(baseURL, email)
+  expect((await api.post(`/api/tickets/${id}/assign`)).ok()).toBeTruthy()
+  await api.dispose()
+  return id
+}
+
+// Clique de mouse no centro do elemento. Diferente de `click({ force: true })`, o clique vai para
+// o que realmente está naquele ponto da tela, como o de uma pessoa. O elemento precisa estar fora
+// do link: o link esticado da linha é que recebe o clique.
+async function clickOutsideLink(page: Page, target: Locator) {
+  expect(await target.evaluate((element) => element.closest('a'))).toBeNull()
+  await target.scrollIntoViewIfNeeded()
+  const box = await target.boundingBox()
+  expect(box).not.toBeNull()
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2)
+}
+
 // Ontem, no horário de Brasília: antes de qualquer chamado criado pelo teste.
 function yesterday() {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
@@ -114,6 +159,145 @@ test('listas ao vivo permitem abrir e assumir chamados', async ({ page, baseURL 
   const live = `Ao vivo ${unique().id}`
   await receive(baseURL!, own.sector.id, live)
   await expect(queue.getByText(live)).toBeVisible()
+})
+
+test('chamados ativos mostram protocolo e órgão, ou "Não cadastrado", na fila e em atendimento', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const registered = unique().phone
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura de Chamados ${id}` }],
+    [{ name: 'Ana Cadastrada', phone: registered, organization: 0, sector: sector.id }],
+  )
+  await receive(baseURL!, sector.id, 'Ana Cadastrada', registered)
+  await receive(baseURL!, sector.id, 'Bia Desconhecida')
+  await receive(baseURL!, sector.id, 'Caio Desconhecido')
+  await assignContact(baseURL!, sector.id, agent, 'Caio Desconhecido')
+  const protocols: Record<string, string> = {}
+  for (const name of ['Ana Cadastrada', 'Bia Desconhecida', 'Caio Desconhecido']) {
+    protocols[name] = (await ticketOf(baseURL!, sector.id, supervisor, name)).protocol
+    expect(protocols[name]).toMatch(/^\d{4}-\d{6}$/)
+  }
+
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/dashboard')
+  const queue = page.getByRole('region', { name: /^Fila/ })
+  const progress = page.getByRole('region', { name: /^Em atendimento/ })
+
+  // Com cadastro, o órgão aparece no lugar de "Não cadastrado".
+  const registeredRow = queue.getByRole('row', { name: /Ana Cadastrada/ })
+  await expect(registeredRow).toContainText(protocols['Ana Cadastrada'])
+  await expect(registeredRow).toContainText(`Prefeitura de Chamados ${id}`)
+  await expect(registeredRow).not.toContainText('Não cadastrado')
+
+  // Sem cadastro, a linha mostra o protocolo e "Não cadastrado", na fila e em atendimento.
+  const queuedRow = queue.getByRole('row', { name: /Bia Desconhecida/ })
+  await expect(queuedRow).toContainText(protocols['Bia Desconhecida'])
+  await expect(queuedRow).toContainText('Não cadastrado')
+  const progressRow = progress.getByRole('row', { name: /Caio Desconhecido/ })
+  await expect(progressRow).toContainText(protocols['Caio Desconhecido'])
+  await expect(progressRow).toContainText('Não cadastrado')
+})
+
+test('outra sessão assume chamados: responsável na linha e carga do atendente mudam sem recarregar', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const first = `Primeiro ${unique().id}`
+  const second = `Segundo ${unique().id}`
+  await receive(baseURL!, sector.id, first)
+  await receive(baseURL!, sector.id, second)
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/dashboard')
+  const queue = page.getByRole('region', { name: /^Fila/ })
+  const progress = page.getByRole('region', { name: /^Em atendimento/ })
+  const table = page.getByRole('region', { name: 'Por atendente' })
+  const agentName = nameOf(agent)
+  const agentRow = table.getByRole('row', { name: new RegExp(`^${agentName}`) })
+  // Coluna "Em atendimento" da tabela: a carga individual do atendente.
+  const load = agentRow.getByRole('cell').nth(1)
+  await expect(queue.getByText(first)).toBeVisible()
+  await expect(queue.getByText(second)).toBeVisible()
+  // Sem ninguém atendendo, o atendente ainda não tem linha na tabela.
+  await expect(table.getByText('Nenhum atendente com números nestes filtros.')).toBeVisible()
+
+  // O atendente assume o primeiro em outra sessão: a tela do supervisor muda sozinha.
+  await assignContact(baseURL!, sector.id, agent, first)
+  await expect(queue.getByText(first)).toHaveCount(0)
+  await expect(queue.getByText(second)).toBeVisible()
+  const assigned = progress.getByRole('row', { name: new RegExp(first) })
+  await expect(assigned).toContainText(agentName)
+  await expect(assigned).not.toContainText('Você')
+  await expect(table.getByRole('columnheader').nth(1)).toHaveText('Em atendimento')
+  await expect(agentRow).toHaveCount(1)
+  await expect(load).toHaveText('1')
+
+  // O segundo também: a carga acompanha cada atribuição.
+  await assignContact(baseURL!, sector.id, agent, second)
+  await expect(queue.getByText(second)).toHaveCount(0)
+  await expect(progress.getByRole('row', { name: new RegExp(second) })).toContainText(agentName)
+  await expect(load).toHaveText('2')
+})
+
+test('a linha inteira abre o chamado, por clique fora do link e por Enter, e Assumir continua assumindo', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const names = ['Ana Primeira', 'Bruno Segundo', 'Carla Terceira', 'Davi Quarto']
+  for (const name of names) await receive(baseURL!, sector.id, name)
+  await assignContact(baseURL!, sector.id, agent, 'Davi Quarto')
+  const ids: Record<string, number> = {}
+  for (const name of names) {
+    ids[name] = (await ticketOf(baseURL!, sector.id, supervisor, name)).id
+  }
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/dashboard')
+  const queue = page.getByRole('region', { name: /^Fila/ })
+  const progress = page.getByRole('region', { name: /^Em atendimento/ })
+
+  // Clique no protocolo e órgão, fora do nome do contato: abre o chamado da linha, sem assumir.
+  await clickOutsideLink(
+    page,
+    queue.getByRole('row', { name: /Bruno Segundo/ }).getByText('Não cadastrado'),
+  )
+  await expect(page).toHaveURL(new RegExp(`/chamados/${ids['Bruno Segundo']}$`))
+  await expect(page.getByRole('heading', { name: 'Bruno Segundo' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
+    'Chamado na fila.',
+  )
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+  await page.goBack()
+
+  // Em atendimento, o clique na célula do responsável, também fora do link, abre o chamado.
+  await clickOutsideLink(
+    page,
+    progress
+      .getByRole('row', { name: /Davi Quarto/ })
+      .getByRole('cell')
+      .last(),
+  )
+  await expect(page).toHaveURL(new RegExp(`/chamados/${ids['Davi Quarto']}$`))
+  await expect(page.getByRole('heading', { name: 'Davi Quarto' })).toBeVisible()
+  await page.goBack()
+
+  // Pelo teclado, o nome do contato é um link: foco e Enter abrem o chamado.
+  await queue.getByRole('link', { name: 'Carla Terceira' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(new RegExp(`/chamados/${ids['Carla Terceira']}$`))
+  await expect(page.getByRole('heading', { name: 'Carla Terceira' })).toBeVisible()
+  await page.goBack()
+
+  // O botão fica acima do link: assume de fato, em vez de só abrir.
+  await queue.getByRole('button', { name: 'Assumir chamado de Ana Primeira' }).click()
+  await expect(page).toHaveURL(new RegExp(`/chamados/${ids['Ana Primeira']}$`))
+  await expect(page.getByRole('heading', { name: 'Ana Primeira' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
 })
 
 test('supervisor abre pelo menu, vê só o próprio setor e não tem filtro de setor', async ({
@@ -198,7 +382,7 @@ test('administrador alterna entre todos os setores e um setor; atendente e módu
 test('atendente não vê o item e, pelo endereço, volta a Chamados', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
 
   await page.goto('/dashboard')

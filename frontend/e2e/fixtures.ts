@@ -24,12 +24,12 @@ export async function login(page: Page, email: string, password: string) {
   await page.getByRole('button', { name: 'Entrar' }).click()
 }
 
-// Entra e abre o painel usado como ponto de partida pelos testes de atendimento.
+// Entra e abre Chamados, o ponto de partida dos testes de atendimento.
 export async function signIn(page: Page, email: string, password: string) {
   await login(page, email, password)
   await expect(page).not.toHaveURL(/\/login$/)
-  await page.goto('/atendimentos')
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await page.goto('/chamados')
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
 }
 
 // Troca de usuário: sai da página antes de limpar os cookies. Uma requisição ainda em andamento
@@ -338,4 +338,35 @@ export async function seedClosedTicket(baseURL: string) {
 export async function chooseAction(page: Page, name: string) {
   await page.getByRole('button', { name: 'Mais ações' }).click()
   await page.getByRole('menuitem', { name, exact: true }).click()
+}
+
+// Número do chamado de um contato que está na fila. Chamados só abre pelo endereço o chamado da
+// fila que ninguém assumiu, então o teste busca o número na API da própria sessão. Sem `sectorId`,
+// usa o setor da pessoa; o administrador informa o setor.
+export async function queuedTicketId(page: Page, contactName: string, sectorId?: number) {
+  const sectors = sectorId
+    ? [sectorId]
+    : [(await json<{ sectorId: number }>(await page.request.get('/api/auth/me'))).sectorId]
+  let ticketId = 0
+  await expect
+    .poll(async () => {
+      for (const id of sectors) {
+        const tickets = await json<{ id: number; contact: { name: string } }[]>(
+          await page.request.get(`/api/sectors/${id}/tickets`),
+        )
+        ticketId = tickets.find((ticket) => ticket.contact.name === contactName)?.id ?? 0
+        if (ticketId) {
+          return true
+        }
+      }
+      return false
+    })
+    .toBe(true)
+  return ticketId
+}
+
+// Abre em Chamados o chamado de um contato que está na fila, sem assumir.
+export async function openQueued(page: Page, contactName: string, sectorId?: number) {
+  await page.goto(`/chamados/${await queuedTicketId(page, contactName, sectorId)}`)
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
 }

@@ -15,6 +15,7 @@ declare global {
       focuses: number
     }
     __requests: number
+    __socketOpen: boolean
     __stored: Record<string, string | null>
   }
 }
@@ -85,6 +86,37 @@ async function spyOnAlerts(page: Page) {
   })
 }
 
+// Marca quando o canal de avisos em tempo real abre. O teste que recarrega a página espera por
+// isso: o chamado que chega antes de o canal abrir não gera aviso nenhum.
+async function trackSocket(page: Page) {
+  await page.addInitScript(() => {
+    window.__socketOpen = false
+    const Real = window.WebSocket
+    class Tracked extends Real {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        this.addEventListener('open', () => {
+          window.__socketOpen = true
+        })
+      }
+    }
+    window.WebSocket = Tracked
+  })
+}
+
+// Recarrega e só volta quando a fila do setor já foi carregada e o canal de avisos está aberto.
+// "Nenhum chamado esperando." aparece antes disso, mas um chamado que chega nesse intervalo entra
+// na primeira carga, sem aviso, ou nem chega à tela.
+async function reloadWhenLive(page: Page) {
+  const queue = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' && /\/api\/sectors\/\d+\/tickets$/.test(response.url()),
+  )
+  await page.reload()
+  await (await queue).finished()
+  await page.waitForFunction(() => window.__socketOpen)
+}
+
 async function setHidden(page: Page, hidden: boolean) {
   await page.evaluate((value) => {
     if (value) {
@@ -124,7 +156,7 @@ test('aba em segundo plano notifica só com o nome, aba visível não, e o cliqu
   await context.grantPermissions(['notifications'])
   await spyOnAlerts(page)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, browserOption, true)
 
   await receive(request, sector.id, 'Ana Visivel')
@@ -159,7 +191,7 @@ test('escolha sobrevive ao recarregar, e recarregar não notifica nem toca', asy
   await context.grantPermissions(['notifications'])
   await spyOnAlerts(page)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, browserOption, true)
   await setOption(page, soundOption, true)
   await setHidden(page, true)
@@ -202,7 +234,7 @@ test('reconectar não notifica nem toca pelo que entrou durante a queda', async 
     ws.connectToServer()
   })
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, browserOption, true)
   await setOption(page, soundOption, true)
   await setHidden(page, true)
@@ -225,7 +257,7 @@ test('opção desligada não notifica nem toca', async ({ page, context, request
   await context.grantPermissions(['notifications'])
   await spyOnAlerts(page)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setHidden(page, true)
 
   // Desligadas desde o início: mesmo com a permissão concedida, o aviso na tela é o único efeito.
@@ -257,7 +289,7 @@ test('som toca sozinho, também com a aba visível, sem notificação', async ({
   const { sector, agent } = await connectedSector(baseURL!, request)
   await spyOnAlerts(page)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, soundOption, true)
   await receive(request, sector.id, 'Iris Som')
   await expect.poll(() => beeps(page)).toBe(1)
@@ -268,13 +300,14 @@ test('som sem interação com a página não quebra nada', async ({ page, reques
   const { sector, agent } = await connectedSector(baseURL!, request)
   const errors: Error[] = []
   page.on('pageerror', (error) => errors.push(error))
+  await trackSocket(page)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, soundOption, true)
 
   // Recarregar zera a interação com a página.
-  await page.reload()
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await reloadWhenLive(page)
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await receive(request, sector.id, 'Jonas Mudo')
   await expect(page.getByText('Chamado recebido: Jonas Mudo')).toBeVisible()
   await receive(request, sector.id, 'Karla Muda')
@@ -297,9 +330,9 @@ test('duas abas não repetem o mesmo chamado, e a aba visível evita a notifica�
   await signIn(page, agent, userPassword)
   const other = await context.newPage()
   await spyOnAlerts(other)
-  await other.goto('/atendimentos')
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
-  await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await other.goto('/chamados')
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
+  await expect(other.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setHidden(page, true)
   await setHidden(other, true)
 
@@ -329,7 +362,7 @@ test('voltar à aba durante a espera não notifica, e o som ainda toca', async (
   await context.grantPermissions(['notifications'])
   await spyOnAlerts(page)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, browserOption, true)
   await setOption(page, soundOption, true)
   await setHidden(page, true)
@@ -372,9 +405,9 @@ test('voltar a uma aba impede a notificação pendente na outra, com som único'
   await signIn(page, agent, userPassword)
   const other = await context.newPage()
   await spyOnAlerts(other)
-  await other.goto('/atendimentos')
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
-  await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await other.goto('/chamados')
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
+  await expect(other.getByText('Nenhum chamado esperando.')).toBeVisible()
   // O navegador só libera o som depois de uma interação com a página.
   await other.locator('body').click({ position: { x: 1, y: 1 } })
   await page.bringToFront()
@@ -432,14 +465,14 @@ test('mudar as opções numa aba vale na outra, sem abrir o menu nela', async ({
   await context.grantPermissions(['notifications'])
   await spyOnAlerts(page)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(page, browserOption, true)
   await setOption(page, soundOption, true)
 
   const other = await context.newPage()
   await spyOnAlerts(other)
-  await other.goto('/atendimentos')
-  await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await other.goto('/chamados')
+  await expect(other.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setHidden(page, true)
   await setHidden(other, true)
   // Com a outra aba na frente, o navegador atrasa os cliques nesta.
@@ -494,7 +527,7 @@ test('administrador não recebe notificação nem som, mesmo com a escolha salva
   })
   await onlySectors(sector.id)
   await signIn(page, admin.email, admin.password)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setHidden(page, true)
 
   const otherContext = await browser.newContext()
@@ -502,7 +535,7 @@ test('administrador não recebe notificação nem som, mesmo com a escolha salva
   const other = await otherContext.newPage()
   await spyOnAlerts(other)
   await signIn(other, supervisor, userPassword)
-  await expect(other.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(other.getByText('Nenhum chamado esperando.')).toBeVisible()
   await setOption(other, browserOption, true)
   await setOption(other, soundOption, true)
   await setHidden(other, true)
@@ -512,7 +545,7 @@ test('administrador não recebe notificação nem som, mesmo com a escolha salva
   await receive(request, sector.id, 'Olivia Fila')
   await expect.poll(() => notified(other)).toEqual(['Olivia Fila'])
   await expect.poll(() => beeps(other)).toBe(1)
-  await expect(page.getByRole('link', { name: 'Olivia Fila' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Assumir chamado de Olivia Fila' })).toBeVisible()
   await page.waitForTimeout(1_000)
   expect(await notified(page)).toEqual([])
   expect(await beeps(page)).toBe(0)
@@ -555,7 +588,7 @@ test('permissão só é pedida ao ativar, e a negada mostra o motivo', async ({ 
     }
   })
   await signIn(page, supervisor, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
   expect(await page.evaluate(() => window.__requests)).toBe(0)
 
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -602,7 +635,7 @@ test('título da aba acompanha o contador e volta ao normal com zero', async ({
 }) => {
   const { sector, agent } = await connectedSector(baseURL!, request)
   await signIn(page, agent, userPassword)
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await expect(page).toHaveTitle('Central de Atendimento')
 
   await receive(request, sector.id, 'Otavio Um')

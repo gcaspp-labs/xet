@@ -9,6 +9,8 @@ import {
   unique,
   userPassword,
   chooseAction,
+  openQueued,
+  login,
 } from './fixtures'
 
 // Liga o número do setor pelo adaptador falso e cadastra um órgão e os módulos do setor.
@@ -54,15 +56,16 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
     })
   expect((await receive('Preciso do contracheque')).ok()).toBeTruthy()
 
-  // O supervisor acompanha os realizados do setor em outra janela.
+  // O supervisor acompanha os Atendimentos do setor em outra janela.
   const otherContext = await browser.newContext()
   const other = await otherContext.newPage()
-  await signIn(other, supervisor, userPassword)
-  const otherDone = other.getByRole('region', { name: 'Realizados hoje' })
-  await expect(otherDone).toContainText('Nenhum atendimento realizado hoje.')
+  await login(other, supervisor, userPassword)
+  await expect(other).not.toHaveURL(/\/login$/)
+  await other.goto('/atendimentos')
+  await expect(other.getByText('Nenhum chamado encontrado.')).toBeVisible()
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Paulo Cliente' }).click()
+  await openQueued(page, 'Paulo Cliente')
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
 
@@ -117,20 +120,19 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await sheet.getByRole('button', { name: 'Não adicionar' }).click()
   await expect(page.getByText('Chamado encerrado', { exact: true })).toBeVisible()
 
-  // Volta a Chamados sem chamado aberto; o painel mantém os realizados.
+  // Volta a Chamados sem chamado aberto; Atendimentos guarda o chamado encerrado.
   await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
   await page.goto('/atendimentos')
-  const done = page.getByRole('region', { name: 'Realizados hoje' })
-  const doneRow = done.getByRole('row', { name: /Paulo Cliente/ })
-  await expect(doneRow).toContainText('Você')
+  const agentName = agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
+  const doneRow = page.getByRole('row', { name: /Paulo Cliente/ })
+  await expect(doneRow).toContainText(agentName)
   await expect(doneRow).toContainText('Encerrado')
 
-  // Quem já estava no painel vê o atendimento sem recarregar, com o nome do atendente.
-  const agentName = agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
-  const otherRow = otherDone.getByRole('row', { name: /Paulo Cliente/ })
+  // Quem já estava na lista vê o atendimento sem recarregar, com o nome do atendente.
+  const otherRow = other.getByRole('row', { name: /Paulo Cliente/ })
   await expect(otherRow).toContainText(agentName)
-  await expect(otherRow).not.toContainText('Você')
+  await expect(otherRow).toContainText('Encerrado')
   await otherContext.close()
 
   // A linha reabre o chamado: o registro aparece nos detalhes e ninguém mais responde.
@@ -154,9 +156,11 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
 
   // Nova mensagem do cliente abre outro chamado, na fila.
   expect((await receive('Agora é sobre férias')).ok()).toBeTruthy()
-  await page.getByRole('link', { name: 'Atendimentos' }).click()
-  const queue = page.getByRole('region', { name: 'Fila do setor' })
-  await expect(queue.getByRole('link', { name: 'Paulo Cliente' })).toHaveCount(1)
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  await expect(queue.getByRole('button', { name: 'Assumir chamado de Paulo Cliente' })).toHaveCount(
+    1,
+  )
   await expect(queue).toContainText('Agora é sobre férias')
 })
 
@@ -177,7 +181,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
 
   // Na fila, o atendente cancela sem assumir e sem cadastrar o contato.
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Paula Golpe' }).click()
+  await openQueued(page, 'Paula Golpe')
   await chooseAction(page, 'Cancelar chamado')
   const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
@@ -186,13 +190,12 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
   await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
 
-  // Volta a Chamados sem chamado aberto; o painel mantém os realizados.
+  // Volta a Chamados sem chamado aberto; Atendimentos guarda o chamado cancelado.
   await expect(page).toHaveURL(/\/chamados$/)
   await expect(page.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
   await page.goto('/atendimentos')
-  const done = page.getByRole('region', { name: 'Realizados hoje' })
-  const doneRow = done.getByRole('row', { name: /Paula Golpe/ })
-  await expect(doneRow).toContainText('Você')
+  const doneRow = page.getByRole('row', { name: /Paula Golpe/ })
+  await expect(doneRow).toContainText(agent.replace(/^agent\.(\d+)@.*$/, 'agent $1'))
   await expect(doneRow).toContainText('Cancelado')
 
   // A conversa mostra quem cancelou e o motivo; não há correção nem nova ação.
@@ -219,13 +222,13 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
 
   // Nova mensagem do mesmo número abre outro chamado, na fila.
   expect((await receive('Última chance')).ok()).toBeTruthy()
-  await page.getByRole('link', { name: 'Atendimentos' }).click()
-  const queue = page.getByRole('region', { name: 'Fila do setor' })
-  await expect(queue.getByRole('link', { name: 'Paula Golpe' })).toHaveCount(1)
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  await expect(queue.getByRole('button', { name: 'Assumir chamado de Paula Golpe' })).toHaveCount(1)
   await expect(queue).toContainText('Última chance')
 
   // Em atendimento, outro atendente não vê a ação; o supervisor cancela.
-  await queue.getByRole('link', { name: 'Paula Golpe' }).click()
+  await openQueued(page, 'Paula Golpe')
   const url = page.url()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
@@ -314,7 +317,7 @@ test('os módulos do contato vêm marcados no encerramento e podem ser alterados
   await api.dispose()
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: `Vera ${id}` }).click()
+  await openQueued(page, `Vera ${id}`)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
@@ -352,8 +355,10 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   const otherContext = await browser.newContext()
   const otherPanel = await otherContext.newPage()
   await signIn(otherPanel, supervisor, userPassword)
-  const otherQueue = otherPanel.getByRole('region', { name: 'Fila do setor' })
-  await expect(otherQueue.getByRole('link', { name: profile })).toBeVisible()
+  const otherQueue = otherPanel.getByRole('region', { name: 'Fila e assuntos' })
+  await expect(
+    otherQueue.getByRole('button', { name: `Assumir chamado de ${profile}` }),
+  ).toBeVisible()
   const otherContacts = await otherContext.newPage()
   await otherContacts.goto('/atendimentos')
   await otherContacts.getByRole('link', { name: 'Contatos' }).click()
@@ -361,7 +366,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
 
   // Na fila, sem assumir, o atendente vê o aviso e o botão junto do contato.
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: profile }).click()
+  await openQueued(page, profile)
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Contato não cadastrado')
   await conversation.getByRole('button', { name: 'Cadastrar contato' }).click()
@@ -385,7 +390,9 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
 
   // Quem já estava nas outras telas vê o nome sem recarregar.
-  await expect(otherQueue.getByRole('link', { name: saved })).toBeVisible()
+  await expect(
+    otherQueue.getByRole('button', { name: `Assumir chamado de ${saved}` }),
+  ).toBeVisible()
   await expect(otherContacts.getByRole('row', { name: new RegExp(saved) })).toBeVisible()
   await otherContext.close()
 
@@ -446,7 +453,7 @@ test('o aviso sobre o botão não bloqueia o clique nem espera o cursor sair', a
   ).toBeTruthy()
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name }).click()
+  await openQueued(page, name)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
@@ -514,7 +521,7 @@ test('o link do aviso não troca de chamado com a janela aberta', async ({
   const second = `Segundo ${unique().id}`
   await receive(first)
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: first }).click()
+  await openQueued(page, first)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
   const firstUrl = page.url()
@@ -584,7 +591,7 @@ test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request
 
   // O cancelamento dispensa o cadastro: o contato continua sem cadastro, e o chamado sem aviso.
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name }).click()
+  await openQueued(page, name)
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText('Contato não cadastrado')
   await chooseAction(page, 'Cancelar chamado')
@@ -595,7 +602,7 @@ test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request
 
   await expect(page).toHaveURL(/\/chamados$/)
   await page.goto('/atendimentos')
-  const row = page.getByRole('region', { name: 'Realizados hoje' }).getByRole('row', { name })
+  const row = page.getByRole('row', { name })
   await row.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
   await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText('Cancelado em')
   await expect(conversation).not.toContainText('Contato não cadastrado')

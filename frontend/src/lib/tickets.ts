@@ -40,18 +40,8 @@ export type Workload = {
   activeTickets: number
 }
 
-export type ClosedTicket = Pick<
-  TicketSummary,
-  'id' | 'protocol' | 'contact' | 'organizationName' | 'municipalityName'
-> & {
-  closureType: 'resolved' | 'transferred' | 'cancelled'
-  closedAt: string
-  closedBy: { id: number; name: string }
-}
-
 export const ticketsKey = (sectorId: number) => ['sectors', sectorId, 'tickets']
 export const workloadKey = (sectorId: number) => ['sectors', sectorId, 'workload']
-export const closedTodayKey = (sectorId: number) => ['sectors', sectorId, 'closed-today']
 
 export const ticketsQuery = (sectorId: number) => ({
   queryKey: ticketsKey(sectorId),
@@ -71,15 +61,6 @@ export function useWorkload(sectorId: number | undefined) {
   return useQuery({
     queryKey: workloadKey(sectorId ?? 0),
     queryFn: () => api<Workload[]>(`/sectors/${sectorId}/workload`),
-    enabled: sectorId !== undefined,
-  })
-}
-
-// Atendimentos do setor encerrados hoje no horário de Brasília, atualizados pelo WebSocket.
-export function useClosedToday(sectorId: number | undefined) {
-  return useQuery({
-    queryKey: closedTodayKey(sectorId ?? 0),
-    queryFn: () => api<ClosedTicket[]>(`/sectors/${sectorId}/closed-today`),
     enabled: sectorId !== undefined,
   })
 }

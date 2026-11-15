@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
-import { closedTodayKey, type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
+import { closedTicketsKey } from '@/lib/closed-tickets'
+import { type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
 export const maxFileSize = 16 * 1024 * 1024
@@ -347,7 +348,7 @@ export function useCloseTicket(ticketId: number, sectorId: number) {
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: closedTodayKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: closedTicketsKey }),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),
   })
@@ -364,7 +365,7 @@ export function useCancelTicket(ticketId: number, sectorId: number) {
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: closedTodayKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: closedTicketsKey }),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),
   })
@@ -451,7 +452,7 @@ export function useTransferSector(ticketId: number, sectorId: number) {
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: closedTodayKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: closedTicketsKey }),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),
   })

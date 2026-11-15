@@ -82,7 +82,7 @@ func TestCancelFromTheQueueWithoutAssigning(t *testing.T) {
 		logs[0]["actor"].(map[string]any)["id"] != float64(bia) {
 		t.Fatalf("logs = %v", logs)
 	}
-	// Detalhes, histórico e realizados identificam o cancelado.
+	// Detalhes, histórico e atendimentos identificam o cancelado.
 	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil)
 	if detail.Status != http.StatusOK || detail.Body["closureType"] != "cancelled" {
 		t.Fatalf("detail: status %d, body %v", detail.Status, detail.Body)
@@ -91,10 +91,10 @@ func TestCancelFromTheQueueWithoutAssigning(t *testing.T) {
 	if len(history) != 1 || history[0]["closureType"] != "cancelled" {
 		t.Fatalf("history = %v", history)
 	}
-	done := e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/closed-today", c.sector.ID), c.anaToken)
+	done := e.DoPageItems("/api/closed-tickets", c.anaToken)
 	if len(done) != 1 || done[0]["closureType"] != "cancelled" || done[0]["organizationName"] != nil ||
-		done[0]["closedBy"].(map[string]any)["id"] != float64(bia) {
-		t.Fatalf("closed today = %v", done)
+		done[0]["assignee"].(map[string]any)["id"] != float64(bia) {
+		t.Fatalf("closed tickets = %v", done)
 	}
 }
 

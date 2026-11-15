@@ -5,7 +5,7 @@ import {
   type APIRequestContext,
   type Locator,
 } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, seedSector, signIn, unique, userPassword, openQueued } from './fixtures'
 
 // PNG de 1×1 pixel, para a pré-visualização carregar uma imagem de verdade.
 const png =
@@ -51,7 +51,7 @@ test('arquivo indisponível vira aviso na conversa e na última mensagem do pain
 
   await signIn(page, agent, userPassword)
   await expect(page.getByText('Arquivo não pôde ser baixado: video-grande.mp4')).toBeVisible()
-  await page.getByRole('link', { name: 'Clara Cliente' }).click()
+  await openQueued(page, 'Clara Cliente')
 
   const received = page
     .getByRole('region', { name: 'Conversa', exact: true })
@@ -88,7 +88,7 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
   })
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Clara Cliente' }).click()
+  await openQueued(page, 'Clara Cliente')
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
   await expect(received).toHaveCount(3)
@@ -172,7 +172,7 @@ test('player de áudio toca, avança e responde ao teclado na gravação e nas m
   await receive('T2dnUw==')
 
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Clara Cliente' }).click()
+  await openQueued(page, 'Clara Cliente')
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
 

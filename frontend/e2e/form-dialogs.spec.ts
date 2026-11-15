@@ -9,6 +9,7 @@ import {
   unique,
   userPassword,
   chooseAction,
+  openQueued,
 } from './fixtures'
 
 // Setor conectado, com um módulo, e um chamado de contato não cadastrado na fila.
@@ -36,7 +37,7 @@ async function queuedTicket(baseURL: string, extraSector = false) {
 }
 
 async function openAssigned(page: Page, contact: string) {
-  await page.getByRole('link', { name: contact }).first().click()
+  await openQueued(page, contact)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
 }
@@ -361,7 +362,7 @@ for (const theme of ['light', 'dark'] as const) {
           })
         }
         if (size) {
-          await page.getByRole('link', { name: contact }).first().click()
+          await openQueued(page, contact)
         } else {
           await openAssigned(page, contact)
           // O aviso aparece sobre o rodapé da janela: a captura espera ele sair.

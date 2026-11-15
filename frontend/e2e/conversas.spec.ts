@@ -1,5 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { expect, request as apiRequest, type Page } from '@playwright/test'
+import {
+  expect,
+  request as apiRequest,
+  type APIRequestContext,
+  type Page,
+  type WebSocketRoute,
+} from '@playwright/test'
 import {
   admin,
   clearSession,
@@ -40,6 +46,48 @@ async function seedSubjects(baseURL: string, sectorId: number) {
     ).toBeTruthy()
   }
   await api.dispose()
+}
+
+// Mensagem de texto de um contato, simulada pelo adaptador falso do backend.
+async function receiveText(
+  request: APIRequestContext,
+  sectorId: number,
+  message: { phone: string; contactName: string; body: string },
+) {
+  const response = await request.post(`/api/test/messaging/sectors/${sectorId}/receive`, {
+    data: { externalMessageId: `E2E-${unique().id}`, ...message },
+  })
+  expect(response.ok()).toBeTruthy()
+}
+
+// Fila da tela Chamados e o item de cada contato nela.
+const queueOf = (page: Page) => page.getByRole('region', { name: 'Fila e assuntos' })
+const queuedItems = (page: Page, contactName: string) =>
+  queueOf(page).getByRole('listitem').filter({ hasText: contactName })
+
+// Intermedia o WebSocket do app. `drop()` fecha a conexão atual e segura as tentativas de
+// reconexão, que ficam pendentes (sem abrir nem fechar) até `restore()`. Assim a queda dura o
+// que o teste quiser, e o que chega nesse intervalo só alcança a tela depois da reconexão.
+async function holdableRealtime(page: Page) {
+  const sockets: WebSocketRoute[] = []
+  let gate: Promise<void> | null = null
+  let release = () => {}
+  await page.routeWebSocket(/\/api\/ws$/, async (ws) => {
+    if (gate) await gate
+    sockets.push(ws)
+    ws.connectToServer()
+  })
+  return {
+    sockets,
+    async drop() {
+      gate = new Promise<void>((resolve) => (release = resolve))
+      await sockets[sockets.length - 1].close({ code: 1006 })
+    },
+    restore() {
+      release()
+      gate = null
+    },
+  }
 }
 
 function assumeIn(page: Page, name: string) {
@@ -147,6 +195,90 @@ test('assumir pela fila abre o chamado e permite consultar assuntos', async ({
     'aria-selected',
     'true',
   )
+})
+
+test('segunda mensagem de chamado ainda na fila atualiza a prévia nas duas sessões e mantém um só item', async ({
+  page,
+  request,
+  baseURL,
+  browser,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  await signIn(page, agent, userPassword)
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await signIn(other, supervisor, userPassword)
+  for (const session of [page, other]) {
+    await expect(queueOf(session).getByText('Nenhum chamado esperando.')).toBeVisible()
+  }
+
+  const { phone } = unique()
+  await receiveText(request, sector.id, { phone, contactName: 'Maria Cliente', body: 'Bom dia' })
+  const [ticket] = (await (await page.request.get(`/api/sectors/${sector.id}/tickets`)).json()) as {
+    protocol: string
+  }[]
+  expect(ticket.protocol).toMatch(/^\d{4}-\d{6}$/)
+  for (const session of [page, other]) {
+    const item = queuedItems(session, 'Maria Cliente')
+    await expect(item).toContainText('Bom dia')
+    // A linha mostra o protocolo do chamado.
+    await expect(item).toContainText(ticket.protocol)
+    await expect(item).toHaveCount(1)
+  }
+
+  // Nova mensagem do mesmo contato: a prévia muda nas duas telas, e continua um único item.
+  await receiveText(request, sector.id, {
+    phone,
+    contactName: 'Maria Cliente',
+    body: 'Preciso de ajuda',
+  })
+  for (const session of [page, other]) {
+    const item = queuedItems(session, 'Maria Cliente')
+    await expect(item).toContainText('Preciso de ajuda')
+    await expect(item).not.toContainText('Bom dia')
+    await expect(item).toContainText(ticket.protocol)
+    await expect(item).toHaveCount(1)
+    await expect(queueOf(session).getByRole('listitem')).toHaveCount(1)
+    await expect(session.getByRole('tab', { name: 'Fila, 1 a assumir' })).toBeVisible()
+  }
+  await otherContext.close()
+})
+
+test('queda do tempo real: o aviso aparece, e ao reconectar some e a fila mostra o chamado recebido na queda', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const realtime = await holdableRealtime(page)
+  await signIn(page, agent, userPassword)
+  const note = page
+    .getByRole('alert')
+    .filter({ hasText: 'Atualização em tempo real interrompida.' })
+  await expect(queueOf(page).getByText('Nenhum chamado esperando.')).toBeVisible()
+  await expect.poll(() => realtime.sockets.length).toBeGreaterThan(0)
+  await expect(note).toBeHidden()
+  const opened = realtime.sockets.length
+
+  // Queda: o aviso aparece e continua, porque a reconexão fica pendente. A mensagem que chega
+  // nesse intervalo não alcança a tela.
+  await realtime.drop()
+  await expect(note).toBeVisible()
+  await receiveText(request, sector.id, {
+    phone: unique().phone,
+    contactName: 'Contato na queda',
+    body: 'Olá',
+  })
+  await expect(queuedItems(page, 'Contato na queda')).toHaveCount(0)
+  await expect(note).toBeVisible()
+
+  // Reconexão: o aviso some e a fila recarrega, com o chamado recebido durante a queda.
+  realtime.restore()
+  await expect.poll(() => realtime.sockets.length, { timeout: 15_000 }).toBeGreaterThan(opened)
+  await expect(note).toBeHidden()
+  const item = queuedItems(page, 'Contato na queda')
+  await expect(item).toHaveCount(1)
+  await expect(item).toContainText('Olá')
 })
 
 test('lista só atendimentos próprios, ordena pela atividade e permite alternar', async ({
@@ -260,8 +392,8 @@ test('supervisor e administrador assumem na fila dos setores permitidos', async 
   const adminContext = await browser.newContext()
   const adminPage = await adminContext.newPage()
   await signIn(adminPage, admin.email, admin.password)
-  await adminPage.getByRole('link', { name: 'Chamados', exact: true }).click()
-  await expect(adminPage.getByText('Você não tem atendimentos ativos.')).toBeVisible()
+  // O administrador é um só para todos os testes: seus chamados ativos de outros testes não
+  // dizem nada sobre este, então a tela vazia não é conferida; o chamado assumido é.
   await adminPage.getByRole('button', { name: 'Assumir chamado de Cliente de outro setor' }).click()
   await expect(adminPage.getByRole('navigation', { name: 'Meus chamados' })).toContainText(
     'Cliente de outro setor',
