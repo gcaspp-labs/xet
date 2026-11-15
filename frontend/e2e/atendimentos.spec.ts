@@ -430,7 +430,11 @@ test('20 por página, e página e filtro sobrevivem ao recarregar', async ({ pag
     organization: 0,
     sector: origin.sector.id,
   }))
-  const [organization] = await seedDirectory(baseURL!, [{ name: `Prefeitura ${id}` }], people)
+  const [organization] = await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura de Paginação ${id}` }],
+    people,
+  )
   const system = await apiRequest.newContext({ baseURL })
   for (const person of people) {
     await receive(system, origin.sector.id, person.phone, person.name)
