@@ -7,6 +7,7 @@ import {
   signIn,
   unique,
   userPassword,
+  chooseAction,
 } from './fixtures'
 
 // Liga os números dos setores pelo adaptador falso e cadastra os módulos da origem.
@@ -60,7 +61,7 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await page.getByRole('link', { name: contact }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
-  await page.getByRole('button', { name: 'Outro setor' }).click()
+  await chooseAction(page, 'Outro setor')
   const sheet = page.getByRole('dialog', { name: 'Transferir para outro setor' })
   await sheet.getByRole('button', { name: 'Transferir' }).click()
   await expect(sheet).toContainText('Escolha o setor de destino.')

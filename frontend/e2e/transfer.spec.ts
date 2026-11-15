@@ -1,5 +1,5 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, seedSector, signIn, unique, userPassword, chooseAction } from './fixtures'
 
 // Liga o número do setor pelo adaptador falso e cria um segundo atendente.
 async function prepare(baseURL: string, sectorId: number) {
@@ -44,7 +44,6 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   // O atendente assume e transfere para o colega.
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Joana Cliente' }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
@@ -57,10 +56,10 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   await other.goto(page.url())
   const otherConversation = other.getByRole('region', { name: 'Conversa', exact: true })
   await expect(otherConversation).toContainText(`Chamado com ${agentName}. Peça a transferência`)
-  await expect(other.getByRole('button', { name: 'Transferir' })).toHaveCount(0)
+  await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
 
   const ticketUrl = page.url()
-  await page.getByRole('button', { name: 'Transferir' }).click()
+  await chooseAction(page, 'Transferir')
   const sheet = page.getByRole('dialog', { name: 'Transferir chamado' })
   // O próprio responsável e administradores não aparecem como destino.
   await sheet.getByRole('combobox', { name: 'Transferir para' }).click()
@@ -77,7 +76,7 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   // O anterior perde a resposta; o histórico mostra a transferência.
   await expect(conversation).toContainText(`Chamado com ${colleague.name}. Peça a transferência`)
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Transferir' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
   const transferText = `${agentName} transferiu o chamado para ${colleague.name}`
   await expect(
     conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
@@ -102,7 +101,7 @@ test('responsável transfere o chamado e só o novo responsável responde', asyn
   const sup = await supContext.newPage()
   await signIn(sup, supervisor, userPassword)
   await sup.goto(page.url())
-  await sup.getByRole('button', { name: 'Transferir' }).click()
+  await chooseAction(sup, 'Transferir')
   const supSheet = sup.getByRole('dialog', { name: 'Transferir chamado' })
   await supSheet.getByRole('combobox', { name: 'Transferir para' }).click()
   await sup.getByRole('option', { name: new RegExp(`^${agentName} · Atendente`) }).click()

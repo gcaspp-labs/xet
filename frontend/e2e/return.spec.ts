@@ -1,5 +1,13 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
-import { admin, recordToasts, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  recordToasts,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+  chooseAction,
+} from './fixtures'
 
 test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   page,
@@ -49,7 +57,9 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   await page.getByRole('link', { name: 'Joana Devolvida' }).click()
   const url = page.url()
   await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Devolver à fila' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Mais ações' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Devolver à fila' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   const ticketPath = `/api/tickets/${url.split('/').pop()}`
@@ -65,18 +75,18 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   await colleague.goto(url)
   const colleagueConversation = colleague.getByRole('region', { name: 'Conversa', exact: true })
   await expect(colleagueConversation).toContainText('Peça a transferência')
-  await expect(colleague.getByRole('button', { name: 'Devolver à fila' })).toHaveCount(0)
+  await expect(colleague.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
 
   // No celular, as ações continuam na tela, sem rolagem lateral.
   await page.setViewportSize({ width: 375, height: 812 })
-  await expect(page.getByRole('button', { name: 'Devolver à fila' })).toBeInViewport()
+  await expect(page.getByRole('button', { name: 'Mais ações' })).toBeInViewport()
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).toBeTruthy()
   await page.setViewportSize({ width: 1280, height: 720 })
 
   // O responsável devolve e volta a Chamados sem chamado aberto.
-  await page.getByRole('button', { name: 'Devolver à fila' }).click()
+  await chooseAction(page, 'Devolver à fila')
   const sheet = page.getByRole('dialog', { name: 'Devolver à fila' })
   await sheet.getByRole('button', { name: 'Devolver à fila' }).click()
   await expect.poll(toasts).toContain('Chamado devolvido à fila')
@@ -99,7 +109,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   // O momento em que foi assumido pela primeira vez não muda.
   await page.goto(url)
   expect(await assignedAtOf()).toBe(assignedAt)
-  await expect(page.getByRole('button', { name: 'Devolver à fila' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
 
   // O supervisor devolve o chamado de outro atendente.
   const supContext = await browser.newContext()
@@ -107,7 +117,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   const supToasts = await recordToasts(sup)
   await signIn(sup, supervisor, userPassword)
   await sup.goto(url)
-  await sup.getByRole('button', { name: 'Devolver à fila' }).click()
+  await chooseAction(sup, 'Devolver à fila')
   const supSheet = sup.getByRole('dialog', { name: 'Devolver à fila' })
   await supSheet.getByRole('button', { name: 'Devolver à fila' }).click()
   await expect.poll(supToasts).toContain('Chamado devolvido à fila')

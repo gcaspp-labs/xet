@@ -10,6 +10,7 @@ import {
   test,
   unique,
   userPassword,
+  chooseAction,
 } from './fixtures'
 
 // Módulo com dois assuntos e uma solução cada, criados pela API como administrador.
@@ -104,7 +105,7 @@ test('assumir pela fila abre o chamado e permite consultar assuntos', async ({
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
   await page.getByRole('tab', { name: 'Assuntos' }).click()
   await expect(page.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Ver chamado' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Ver chamado' })).toHaveCount(0)
   for (const name of ['Detalhes', 'Notas', 'Histórico', 'Falou com']) {
     await expect(page.getByRole('tab', { name })).toHaveCount(0)
   }
@@ -132,7 +133,7 @@ test('assumir pela fila abre o chamado e permite consultar assuntos', async ({
   await otherPage.getByRole('button', { name: 'Assumir chamado de Outro cliente' }).click()
   await expect(page.getByRole('tab', { name: 'Fila', exact: true })).toHaveText('Fila')
   await otherContext.close()
-  await page.getByRole('button', { name: 'Devolver à fila' }).click()
+  await chooseAction(page, 'Devolver à fila')
   await expect(page.getByRole('dialog', { name: 'Devolver à fila' })).toContainText(
     'mensagens e histórico continuam no chamado.',
   )
@@ -214,7 +215,7 @@ test('cancelar na tela Chamados retorna ao estado sem chamado aberto', async ({
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: 'Chamados', exact: true }).click()
   await page.getByRole('button', { name: 'Assumir chamado de Cliente cancelado' }).click()
-  await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await chooseAction(page, 'Cancelar chamado')
   const dialog = page.getByRole('dialog', { name: 'Cancelar chamado' })
   await dialog.getByLabel('Motivo').fill('Atendimento iniciado por engano')
   await dialog.getByRole('button', { name: 'Cancelar chamado' }).click()
@@ -351,7 +352,8 @@ for (const action of ['Encerrar', 'Outro setor', 'Transferir'] as const) {
     await signIn(page, origin.agent, userPassword)
     await page.getByRole('link', { name: 'Chamados', exact: true }).click()
     await page.getByRole('button', { name: `Assumir chamado de ${contact}` }).click()
-    await page.getByRole('button', { name: action, exact: true }).click()
+    if (action === 'Encerrar') await page.getByRole('button', { name: action, exact: true }).click()
+    else await chooseAction(page, action)
     if (action === 'Transferir') {
       const sheet = page.getByRole('dialog', { name: 'Transferir chamado' })
       await sheet.getByRole('combobox', { name: 'Transferir para' }).click()

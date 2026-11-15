@@ -9,6 +9,7 @@ import {
   test,
   unique,
   userPassword,
+  chooseAction,
 } from './fixtures'
 
 const sidebar = '[data-slot=sidebar-inner]'
@@ -106,7 +107,7 @@ test('quem cancela pela própria tela volta a /chamados e não é levado a Atend
   await agentApi.dispose()
   await signIn(page, agent, userPassword)
   await page.goto(`/chamados/${ticketId}`)
-  await page.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await chooseAction(page, 'Cancelar chamado')
   const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
   await sheet.getByLabel('Motivo').fill('Aberto por engano.')
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()

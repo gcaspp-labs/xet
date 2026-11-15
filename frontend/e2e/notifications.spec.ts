@@ -5,7 +5,7 @@ import {
   type Page,
   type WebSocketRoute,
 } from '@playwright/test'
-import { admin, seedSector, signIn, test, unique, userPassword } from './fixtures'
+import { admin, seedSector, signIn, test, unique, userPassword, chooseAction } from './fixtures'
 
 async function connectSector(baseURL: string, sectorId: number) {
   const api = await apiRequest.newContext({ baseURL })
@@ -200,7 +200,7 @@ test('item sai quando outra pessoa assume e volta quando o chamado é devolvido 
   await expect(openConversation).toHaveAttribute('href', /^\/chamados\/\d+$/)
   await openConversation.click()
   await expect(other).toHaveURL(/\/chamados\/\d+$/)
-  await other.getByRole('button', { name: 'Devolver à fila' }).click()
+  await chooseAction(other, 'Devolver à fila')
   const drawer = other.getByRole('dialog', { name: 'Devolver à fila' })
   await drawer.getByRole('button', { name: 'Devolver à fila' }).click()
   await expect(bellOf(page)).toHaveAccessibleName('Notificações, 1 pendente')
@@ -222,7 +222,7 @@ test('item sai quando outra pessoa cancela o chamado', async ({
   const other = await otherContext.newPage()
   await signIn(other, supervisor, userPassword)
   await other.getByRole('link', { name: 'Lauro Golpe' }).click()
-  await other.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await chooseAction(other, 'Cancelar chamado')
   const sheet = other.getByRole('dialog', { name: 'Cancelar chamado' })
   await sheet.getByLabel('Motivo').fill('Golpe do falso boleto.')
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()

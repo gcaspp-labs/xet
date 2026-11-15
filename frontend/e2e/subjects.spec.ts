@@ -9,6 +9,7 @@ import {
   signIn,
   unique,
   userPassword,
+  chooseAction,
 } from './fixtures'
 
 type Response = { ok(): boolean; json(): Promise<unknown> }
@@ -142,7 +143,6 @@ test('sugestões dependem dos módulos marcados sem apagar o texto', async ({ pa
   const { agent, contacts } = await prepare(baseURL!, ['Folha de pagamento'], 1)
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: contacts[0] }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   const subject = sheet.getByLabel('Assunto')
@@ -189,7 +189,6 @@ test('assuntos iguais mostram os módulos e reúnem soluções sem repetição',
   ).toBeTruthy()
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: contacts[0] }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   await sheet.getByRole('checkbox', { name: 'Folha' }).check()
@@ -215,7 +214,6 @@ test('escolhe módulo para adicionar assunto quando há mais de um', async ({ pa
   await api.dispose()
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: contacts[0] }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   await sheet.getByRole('checkbox', { name: 'Folha' }).check()
@@ -245,7 +243,6 @@ test('módulo desativado durante a pergunta exige escolher outro marcado', async
   await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }))
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: contacts[0] }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   await sheet.getByRole('checkbox', { name: 'Folha' }).check()
@@ -285,7 +282,6 @@ test('sem módulo ativo marcado exige marcar outro antes de encerrar', async ({ 
   await json(await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }))
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: contacts[0] }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   await sheet.getByRole('checkbox', { name: 'Folha' }).check()
@@ -417,7 +413,7 @@ test('a aba e a busca não passam para outra pessoa depois de sair', async ({ pa
   await card.getByRole('tab', { name: 'Assuntos' }).click()
   await card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' }).fill('ferias')
 
-  await page.getByRole('button', { name: 'Transferir' }).click()
+  await chooseAction(page, 'Transferir')
   const sheet = page.getByRole('dialog', { name: 'Transferir chamado' })
   await sheet.getByRole('combobox', { name: 'Transferir para' }).click()
   await page.getByRole('option', { name: /Supervisor/ }).click()
@@ -627,7 +623,6 @@ test('a correção só pergunta quando o assunto é alterado', async ({ page, ba
   const { sector, agent, contacts } = await prepare(baseURL!, [], 1)
   await signIn(page, agent, userPassword)
   await page.getByRole('link', { name: contacts[0] }).click()
-  await page.getByRole('link', { name: 'Ver chamado' }).click()
   const ticketUrl = page.url()
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const closing = page.getByRole('dialog', { name: 'Encerrar chamado' })

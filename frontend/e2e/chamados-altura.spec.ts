@@ -126,7 +126,7 @@ async function prepare(page: Page, baseURL: string, who: 'agent' | 'admin' = 'ag
 test.describe('desktop 1440×900', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  test('com conversa aberta e cabeçalho em várias linhas, só as listas e o histórico rolam', async ({
+  test('com conversa aberta e o cabeçalho do administrador, só as listas e o histórico rolam', async ({
     page,
     baseURL,
   }) => {
@@ -135,8 +135,8 @@ test.describe('desktop 1440×900', () => {
     const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
     await expect(conversation).toContainText('Mensagem número 39 do histórico')
     const header = page.getByRole('heading', { level: 1 }).locator('xpath=ancestor::header[1]')
-    // O cabeçalho da página ocupa mais de uma linha e mesmo assim nada passa da janela.
-    expect((await header.boundingBox())!.height).toBeGreaterThan(100)
+    // O cabeçalho (com o seletor Setor) cabe em uma linha e nada passa da janela.
+    expect((await header.boundingBox())!.height).toBeLessThan(100)
     expect(await pageScrolls(page)).toBe(false)
     await expectInViewport(page, page.getByRole('textbox', { name: 'Mensagem' }))
 

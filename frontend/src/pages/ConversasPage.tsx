@@ -4,29 +4,34 @@ import {
   Ban,
   CircleAlert,
   CircleCheck,
-  FileText,
   Inbox,
-  MessageSquarePlus,
+  MoreHorizontal,
+  Plus,
   MessagesSquare,
-  PencilLine,
   Undo2,
   UserCheck,
   UserRoundCog,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useLocation, useNavigate, useParams } from 'react-router'
+import { NavLink, useLocation, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { RegisterContactSheet } from '@/components/ContactSheet'
-import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
 import NotFoundPage from '@/pages/NotFoundPage'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
@@ -42,19 +47,95 @@ import { cn } from '@/lib/utils'
 import { useSectors } from '@/lib/admin'
 import { isNotFound } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
-import { ticketKey, useAssignTicket, useTicket, useTicketModules } from '@/lib/conversation'
+import { ticketKey, useAssignTicket, useTicket } from '@/lib/conversation'
 import { formatMessageTime, organizationLabel } from '@/lib/format'
 import { lastMessagePreview, parseTicketId, ticketsQuery, type TicketSummary } from '@/lib/tickets'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import {
   canCancel,
   canClose,
-  canCorrect,
   canReturn,
   canTransfer,
   ConversationCard,
 } from '@/pages/ticket/TicketPage'
 import { useConversasSearch } from '@/pages/ticket/useTicketView'
+
+import type { TicketDetail } from '@/lib/conversation'
+import type { User } from '@/lib/auth'
+
+type Action = 'cancel' | 'return' | 'transfer' | 'sector' | 'close'
+
+// Ação principal visível (Assumir na fila, Encerrar em atendimento) e o resto no menu "Mais ações" (⋯),
+// com Cancelar chamado no fim, depois de um divisor. Cada item aparece só para quem pode.
+function TicketActions({
+  ticket,
+  user,
+  canSubjects,
+  onAction,
+  onAssign,
+  assigning,
+}: {
+  ticket: TicketDetail
+  user: User
+  canSubjects: boolean
+  onAction: (action: Action) => void
+  onAssign: () => void
+  assigning: boolean
+}) {
+  const main = [
+    canReturn(ticket, user) && { id: 'return' as const, label: 'Devolver à fila', icon: Undo2 },
+    canTransfer(ticket, user) && {
+      id: 'transfer' as const,
+      label: 'Transferir',
+      icon: UserRoundCog,
+    },
+    canSubjects && { id: 'sector' as const, label: 'Outro setor', icon: ArrowRightLeft },
+  ].filter((item) => !!item)
+  const cancel = canCancel(ticket, user)
+  const hasMenu = main.length > 0 || cancel
+  return (
+    <div className="flex items-center gap-2">
+      {ticket.status === 'queued' && (
+        <Button disabled={assigning} onClick={onAssign}>
+          <UserCheck strokeWidth={1.7} aria-hidden />
+          Assumir
+        </Button>
+      )}
+      {canSubjects && (
+        <Button onClick={() => onAction('close')}>
+          <CircleCheck strokeWidth={1.7} aria-hidden />
+          Encerrar
+        </Button>
+      )}
+      {hasMenu && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="outline" size="icon" aria-label="Mais ações" title="Mais ações" />
+            }
+          >
+            <MoreHorizontal strokeWidth={1.7} aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-48">
+            {main.map((item) => (
+              <DropdownMenuItem key={item.id} onClick={() => onAction(item.id)}>
+                <item.icon strokeWidth={1.7} aria-hidden />
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+            {cancel && main.length > 0 && <DropdownMenuSeparator />}
+            {cancel && (
+              <DropdownMenuItem variant="destructive" onClick={() => onAction('cancel')}>
+                <Ban strokeWidth={1.7} aria-hidden />
+                Cancelar chamado
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+  )
+}
 
 type SectorTicket = TicketSummary & { sectorId: number }
 // Abaixo de xl só um bloco aparece por vez; a partir de xl, os três ficam lado a lado.
@@ -87,7 +168,6 @@ export default function ConversasPage() {
   const visible = sectors.filter((sector) => user?.role === 'admin' || sector.id === user?.sectorId)
   const results = useQueries({ queries: visible.map((sector) => ticketsQuery(sector.id)) })
   const { data: ticket, error: ticketError } = useTicket(ticketId ?? 0, !!ticketId)
-  const { data: recordedModules } = useTicketModules(ticketId ?? 0, ticket?.status === 'closed')
   const queryClient = useQueryClient()
   const assign = useAssignTicket()
   const navigate = useNavigate()
@@ -174,86 +254,23 @@ export default function ConversasPage() {
                 </Select>
               </Field>
             )}
-            {sector && (
-              <Button onClick={() => setStarting(true)}>
-                <MessageSquarePlus strokeWidth={1.7} aria-hidden />
-                Novo chamado
-              </Button>
-            )}
             {ticket && (
-              <>
-                <Link
-                  to={`/chamados/${ticket.id}`}
-                  className={buttonVariants({ variant: 'ghost' })}
-                >
-                  <FileText strokeWidth={1.7} aria-hidden />
-                  Ver chamado
-                </Link>
-                {canCancel(ticket, user) && (
-                  <>
-                    <span aria-hidden className="h-6 border-l border-line" />
-                    <Button variant="destructive" onClick={() => setAction('cancel')}>
-                      <Ban strokeWidth={1.7} aria-hidden />
-                      Cancelar chamado
-                    </Button>
-                  </>
-                )}
-                {canReturn(ticket, user) && (
-                  <Button variant="outline" onClick={() => setAction('return')}>
-                    <Undo2 strokeWidth={1.7} aria-hidden />
-                    Devolver à fila
-                  </Button>
-                )}
-                {ticket.status === 'queued' && (
-                  <Button
-                    disabled={assign.isPending}
-                    onClick={() =>
-                      assign.mutate(
-                        { ticketId: ticket.id, sectorId: ticket.sector.id },
-                        { onSuccess: () => toast.success('Chamado assumido') },
-                      )
-                    }
-                  >
-                    <UserCheck strokeWidth={1.7} aria-hidden />
-                    Assumir
-                  </Button>
-                )}
-                {canTransfer(ticket, user) && (
-                  <Button variant="outline" onClick={() => setAction('transfer')}>
-                    <UserRoundCog strokeWidth={1.7} aria-hidden />
-                    Transferir
-                  </Button>
-                )}
-                {canCorrect(ticket, user) && (
-                  <Button onClick={() => setAction('correct')}>
-                    <PencilLine strokeWidth={1.7} aria-hidden />
-                    Corrigir
-                  </Button>
-                )}
-                {showSubjects && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setClosingKey((n) => n + 1)
-                      setAction('sector')
-                    }}
-                  >
-                    <ArrowRightLeft strokeWidth={1.7} aria-hidden />
-                    Outro setor
-                  </Button>
-                )}
-                {showSubjects && (
-                  <Button
-                    onClick={() => {
-                      setClosingKey((n) => n + 1)
-                      setAction('close')
-                    }}
-                  >
-                    <CircleCheck strokeWidth={1.7} aria-hidden />
-                    Encerrar
-                  </Button>
-                )}
-              </>
+              <TicketActions
+                ticket={ticket}
+                user={user}
+                onAction={(next) => {
+                  if (next === 'close' || next === 'sector') setClosingKey((n) => n + 1)
+                  setAction(next)
+                }}
+                canSubjects={showSubjects}
+                onAssign={() =>
+                  assign.mutate(
+                    { ticketId: ticket.id, sectorId: ticket.sector.id },
+                    { onSuccess: () => toast.success('Chamado assumido') },
+                  )
+                }
+                assigning={assign.isPending}
+              />
             )}
           </div>
         }
@@ -301,13 +318,6 @@ export default function ConversasPage() {
             onOpenChange={(open) => !open && setAction('')}
             onSuccess={leave}
           />
-          {action === 'correct' && recordedModules && (
-            <CorrectionSheet
-              ticket={ticket}
-              recorded={recordedModules}
-              onOpenChange={() => setAction('')}
-            />
-          )}
           {action === 'register' && (
             <RegisterContactSheet
               contactId={ticket.contact.id}
@@ -342,8 +352,19 @@ export default function ConversasPage() {
             aria-labelledby="my-conversations-title"
             className={cn('min-h-0', show('mine'))}
           >
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
               <CardTitle id="my-conversations-title">Meus chamados ({mine.length})</CardTitle>
+              {sector && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Novo chamado"
+                  title="Novo chamado"
+                  onClick={() => setStarting(true)}
+                >
+                  <Plus strokeWidth={1.7} aria-hidden />
+                </Button>
+              )}
             </CardHeader>
             {mine.length ? (
               <nav aria-label="Meus chamados" className="flex-1 overflow-y-auto">
