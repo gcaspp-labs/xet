@@ -7,6 +7,7 @@ O responsável pelo chamado conversa com o contato pela tela da conversa, e ning
 - [jornada] Sem assumir, a caixa de resposta não aparece, e a tela diz para assumir.
 - [jornada] Quem não é o responsável acompanha, sem caixa de resposta.
 - [jornada] A resposta sai com Enter e fica "Enviada"; a caixa é limpa.
+- [jornada] O seletor de emojis abre com busca, insere o emoji no cursor e a mensagem sai com ele.
 - [jornada] Quem acompanha em outra janela vê a resposta sem recarregar.
 - [jornada] Confirmações do celular do contato levam a "Entregue" e "Lida".
 - [jornada] Repetir o envio com o mesmo `clientRequestId` devolve a mesma mensagem, sem duplicar.
@@ -39,6 +40,7 @@ scripts/verify/scripts/drive.sh reply
 - Caixa de resposta: `getByRole('textbox', { name: 'Mensagem' })`.
 - Mensagem enviada: `getByRole('listitem', { name: 'Mensagem enviada' }).filter({ hasText: '...' })`.
 - Arquivo: `getByLabel('Arquivo para enviar')` com `setInputFiles`, e `getByRole('textbox', { name: 'Legenda do arquivo' })`.
+- Seletor de emojis: botão `getByRole('button', { name: 'Inserir emoji' })`, busca `getByRole('searchbox', { name: 'Buscar emoji' })` (recebe o foco ao abrir; Enter insere o primeiro resultado) e grade `getByLabel('Emojis')`.
 - Recibos: `t.phone(setor).status('delivered' | 'read', ['fake-msg-<clientRequestId>'])`. O `clientRequestId` vem da requisição capturada com `page.waitForRequest`.
 - Queda e volta do número: `t.phone(setor).drop()` e `POST /api/sectors/{id}/connection` como administrador.
 
@@ -54,5 +56,5 @@ scripts/verify/scripts/drive.sh reply
 ## Estado final observável
 
 - **Tela:** as mensagens com "Lida" e "Enviada"; o arquivo com link para `/api/media/<id>`; a mensagem reenviada sem "Falhou"; o supervisor sem caixa de resposta.
-- **`messages`:** uma `inbound` e três `outbound`, com situações `read`, `sent` e `sent` e `external_message_id` preenchido, ou seja, aceitas pelo provedor. Uma só linha para cada `client_request_id`.
+- **`messages`:** uma `inbound` e quatro `outbound`, com situações `read`, `sent`, `sent` e `sent` e `external_message_id` preenchido, ou seja, aceitas pelo provedor. Uma só linha para cada `client_request_id`.
 - **API:** o envio repetido devolve o mesmo `id`, e a resposta indevida recebe 403.
