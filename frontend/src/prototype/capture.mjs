@@ -17,28 +17,24 @@ const shot = async (name, url, act) => {
   console.log(name)
   await page.close()
 }
-const openBar = async (page, msg, v) => {
-  if (v === 'C') await msg.locator('div').first().hover()
-  else await msg.getByRole('button', { name: 'Reagir' }).click()
-  await (v === 'C' ? msg : page).getByRole('group', { name: 'Reagir à mensagem' }).first().waitFor()
+const openBar = async (page, msg) => {
+  await msg.getByRole('button', { name: 'Reagir' }).click()
+  await page.getByRole('group', { name: 'Reagir à mensagem' }).first().waitFor()
 }
-for (const v of ['A', 'B', 'C']) {
-  const url = `/chamados/300?variant=${v}&captura=1`
-  await shot(`${v}-reacoes`, url, async (page, msg) => {
-    if (v === 'A') await page.getByRole('button', { name: /^Reações: Cliente reagiu 👍; Setor/ }).click()
-  })
-  await shot(`${v}-barra`, url, (page, msg) => openBar(page, msg, v))
-  await shot(`${v}-mais`, url, async (page, msg) => {
-    await openBar(page, msg, v)
-    await (v === 'C' ? msg : page).getByRole('button', { name: 'Mais emojis' }).first().click()
-    await page.getByRole('searchbox', { name: 'Buscar emoji' }).fill('festa')
-  })
-  await shot(`${v}-sem-permissao`, `/chamados/500?variant=${v}&captura=1`, async (page, msg) => {
-    await msg.hover()
-  })
-}
-await shot('A-falha', `/chamados/300?variant=A&captura=1&falha=1`, async (page, msg) => {
-  await openBar(page, msg, 'A')
+// Versão aprovada (botão ao lado + etiquetas): nomes sem letra de versão.
+const url = `/chamados/300?captura=1`
+await shot('aprovada-reacoes', url)
+await shot('aprovada-barra', url, (page, msg) => openBar(page, msg))
+await shot('aprovada-mais', url, async (page, msg) => {
+  await openBar(page, msg)
+  await page.getByRole('button', { name: 'Mais emojis' }).first().click()
+  await page.getByRole('searchbox', { name: 'Buscar emoji' }).fill('festa')
+})
+await shot('aprovada-sem-permissao', `/chamados/500?captura=1`, async (page, msg) => {
+  await msg.hover()
+})
+await shot('aprovada-falha', `/chamados/300?captura=1&falha=1`, async (page, msg) => {
+  await openBar(page, msg)
   await page.getByRole('button', { name: 'Reagir com ❤️' }).click()
   await page.waitForTimeout(900)
 })
