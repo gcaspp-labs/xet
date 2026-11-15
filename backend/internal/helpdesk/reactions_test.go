@@ -1,11 +1,15 @@
 package helpdesk_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
@@ -17,17 +21,20 @@ const reactionContact = "5511988887777@s.whatsapp.net"
 // react delivers a reaction of the contact to the message with the provider ID.
 func (e *testEnv) react(sectorID int64, target, emoji string, at time.Time) {
 	e.T.Helper()
-	e.reaction(sectorID, messaging.ReactionReceived{
-		TargetExternalMessageID: target, ExternalContactID: reactionContact, Phone: "5511988887777", Emoji: emoji, At: at,
-	})
+	e.reactAs(sectorID, target, emoji, at, false)
 }
 
 // reactFromPhone delivers a reaction made from the phone of the sector.
 func (e *testEnv) reactFromPhone(sectorID int64, target, emoji string, at time.Time) {
 	e.T.Helper()
+	e.reactAs(sectorID, target, emoji, at, true)
+}
+
+func (e *testEnv) reactAs(sectorID int64, target, emoji string, at time.Time, fromSectorPhone bool) {
+	e.T.Helper()
 	e.reaction(sectorID, messaging.ReactionReceived{
 		TargetExternalMessageID: target, ExternalContactID: reactionContact, Phone: "5511988887777", Emoji: emoji,
-		FromSectorPhone: true, At: at,
+		FromSectorPhone: fromSectorPhone, At: at,
 	})
 }
 
@@ -87,13 +94,25 @@ func (c reactionCase) reactions(externalID string) map[string]any {
 	return c.reactionsOf(c.ticket.ID, c.token, externalID)
 }
 
-func (c reactionCase) closeIt() {
+func (c reactionCase) closeFixtureTicket() {
 	c.T.Helper()
 	org, err := c.Q.CreateOrganization(c.T.Context(), db.CreateOrganizationParams{Name: "Prefeitura", MunicipalityID: c.Municipality("Itu")})
 	if err != nil {
 		c.T.Fatal(err)
 	}
 	c.closeTicket(c.ticket.ID, c.ana.ID, org.ID)
+}
+
+// noMoreEvents fails when the panel is notified in the next moments. Waiting
+// closes the connection, so it is the last use of it.
+func (c reactionCase) noMoreEvents(conn *websocket.Conn) {
+	c.T.Helper()
+	ctx, cancel := context.WithTimeout(c.T.Context(), 300*time.Millisecond)
+	defer cancel()
+	var ev realtime.Event
+	if err := wsjson.Read(ctx, conn, &ev); err == nil {
+		c.T.Fatalf("unexpected event: %+v", ev)
+	}
 }
 
 func emojiOf(t *testing.T, side any) string {
@@ -155,7 +174,7 @@ func TestReactionToClosedTicketOrUnknownMessageIsDiscarded(t *testing.T) {
 	now := time.Now().Truncate(time.Microsecond)
 	c.react(c.sector.ID, "IN-1", "👍", now)
 	c.reactFromPhone(c.sector.ID, "OUT-1", "🙏", now)
-	c.closeIt()
+	c.closeFixtureTicket()
 
 	tickets, messages, contacts, rows := c.Count("tickets"), c.Count("messages"), c.Count("contacts"), c.reactionRows()
 	before := c.reactions("IN-1")
@@ -337,5 +356,118 @@ func TestReactionNotifiesThePanelAndKeepsTheLists(t *testing.T) {
 	// A última mensagem e a ordem das listas continuam as mesmas.
 	if after := c.DoList(http.MethodGet, list, c.token); !reflect.DeepEqual(before, after) {
 		t.Fatalf("lists changed with the reaction:\nbefore %v\nafter  %v", before, after)
+	}
+}
+
+// A removal is a change of the side like any other: an older event delivered
+// again, even the very reaction that was removed, must not bring it back.
+func TestRemovedReactionDoesNotComeBackWhenAnOldEventIsDeliveredAgain(t *testing.T) {
+	t.Parallel()
+	sides := []struct {
+		name  string
+		react func(c reactionCase, emoji string, at time.Time)
+		side  string
+		other string
+	}{
+		{"customer", func(c reactionCase, emoji string, at time.Time) { c.react(c.sector.ID, "IN-1", emoji, at) }, "customer", "sector"},
+		{"sector phone", func(c reactionCase, emoji string, at time.Time) { c.reactFromPhone(c.sector.ID, "IN-1", emoji, at) }, "sector", "customer"},
+	}
+	for _, tc := range sides {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := newReactionCase(t)
+			t1 := time.Now().Truncate(time.Microsecond)
+			t2 := t1.Add(time.Second)
+			events := c.subscribe(c.token)
+
+			tc.react(c, "👍", t1) // reaction at T1
+			if ev := c.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
+				t.Fatalf("event of the reaction = %+v", ev)
+			}
+			tc.react(c, "", t2) // removal at T2
+			if ev := c.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
+				t.Fatalf("event of the removal = %+v", ev)
+			}
+			if r := c.reactions("IN-1"); r[tc.side] != nil || r[tc.other] != nil {
+				t.Fatalf("reactions after removal = %v", r)
+			}
+
+			// The provider delivers T1 again, and the removal again. A connection of its
+			// own listens to them, since waiting for silence closes it.
+			replays := c.subscribe(c.token)
+			tc.react(c, "👍", t1)
+			tc.react(c, "", t2)
+			tc.react(c, "😂", t1.Add(500*time.Millisecond)) // another old event, between the two
+			if r := c.reactions("IN-1"); r[tc.side] != nil || r[tc.other] != nil {
+				t.Fatalf("removed reaction came back: %v", r)
+			}
+			c.noMoreEvents(replays)
+
+			// A newer reaction still works, and the removed one is not a barrier.
+			tc.react(c, "🙏", t2.Add(time.Second))
+			if got := emojiOf(t, c.reactions("IN-1")[tc.side]); got != "🙏" {
+				t.Fatalf("newer reaction = %q, want 🙏", got)
+			}
+			if ev := c.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
+				t.Fatalf("event of the newer reaction = %+v", ev)
+			}
+		})
+	}
+}
+
+// A removal that arrives before the first reaction, which was older, is the
+// newest word: the old reaction delivered afterwards is discarded.
+func TestRemovalReceivedBeforeAnOlderReactionWins(t *testing.T) {
+	t.Parallel()
+	for _, side := range []struct {
+		name  string
+		react func(c reactionCase, emoji string, at time.Time)
+		side  string
+	}{
+		{"customer", func(c reactionCase, emoji string, at time.Time) { c.react(c.sector.ID, "IN-1", emoji, at) }, "customer"},
+		{"sector phone", func(c reactionCase, emoji string, at time.Time) { c.reactFromPhone(c.sector.ID, "IN-1", emoji, at) }, "sector"},
+	} {
+		t.Run(side.name, func(t *testing.T) {
+			t.Parallel()
+			c := newReactionCase(t)
+			t1 := time.Now().Truncate(time.Microsecond)
+			events := c.subscribe(c.token)
+
+			// Removal at T2 with nothing to remove: recorded for the order, nobody notified.
+			side.react(c, "", t1.Add(time.Second))
+			if r := c.reactions("IN-1"); r[side.side] != nil {
+				t.Fatalf("reaction after a removal with nothing to remove = %v", r)
+			}
+			// The reaction at T1 arrives late.
+			side.react(c, "👍", t1)
+			if r := c.reactions("IN-1"); r["customer"] != nil || r["sector"] != nil {
+				t.Fatalf("late reaction was recorded: %v", r)
+			}
+
+			// Same time as the removal: the removal wins.
+			side.react(c, "👍", t1.Add(time.Second))
+			if r := c.reactions("IN-1"); r[side.side] != nil {
+				t.Fatalf("reaction at the time of the removal = %v", r)
+			}
+			c.noMoreEvents(events)
+		})
+	}
+}
+
+// The removal in the same instant as the reaction (the provider has a
+// resolution of seconds) must still remove it, and then block its replay.
+func TestRemovalAtTheSameTimeAsTheReactionRemovesIt(t *testing.T) {
+	t.Parallel()
+	c := newReactionCase(t)
+	at := time.Now().Truncate(time.Second)
+
+	c.react(c.sector.ID, "IN-1", "👍", at)
+	c.react(c.sector.ID, "IN-1", "", at)
+	if r := c.reactions("IN-1"); r["customer"] != nil {
+		t.Fatalf("reaction after a removal at the same time = %v", r["customer"])
+	}
+	c.react(c.sector.ID, "IN-1", "👍", at)
+	if r := c.reactions("IN-1"); r["customer"] != nil {
+		t.Fatalf("replay of the reaction at the same time = %v", r["customer"])
 	}
 }

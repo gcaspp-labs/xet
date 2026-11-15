@@ -18,7 +18,12 @@ async function connectSector(baseURL: string, sectorId: number) {
   await api.dispose()
 }
 
-async function phone(request: APIRequestContext, sectorId: number, action: string, data?: object) {
+async function simulateMessaging(
+  request: APIRequestContext,
+  sectorId: number,
+  action: string,
+  data?: object,
+) {
   const response = await request.post(`/api/test/messaging/sectors/${sectorId}/${action}`, {
     data,
   })
@@ -35,10 +40,10 @@ test('reação do cliente e do celular do setor chegam pela API e continuam depo
 }) => {
   const { sector, agent } = await seedSector(baseURL!)
   await connectSector(baseURL!, sector.id)
-  await phone(request, sector.id, 'pair')
+  await simulateMessaging(request, sector.id, 'pair')
   const { phone: number, id } = unique()
   const messageId = `E2E-REACT-${id}`
-  await phone(request, sector.id, 'receive', {
+  await simulateMessaging(request, sector.id, 'receive', {
     externalMessageId: messageId,
     phone: number,
     contactName: 'Clara Cliente',
@@ -56,7 +61,7 @@ test('reação do cliente e do celular do setor chegam pela API e continuam depo
     return message!.reactions
   }
   const react = (emoji: string, fromSectorPhone = false) =>
-    phone(request, sector.id, 'react', {
+    simulateMessaging(request, sector.id, 'react', {
       targetExternalMessageId: messageId,
       phone: number,
       emoji,
