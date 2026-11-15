@@ -10,24 +10,22 @@ import (
 	"time"
 )
 
-const deleteMessageReaction = `-- name: DeleteMessageReaction :execrows
-delete from message_reactions
-where message_id = $1 and side = $2 and reacted_at <= $3
+const getMessageReactionEmoji = `-- name: GetMessageReactionEmoji :one
+select emoji from message_reactions
+where message_id = $1 and side = $2
 `
 
-type DeleteMessageReactionParams struct {
+type GetMessageReactionEmojiParams struct {
 	MessageID int64
 	Side      ReactionSide
-	ReactedAt time.Time
 }
 
-// Removes the reaction of a side, unless it is newer than the removal.
-func (q *Queries) DeleteMessageReaction(ctx context.Context, arg DeleteMessageReactionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteMessageReaction, arg.MessageID, arg.Side, arg.ReactedAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Reaction a side shows now: null when it was removed. No row: never reacted.
+func (q *Queries) GetMessageReactionEmoji(ctx context.Context, arg GetMessageReactionEmojiParams) (*string, error) {
+	row := q.db.QueryRow(ctx, getMessageReactionEmoji, arg.MessageID, arg.Side)
+	var emoji *string
+	err := row.Scan(&emoji)
+	return emoji, err
 }
 
 const getMessageRefByExternalID = `-- name: GetMessageRefByExternalID :one
@@ -53,27 +51,57 @@ func (q *Queries) GetMessageRefByExternalID(ctx context.Context, arg GetMessageR
 	return i, err
 }
 
+const removeMessageReaction = `-- name: RemoveMessageReaction :execrows
+insert into message_reactions (message_id, side, emoji, author_id, via_phone, reacted_at)
+values ($1, $2, null, null, false, $3)
+on conflict (message_id, side) do update
+set emoji = null, author_id = null, via_phone = false, reacted_at = excluded.reacted_at
+where message_reactions.reacted_at < excluded.reacted_at
+   or (message_reactions.reacted_at = excluded.reacted_at and message_reactions.emoji is not null)
+`
+
+type RemoveMessageReactionParams struct {
+	MessageID int64
+	Side      ReactionSide
+	ReactedAt time.Time
+}
+
+// Removes the reaction of a side but keeps the time of the removal, so that an
+// older event delivered again does not bring the reaction back. A removal that
+// arrives before any reaction is recorded too. An older removal changes
+// nothing, and the same one delivered again neither.
+func (q *Queries) RemoveMessageReaction(ctx context.Context, arg RemoveMessageReactionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeMessageReaction, arg.MessageID, arg.Side, arg.ReactedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertMessageReaction = `-- name: UpsertMessageReaction :execrows
 insert into message_reactions (message_id, side, emoji, author_id, via_phone, reacted_at)
 values ($1, $2, $3, $4, $5, $6)
 on conflict (message_id, side) do update
 set emoji = excluded.emoji, author_id = excluded.author_id, via_phone = excluded.via_phone, reacted_at = excluded.reacted_at
-where message_reactions.reacted_at <= excluded.reacted_at
-  and (message_reactions.emoji, message_reactions.author_id, message_reactions.via_phone, message_reactions.reacted_at)
-      is distinct from (excluded.emoji, excluded.author_id, excluded.via_phone, excluded.reacted_at)
+where message_reactions.reacted_at < excluded.reacted_at
+   or (message_reactions.reacted_at = excluded.reacted_at
+       and message_reactions.emoji is not null
+       and (message_reactions.emoji, message_reactions.author_id, message_reactions.via_phone)
+           is distinct from (excluded.emoji, excluded.author_id, excluded.via_phone))
 `
 
 type UpsertMessageReactionParams struct {
 	MessageID int64
 	Side      ReactionSide
-	Emoji     string
+	Emoji     *string
 	AuthorID  *int64
 	ViaPhone  bool
 	ReactedAt time.Time
 }
 
-// Sets the current reaction of a side. A reaction older than the recorded one
-// changes nothing, and neither does the same event delivered again.
+// Sets the current reaction of a side. An event older than the last change of
+// the side (a reaction or a removal) changes nothing, and neither does the same
+// event delivered again. A removal at the same time as a reaction wins over it.
 func (q *Queries) UpsertMessageReaction(ctx context.Context, arg UpsertMessageReactionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertMessageReaction,
 		arg.MessageID,

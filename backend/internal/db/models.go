@@ -652,7 +652,7 @@ type Message struct {
 type MessageReaction struct {
 	MessageID int64
 	Side      ReactionSide
-	Emoji     string
+	Emoji     *string
 	AuthorID  *int64
 	ViaPhone  bool
 	ReactedAt time.Time

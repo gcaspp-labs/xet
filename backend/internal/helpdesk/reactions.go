@@ -18,8 +18,9 @@ import (
 // phone of the sector, as the current reaction of its side of the message. A
 // reaction is not a message: one to a message of a closed ticket, or that the
 // system does not have, is discarded without opening a ticket or recording
-// anything. An older event than the recorded reaction changes nothing, and the
-// same event delivered again neither. The panels of the sector are notified
+// anything. A removal keeps the time of the event, so an older event than the
+// last change of the side, reaction or removal, changes nothing even when it
+// is delivered again, and the same event delivered again neither. The panels of the sector are notified
 // after the commit, only when something changed; the last message of the
 // ticket is not touched.
 func (s *Service) HandleReaction(ctx context.Context, ev messaging.ReactionReceived) error {
@@ -61,18 +62,27 @@ func (s *Service) HandleReaction(ctx context.Context, ev messaging.ReactionRecei
 		if ticket.Status == db.TicketStatusClosed {
 			return nil
 		}
+		// Only what the side shows counts as a change: a removal with nothing
+		// to remove is recorded for the order of events, but notifies no one.
+		shown := false
+		if cur, err := q.GetMessageReactionEmoji(ctx, db.GetMessageReactionEmojiParams{MessageID: target.ID, Side: side}); err == nil {
+			shown = cur != nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("get reaction: %w", err)
+		}
 		var n int64
 		if emoji == "" {
-			n, err = q.DeleteMessageReaction(ctx, db.DeleteMessageReactionParams{MessageID: target.ID, Side: side, ReactedAt: at})
+			n, err = q.RemoveMessageReaction(ctx, db.RemoveMessageReactionParams{MessageID: target.ID, Side: side, ReactedAt: at})
+			changed = n > 0 && shown
 		} else {
 			n, err = q.UpsertMessageReaction(ctx, db.UpsertMessageReactionParams{
-				MessageID: target.ID, Side: side, Emoji: emoji, ViaPhone: viaPhone, ReactedAt: at,
+				MessageID: target.ID, Side: side, Emoji: &emoji, ViaPhone: viaPhone, ReactedAt: at,
 			})
+			changed = n > 0
 		}
 		if err != nil {
 			return fmt.Errorf("save reaction: %w", err)
 		}
-		changed = n > 0
 		return nil
 	})
 	if err != nil {

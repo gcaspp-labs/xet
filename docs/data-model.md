@@ -356,18 +356,19 @@ Escolha de armazenamento (#197): uma tabela pequena, em vez de colunas em `messa
 | --- | --- | --- |
 | `message_id` | bigint → `messages` | Obrigatório; parte da chave primária |
 | `side` | reaction_side | Obrigatório; `customer` (o cliente) ou `sector` (o número do setor); parte da chave primária |
-| `emoji` | text | Obrigatório, não vazio. Reação vazia (remoção) apaga a linha |
+| `emoji` | text | Não vazio, ou vazio (`null`) quando a reação foi removida: a linha fica só para guardar o horário da remoção. A API mostra o lado como `null` |
 | `author_id` | bigint → `users` | Atendente que reagiu pelo sistema; só no lado `sector`; vazio quando a reação veio do celular ou o provedor não informa |
 | `via_phone` | boolean | `true` quando o provedor informa que a reação do setor foi feita pelo celular, fora do sistema; nunca junto com `author_id`; sempre `false` no lado `customer` |
-| `reacted_at` | timestamptz | Obrigatório; horário da reação segundo o provedor |
+| `reacted_at` | timestamptz | Obrigatório; horário da última alteração do lado (reação ou remoção) segundo o provedor |
 
 Restrições:
 
 - Chave primária `(message_id, side)`: uma reação por lado; a nova do mesmo lado substitui a anterior.
 - `side = 'customer'` ⇒ `author_id` vazio e `via_phone` falso (`message_reactions_customer_side`).
 - `author_id` preenchido ⇒ `via_phone` falso (`message_reactions_author_or_phone`).
+- `emoji` vazio (removida) ⇒ `author_id` vazio e `via_phone` falso (`message_reactions_removed`).
 
-Regras de gravação (`helpdesk/reactions.go`): o chamado da mensagem é travado (`for update`); reação a mensagem de chamado encerrado ou desconhecida é descartada, sem criar mensagem nem chamado. Um evento mais antigo que a reação gravada do mesmo lado não a altera (nem a remove), e o mesmo evento repetido não muda nada. Como a remoção apaga a linha, não há registro de remoção: um evento de reação atrasado que chegue depois de uma remoção mais nova volta a gravá-la (aceito, porque o provedor entrega em ordem na prática).
+Regras de gravação (`helpdesk/reactions.go`): o chamado da mensagem é travado (`for update`); reação a mensagem de chamado encerrado ou desconhecida é descartada, sem criar mensagem nem chamado. Um evento mais antigo que a última alteração gravada do mesmo lado, reação ou remoção, não muda nada, e o mesmo evento repetido também não: a remoção guarda o horário em vez de apagar a linha, então uma reação removida não volta quando um evento antigo é entregue de novo, e uma remoção que chega antes de uma reação mais antiga a descarta. No mesmo horário, a remoção vence a reação; entre reações do mesmo horário, vale a última recebida. Só muda o aviso ao painel quando o que o lado mostra muda: uma remoção sem reação a remover é gravada, mas não avisa.
 
 ### `media_files` — Arquivo
 
