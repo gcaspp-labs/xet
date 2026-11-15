@@ -28,6 +28,8 @@ import {
 } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
+// PROTÓTIPO #200: reações em três versões (?variant=A|B|C).
+import { ReactionShell, PrototypeSwitcher, variant as prototypeVariant } from '@/prototype/Reactions200'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
@@ -315,11 +317,13 @@ function MessageBubble({
   const prefix =
     outbound && message.origin === 'agent' ? message.body?.match(/^\*([^*\n]+:)\*(?:\n|$)/) : null
 
-  return (
-    <li
-      aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
+  // PROTÓTIPO #200: o balão vira uma função com espaços para as reações de cada versão.
+  const bubble = ({ footer, inside, overlay }: { footer?: ReactNode; inside?: ReactNode; overlay?: ReactNode }) => (
+    <div
       className={cn(
-        'flex max-w-[78%] flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+        'relative flex flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+        prototypeVariant() === 'A' ? 'min-w-0' : 'max-w-[78%]',
+        overlay && 'group/msg',
         modern
           ? outbound
             ? 'self-end rounded-br-(--radius-6) border-primary bg-primary text-primary-foreground'
@@ -329,6 +333,7 @@ function MessageBubble({
             : 'self-start border-line-soft bg-card',
       )}
     >
+      {overlay}
       {author && (
         <p
           className={cn(
@@ -360,7 +365,9 @@ function MessageBubble({
           </p>
         )
       )}
+      {inside}
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {footer}
         <span
           className={cn(
             'mono-num caption',
@@ -400,6 +407,14 @@ function MessageBubble({
           )}
         </div>
       )}
+    </div>
+  )
+  return (
+    <li
+      aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
+      className={cn('flex flex-col gap-1', outbound ? 'items-end' : 'items-start')}
+    >
+      <ReactionShell message={message} canAct={canRetry} outbound={outbound} modern={modern} bubble={bubble} />
     </li>
   )
 }
@@ -711,6 +726,7 @@ export function ConversationCard({
           </Empty>
         )}
       </div>
+      <PrototypeSwitcher />
       {retry.error && (
         <div className="px-3 pb-2">
           <Alert variant="warning">
