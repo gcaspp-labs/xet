@@ -3,6 +3,7 @@ import emojiData from 'emojibase-data/pt/compact.json'
 import { Smile } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 const categories = [
@@ -51,25 +52,37 @@ export function EmojiPicker({
     onSelect(emoji.unicode)
     setOpen(false)
   }
-  const navigate = (event: KeyboardEvent) => {
+  const focusEmoji = (index: number) => {
+    setActive(index)
+    grid.current?.querySelectorAll<HTMLButtonElement>('button')[index]?.focus()
+  }
+  const searchKeys = (event: KeyboardEvent) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      choose(active)
+    } else if (event.key === 'ArrowDown' && matches.length) {
+      event.preventDefault()
+      focusEmoji(0)
+    }
+  }
+  const tabKeys = (event: KeyboardEvent) => {
+    if (event.key === 'ArrowDown' && matches.length) {
+      event.preventDefault()
+      focusEmoji(0)
+    }
+  }
+  const gridKeys = (event: KeyboardEvent) => {
     const offsets: Record<string, number> = {
       ArrowRight: 1,
       ArrowLeft: -1,
       ArrowDown: 8,
       ArrowUp: -8,
     }
-    if (event.key === 'Enter' && event.target === search.current) {
-      event.preventDefault()
-      choose(active)
-    } else if (event.key in offsets && matches.length) {
-      event.preventDefault()
-      const next =
-        event.target === search.current
-          ? 0
-          : Math.max(0, Math.min(matches.length - 1, active + offsets[event.key]))
-      setActive(next)
-      grid.current?.querySelectorAll<HTMLButtonElement>('button')[next]?.focus()
-    }
+    if (!(event.key in offsets)) return
+    event.preventDefault()
+    const next = active + offsets[event.key]
+    if (next < 0) search.current?.focus()
+    else focusEmoji(Math.min(matches.length - 1, next))
   }
 
   return (
@@ -92,7 +105,6 @@ export function EmojiPicker({
         className="w-80 p-3"
         initialFocus={search}
         finalFocus={returnFocus}
-        onKeyDown={navigate}
       >
         <Input
           ref={search}
@@ -100,36 +112,44 @@ export function EmojiPicker({
           aria-label="Buscar emoji"
           placeholder="Buscar emoji"
           value={query}
+          onKeyDown={searchKeys}
           onChange={(event) => {
             setQuery(event.target.value)
             setActive(0)
           }}
         />
-        <div
-          role="tablist"
-          aria-label="Categorias de emojis"
-          className="flex justify-between gap-1 py-2"
+        <Tabs
+          value={query ? null : group}
+          onValueChange={(value) => {
+            setGroup(value as number)
+            setQuery('')
+            setActive(0)
+          }}
         >
-          {categories.map((category) => (
-            <button
-              key={category.group}
-              type="button"
-              role="tab"
-              aria-label={category.label}
-              aria-selected={group === category.group && !query}
-              className="rounded-(--radius-7) p-1 hover:bg-muted aria-selected:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-              onClick={() => {
-                setGroup(category.group)
-                setQuery('')
-                setActive(0)
-              }}
-            >
-              <span aria-hidden>{category.icon}</span>
-            </button>
-          ))}
-        </div>
+          <TabsList
+            aria-label="Categorias de emojis"
+            className="justify-between gap-1 border-b-0 py-1"
+            onKeyDown={tabKeys}
+          >
+            {categories.map((category) => (
+              <TabsTrigger
+                key={category.group}
+                value={category.group}
+                aria-label={category.label}
+                className="rounded-(--radius-7) border-b-0 p-1 hover:bg-muted data-active:bg-muted"
+              >
+                <span aria-hidden>{category.icon}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         {matches.length ? (
-          <div ref={grid} aria-label="Emojis" className="grid max-h-56 grid-cols-8 overflow-y-auto">
+          <div
+            ref={grid}
+            aria-label="Emojis"
+            onKeyDown={gridKeys}
+            className="grid max-h-56 grid-cols-8 overflow-y-auto"
+          >
             {matches.map((emoji, index) => (
               <button
                 key={emoji.hexcode}
