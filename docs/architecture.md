@@ -177,6 +177,7 @@ Ferramentas de desenvolvimento (não entram no binário, executadas via Docker c
 | Ícones | lucide-react, com traço 1,7 |
 | Notificações na tela | sonner |
 | Datas | date-fns (locale pt-BR) |
+| Dados de emojis | `emojibase-data` 18.0.0 (MIT): catálogo local com nomes em português para busca; o pacote completo ocupa cerca de 52 MB instalado, mas só o arquivo compacto em português (584 kB antes da compressão) entra no frontend. A busca por nome é feita no próprio navegador, sem serviço externo |
 | Tempo real | WebSocket nativo do navegador |
 | Gravação de áudio | MediaRecorder nativo do navegador |
 | Testes ponta a ponta | Playwright |

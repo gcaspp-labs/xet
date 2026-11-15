@@ -28,6 +28,7 @@ import {
 } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
+import { EmojiPicker } from '@/components/EmojiPicker'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
 import type { HistoryReturnState } from '@/lib/history-return'
@@ -414,6 +415,19 @@ function Composer({ ticketId }: { ticketId: number }) {
   // quando o conteúdo muda.
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const messageInput = useRef<HTMLTextAreaElement>(null)
+
+  const insertEmoji = (emoji: string) => {
+    const input = messageInput.current
+    if (!input) return
+    const start = input.selectionStart
+    const end = input.selectionEnd
+    changeText(text.slice(0, start) + emoji + text.slice(end))
+    requestAnimationFrame(() => {
+      input.focus()
+      input.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
+  }
 
   const changeText = (value: string) => {
     requestId.current = null
@@ -569,7 +583,9 @@ function Composer({ ticketId }: { ticketId: number }) {
           >
             <Paperclip strokeWidth={1.7} aria-hidden />
           </Button>
+          <EmojiPicker onSelect={insertEmoji} returnFocus={messageInput} />
           <Textarea
+            ref={messageInput}
             aria-label={file ? 'Legenda do arquivo' : 'Mensagem'}
             placeholder={file ? 'Legenda (opcional)' : 'Escreva a mensagem'}
             rows={1}

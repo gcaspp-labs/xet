@@ -73,6 +73,22 @@ await journey('reply', async (t) => {
     },
   )
 
+  await t.step('Seletor de emojis: busca, insere no cursor e a mensagem sai com o emoji', async () => {
+    await composer.fill('Obrigada')
+    await agentPage.getByRole('button', { name: 'Inserir emoji' }).click()
+    const search = agentPage.getByRole('searchbox', { name: 'Buscar emoji' })
+    await expect(search).toBeFocused()
+    await expect(agentPage.getByLabel('Emojis').getByRole('button').first()).toBeVisible()
+    await t.shot(agentPage, 'seletor-aberto')
+    await search.fill('coração vermelho')
+    await search.press('Enter')
+    await expect(composer).toHaveValue('Obrigada❤️')
+    await expect(composer).toBeFocused()
+    await t.shot(agentPage, 'emoji-inserido')
+    await composer.press('Enter')
+    await expect(sent('Obrigada❤️')).toContainText('Enviada')
+  })
+
   await t.step('Supervisor vê a resposta na outra janela, sem recarregar', async () => {
     await expect(supervisorConversation).toContainText('Segue o contracheque em anexo.')
     await t.shot(supervisorPage, 'supervisor-acompanha')
@@ -165,6 +181,7 @@ await journey('reply', async (t) => {
     expect(messages.map((message) => [message.direction, message.status])).toEqual([
       ['inbound', null],
       ['outbound', 'read'],
+      ['outbound', 'sent'],
       ['outbound', 'sent'],
       ['outbound', 'sent'],
     ])
