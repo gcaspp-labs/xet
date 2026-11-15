@@ -32,7 +32,8 @@ A migração futura para a API oficial do WhatsApp (Cloud API) deve consistir em
 O pacote `internal/helpdesk/messaging` define a interface e os tipos neutros; cada provedor fica em um subpacote (`internal/helpdesk/messaging/whatsmeow`, futuramente `internal/helpdesk/messaging/cloudapi`).
 
 - **Envio:** `SendText`, `SendMedia` (imagem, vídeo, áudio, documento) com destinatário, conteúdo e identificador de idempotência; retorna o identificador externo da mensagem.
-- **Eventos recebidos:** mensagem recebida, mensagem enviada por fora do sistema, atualização de status (enviada, entregue, lida, falhou), mudança de conexão. O adaptador entrega eventos já traduzidos para os tipos neutros; o domínio nunca vê tipos do provedor.
+- **Eventos recebidos:** mensagem recebida, mensagem enviada por fora do sistema, atualização de status (enviada, entregue, lida, falhou), reação recebida, mudança de conexão. O adaptador entrega eventos já traduzidos para os tipos neutros; o domínio nunca vê tipos do provedor.
+- **Reação recebida (`ReactionReceived`):** a reação do cliente, ou a feita pelo celular do setor, a uma mensagem. Identifica a mensagem alvo **só pelo identificador externo** (`TargetExternalMessageID`), com o contato (como em `Message`), o emoji (vazio = remoção), a hora e se é de grupo. `FromSectorPhone` (reação feita pelo celular do setor, fora do sistema) é **opcional**: o provedor que não sabe informar deixa falso, e a tela não pode depender dele. O domínio grava a reação atual por mensagem e lado em `message_reactions` (ver [data-model.md](data-model.md)); a reação não vira mensagem.
 - **Mídia:** o adaptador baixa a mídia e entrega o conteúdo; o domínio grava pelo adaptador de armazenamento. Acima do limite de recebimento (100 MB), ou se o download falhar depois de algumas tentativas, o adaptador entrega a mensagem sem o conteúdo (`media_unavailable`), sem baixar o arquivo.
 - **Conexão:** iniciar, encerrar e consultar status por setor. O pareamento por QR code é específico do Whatsmeow e fica fora do contrato comum, exposto apenas pelo adaptador Whatsmeow (interface opcional `QRPairing`). O evento de conexão informa o telefone da conta vinculada.
 - **Contato:** resolver telefone em identificador externo do contato.
@@ -49,7 +50,7 @@ O pacote `internal/helpdesk/messaging` define a interface e os tipos neutros; ca
 ### Adaptador falso
 
 - `internal/helpdesk/messaging/fake` implementa o contrato para os testes de integração do backend.
-- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número, mensagens recebidas (texto, imagem, vídeo, áudio, documento e arquivo indisponível), confirmações de entrega e leitura das mensagens enviadas e a agenda do número. O padrão é `whatsmeow`, e em produção essas rotas não existem.
+- Com `MESSAGING_PROVIDER=fake`, o servidor usa o adaptador falso no lugar do Whatsmeow. Esse modo existe para os testes ponta a ponta, que rodam contra o backend real: só nele existem as rotas `/api/test/messaging/...`, que simulam a leitura e a troca do QR code, a desconexão do número, mensagens recebidas (texto, imagem, vídeo, áudio, documento e arquivo indisponível), confirmações de entrega e leitura das mensagens enviadas, reações recebidas (do cliente e do celular do setor, inclusive a remoção) e a agenda do número. O padrão é `whatsmeow`, e em produção essas rotas não existem.
 
 ### Regras
 
@@ -63,6 +64,12 @@ O pacote `internal/helpdesk/messaging` define a interface e os tipos neutros; ca
 - Fora da janela de 24 horas desde a última mensagem do cliente, só é possível enviar modelos (templates) aprovados pela Meta. Isso afeta iniciar conversas e a primeira mensagem em transferências entre setores, que hoje são texto livre.
 - Cobrança por conversa ou mensagem, conforme a tabela da Meta.
 - Não há QR code; o número é registrado na plataforma da Meta.
+
+**Reações recebidas** (pesquisado em 15/11/2026, na [documentação do webhook de reação](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/reaction/)). Nada abaixo muda o que se constrói com o Whatsmeow; o contrato só precisa tolerar.
+
+- **Documentado:** o webhook de reação traz `reaction.message_id` e `emoji`; quando o cliente **remove** a reação, o webhook vem **sem o campo `emoji`** (não vem texto vazio). O contrato mantém "emoji vazio = remoção": o futuro adaptador traduz a ausência do campo para o vazio.
+- **Documentado:** o gatilho descrito é o cliente reagir a uma mensagem **enviada pela empresa** nos **últimos 30 dias**.
+- **A confirmar na migração** (a documentação consultada não diz; não é proibição): se a reação do cliente a uma mensagem **dele mesmo** (recebida) chega pela Cloud API — se não chegar, simplesmente não há reação, e o contrato não exige o evento; se a reação a uma mensagem com **mais de 30 dias** chega — o XET não impõe limite de idade, e o que chegar o domínio trata pelas regras de reação; e se existe evento de reação **feita pelo celular do setor** (`FromSectorPhone`) — o contrato trata a indicação como opcional.
 
 ## Regras críticas no banco
 

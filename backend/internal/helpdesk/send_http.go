@@ -33,6 +33,29 @@ type messageResponse struct {
 	SentAt        time.Time           `json:"sentAt"`
 	Author        *httpx.Ref          `json:"author"`
 	Media         *mediaResponse      `json:"media"`
+	Reactions     reactionsResponse   `json:"reactions"`
+}
+
+// reactionsResponse holds the current reaction of each side of a message; a
+// side without reaction is null.
+type reactionsResponse struct {
+	Customer *customerReactionResponse `json:"customer"`
+	Sector   *sectorReactionResponse   `json:"sector"`
+}
+
+type customerReactionResponse struct {
+	Emoji string    `json:"emoji"`
+	At    time.Time `json:"at"`
+}
+
+// sectorReactionResponse tells who reacted for the sector: the agent (by), or
+// viaPhone when it came from the phone of the sector. Both are empty when the
+// provider does not say, and nothing may depend on either.
+type sectorReactionResponse struct {
+	Emoji    string     `json:"emoji"`
+	At       time.Time  `json:"at"`
+	By       *httpx.Ref `json:"by"`
+	ViaPhone bool       `json:"viaPhone"`
 }
 
 func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
@@ -48,6 +71,16 @@ func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
 	}
 	if m.MediaID != nil && m.MediaMimeType != nil && m.MediaSizeBytes != nil {
 		out.Media = &mediaResponse{ID: *m.MediaID, MimeType: *m.MediaMimeType, FileName: m.MediaFileName, SizeBytes: *m.MediaSizeBytes, DurationSeconds: m.MediaDurationSeconds}
+	}
+	if m.CustomerReactionEmoji != nil && m.CustomerReactionAt != nil {
+		out.Reactions.Customer = &customerReactionResponse{Emoji: *m.CustomerReactionEmoji, At: *m.CustomerReactionAt}
+	}
+	if m.SectorReactionEmoji != nil && m.SectorReactionAt != nil {
+		r := &sectorReactionResponse{Emoji: *m.SectorReactionEmoji, At: *m.SectorReactionAt, ViaPhone: m.SectorReactionViaPhone != nil && *m.SectorReactionViaPhone}
+		if m.SectorReactionAuthorID != nil && m.SectorReactionAuthorName != nil {
+			r.By = &httpx.Ref{ID: *m.SectorReactionAuthorID, Name: *m.SectorReactionAuthorName}
+		}
+		out.Reactions.Sector = r
 	}
 	return out
 }

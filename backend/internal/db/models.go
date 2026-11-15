@@ -396,6 +396,64 @@ func AllMessageTypeValues() []MessageType {
 	}
 }
 
+type ReactionSide string
+
+const (
+	ReactionSideCustomer ReactionSide = "customer"
+	ReactionSideSector   ReactionSide = "sector"
+)
+
+func (e *ReactionSide) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ReactionSide(s)
+	case string:
+		*e = ReactionSide(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ReactionSide: %T", src)
+	}
+	return nil
+}
+
+type NullReactionSide struct {
+	ReactionSide ReactionSide
+	Valid        bool // Valid is true if ReactionSide is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullReactionSide) Scan(value interface{}) error {
+	if value == nil {
+		ns.ReactionSide, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ReactionSide.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullReactionSide) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ReactionSide), nil
+}
+
+func (e ReactionSide) Valid() bool {
+	switch e {
+	case ReactionSideCustomer,
+		ReactionSideSector:
+		return true
+	}
+	return false
+}
+
+func AllReactionSideValues() []ReactionSide {
+	return []ReactionSide{
+		ReactionSideCustomer,
+		ReactionSideSector,
+	}
+}
+
 type TicketStatus string
 
 const (
@@ -589,6 +647,15 @@ type Message struct {
 	SentAt            time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+}
+
+type MessageReaction struct {
+	MessageID int64
+	Side      ReactionSide
+	Emoji     *string
+	AuthorID  *int64
+	ViaPhone  bool
+	ReactedAt time.Time
 }
 
 type Module struct {

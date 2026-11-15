@@ -40,8 +40,9 @@ const (
 	TypeVideo    MessageType = "video"
 	TypeAudio    MessageType = "audio"
 	TypeDocument MessageType = "document"
-	// TypeUnsupported covers stickers, reactions, locations and other types
-	// outside the pilot, kept as a notice in the history.
+	// TypeUnsupported covers stickers, locations and other types outside the
+	// pilot, kept as a notice in the history. Reactions are not messages: they
+	// arrive as ReactionReceived.
 	TypeUnsupported MessageType = "unsupported"
 	// TypeMediaUnavailable is a received file above MaxReceivedFileSize or that
 	// did not download, delivered without content. Body holds the caption or
@@ -125,10 +126,33 @@ type StatusUpdated struct {
 	At                 time.Time
 }
 
+// ReactionReceived is a reaction to a message of a chat with a contact, made
+// by the contact or from the phone of the sector. It points at the target only
+// by its provider message ID, which every provider has. An empty Emoji removes
+// the reaction.
+type ReactionReceived struct {
+	SectorID int64
+	// TargetExternalMessageID is the provider ID of the message reacted to.
+	TargetExternalMessageID string
+	// ExternalContactID and Phone identify the contact of the chat, as in Message.
+	ExternalContactID string
+	Phone             string
+	// Group reports a reaction in a group chat or broadcast list.
+	Group bool
+	// Emoji is the reaction; empty removes the one the author had set.
+	Emoji string
+	// FromSectorPhone reports a reaction made from the phone of the sector,
+	// outside the system. Optional: a provider that cannot tell leaves it
+	// false, and nothing may depend on it being set.
+	FromSectorPhone bool
+	At              time.Time
+}
+
 func (e ConnectionChanged) Sector() int64  { return e.SectorID }
 func (e MessageReceived) Sector() int64    { return e.SectorID }
 func (e MessageSentOutside) Sector() int64 { return e.SectorID }
 func (e StatusUpdated) Sector() int64      { return e.SectorID }
+func (e ReactionReceived) Sector() int64   { return e.SectorID }
 
 // EventHandler receives the events of every sector. A returned error tells
 // the provider the event was not processed, so it may be delivered again.
