@@ -47,18 +47,28 @@ export function useQueryState() {
 }
 
 // Página e ordem da lista guardadas no endereço (?pagina=, ?ordem=, ?direcao=), com o
-// nome da coluna na tela ligado ao nome na API. Sem parâmetro, a ordem padrão
-// crescente e a página 1; valor desconhecido também cai nelas, e coluna desconhecida
-// volta à ordem padrão inteira, crescente, como na API.
+// nome da coluna na tela ligado ao nome na API. Sem parâmetro, a ordem é a da coluna
+// padrão, na direção padrão (crescente, a não ser que a lista diga outra), e a página 1.
+// Cada coluna começa crescente, menos a padrão, que começa na direção padrão; o endereço
+// só guarda a direção quando ela difere da inicial da coluna. Valor desconhecido cai na
+// ordem padrão inteira, como na API.
 export function usePagedList<Sort extends string>(
   columns: Record<string, Sort>,
   defaultColumn: string,
+  defaultDirection: SortDirection = 'asc',
 ) {
   const { params, update } = useQueryState()
   const chosen = params.get('ordem') ?? defaultColumn
   const known = Object.hasOwn(columns, chosen)
   const column = known ? chosen : defaultColumn
-  const direction: SortDirection = known && params.get('direcao') === 'desc' ? 'desc' : 'asc'
+  const firstDirection = (of: string): SortDirection =>
+    of === defaultColumn ? defaultDirection : 'asc'
+  const asked = params.get('direcao')
+  const direction: SortDirection = !known
+    ? defaultDirection
+    : asked === 'asc' || asked === 'desc'
+      ? asked
+      : firstDirection(column)
   const page = Math.max(1, Math.trunc(Number(params.get('pagina'))) || 1)
   return {
     column,
@@ -72,12 +82,13 @@ export function usePagedList<Sort extends string>(
         update({ pagina: served === 1 ? null : String(served) }, true)
       }
     },
-    // Clicar na coluna ativa inverte a direção; outra coluna começa crescente.
+    // Clicar na coluna ativa inverte a direção; outra coluna começa na direção inicial dela.
     toggleSort: (next: string) => {
-      const nextDirection = column === next && direction === 'asc' ? 'desc' : 'asc'
+      const nextDirection: SortDirection =
+        column === next ? (direction === 'asc' ? 'desc' : 'asc') : firstDirection(next)
       update({
         ordem: next === defaultColumn ? null : next,
-        direcao: nextDirection === 'asc' ? null : 'desc',
+        direcao: nextDirection === firstDirection(next) ? null : nextDirection,
         pagina: null,
       })
     },

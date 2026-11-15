@@ -4,7 +4,7 @@ import { type Role, useCurrentUser } from '@/lib/auth'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
-import PanelPage from '@/pages/PanelPage'
+import AtendimentosPage from '@/pages/AtendimentosPage'
 import ConversasPage from '@/pages/ConversasPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
@@ -48,7 +48,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/atendimentos" element={<PanelPage />} />
+          <Route path="/atendimentos" element={<AtendimentosPage />} />
           <Route path="/atendimentos/:ticketId" element={<TicketPage />} />
           <Route path="/chamados" element={<ConversasPage />} />
           <Route path="/chamados/:ticketId" element={<ConversasPage />} />

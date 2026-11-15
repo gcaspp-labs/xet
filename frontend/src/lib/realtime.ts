@@ -1,11 +1,12 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { closedTicketsKey } from '@/lib/closed-tickets'
 import { connectionKey } from '@/lib/connection'
 import { historyKey, ticketKey } from '@/lib/conversation'
 import { dashboardAssigneesKey, dashboardKey } from '@/lib/dashboard'
 import { contactsKey } from '@/lib/directory'
 import { resetQueueBaseline } from '@/lib/notifications'
-import { closedTodayKey, ticketsKey, workloadKey } from '@/lib/tickets'
+import { ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Avisos do backend (docs/architecture.md, Tempo real): dizem o que mudou, e os dados
 // são recarregados pela API.
@@ -23,7 +24,7 @@ function handle(queryClient: QueryClient, event: RealtimeEvent) {
     case 'ticket':
       void queryClient.invalidateQueries({ queryKey: ticketsKey(event.sectorId) })
       void queryClient.invalidateQueries({ queryKey: workloadKey(event.sectorId) })
-      void queryClient.invalidateQueries({ queryKey: closedTodayKey(event.sectorId) })
+      void queryClient.invalidateQueries({ queryKey: closedTicketsKey })
       void queryClient.invalidateQueries({ queryKey: dashboardKey })
       void queryClient.invalidateQueries({ queryKey: dashboardAssigneesKey(event.sectorId) })
       // Conversa e histórico abertos do chamado.
