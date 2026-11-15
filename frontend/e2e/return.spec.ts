@@ -7,6 +7,7 @@ import {
   unique,
   userPassword,
   chooseAction,
+  openQueued,
 } from './fixtures'
 
 test('chamado devolvido volta à fila, e outra pessoa assume', async ({
@@ -54,7 +55,7 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   // Na fila, a ação não aparece: o chamado é assumido.
   const toasts = await recordToasts(page)
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: 'Joana Devolvida' }).click()
+  await openQueued(page, 'Joana Devolvida')
   const url = page.url()
   await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Mais ações' }).click()

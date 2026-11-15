@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { admin, seedClosedTicket, seedSector, signIn, userPassword } from './fixtures'
+import { admin, login, seedClosedTicket, seedSector, signIn, userPassword } from './fixtures'
 
 const sidebar = '[data-slot=sidebar-inner]'
 
@@ -22,7 +22,9 @@ test('cabeçalho fica fixo com a marca e o sino de notificações, acima da barr
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 400 })
-  await signIn(page, admin.email, admin.password)
+  // O Dashboard, a tela inicial do administrador, é mais alta que a janela e rola.
+  await login(page, admin.email, admin.password)
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
   const header = page.getByRole('banner')
   await expect(header).toContainText('GCASPP LAB')
   await expect(header).toContainText('Central de Atendimento')

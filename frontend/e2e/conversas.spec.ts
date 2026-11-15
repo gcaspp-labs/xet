@@ -260,8 +260,8 @@ test('supervisor e administrador assumem na fila dos setores permitidos', async 
   const adminContext = await browser.newContext()
   const adminPage = await adminContext.newPage()
   await signIn(adminPage, admin.email, admin.password)
-  await adminPage.getByRole('link', { name: 'Chamados', exact: true }).click()
-  await expect(adminPage.getByText('Você não tem atendimentos ativos.')).toBeVisible()
+  // O administrador é um só para todos os testes: seus chamados ativos de outros testes não
+  // dizem nada sobre este, então a tela vazia não é conferida; o chamado assumido é.
   await adminPage.getByRole('button', { name: 'Assumir chamado de Cliente de outro setor' }).click()
   await expect(adminPage.getByRole('navigation', { name: 'Meus chamados' })).toContainText(
     'Cliente de outro setor',

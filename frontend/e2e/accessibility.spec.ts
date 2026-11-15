@@ -1,5 +1,5 @@
 import { expect, request as apiRequest, test, type Page } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, openQueued, seedSector, signIn, unique, userPassword } from './fixtures'
 
 type Preferences = { theme?: 'light' | 'dark'; size?: 'large' | 'larger'; contrast?: boolean }
 
@@ -50,7 +50,7 @@ async function receive(baseURL: string, sectorId: number) {
 
 // Abre a conversa e assume: a tela de maior densidade, com o formulário de encerramento a um clique.
 async function openAssignedTicket(page: Page, contact: string) {
-  await page.getByRole('link', { name: contact }).first().click()
+  await openQueued(page, contact)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
 }
@@ -216,7 +216,7 @@ async function chooseInMenu(page: Page, role: 'menuitemradio' | 'menuitemcheckbo
 test('tamanho do texto muda o texto medido e sobrevive ao recarregar', async ({ page }) => {
   await signIn(page, admin.email, admin.password)
   const html = page.locator('html')
-  const heading = page.getByRole('heading', { name: 'Atendimentos' })
+  const heading = page.getByRole('heading', { name: 'Chamados' })
   await expect(heading).toBeVisible()
   expect(await fontSize(page, 'body')).toBe(14)
   expect(await fontSize(page, 'h1')).toBe(19)
@@ -249,7 +249,7 @@ test('tamanho do texto muda o texto medido e sobrevive ao recarregar', async ({ 
 test('o aviso temporário acompanha o tamanho escolhido', async ({ page, baseURL }) => {
   const { sector, agent } = await connectedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
 
   for (const [label, expected] of [
     ['Padrão', 13],
@@ -386,7 +386,7 @@ test('alto contraste muda as cores nos temas claro e escuro e combina com o tama
 
   await chooseInMenu(page, 'menuitemradio', 'Maior')
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
   await expect(body).toHaveCSS('background-color', 'rgb(255, 255, 255)')
   await expect(body).toHaveCSS('font-size', '18.2px')
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -414,7 +414,7 @@ for (const theme of ['light', 'dark'] as const) {
     await signIn(page, agent, userPassword)
 
     // Painel, com barra lateral e status.
-    await expect(page.getByRole('link', { name: queued }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: `Assumir chamado de ${queued}` })).toBeVisible()
     await expectContrast(page, 'painel')
 
     // Sino aberto, com a fila.
@@ -488,7 +488,7 @@ for (const theme of ['light', 'dark'] as const) {
     const page = await context.newPage()
     await prefer(page, { theme, contrast: true })
     await signIn(page, supervisor, userPassword)
-    await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
 
     // Foco em 3px, com contraste medido contra o fundo; vale até para os campos de texto.
     const bell = page.getByRole('banner').getByRole('button', { name: /^Notificações/ })
@@ -588,7 +588,7 @@ test('em "Maior", no computador, as ações do painel e o título da conversa fi
   const page = await context.newPage()
   await prefer(page, { size: 'larger' })
   await signIn(page, agent, userPassword)
-  const queue = page.getByRole('region', { name: 'Fila do setor' })
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
   await expect(queue.getByRole('button', { name: 'Assumir' })).toBeInViewport({ ratio: 1 })
 
   await openAssignedTicket(page, contact)
@@ -602,7 +602,7 @@ test('em "Maior", no computador, as ações do painel e o título da conversa fi
 test('o medidor de contraste aponta os textos fracos do tema normal', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await signIn(page, admin.email, admin.password)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
   const { failures } = await auditContrast(page, 7)
   expect(failures.length).toBeGreaterThan(0)
 })

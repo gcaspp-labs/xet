@@ -70,10 +70,10 @@ test('atendente busca um contato e inicia o chamado pelo número do setor', asyn
     `${agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')} abriu e assumiu o chamado`,
   )
   const ticketUrl = page.url()
-  await page.getByRole('link', { name: 'Atendimentos' }).click()
-  await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText(
-    `Prefeitura ${id} — ${defaultMunicipality}`,
-  )
+  // O chamado já nasce com o órgão do contato.
+  const detail = await page.request.get(`/api/tickets/${ticketUrl.split('/').pop()}`)
+  const organization = ((await detail.json()) as { organization: { name: string } }).organization
+  expect(organization.name).toBe(`Prefeitura ${id}`)
   await page.goto(ticketUrl)
 
   // Outro integrante do setor que abre um chamado com o mesmo contato é levado ao

@@ -192,7 +192,7 @@ test('atendente não vê a conexão nem o aviso de desconexão', async ({ page, 
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
 
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Conexão' })).toBeHidden()
   await expect(page.getByText(/desconectado\./)).toBeHidden()
   await page.goto('/conexao')

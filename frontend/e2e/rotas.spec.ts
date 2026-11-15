@@ -81,7 +81,7 @@ test('chamado encerrado em /chamados/:id vai para /atendimentos/:id, trocando o 
   )
   // O endereço antigo foi substituído: voltar não passa por /chamados/:id.
   await page.goBack()
-  await expect(page).toHaveURL(/\/atendimentos$/)
+  await expect(page).toHaveURL(/\/chamados$/)
 })
 
 test('quem está com o chamado aberto em Chamados vai para Atendimentos quando ele é encerrado por outra pessoa', async ({

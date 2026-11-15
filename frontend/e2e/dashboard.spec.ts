@@ -198,7 +198,7 @@ test('administrador alterna entre todos os setores e um setor; atendente e módu
 test('atendente não vê o item e, pelo endereço, volta a Chamados', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
 
   await page.goto('/dashboard')

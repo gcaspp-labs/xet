@@ -5,7 +5,16 @@ import {
   type Page,
   type WebSocketRoute,
 } from '@playwright/test'
-import { admin, seedSector, signIn, test, unique, userPassword, chooseAction } from './fixtures'
+import {
+  admin,
+  seedSector,
+  signIn,
+  test,
+  unique,
+  userPassword,
+  chooseAction,
+  openQueued,
+} from './fixtures'
 
 async function connectSector(baseURL: string, sectorId: number) {
   const api = await apiRequest.newContext({ baseURL })
@@ -125,7 +134,7 @@ test('assumir pelo sino não muda a tela e "Abrir chamado" leva à tela Chamados
   await receive(request, sector.id, 'Davi Fila')
   await receive(request, sector.id, 'Eva Fila')
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
   const openedAt = page.url()
 
   await bellOf(page).click()
@@ -221,7 +230,7 @@ test('item sai quando outra pessoa cancela o chamado', async ({
   const otherContext = await browser.newContext()
   const other = await otherContext.newPage()
   await signIn(other, supervisor, userPassword)
-  await other.getByRole('link', { name: 'Lauro Golpe' }).click()
+  await openQueued(other, 'Lauro Golpe')
   await chooseAction(other, 'Cancelar chamado')
   const sheet = other.getByRole('dialog', { name: 'Cancelar chamado' })
   await sheet.getByLabel('Motivo').fill('Golpe do falso boleto.')
@@ -281,7 +290,7 @@ test('voltar a rede não repete o aviso dos chamados que entraram durante a qued
   const { sector, agent } = await connectedSector(baseURL!, request)
   await signIn(page, agent, userPassword)
   // A fila precisa ter carregado: a primeira carga é a referência e não avisa.
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await receive(request, sector.id, 'Gabi Antes')
   await expect(page.getByText('Chamado recebido: Gabi Antes')).toBeVisible()
   await expect(page.getByText('Chamado recebido: Gabi Antes')).toBeHidden()
@@ -316,7 +325,7 @@ test('queda real do WebSocket não repete o aviso quando a conexão reabre', asy
   })
   await signIn(page, agent, userPassword)
   // A fila precisa ter carregado: a primeira carga é a referência e não avisa.
-  await expect(page.getByText('Nenhum chamado na fila.')).toBeVisible()
+  await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   // No desenvolvimento, o StrictMode do React abre e fecha uma conexão a mais.
   await expect.poll(() => sockets.length).toBeGreaterThan(0)
   const opened = sockets.length
@@ -343,7 +352,7 @@ test('atendente de outro setor não vê o chamado e não vê número desconectad
   const second = await seedSector(baseURL!)
   await receive(request, first.sector.id, 'Ivo Outro Setor')
   await signIn(page, second.agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
 
   // O setor do atendente não tem número conectado, mas só supervisor e administrador são avisados.
   await bellOf(page).click()
@@ -397,7 +406,7 @@ test('administrador não vê os chamados no sino, mas os vê e assume pelo paine
   await receive(request, sector.id, 'Julia Antiga')
   await signIn(page, admin.email, admin.password)
   const bell = bellOf(page)
-  await expect(page.getByRole('link', { name: 'Julia Antiga' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Assumir chamado de Julia Antiga' })).toBeVisible()
   await expect(bell).toHaveAccessibleName('Notificações')
   await expect(page).toHaveTitle('Central de Atendimento')
 
@@ -410,7 +419,7 @@ test('administrador não vê os chamados no sino, mas os vê e assume pelo paine
   // dele estaria na tela. A contagem é pontual: o toHaveCount(0) passaria com o aviso já fechado.
   await receive(request, sector.id, 'Kleber Novo')
   await expect(other.getByText('Chamado recebido: Kleber Novo')).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Kleber Novo' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Assumir chamado de Kleber Novo' })).toBeVisible()
   expect(await page.getByText('Chamado recebido: Kleber Novo').count()).toBe(0)
   await expect(page.getByTestId('notification-count')).toBeHidden()
   await expect(bell).toHaveAccessibleName('Notificações')
@@ -434,8 +443,7 @@ test('administrador não vê os chamados no sino, mas os vê e assume pelo paine
   await other.keyboard.press('Escape')
 
   // Pelo painel, o administrador assume como sempre, e o item sai do sino do supervisor.
-  await page.getByRole('link', { name: 'Kleber Novo' }).click()
-  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await page.getByRole('button', { name: 'Assumir chamado de Kleber Novo' }).click()
   await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
   await expect(bellOf(other)).toHaveAccessibleName('Notificações, 1 pendente')
   await otherContext.close()

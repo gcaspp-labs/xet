@@ -10,6 +10,8 @@ import {
   unique,
   userPassword,
   chooseAction,
+  openQueued,
+  queuedTicketId,
 } from './fixtures'
 
 type Response = { ok(): boolean; json(): Promise<unknown> }
@@ -408,7 +410,7 @@ test('busca e copia soluções sem interromper a conversa', async ({ page, conte
 test('a aba e a busca não passam para outra pessoa depois de sair', async ({ page, baseURL }) => {
   const { agent, supervisor, contacts } = await prepare(baseURL!, ['Férias'], 1)
   await signIn(page, agent, userPassword)
-  await page.getByRole('link', { name: contacts[0] }).click()
+  await openQueued(page, contacts[0])
   const card = page.getByRole('region', { name: 'Fila e assuntos' })
   await card.getByRole('tab', { name: 'Assuntos' }).click()
   await card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' }).fill('ferias')
@@ -426,8 +428,7 @@ test('a aba e a busca não passam para outra pessoa depois de sair', async ({ pa
   await page.getByLabel('Senha').fill(userPassword)
   await page.getByRole('button', { name: 'Entrar' }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
-  await page.goto('/atendimentos')
-  await page.getByRole('link', { name: contacts[0] }).click()
+  await openQueued(page, contacts[0])
   await expect(card.getByRole('tab', { name: 'Fila' })).toHaveAttribute('aria-selected', 'true')
   await card.getByRole('tab', { name: 'Assuntos' }).click()
   await expect(card.getByRole('searchbox', { name: 'Buscar assuntos e soluções' })).toHaveValue('')
@@ -438,7 +439,7 @@ test('aba respeita responsável, setor e tela estreita', async ({ page, browser,
   const second = await prepare(baseURL!, [], 1)
   await addSolutions(baseURL!, first.sector.id, 'Folha', ['Solução exclusiva do primeiro setor.'])
   await signIn(page, first.agent, userPassword)
-  await page.getByRole('link', { name: first.contacts[0] }).click()
+  await openQueued(page, first.contacts[0])
   const firstUrl = page.url()
   const card = page.getByRole('region', { name: 'Fila e assuntos' })
   await card.getByRole('tab', { name: 'Assuntos' }).click()
@@ -461,7 +462,7 @@ test('aba respeita responsável, setor e tela estreita', async ({ page, browser,
   await otherContext.close()
   await clearSession(page)
   await signIn(page, second.agent, userPassword)
-  await page.getByRole('link', { name: second.contacts[0] }).click()
+  await openQueued(page, second.contacts[0])
   await page.getByRole('tablist', { name: 'Mostrar' }).getByRole('tab', { name: /^Fila/ }).click()
   await page.getByRole('tab', { name: 'Assuntos' }).click()
   await expect(page.getByText('Este setor ainda não tem assuntos cadastrados.')).toBeVisible()
@@ -500,17 +501,14 @@ test('supervisor e administrador consultam quando são responsáveis', async ({ 
   await api.dispose()
   await addSolutions(baseURL!, sector.id, 'Orientações', ['Resposta do setor.'])
   await signIn(page, supervisor, userPassword)
-  const adminTicketUrl = await page
-    .getByRole('link', { name: 'Cliente Administrador' })
-    .getAttribute('href')
-  expect(adminTicketUrl).toBeTruthy()
-  await page.getByRole('link', { name: 'Cliente Supervisor' }).click()
+  const adminTicketUrl = `/chamados/${await queuedTicketId(page, 'Cliente Administrador')}`
+  await openQueued(page, 'Cliente Supervisor')
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await page.getByRole('tab', { name: 'Assuntos' }).click()
   await expect(page.getByText('Resposta do setor.')).toBeVisible()
   await clearSession(page)
   await signIn(page, admin.email, admin.password)
-  await page.goto(adminTicketUrl!)
+  await page.goto(adminTicketUrl)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await page.getByRole('tab', { name: 'Assuntos' }).click()
   await expect(page.getByText('Resposta do setor.')).toBeVisible()
@@ -577,8 +575,7 @@ test('assunto fora da lista: voltar não salva, adicionar e não adicionar salva
   await signIn(page, agent, userPassword)
 
   const fill = async (contact: string, subject: string) => {
-    await page.goto('/atendimentos')
-    await page.getByRole('link', { name: contact }).click()
+    await openQueued(page, contact)
     await page.getByRole('button', { name: 'Encerrar' }).click()
     const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
     await sheet.getByLabel('Assunto').fill(subject)
@@ -890,8 +887,7 @@ test('a confirmação de exclusão do assunto diz quantas soluções serão apag
 
 // Abre o encerramento do chamado do contato e preenche o módulo.
 async function openClosing(page: import('@playwright/test').Page, contact: string) {
-  await page.goto('/atendimentos')
-  await page.getByRole('link', { name: contact }).click()
+  await openQueued(page, contact)
   await page.getByRole('button', { name: 'Encerrar' }).click()
   const sheet = page.getByRole('dialog', { name: 'Encerrar chamado' })
   await sheet.getByRole('checkbox', { name: 'Folha' }).click()

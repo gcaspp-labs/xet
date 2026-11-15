@@ -402,7 +402,7 @@ test('administrador gerencia módulos de qualquer setor', async ({ page, baseURL
 test('atendente não acessa a administração', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, agent, userPassword)
-  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
 
   await expect(page.getByText('Administração')).toHaveCount(0)
   for (const name of ['Módulos', 'Setores', 'Usuários']) {
