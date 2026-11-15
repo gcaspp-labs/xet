@@ -105,10 +105,12 @@ func (e *testEnv) DoStrings(path, token string) []string {
 type closedList struct {
 	sectorTransfer
 	bia, sup, rhUser int64
-	a, b, c, d       int64 // Contabilidade: today, yesterday, 10 days ago, 40 days ago (transferred)
-	rhDone           int64 // RH, closed today
-	rhNext           int64 // RH, queued, born from d
-	maria, joao, rui int64
+	// Contabilidade, by when each one closed.
+	closedToday, closedYesterday, closedTenDaysAgo int64
+	transferredFortyDaysAgo                        int64
+	rhDone                                         int64 // RH, closed today
+	rhNext                                         int64 // RH, queued, born from transferredFortyDaysAgo
+	maria, joao, rui                               int64
 }
 
 func newClosedList(t *testing.T) closedList {
@@ -122,19 +124,19 @@ func newClosedList(t *testing.T) closedList {
 	c.rui = e.Contact(c.rhToken, "Rui", "5511977776666", c.org, c.rh)
 
 	today, yesterday := dayStart(t, 0), dayStart(t, -1)
-	c.a = e.insertClosed(closedTicket{
+	c.closedToday = e.insertClosed(closedTicket{
 		protocol: "9001-000001", closureType: "resolved", sector: c.sector.ID, contact: c.maria, organization: &c.org,
 		assignee: c.ana.ID, subject: "Contracheque atrasado", modules: c.modules[:1], closedAt: today.Add(time.Hour),
 	})
-	c.b = e.insertClosed(closedTicket{
+	c.closedYesterday = e.insertClosed(closedTicket{
 		protocol: "9001-000002", closureType: "resolved", sector: c.sector.ID, contact: c.joao, organization: &camara,
 		assignee: c.bia, subject: "Férias", modules: c.modules, closedAt: yesterday.Add(time.Hour),
 	})
-	c.c = e.insertClosed(closedTicket{
+	c.closedTenDaysAgo = e.insertClosed(closedTicket{
 		protocol: "9001-000003", closureType: "cancelled", sector: c.sector.ID, contact: c.maria,
 		assignee: c.sup, closedAt: today.AddDate(0, 0, -10).Add(time.Hour),
 	})
-	c.d = e.insertClosed(closedTicket{
+	c.transferredFortyDaysAgo = e.insertClosed(closedTicket{
 		protocol: "9001-000004", closureType: "transferred", sector: c.sector.ID, contact: c.rui, organization: &c.org,
 		assignee: c.ana.ID, subject: "Imposto de renda", modules: c.modules[1:], closedAt: today.AddDate(0, 0, -40).Add(time.Hour),
 	})
@@ -145,7 +147,7 @@ func newClosedList(t *testing.T) closedList {
 	// The transfer leaves a new ticket in the destination, still queued.
 	if err := e.Pool.QueryRow(t.Context(), `
 		insert into tickets (protocol, sector_id, contact_id, organization_id, status, previous_ticket_id, arrived_at, started_at)
-		values ('9001-000006', $1, $2, $3, 'queued', $4, now(), now()) returning id`, c.rh, c.rui, c.org, c.d).Scan(&c.rhNext); err != nil {
+		values ('9001-000006', $1, $2, $3, 'queued', $4, now(), now()) returning id`, c.rh, c.rui, c.org, c.transferredFortyDaysAgo).Scan(&c.rhNext); err != nil {
 		t.Fatal(err)
 	}
 	return c
@@ -257,11 +259,11 @@ func TestClosedTicketsPeriodsFollowTheRealClosing(t *testing.T) {
 	// The limits of the day in Brasília: the last second of yesterday is already today in UTC.
 	e := c.e
 	start := dayStart(t, 0)
-	e.setClosedAt(c.a, start.Add(-time.Second))
+	e.setClosedAt(c.closedToday, start.Add(-time.Second))
 	c.expect(c.supToken, qs("period", "today"))
-	e.setClosedAt(c.a, start)
+	e.setClosedAt(c.closedToday, start)
 	c.expect(c.supToken, qs("period", "today"), "9001-000001")
-	e.setClosedAt(c.a, start.AddDate(0, 0, 1))
+	e.setClosedAt(c.closedToday, start.AddDate(0, 0, 1))
 	c.expect(c.supToken, qs("period", "today"))
 	c.expect(c.supToken, qs("from", day(1), "to", day(1)), "9001-000001")
 }
@@ -406,7 +408,7 @@ func TestClosedTicketsShowWhatEachRowNeeds(t *testing.T) {
 	}
 
 	a := byProtocol["9001-000001"]
-	if a["id"] != float64(c.a) || a["closureType"] != "resolved" || a["closedAt"] == nil || a["subject"] != "Contracheque atrasado" ||
+	if a["id"] != float64(c.closedToday) || a["closureType"] != "resolved" || a["closedAt"] == nil || a["subject"] != "Contracheque atrasado" ||
 		a["organizationName"] != "Prefeitura de Campinas" || a["municipalityName"] != "Itu" || a["transferredTo"] != nil {
 		t.Fatalf("a = %v", a)
 	}
