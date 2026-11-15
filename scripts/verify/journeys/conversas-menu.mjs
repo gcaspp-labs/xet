@@ -8,7 +8,7 @@ await journey('conversas-menu', async (t) => {
 
   await t.step('Abrir Chamados pelo menu', async () => {
     await page.getByRole('link', { name: 'Chamados', exact: true }).click()
-    await expect(page).toHaveURL(/\/conversas$/)
+    await expect(page).toHaveURL(/\/chamados$/)
     await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Fila' })).toBeVisible()
     await t.shot(page, 'conversas-vazia')

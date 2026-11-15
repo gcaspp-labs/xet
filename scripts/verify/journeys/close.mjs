@@ -15,17 +15,30 @@ await journey('close', async (t) => {
   const agent = sector.agents[0]
   const phone = t.phone(sector.id)
 
+  // Os chamados encerrados ficam no histórico da tela Atendimentos; a fila, na tela Chamados.
+  const history = (page) => page.getByRole('table').getByRole('row')
+  const queueOf = (page) => page.getByRole('region', { name: 'Fila e assuntos' })
+  // As ações menos usadas ficam no menu "Mais ações".
+  const chooseAction = async (page, name) => {
+    await page.getByRole('button', { name: 'Mais ações' }).click()
+    await page.getByRole('menuitem', { name, exact: true }).click()
+  }
+
   const supervisorPage = await t.signIn(sector.supervisor)
-  const supervisorDone = supervisorPage.getByRole('region', { name: 'Realizados hoje' })
-  await expect(supervisorDone).toContainText('Nenhum atendimento realizado hoje.')
+  await supervisorPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await expect(supervisorPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await expect(supervisorPage.getByText('Nenhum chamado encontrado.')).toBeVisible()
 
   const agentPage = await t.signIn(agent)
 
   const ticketId = await t.step('Atendente assume o chamado', async () => {
-    await agentPage.getByRole('link', { name: paulo.name }).click()
-    await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
-    await agentPage.getByRole('button', { name: 'Assumir', exact: true }).click()
-    await expect(agentPage.getByText('Chamado assumido')).toBeVisible()
+    await queueOf(agentPage)
+      .getByRole('button', { name: `Assumir chamado de ${paulo.name}` })
+      .click()
+    await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
+    await expect(
+      agentPage.getByRole('region', { name: 'Conversa', exact: true }),
+    ).toContainText(`${agent.name} assumiu o chamado`)
     return Number(agentPage.url().split('/').pop())
   })
 
@@ -76,7 +89,7 @@ await journey('close', async (t) => {
   })
 
   await t.step(
-    'Com tudo certo, encerra e volta ao painel com o atendimento nos realizados',
+    'Com tudo certo, encerra e volta a Chamados, com o atendimento no histórico',
     async () => {
       // Horários de início e fim passados, no fuso da tela.
       const local = (minutesAgo) => {
@@ -89,28 +102,34 @@ await journey('close', async (t) => {
       await sheet.getByRole('button', { name: 'Encerrar' }).click()
       await sheet.getByRole('button', { name: 'Não adicionar' }).click()
       await expect(agentPage.getByText('Chamado encerrado', { exact: true })).toBeVisible()
+      await expect(agentPage).toHaveURL(/\/chamados$/)
+      await expect(agentPage.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
+      await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
       await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
-      const doneRow = agentPage
-        .getByRole('region', { name: 'Realizados hoje' })
-        .getByRole('row', { name: new RegExp(paulo.name) })
-      await expect(doneRow).toContainText('Você')
+      const doneRow = history(agentPage).filter({ hasText: paulo.name })
+      await expect(doneRow).toContainText(agent.name)
       await expect(doneRow).toContainText('Encerrado')
-      await t.shot(agentPage, 'painel-realizados')
+      await expect(doneRow).toContainText('Contracheque')
+      await t.shot(agentPage, 'historico-encerrados')
     },
   )
 
-  await t.step('Supervisor vê o atendimento nos realizados, sem recarregar', async () => {
-    const row = supervisorDone.getByRole('row', { name: new RegExp(paulo.name) })
+  await t.step('Supervisor vê o atendimento no histórico, sem recarregar', async () => {
+    const row = history(supervisorPage).filter({ hasText: paulo.name })
     await expect(row).toContainText(agent.name)
-    await expect(row).not.toContainText('Você')
-    await t.shot(supervisorPage, 'supervisor-realizados')
+    await expect(row).toContainText('Encerrado')
+    await t.shot(supervisorPage, 'supervisor-historico')
   })
   await t.closeSession(supervisorPage)
 
-  await t.step('Chamado encerrado mostra o registro e não aceita resposta', async () => {
+  await t.step('Chamado encerrado abre a ficha só leitura e não aceita resposta', async () => {
+    // O endereço da tela Chamados leva o chamado encerrado à ficha em Atendimentos.
     await agentPage.goto(`/chamados/${ticketId}`)
+    await expect(agentPage).toHaveURL(new RegExp(`/atendimentos/${ticketId}$`))
+    await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toContainText('Encerrado em')
     const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
-    await expect(conversation).toContainText('Chamado encerrado.')
+    // Na ficha, o aviso "Chamado encerrado." virou "Só leitura. Encerrado em ... por ...".
+    await expect(conversation).toContainText('Só leitura. Encerrado em')
     await expect(
       conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
         hasText: `${agent.name} encerrou o chamado`,
@@ -118,7 +137,7 @@ await journey('close', async (t) => {
     ).toBeVisible()
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
     await expect(agentPage.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-    const details = agentPage.getByRole('region', { name: 'Chamado', exact: true })
+    const details = agentPage.getByRole('region', { name: 'Atendimento', exact: true })
     await expect(details).toContainText('Contracheque')
     await expect(details).toContainText('Enviada a segunda via.')
     await expect(details).toContainText('Folha')
@@ -131,9 +150,9 @@ await journey('close', async (t) => {
     'Nova mensagem do cliente abre outro chamado, sem reabrir',
     async () => {
       await phone.receive(paulo, 'Agora é sobre férias')
-      await agentPage.getByRole('link', { name: 'Atendimentos' }).click()
-      const queue = agentPage.getByRole('region', { name: 'Fila do setor' })
-      await expect(queue.getByRole('link', { name: paulo.name })).toHaveCount(1)
+      await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
+      const queue = queueOf(agentPage)
+      await expect(queue.getByRole('listitem').filter({ hasText: paulo.name })).toHaveCount(1)
       await expect(queue).toContainText('Agora é sobre férias')
       await t.shot(agentPage, 'novo-chamado-na-fila')
       const rows = t.sql(
@@ -148,9 +167,14 @@ await journey('close', async (t) => {
   await t.step('Cancelamento direto da fila exige motivo e dispensa o cadastro', async () => {
     const golpe = t.customer('Paula Golpe')
     await phone.receive(golpe, 'Seu boleto venceu')
-    await agentPage.getByRole('link', { name: golpe.name }).click()
-    await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
-    await agentPage.getByRole('button', { name: 'Cancelar chamado' }).click()
+    // Um chamado da fila só abre pelo endereço, sem assumir.
+    const [queued] = t.sql(
+      `select t.id from tickets t join contacts c on c.id = t.contact_id
+        where c.phone = '${golpe.phone}' and t.status = 'queued'`,
+    )
+    await agentPage.goto(`/chamados/${queued.id}`)
+    await expect(agentPage.getByRole('heading', { name: golpe.name })).toBeVisible()
+    await chooseAction(agentPage, 'Cancelar chamado')
     const cancel = agentPage.getByRole('dialog', { name: 'Cancelar chamado' })
     await cancel.getByRole('button', { name: 'Cancelar chamado' }).click()
     await expect(cancel).toContainText('Informe o motivo do cancelamento.')
@@ -158,11 +182,11 @@ await journey('close', async (t) => {
     await t.shot(agentPage, 'cancelamento')
     await cancel.getByRole('button', { name: 'Cancelar chamado' }).click()
     await expect(agentPage.getByText('Chamado cancelado', { exact: true })).toBeVisible()
-    const row = agentPage
-      .getByRole('region', { name: 'Realizados hoje' })
-      .getByRole('row', { name: new RegExp(golpe.name) })
+    await expect(agentPage).toHaveURL(/\/chamados$/)
+    await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+    const row = history(agentPage).filter({ hasText: golpe.name })
     await expect(row).toContainText('Cancelado')
-    await t.shot(agentPage, 'cancelado-nos-realizados')
+    await t.shot(agentPage, 'cancelado-no-historico')
     const [cancelled] = t.sql(
       `select t.status, t.closure_type, a.action, a.reason, c.registered as contact_registered
          from tickets t join contacts c on c.id = t.contact_id

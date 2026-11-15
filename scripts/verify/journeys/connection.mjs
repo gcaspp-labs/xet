@@ -123,16 +123,16 @@ await journey('connection', async (t) => {
   })
 
   await t.step(
-    'Atendente não vê a conexão nem o aviso no sino, e a rota o devolve ao painel',
+    'Atendente não vê a conexão nem o aviso no sino, e a rota o devolve à tela Chamados',
     async () => {
       const agentPage = await t.signIn(sector.agents[0])
-      await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+      await expect(agentPage.getByRole('heading', { name: 'Chamados' })).toBeVisible()
       await expect(agentPage.getByRole('link', { name: 'Conexão' })).toBeHidden()
       await expect(agentPage.getByRole('button', { name: /^Notificações/ })).toHaveAccessibleName(
         'Notificações',
       )
       await agentPage.goto('/conexao')
-      await expect(agentPage).toHaveURL(/\/$/)
+      await expect(agentPage).toHaveURL(/\/chamados$/)
       await t.shot(agentPage, 'atendente-sem-conexao')
       const blocked = await agentPage.request.post(`/api/sectors/${sector.id}/connection`)
       expect(blocked.status()).toBe(403)

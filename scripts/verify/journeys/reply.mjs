@@ -6,8 +6,9 @@ await journey('reply', async (t) => {
     'Preparar setor conectado, atendente, supervisor e um chamado na fila',
     async () => {
       const seeded = await t.seedSector({ agents: 1 })
-      await t.phone(seeded.id).receive(t.customer('Carla Cliente'), 'Preciso do contracheque')
-      return seeded
+      const customer = t.customer('Carla Cliente')
+      await t.phone(seeded.id).receive(customer, 'Preciso do contracheque')
+      return { ...seeded, carla: customer }
     },
   )
   const agent = sector.agents[0]
@@ -20,7 +21,13 @@ await journey('reply', async (t) => {
     conversation.getByRole('listitem', { name: 'Mensagem enviada' }).filter({ hasText: text })
 
   const ticketId = await t.step('Sem assumir, não há como responder', async () => {
-    await agentPage.getByRole('link', { name: 'Carla Cliente' }).click()
+    // Um chamado da fila só abre pelo endereço: o atendente ainda não é responsável, e a lista
+    // Meus chamados só traz o que ele assumiu.
+    const [queued] = t.sql(
+      `select t.id from tickets t join contacts c on c.id = t.contact_id
+        where c.phone = '${sector.carla.phone}' and t.status = 'queued'`,
+    )
+    await agentPage.goto(`/chamados/${queued.id}`)
     await expect(agentPage.getByRole('heading', { name: 'Carla Cliente' })).toBeVisible()
     await expect(conversation).toContainText('Preciso do contracheque')
     await expect(conversation).toContainText('Chamado na fila. Assuma o chamado para responder.')

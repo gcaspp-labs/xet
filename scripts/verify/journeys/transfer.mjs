@@ -17,14 +17,22 @@ await journey('transfer', async (t) => {
   )
   const [agent, colleague] = sector.agents
 
+  // As ações do chamado (Transferir, Outro setor, Cancelar chamado) ficam no menu "Mais ações".
+  const chooseAction = async (page, name) => {
+    await page.getByRole('button', { name: 'Mais ações' }).click()
+    await page.getByRole('menuitem', { name, exact: true }).click()
+  }
+  // A fila fica na aba Fila do cartão "Fila e assuntos" da tela Chamados.
+  const queueOf = (page) => page.getByRole('region', { name: 'Fila e assuntos' })
+
   const agentPage = await t.signIn(agent)
   const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
 
   const ticketId = await t.step('Atendente assume o chamado', async () => {
-    await agentPage.getByRole('link', { name: joana.name }).click()
-    await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
-    await agentPage.getByRole('button', { name: 'Assumir', exact: true }).click()
-    await expect(agentPage.getByText('Chamado assumido')).toBeVisible()
+    await queueOf(agentPage)
+      .getByRole('button', { name: `Assumir chamado de ${joana.name}` })
+      .click()
+    await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     await expect(conversation).toContainText(`${agent.name} assumiu o chamado`)
     return Number(agentPage.url().split('/').pop())
   })
@@ -37,13 +45,15 @@ await journey('transfer', async (t) => {
     await expect(colleagueConversation).toContainText(
       `Chamado com ${agent.name}. Peça a transferência`,
     )
+    // Sem permissão, nem o menu "Mais ações" aparece.
+    await expect(colleaguePage.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
     await expect(colleaguePage.getByRole('button', { name: 'Transferir' })).toHaveCount(0)
     await expect(colleaguePage.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
     await t.shot(colleaguePage, 'colega-antes')
   })
 
   await t.step('Responsável transfere para o colega e perde a resposta', async () => {
-    await agentPage.getByRole('button', { name: 'Transferir' }).click()
+    await chooseAction(agentPage, 'Transferir')
     const sheet = agentPage.getByRole('dialog', { name: 'Transferir chamado' })
     await sheet.getByRole('combobox', { name: 'Transferir para' }).click()
     await t.shot(agentPage, 'escolher-destino')
@@ -56,8 +66,12 @@ await journey('transfer', async (t) => {
       .click()
     await sheet.getByRole('button', { name: 'Transferir' }).click()
     await expect(agentPage.getByText('Chamado transferido')).toBeVisible()
+    // Quem transfere sai da conversa e volta à lista; o chamado deixa de ser dele.
+    await expect(agentPage).toHaveURL(/\/chamados$/)
+    await agentPage.goto(`/chamados/${ticketId}`)
     await expect(conversation).toContainText(`Chamado com ${colleague.name}. Peça a transferência`)
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+    await expect(agentPage.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
     await expect(agentPage.getByRole('button', { name: 'Transferir' })).toHaveCount(0)
     await expect(conversation).toContainText('Preciso da segunda via da guia')
     await expect(
@@ -96,7 +110,7 @@ await journey('transfer', async (t) => {
 
   await t.step('Supervisor transfere o chamado de outra pessoa', async () => {
     await supervisorPage.goto(`/chamados/${ticketId}`)
-    await supervisorPage.getByRole('button', { name: 'Transferir' }).click()
+    await chooseAction(supervisorPage, 'Transferir')
     const sheet = supervisorPage.getByRole('dialog', { name: 'Transferir chamado' })
     await sheet.getByRole('combobox', { name: 'Transferir para' }).click()
     await supervisorPage
@@ -143,16 +157,17 @@ await journey('transfer', async (t) => {
     'Responsável assume um segundo chamado para mandar a outro setor',
     async () => {
       await agentPage.goto('/')
-      await agentPage.getByRole('link', { name: lucia.name }).click()
-      await agentPage.getByRole('link', { name: 'Ver chamado' }).click()
-      await agentPage.getByRole('button', { name: 'Assumir', exact: true }).click()
-      await expect(agentPage.getByText('Chamado assumido')).toBeVisible()
+      await expect(agentPage).toHaveURL(/\/chamados$/)
+      await queueOf(agentPage)
+        .getByRole('button', { name: `Assumir chamado de ${lucia.name}` })
+        .click()
+      await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
       return Number(agentPage.url().split('/').pop())
     },
   )
 
   await t.step('Transferência para outro setor exige o formulário e encerra a origem', async () => {
-    await agentPage.getByRole('button', { name: 'Outro setor' }).click()
+    await chooseAction(agentPage, 'Outro setor')
     const sheet = agentPage.getByRole('dialog', { name: 'Transferir para outro setor' })
     await sheet.getByRole('button', { name: 'Transferir' }).click()
     await expect(sheet).toContainText('Escolha o setor de destino.')
@@ -172,19 +187,29 @@ await journey('transfer', async (t) => {
     await sheet.getByRole('button', { name: 'Transferir' }).click()
     await sheet.getByRole('button', { name: 'Não adicionar' }).click()
     await expect(agentPage.getByText('Chamado transferido para outro setor')).toBeVisible()
+    await expect(agentPage).toHaveURL(/\/chamados$/)
+    // O chamado de origem, encerrado como transferido, vai para o histórico em Atendimentos.
+    await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
     await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
-    const doneRow = agentPage
-      .getByRole('region', { name: 'Realizados hoje' })
-      .getByRole('row', { name: new RegExp(lucia.name) })
+    const doneRow = agentPage.getByRole('table').getByRole('row', { name: new RegExp(lucia.name) })
     await expect(doneRow).toContainText('Transferido')
-    await t.shot(agentPage, 'origem-realizados')
+    await expect(doneRow).toContainText(`para ${destination.name}`)
+    await t.shot(agentPage, 'origem-no-historico')
   })
 
   const destinationPage = await t.signIn(destination.agents[0])
+  let destinationTicketId
 
-  await t.step('Destino recebe na fila, com a origem e o chamado anterior', async () => {
-    await destinationPage.getByRole('link', { name: lucia.name }).click()
-    await destinationPage.getByRole('link', { name: 'Ver chamado' }).click()
+  await t.step('Destino recebe na fila, assume e responde', async () => {
+    // O chamado novo está na fila do destino e só abre pelo endereço, até alguém assumir.
+    const [created] = t.sql(
+      `select id from tickets where previous_ticket_id = ${otherTicketId}`,
+    )
+    destinationTicketId = created.id
+    await expect(
+      queueOf(destinationPage).getByRole('listitem').filter({ hasText: lucia.name }),
+    ).toHaveCount(1)
+    await destinationPage.goto(`/chamados/${destinationTicketId}`)
     const destinationConversation = destinationPage.getByRole('region', {
       name: 'Conversa',
       exact: true,
@@ -192,16 +217,11 @@ await journey('transfer', async (t) => {
     await expect(destinationConversation).toContainText(
       `Transferido de ${sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
     )
-    const previous = destinationPage
-      .getByRole('region', { name: 'Chamado', exact: true })
-      .getByRole('region', { name: 'Chamado anterior' })
-    await expect(previous).toContainText(sector.name)
-    await expect(previous).toContainText('Folha de março')
-    await expect(previous).toContainText(`Transferido por ${agent.name}`)
     await t.shot(destinationPage, 'destino-na-fila')
 
     await destinationPage.getByRole('button', { name: 'Assumir', exact: true }).click()
     await expect(destinationPage.getByText('Chamado assumido')).toBeVisible()
+    await expect(destinationPage.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
     const composer = destinationPage.getByRole('textbox', { name: 'Mensagem' })
     await composer.fill('Olá, aqui é o setor de destino.')
     await composer.press('Enter')
@@ -241,5 +261,52 @@ await journey('transfer', async (t) => {
     )
     expect(audit.map((entry) => entry.action)).toContain('ticket_transferred_sector')
     t.observe('Auditoria da origem', audit)
+  })
+
+  const details = (page) => page.getByRole('region', { name: 'Atendimento', exact: true })
+
+  await t.step('Chamado de origem abre a ficha só leitura, com o destino na cadeia', async () => {
+    await agentPage.goto(`/atendimentos/${otherTicketId}`)
+    await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toContainText(
+      `Transferido para ${destination.name}`,
+    )
+    const chain = details(agentPage).getByRole('region', { name: 'Cadeia de transferências' })
+    await expect(chain).toContainText(sector.name)
+    await expect(chain).toContainText(destination.name)
+    await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+    await t.shot(agentPage, 'ficha-origem')
+  })
+
+  await t.step('Destino cancela o chamado novo e a ficha dele traz a origem', async () => {
+    await chooseAction(destinationPage, 'Cancelar chamado')
+    const cancel = destinationPage.getByRole('dialog', { name: 'Cancelar chamado' })
+    await cancel.getByLabel('Motivo').fill('Encerrado ao fim da verificação.')
+    await cancel.getByRole('button', { name: 'Cancelar chamado' }).click()
+    await expect(destinationPage.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+    await destinationPage.goto(`/atendimentos/${destinationTicketId}`)
+    const previous = details(destinationPage).getByRole('region', { name: 'Chamado anterior' })
+    await expect(previous).toContainText(sector.name)
+    await expect(previous).toContainText('Folha de março')
+    await expect(previous).toContainText('Encaminhado ao setor responsável.')
+    await expect(previous).toContainText(`transferido por ${agent.name}`)
+    await t.shot(destinationPage, 'ficha-destino-com-origem')
+    await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
+    await expect(destinationPage).toHaveURL(new RegExp(`/atendimentos/${otherTicketId}$`))
+    await expect(destinationPage.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
+      'Folha de março',
+    )
+    await t.shot(destinationPage, 'ficha-origem-pelo-destino')
+  })
+
+  await t.step('Estado final do destino cancelado no banco', async () => {
+    const [destinationTicket] = t.sql(
+      `select status, closure_type, previous_ticket_id from tickets where id = ${destinationTicketId}`,
+    )
+    expect(destinationTicket).toEqual({
+      status: 'closed',
+      closure_type: 'cancelled',
+      previous_ticket_id: otherTicketId,
+    })
+    t.observe('Destino depois do cancelamento', destinationTicket)
   })
 })

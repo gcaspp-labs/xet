@@ -57,7 +57,7 @@ scripts/verify/scripts/drive.sh connection
 
 ## Estado final observável
 
-- **Tela:** "Requer QR code", com o motivo da recusa, depois da tentativa com o número de outro setor; o atendente de volta ao painel, sem o item "Conexão" e sem aviso no sino.
+- **Tela:** "Requer QR code", com o motivo da recusa, depois da tentativa com o número de outro setor; o atendente de volta à tela Chamados, sem o item "Conexão" e sem aviso no sino.
 - **`sectors`:** `connection_status = 'logged_out'` e `external_account_id` vazio.
 - **`audit_logs`:** `sector_connected` e `sector_disconnected` duas vezes cada, em ordem, com o supervisor como autor do último, porque desvinculou pela tela.
 - **API:** o atendente recebe 403 ao tentar conectar.
