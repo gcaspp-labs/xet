@@ -28,6 +28,15 @@ import {
 } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
+// PROTÓTIPO #199: seletor de emojis, três versões por ?variant=.
+import {
+  PickerA,
+  PickerBButton,
+  PickerBPanel,
+  PickerC,
+  PrototypeSwitcher,
+  usePrototypeVariant,
+} from '@/prototype/EmojiPicker199'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
 import type { HistoryReturnState } from '@/lib/history-return'
@@ -414,6 +423,35 @@ function Composer({ ticketId }: { ticketId: number }) {
   // quando o conteúdo muda.
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  // PROTÓTIPO #199
+  const variant = usePrototypeVariant()
+  const field = useRef<HTMLTextAreaElement>(null)
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  const insertEmoji = (emoji: string) => {
+    const el = field.current
+    const start = el?.selectionStart ?? text.length
+    const end = el?.selectionEnd ?? text.length
+    changeText(text.slice(0, start) + emoji + text.slice(end))
+    if (variant !== 'B') setEmojiOpen(false)
+    requestAnimationFrame(() => {
+      field.current?.focus()
+      field.current?.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
+  }
+  const emojiButton =
+    variant === 'B' ? (
+      <PickerBButton
+        open={emojiOpen}
+        onOpenChange={(o) => {
+          setEmojiOpen(o)
+          if (!o) requestAnimationFrame(() => field.current?.focus())
+        }}
+      />
+    ) : variant === 'C' ? (
+      <PickerC onPick={insertEmoji} open={emojiOpen} onOpenChange={setEmojiOpen} returnFocus={field} />
+    ) : (
+      <PickerA onPick={insertEmoji} open={emojiOpen} onOpenChange={setEmojiOpen} returnFocus={field} />
+    )
 
   const changeText = (value: string) => {
     requestId.current = null
@@ -488,6 +526,16 @@ function Composer({ ticketId }: { ticketId: number }) {
 
   return (
     <div className="flex flex-col gap-2 border-t border-line-soft p-3">
+      <PrototypeSwitcher />
+      {variant === 'B' && emojiOpen && !recorder.recording && !voice && (
+        <PickerBPanel
+          onPick={insertEmoji}
+          onClose={() => {
+            setEmojiOpen(false)
+            field.current?.focus()
+          }}
+        />
+      )}
       {error && (
         <Alert variant="warning">
           <CircleAlert strokeWidth={1.7} aria-hidden />
@@ -569,7 +617,9 @@ function Composer({ ticketId }: { ticketId: number }) {
           >
             <Paperclip strokeWidth={1.7} aria-hidden />
           </Button>
+          {emojiButton}
           <Textarea
+            ref={field}
             aria-label={file ? 'Legenda do arquivo' : 'Mensagem'}
             placeholder={file ? 'Legenda (opcional)' : 'Escreva a mensagem'}
             rows={1}
