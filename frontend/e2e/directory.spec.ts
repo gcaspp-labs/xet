@@ -841,6 +841,54 @@ test('contatos em páginas de 20, ordenados pela coluna, com página e ordem no 
   )
 })
 
+test('busca e ordem trocadas antes do próximo redesenho ficam as duas no endereço', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const { id } = unique()
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Câmara ${id}` }, { name: `Autarquia ${id}` }],
+    [
+      { name: `Maria A ${id}`, phone: `5511${id}`, organization: 0, sector: own.sector.id },
+      { name: `Maria B ${id}`, phone: `5512${id}`, organization: 1, sector: own.sector.id },
+      { name: `Pedro ${id}`, phone: `5513${id}`, organization: 1, sector: own.sector.id },
+    ],
+  )
+  await signIn(page, own.agent, userPassword)
+  await page.goto('/contatos')
+  const rows = page.getByRole('row').filter({ hasText: id })
+  await expect(rows).toHaveCount(3)
+  await expect(rows.first()).toContainText(`Maria A ${id}`)
+
+  // As duas mudanças saem na mesma tarefa do navegador, como dois eventos seguidos que a
+  // tela não teve tempo de redesenhar entre um e outro: a segunda não pode apagar a primeira.
+  const search = await page.getByLabel('Buscar contatos').elementHandle()
+  const sort = await page.getByRole('button', { name: 'Órgão', exact: true }).elementHandle()
+  await page.evaluate(
+    ([input, button, text]) => {
+      const field = input as HTMLInputElement
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      setValue.call(field, text)
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+      ;(button as HTMLButtonElement).click()
+    },
+    [search, sort, `Maria`] as const,
+  )
+
+  await expect(page).toHaveURL(/busca=/)
+  await expect(page).toHaveURL(/ordem=orgao/)
+  await expect(page.getByLabel('Buscar contatos')).toHaveValue('Maria')
+  // A tela também segue as duas: só as Marias, a da Autarquia antes da da Câmara.
+  await expect(rows).toHaveCount(2)
+  await expect(rows.first()).toContainText(`Maria B ${id}`)
+  await expect(page.getByRole('columnheader', { name: 'Órgão' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+})
+
 test('reabrir o endereço com órgão restaura o filtro, mesmo sem contatos encontrados', async ({
   page,
   baseURL,

@@ -56,6 +56,9 @@ test('em tela cheia, a lista abre abaixo do campo e escolhe por clique e por tec
   await expect(trigger).toHaveText(/Folha/)
   await trigger.click()
   await expectListBelow(page, trigger)
+  // O Escape só é ouvido depois que a lista termina de abrir, quando o foco chega ao item
+  // escolhido: um Escape logo no quadro da abertura é ignorado e a lista continua aberta.
+  await expect(page.getByRole('option', { name: 'Folha' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('listbox')).toHaveCount(0)
 

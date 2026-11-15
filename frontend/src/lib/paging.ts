@@ -24,13 +24,16 @@ export function pageParams<Sort extends string>(request: PageRequest<Sort>) {
 
 // Atualiza a query string da tela; nulo tira o parâmetro. O estado da navegação
 // (por exemplo, de onde o histórico foi aberto) segue junto com o endereço.
+// O próximo endereço parte do endereço atual do navegador, e não dos parâmetros do
+// último redesenho: duas mudanças seguidas antes de a tela redesenhar (mesmo vindas
+// de cópias diferentes deste hook na mesma tela) ficam as duas no endereço (#205).
 export function useQueryState() {
   const [params, setParams] = useSearchParams()
   const { state } = useLocation()
   const update = (next: Record<string, string | null>, replace = false) => {
     setParams(
-      (current) => {
-        const copy = new URLSearchParams(current)
+      () => {
+        const copy = new URLSearchParams(window.location.search)
         for (const [key, value] of Object.entries(next)) {
           if (value === null) {
             copy.delete(key)
