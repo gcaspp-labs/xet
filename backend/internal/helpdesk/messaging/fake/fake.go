@@ -190,6 +190,17 @@ func (a *Adapter) SendOutside(ctx context.Context, sectorID int64, msg messaging
 	return a.handler(ctx, messaging.MessageSentOutside{SectorID: sectorID, Message: msg})
 }
 
+// React delivers a reaction of a contact (or, with fromSectorPhone, one made
+// from the phone of the sector) to the message with the given provider ID. An
+// empty emoji removes the reaction.
+func (a *Adapter) React(ctx context.Context, sectorID int64, ev messaging.ReactionReceived) error {
+	ev.SectorID = sectorID
+	if ev.At.IsZero() {
+		ev.At = time.Now()
+	}
+	return a.handler(ctx, ev)
+}
+
 // Disconnect unlinks the account. An unreachable device ends the session the
 // same way and reports the error, like the real provider.
 func (a *Adapter) Disconnect(ctx context.Context, sectorID int64) error {

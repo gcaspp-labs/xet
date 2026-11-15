@@ -76,6 +76,30 @@ func (a *Adapter) Handler() http.Handler {
 		}
 		a.control(w, r, func(sectorID int64) error { return a.Receive(r.Context(), sectorID, msg) })
 	})
+	// Reaction of a contact to a message, or from the phone of the sector;
+	// an empty emoji removes it.
+	r.Post("/messaging/sectors/{sectorID}/react", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			TargetExternalMessageID string `json:"targetExternalMessageId"`
+			Phone                   string `json:"phone"`
+			Emoji                   string `json:"emoji"`
+			FromSectorPhone         bool   `json:"fromSectorPhone"`
+			Group                   bool   `json:"group"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TargetExternalMessageID == "" || body.Phone == "" {
+			http.Error(w, "targetExternalMessageId and phone are required", http.StatusBadRequest)
+			return
+		}
+		ev := messaging.ReactionReceived{
+			TargetExternalMessageID: body.TargetExternalMessageID,
+			ExternalContactID:       body.Phone + "@s.whatsapp.net",
+			Phone:                   body.Phone,
+			Emoji:                   body.Emoji,
+			FromSectorPhone:         body.FromSectorPhone,
+			Group:                   body.Group,
+		}
+		a.control(w, r, func(sectorID int64) error { return a.React(r.Context(), sectorID, ev) })
+	})
 	// Delivery progress of sent messages, as the contact's phone reports it.
 	r.Post("/messaging/sectors/{sectorID}/status", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

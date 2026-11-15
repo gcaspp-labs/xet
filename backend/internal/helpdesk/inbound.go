@@ -29,6 +29,8 @@ func (s *Service) HandleEvent(ctx context.Context, ev messaging.Event) error {
 		return s.HandleSentOutside(ctx, ev)
 	case messaging.StatusUpdated:
 		return s.HandleStatus(ctx, ev)
+	case messaging.ReactionReceived:
+		return s.HandleReaction(ctx, ev)
 	}
 	return nil
 }

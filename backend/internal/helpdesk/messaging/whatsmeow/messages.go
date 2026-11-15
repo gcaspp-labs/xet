@@ -30,6 +30,9 @@ type downloadable interface {
 func (s *session) message(evt *events.Message) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), eventTimeout)
 	defer cancel()
+	if reaction := evt.Message.GetReactionMessage(); reaction != nil && !evt.IsEdit {
+		return s.reaction(ctx, evt, reaction)
+	}
 	msg, ok := s.translate(ctx, evt)
 	if !ok {
 		return true
@@ -41,10 +44,36 @@ func (s *session) message(evt *events.Message) bool {
 	return s.adapter.emit(ev) == nil
 }
 
+// reaction emits a reaction to a message of a chat. The reaction text is the
+// emoji, empty when the author removes it.
+func (s *session) reaction(ctx context.Context, evt *events.Message, reaction *waE2E.ReactionMessage) bool {
+	info := evt.Info
+	target := reaction.GetKey().GetID()
+	if target == "" || info.Chat == types.StatusBroadcastJID {
+		return true
+	}
+	ev := messaging.ReactionReceived{
+		SectorID:                s.sectorID,
+		TargetExternalMessageID: target,
+		Group:                   info.IsGroup,
+		Emoji:                   reaction.GetText(),
+		FromSectorPhone:         info.IsFromMe,
+		At:                      info.Timestamp,
+	}
+	if !info.IsGroup {
+		contact := s.contact(ctx, info)
+		ev.ExternalContactID = contact.String()
+		if contact.Server == types.DefaultUserServer {
+			ev.Phone = contact.User
+		}
+	}
+	return s.adapter.emit(ev) == nil
+}
+
 // translate converts a Whatsmeow message into the neutral type, downloading
 // its media. Edits and protocol messages (deletions, settings, key sharing)
 // are outside the pilot and are skipped; other unknown kinds become
-// unsupported, so they still show up in the history.
+// unsupported (reactions have their own event), so they still show up in the history.
 func (s *session) translate(ctx context.Context, evt *events.Message) (messaging.Message, bool) {
 	info := evt.Info
 	m := evt.Message
