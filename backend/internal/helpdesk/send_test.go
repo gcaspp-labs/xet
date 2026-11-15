@@ -171,6 +171,24 @@ func (c conversation) assign() {
 	}
 }
 
+func TestEmojiTextReachesMessagingProvider(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	c.assign()
+	response := c.e.sendText(c.ticket.ID, c.anaToken, requestA, "Olá ❤️")
+	if response.Status != http.StatusOK || response.Body["status"] != "sent" {
+		t.Fatalf("send: status %d, body %v", response.Status, response.Body)
+	}
+	sent := c.e.WhatsApp.SentMessages()
+	if len(sent) != 1 {
+		t.Fatalf("sent to provider = %+v", sent)
+	}
+	msg, ok := sent[0].(messaging.TextMessage)
+	if !ok || msg.Body != "*ana@exemplo.com:*\nOlá ❤️" {
+		t.Fatalf("provider message = %+v", sent[0])
+	}
+}
+
 func TestOnlyTheAssigneeReplies(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
