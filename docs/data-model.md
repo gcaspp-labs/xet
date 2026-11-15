@@ -45,6 +45,8 @@ erDiagram
     tickets ||--o{ messages : contém
     users ||--o{ messages : "autor (envio pelo sistema)"
     media_files ||--o| messages : anexo
+    messages ||--o{ message_reactions : "reação atual (uma por lado)"
+    users ||--o{ message_reactions : "autor (reação pelo sistema)"
     tickets ||--o{ audit_logs : ""
     users ||--o{ audit_logs : "autor da ação"
 ```
@@ -59,8 +61,9 @@ erDiagram
 | `closure_type` | `resolved`, `transferred`, `cancelled` | Encerrado normalmente, etapa encerrada por transferência entre setores ou cancelado sem lançar o atendimento |
 | `message_direction` | `inbound`, `outbound` | Recebida do cliente ou enviada pelo setor |
 | `message_origin` | `customer`, `agent`, `phone` | Enviada pelo cliente, por um atendente no sistema ou pelo celular fora do sistema |
-| `message_type` | `text`, `image`, `video`, `audio`, `document`, `unsupported`, `media_unavailable` | `unsupported` cobre figurinhas, reações, localização e outros tipos fora do piloto; `media_unavailable` é o arquivo recebido acima do limite ou que não baixou |
+| `message_type` | `text`, `image`, `video`, `audio`, `document`, `unsupported`, `media_unavailable` | `unsupported` cobre figurinhas, localização e outros tipos fora do piloto (as reações recebidas deixaram de ser gravadas como mensagem: vão para `message_reactions`; as antigas, já gravadas como `unsupported`, ficam como estão); `media_unavailable` é o arquivo recebido acima do limite ou que não baixou |
 | `message_status` | `pending`, `sent`, `delivered`, `read`, `failed` | Situação de entrega das mensagens enviadas |
+| `reaction_side` | `customer`, `sector` | Lado da reação: do cliente ou do número do setor |
 
 ## Organização interna
 
@@ -344,6 +347,27 @@ Mensagens enviadas pelo celular fora do sistema (`origin = 'phone'`) são gravad
 Mensagens enviadas pelo sistema são gravadas como `pending` (com `sent_at` no momento do registro) e passam a `sent` com o `external_message_id` quando o provedor aceita, ou a `failed` com `failure_reason`. As confirmações do provedor só avançam a situação (`sent` → `delivered` → `read`); uma falha informada pelo provedor só vale para mensagens `pending` ou `sent`, e uma entrega confirmada vale também sobre `failed`. O reenvio pelo responsável volta a mensagem de `failed` para `pending` com a mesma chave de idempotência (`client_request_id`).
 
 Mensagens não são editadas nem excluídas.
+
+### `message_reactions` — Reação atual da mensagem
+
+Escolha de armazenamento (#197): uma tabela pequena, em vez de colunas em `messages`, porque a reação tem dados próprios (autor, origem, horário) e muda sem que a mensagem mude (mensagens não são editadas). Cada mensagem guarda no máximo **duas reações atuais**, uma por lado, sem histórico de trocas.
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `message_id` | bigint → `messages` | Obrigatório; parte da chave primária |
+| `side` | reaction_side | Obrigatório; `customer` (o cliente) ou `sector` (o número do setor); parte da chave primária |
+| `emoji` | text | Obrigatório, não vazio. Reação vazia (remoção) apaga a linha |
+| `author_id` | bigint → `users` | Atendente que reagiu pelo sistema; só no lado `sector`; vazio quando a reação veio do celular ou o provedor não informa |
+| `via_phone` | boolean | `true` quando o provedor informa que a reação do setor foi feita pelo celular, fora do sistema; nunca junto com `author_id`; sempre `false` no lado `customer` |
+| `reacted_at` | timestamptz | Obrigatório; horário da reação segundo o provedor |
+
+Restrições:
+
+- Chave primária `(message_id, side)`: uma reação por lado; a nova do mesmo lado substitui a anterior.
+- `side = 'customer'` ⇒ `author_id` vazio e `via_phone` falso (`message_reactions_customer_side`).
+- `author_id` preenchido ⇒ `via_phone` falso (`message_reactions_author_or_phone`).
+
+Regras de gravação (`helpdesk/reactions.go`): o chamado da mensagem é travado (`for update`); reação a mensagem de chamado encerrado ou desconhecida é descartada, sem criar mensagem nem chamado. Um evento mais antigo que a reação gravada do mesmo lado não a altera (nem a remove), e o mesmo evento repetido não muda nada. Como a remoção apaga a linha, não há registro de remoção: um evento de reação atrasado que chegue depois de uma remoção mais nova volta a gravá-la (aceito, porque o provedor entrega em ordem na prática).
 
 ### `media_files` — Arquivo
 
