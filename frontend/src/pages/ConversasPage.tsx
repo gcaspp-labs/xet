@@ -18,7 +18,6 @@ import { toast } from 'sonner'
 import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { RegisterContactSheet } from '@/components/ContactSheet'
-import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
@@ -48,7 +47,7 @@ import { cn } from '@/lib/utils'
 import { useSectors } from '@/lib/admin'
 import { isNotFound } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
-import { ticketKey, useAssignTicket, useTicket, useTicketModules } from '@/lib/conversation'
+import { ticketKey, useAssignTicket, useTicket } from '@/lib/conversation'
 import { formatMessageTime, organizationLabel } from '@/lib/format'
 import { lastMessagePreview, parseTicketId, ticketsQuery, type TicketSummary } from '@/lib/tickets'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
@@ -169,7 +168,6 @@ export default function ConversasPage() {
   const visible = sectors.filter((sector) => user?.role === 'admin' || sector.id === user?.sectorId)
   const results = useQueries({ queries: visible.map((sector) => ticketsQuery(sector.id)) })
   const { data: ticket, error: ticketError } = useTicket(ticketId ?? 0, !!ticketId)
-  const { data: recordedModules } = useTicketModules(ticketId ?? 0, ticket?.status === 'closed')
   const queryClient = useQueryClient()
   const assign = useAssignTicket()
   const navigate = useNavigate()
@@ -320,13 +318,6 @@ export default function ConversasPage() {
             onOpenChange={(open) => !open && setAction('')}
             onSuccess={leave}
           />
-          {action === 'correct' && recordedModules && (
-            <CorrectionSheet
-              ticket={ticket}
-              recorded={recordedModules}
-              onOpenChange={() => setAction('')}
-            />
-          )}
           {action === 'register' && (
             <RegisterContactSheet
               contactId={ticket.contact.id}

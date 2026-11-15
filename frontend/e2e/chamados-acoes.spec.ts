@@ -86,6 +86,17 @@ test('responsável vê Encerrar e o ⋯ com as ações, e Cancelar chamado fica 
   const colorOf = (name: string) =>
     menu.getByRole('menuitem', { name }).evaluate((element) => getComputedStyle(element).color)
   const cancelColor = await colorOf('Cancelar chamado')
+  // A cor esperada é a do token destrutivo (--danger), resolvida pelo navegador em rgb(...).
+  const dangerColor = await page.evaluate(() => {
+    const probe = document.createElement('span')
+    probe.style.color = 'var(--danger)'
+    document.body.appendChild(probe)
+    const resolved = getComputedStyle(probe).color
+    probe.remove()
+    return resolved
+  })
+  expect(dangerColor).toMatch(/^rgb\(/)
+  expect(cancelColor).toBe(dangerColor)
   expect(await colorOf('Transferir')).not.toBe(cancelColor)
   expect(await colorOf('Devolver à fila')).not.toBe(cancelColor)
 
