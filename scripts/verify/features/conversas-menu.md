@@ -7,7 +7,7 @@ O atendente abre Chamados pelo menu, assume um chamado e responde nos temas disp
 - [jornada] Acesso pelo menu Helpdesk e estado sem atendimentos.
 - [jornada] Chamado recebido aparece na Fila e pode ser assumido.
 - [jornada] Mensagem enviada aparece no chamado, com capturas nos temas claro, escuro e alto contraste.
-- [não coberto] Filtrar e ordenar atendimentos, trocar de chamado e acessar Assuntos (`conversas.spec.ts`).
+- [não coberto] Listar só os chamados próprios, ordenar por atividade e trocar de chamado (`conversas.spec.ts`).
 - [manual] Receber e responder pelo WhatsApp real.
 
 ## How to get to it
@@ -30,6 +30,7 @@ scripts/verify/scripts/drive.sh conversas-menu
 
 ## Gotchas
 
+- A tela é `/chamados`: o endereço antigo `/conversas` mostra Não encontrado (ver `final-routes`).
 - A jornada cria um setor isolado com dados fictícios; a mensagem recebida não prova a conexão com o WhatsApp real.
 - A aba Fila é selecionada ao entrar. O nome acessível do botão inclui o nome do contato.
 - A verificação final conta chamados em atendimento no setor; a presença da mensagem enviada é conferida na tela.

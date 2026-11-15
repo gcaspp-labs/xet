@@ -34,7 +34,9 @@ await journey("consult-subjects", async (t) => {
     },
   );
   const page = await t.signIn(sector.agents[0]);
-  const card = page.getByRole("region", { name: "Chamado", exact: true });
+  // Na tela Chamados, as abas Fila e Assuntos ficam no mesmo cartão, à direita da conversa.
+  const card = page.getByRole("region", { name: "Fila e assuntos" });
+  const mine = page.getByRole("navigation", { name: "Meus chamados" });
   const conversation = page.getByRole("region", {
     name: "Conversa",
     exact: true,
@@ -42,9 +44,11 @@ await journey("consult-subjects", async (t) => {
   const first = await t.step(
     "Assumir chamado e consultar soluções ao lado do chat",
     async () => {
-      await page.getByRole("link", { name: "Cecília Consulta" }).click();
-      await page.getByRole("link", { name: "Ver chamado" }).click();
-      await page.getByRole("button", { name: "Assumir", exact: true }).click();
+      await expect(page).toHaveURL(/\/chamados$/);
+      await card
+        .getByRole("button", { name: "Assumir chamado de Cecília Consulta" })
+        .click();
+      await expect(page).toHaveURL(/\/chamados\/\d+$/);
       await card.getByRole("tab", { name: "Assuntos" }).click();
       await expect(card).toContainText("Agendadas pelo portal.");
       await expect(card).toContainText("Período confirmado.");
@@ -87,18 +91,32 @@ await journey("consult-subjects", async (t) => {
     await t.shot(page, "solucao-copiada");
   });
   await t.step(
-    "Outro chamado começa em Detalhes e o anterior mantém a busca",
+    "Outro chamado volta à Fila e o anterior lembra a busca",
     async () => {
-      await page.getByRole("link", { name: "Outro Cliente" }).click();
-      await expect(card.getByRole("tab", { name: "Detalhes" })).toHaveAttribute(
+      // A aba volta à Fila a cada troca de chamado; só a busca de cada chamado é lembrada.
+      await card.getByRole("tab", { name: "Fila" }).click();
+      await card
+        .getByRole("button", { name: "Assumir chamado de Outro Cliente" })
+        .click();
+      await expect(page).toHaveURL(/\/chamados\/\d+$/);
+      await expect(page.getByRole("heading", { name: "Outro Cliente" })).toBeVisible();
+      await expect(card.getByRole("tab", { name: "Fila" })).toHaveAttribute(
         "aria-selected",
         "true",
       );
-      await page.getByRole("link", { name: "Cecília Consulta" }).click();
-      await expect(card.getByRole("tab", { name: "Assuntos" })).toHaveAttribute(
+      await card.getByRole("tab", { name: "Assuntos" }).click();
+      await expect(
+        card.getByRole("searchbox", { name: "Buscar assuntos e soluções" }),
+      ).toHaveValue("");
+      await mine.getByRole("link", { name: /Cecília Consulta/ }).click();
+      await expect(
+        page.getByRole("heading", { name: "Cecília Consulta" }),
+      ).toBeVisible();
+      await expect(card.getByRole("tab", { name: "Fila" })).toHaveAttribute(
         "aria-selected",
         "true",
       );
+      await card.getByRole("tab", { name: "Assuntos" }).click();
       await expect(
         card.getByRole("searchbox", { name: "Buscar assuntos e soluções" }),
       ).toHaveValue("periodo");

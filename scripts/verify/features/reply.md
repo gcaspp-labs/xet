@@ -14,7 +14,7 @@ O responsável pelo chamado conversa com o contato pela tela da conversa, e ning
 - [jornada] Arquivo com legenda é enviado e pode ser baixado pela conversa.
 - [jornada] Com o número caído, a mensagem fica "Falhou", com o motivo e sem reenvio automático.
 - [jornada] O responsável reenvia depois de reconectar, sem duplicar.
-- [não coberto] Notas internas, "Falou com" e histórico do contato (`conversation.spec.ts`).
+- [não coberto] Histórico dos chamados do contato, na ficha do atendimento (`ficha-atendimento.spec.ts`).
 - [não coberto] Áudio gravado, imagens, vídeos e mídias recebidas (`media.spec.ts`).
 - [não coberto] Mensagens `pending` marcadas como `failed` ao reiniciar o serviço (só testes de integração).
 - [manual] Texto, imagem e PDF chegando ao celular do contato.
@@ -24,7 +24,7 @@ O responsável pelo chamado conversa com o contato pela tela da conversa, e ning
 
 ## How to get to it
 
-1. O atendente abre o chamado pela fila e clica em "Assumir".
+1. O atendente abre o chamado na tela Chamados, pelo endereço `/chamados/<id>`, e clica em "Assumir". Um chamado da fila só abre assim, até alguém assumir.
 2. Em `/chamados/<id>`, escreve em "Escreva a mensagem" e aperta Enter. A mensagem aparece à direita, primeiro como "Enviando" e depois como "Enviada".
 3. Para mandar um arquivo, clica no clipe, escolhe o arquivo, escreve a legenda e clica em enviar.
 4. Se a mensagem falhar, aparece "Falhou" com o motivo e o botão "Reenviar".

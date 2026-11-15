@@ -4,14 +4,16 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 
 ## Sub-features
 
-- [jornada] O colega acompanha, sem poder responder nem transferir.
+- [jornada] O colega acompanha, sem poder responder nem transferir (sem o menu "Mais ações").
 - [jornada] O responsável transfere para um colega; o destino não oferece o próprio responsável.
 - [jornada] Quem transferiu perde a resposta, e a conversa guarda o registro da transferência e o histórico.
 - [jornada] O novo responsável passa a responder sem recarregar.
 - [jornada] Pela API, o responsável anterior recebe 403.
 - [jornada] O supervisor transfere o chamado de outra pessoa.
 - [jornada] A transferência para outro setor exige o formulário, encerra a origem e cria um chamado na fila do destino.
-- [jornada] O destino vê a origem e o chamado anterior, assume e responde pelo adaptador falso.
+- [jornada] O destino vê "Transferido de ...", assume e responde pelo adaptador falso.
+- [jornada] A origem, encerrada como transferida, abre a ficha só leitura com o destino na cadeia de transferências.
+- [jornada] Cancelado o chamado novo, a ficha do destino traz o chamado anterior (setor, assunto, resolução e quem transferiu), e o link abre a ficha da origem.
 - [não coberto] Devolver à fila (`return.spec.ts`).
 - [não coberto] Abrir o chamado anterior pelo destino, sem poder agir nela (`transfer-sector.spec.ts`).
 - [não coberto] Recusa da transferência para um setor onde o contato já tem chamado aberto (só testes de integração).
@@ -21,16 +23,16 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 
 **No mesmo setor:**
 
-1. Com o chamado assumido, o responsável clica em "Transferir" no alto do chamado.
+1. Com o chamado assumido, o responsável abre o menu "Mais ações" e escolhe "Transferir".
 2. Escolhe a pessoa em "Transferir para" e confirma.
-3. O aviso "Chamado transferido" aparece, e a caixa de resposta some da tela dele. Na tela do novo responsável, ela aparece sem recarregar.
+3. O aviso "Chamado transferido" aparece, e ele volta a `/chamados`. Se reabrir o chamado pelo endereço, vê a conversa sem caixa de resposta. Na tela do novo responsável, a caixa aparece sem recarregar.
 
 **Para outro setor:**
 
-1. O responsável clica em "Outro setor".
+1. O responsável abre "Mais ações" e escolhe "Outro setor".
 2. Preenche assunto, resolução e módulos e escolhe o setor de destino. Se o contato não tiver cadastro, cadastra pelo próprio formulário.
-3. Confirma e volta ao painel, com o atendimento em "Realizados hoje", marcado "Transferido".
-4. No setor de destino, o chamado está na fila, com a mensagem "Transferido de ...". Quem assume escreve a primeira mensagem ao contato.
+3. Confirma e volta a `/chamados`. Em Atendimentos, a origem é uma linha do histórico, marcada "Transferido", com "para <setor de destino>".
+4. No setor de destino, o chamado está na fila, com a mensagem "Transferido de ...". Quem assume escreve a primeira mensagem ao contato. O chamado da fila só abre pelo endereço `/chamados/<id>`, até alguém assumir.
 
 ## Driving it
 
@@ -47,7 +49,8 @@ scripts/verify/scripts/drive.sh transfer
 - O destino lista também o supervisor do setor, com a contagem "0 em atendimento". Quem não é atendente pode receber o chamado; não trate isso como erro.
 - A transferência para outro setor exige contato cadastrado com órgão e ao menos um módulo no setor de origem. Sem isso, o formulário não conclui, e a jornada precisa falhar. Os módulos vêm do `seedSector({ modules })`.
 - Os dois setores precisam estar conectados, ou a resposta do destino falha.
-- O botão "Transferir" existe no alto da tela e dentro do painel lateral: use sempre o que está dentro do diálogo para confirmar.
+- "Transferir" é um item do menu "Mais ações" e também o botão de confirmar do diálogo: dentro do diálogo, use sempre o botão do próprio `getByRole('dialog', ...)`.
+- O "Chamado anterior" só aparece na ficha (`/atendimentos/<id>`), dentro dos detalhes, e a ficha só existe para chamado encerrado. Por isso a jornada cancela o chamado do destino no fim.
 - `changes.assignee_id` em `audit_logs` guarda os ids das pessoas, e não os nomes.
 
 ## Estado final observável
@@ -57,3 +60,4 @@ scripts/verify/scripts/drive.sh transfer
 - **`audit_logs`, mesmo setor:** `ticket_assigned` e dois `ticket_transferred_user`, com autor e `assignee_id` de/para corretos.
 - **`tickets`, outro setor:** origem `closed` com `closure_type = 'transferred'`; destino com `previous_ticket_id` apontando para a origem.
 - **`audit_logs`, outro setor:** `ticket_transferred_sector` na origem.
+- **`tickets`, destino cancelado no fim:** `closed` com `closure_type = 'cancelled'` e `previous_ticket_id` ainda apontando para a origem.
