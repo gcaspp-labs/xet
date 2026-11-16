@@ -370,6 +370,8 @@ Restrições:
 
 Regras de gravação (`helpdesk/reactions.go`): o chamado da mensagem é travado (`for update`); reação a mensagem de chamado encerrado ou desconhecida é descartada, sem criar mensagem nem chamado. Um evento mais antigo que a última alteração gravada do mesmo lado, reação ou remoção, não muda nada, e o mesmo evento repetido também não: a remoção guarda o horário em vez de apagar a linha, então uma reação removida não volta quando um evento antigo é entregue de novo, e uma remoção que chega antes de uma reação mais antiga a descarta. No mesmo horário, a remoção vence a reação; entre reações do mesmo horário, vale a última recebida. Só muda o aviso ao painel quando o que o lado mostra muda: uma remoção sem reação a remover é gravada, mas não avisa.
 
+Reação do setor pelo painel (`helpdesk/react.go`, #198): só o responsável, com o chamado aberto, reage a mensagem recebida ou enviada com identificador no WhatsApp (`sent`, `delivered` ou `read`). Com o chamado travado, decide: o emoji que o lado `sector` já mostra, de quem for, vira remoção; outro emoji substitui. Envia ao provedor fora da transação e, só se ele aceitar, trava o chamado de novo e grava o lado `sector` com `author_id` do atendente (`via_phone` falso), ou a remoção. O horário gravado é o do servidor, ou 1 µs depois do horário já gravado do lado, se este estiver à frente (relógio do celular adiantado), para a ação do painel ser sempre a alteração mais nova. Recusa do provedor não grava nada.
+
 ### `media_files` — Arquivo
 
 | Coluna | Tipo | Regras |
