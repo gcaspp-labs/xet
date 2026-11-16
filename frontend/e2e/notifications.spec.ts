@@ -7,9 +7,12 @@ import {
 } from '@playwright/test'
 import {
   admin,
+  login,
+  openWhenLive,
   seedSector,
   signIn,
   test,
+  trackSocket,
   unique,
   userPassword,
   chooseAction,
@@ -288,8 +291,11 @@ test('voltar a rede não repete o aviso dos chamados que entraram durante a qued
   baseURL,
 }) => {
   const { sector, agent } = await connectedSector(baseURL!, request)
-  await signIn(page, agent, userPassword)
-  // A fila precisa ter carregado: a primeira carga é a referência e não avisa.
+  await trackSocket(page)
+  await login(page, agent, userPassword)
+  await expect(page).not.toHaveURL(/\/login$/)
+  // A primeira carga da fila é a referência e não avisa: o chamado só pode chegar depois dela.
+  await openWhenLive(page, sector.id, '/chamados')
   await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
   await receive(request, sector.id, 'Gabi Antes')
   await expect(page.getByText('Chamado recebido: Gabi Antes')).toBeVisible()

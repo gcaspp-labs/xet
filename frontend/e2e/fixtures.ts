@@ -105,7 +105,49 @@ export const test = base.extend<{ onlySectors: (...ids: number[]) => Promise<voi
 declare global {
   interface Window {
     __toasts: string[]
+    __socketOpen: boolean
   }
+}
+
+// Marca quando o canal de avisos em tempo real abre: o chamado que chega antes disso não gera
+// aviso nenhum. Chame antes de abrir a página; vale para cada documento, inclusive depois de
+// recarregar. Usado com openWhenLive.
+export async function trackSocket(page: Page) {
+  await page.addInitScript(() => {
+    window.__socketOpen = false
+    const Real = window.WebSocket
+    class Tracked extends Real {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        this.addEventListener('open', () => {
+          window.__socketOpen = true
+        })
+      }
+    }
+    window.WebSocket = Tracked
+  })
+}
+
+// Abre a página inteira (o endereço, ou recarrega sem endereço) e só volta quando, nesse documento,
+// a primeira carga da fila do setor terminou e o canal de avisos abriu. Antes disso, um chamado que
+// chega entra na primeira carga, que é a referência do sino e não avisa (docs/features/
+// notifications.md, regra 7), e "Nenhum chamado esperando." já aparece enquanto a fila carrega.
+// A espera pela fila começa depois de a navegação trocar de documento: o documento anterior também
+// busca a fila (o login já leva a Chamados), e a resposta dele não serve de referência. Precisa de
+// trackSocket antes.
+export async function openWhenLive(page: Page, sectorId: number, url?: string) {
+  if (url) {
+    await page.goto(url, { waitUntil: 'commit' })
+  } else {
+    await page.reload({ waitUntil: 'commit' })
+  }
+  const queue = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).pathname === `/api/sectors/${sectorId}/tickets`,
+  )
+  await (await queue).finished()
+  await page.waitForFunction(() => window.__socketOpen)
 }
 
 // Os avisos (toasts) somem em 2,5 s. Com o swap cheio, o processo dos testes pode parar por mais
