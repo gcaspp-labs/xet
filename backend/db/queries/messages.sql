@@ -10,9 +10,10 @@ returning *;
 
 -- name: FindTicketMessageID :one
 -- Message of the ticket with the provider ID, to link a quote. Only the same
--- ticket: a quote never links to a message of another ticket.
+-- ticket: a quote never links to a message of another ticket. The sector of
+-- the ticket lets the search use the unique (sector_id, external_message_id).
 select id from messages
-where ticket_id = @ticket_id and external_message_id = @external_message_id;
+where sector_id = @sector_id and external_message_id = @external_message_id and ticket_id = @ticket_id;
 
 -- name: CreateProviderMessage :one
 -- Message that came from the provider (received, or sent from the phone).

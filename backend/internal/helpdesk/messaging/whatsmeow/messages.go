@@ -132,18 +132,16 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 // message. Without the ID of the quoted message there is no quote; without its
 // content there is no snippet. The quoted media is not downloaded.
 func quote(m *waE2E.Message) *messaging.Quote {
+	// A message carries one content; the getters are nil-safe, so the absent
+	// kinds return no context.
 	var info *waE2E.ContextInfo
-	switch {
-	case m.GetExtendedTextMessage() != nil:
-		info = m.GetExtendedTextMessage().GetContextInfo()
-	case m.GetImageMessage() != nil:
-		info = m.GetImageMessage().GetContextInfo()
-	case m.GetVideoMessage() != nil:
-		info = m.GetVideoMessage().GetContextInfo()
-	case m.GetAudioMessage() != nil:
-		info = m.GetAudioMessage().GetContextInfo()
-	case m.GetDocumentMessage() != nil:
-		info = m.GetDocumentMessage().GetContextInfo()
+	for _, c := range []interface{ GetContextInfo() *waE2E.ContextInfo }{
+		m.GetExtendedTextMessage(), m.GetImageMessage(), m.GetVideoMessage(),
+		m.GetAudioMessage(), m.GetDocumentMessage(),
+	} {
+		if info = c.GetContextInfo(); info != nil {
+			break
+		}
 	}
 	if info.GetStanzaID() == "" {
 		return nil

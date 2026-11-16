@@ -180,7 +180,11 @@ func setQuote(ctx context.Context, q *db.Queries, params *db.CreateProviderMessa
 		return nil
 	}
 	params.QuotedExternalMessageID = &quote.ExternalMessageID
-	id, err := q.FindTicketMessageID(ctx, db.FindTicketMessageIDParams{TicketID: params.TicketID, ExternalMessageID: &quote.ExternalMessageID})
+	id, err := q.FindTicketMessageID(ctx, db.FindTicketMessageIDParams{
+		SectorID:          params.SectorID,
+		ExternalMessageID: &quote.ExternalMessageID,
+		TicketID:          params.TicketID,
+	})
 	switch {
 	case err == nil:
 		params.QuotedMessageID = &id

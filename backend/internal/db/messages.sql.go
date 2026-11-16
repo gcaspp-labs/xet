@@ -277,18 +277,20 @@ func (q *Queries) FailSentMessages(ctx context.Context, arg FailSentMessagesPara
 
 const findTicketMessageID = `-- name: FindTicketMessageID :one
 select id from messages
-where ticket_id = $1 and external_message_id = $2
+where sector_id = $1 and external_message_id = $2 and ticket_id = $3
 `
 
 type FindTicketMessageIDParams struct {
-	TicketID          int64
+	SectorID          int64
 	ExternalMessageID *string
+	TicketID          int64
 }
 
 // Message of the ticket with the provider ID, to link a quote. Only the same
-// ticket: a quote never links to a message of another ticket.
+// ticket: a quote never links to a message of another ticket. The sector of
+// the ticket lets the search use the unique (sector_id, external_message_id).
 func (q *Queries) FindTicketMessageID(ctx context.Context, arg FindTicketMessageIDParams) (int64, error) {
-	row := q.db.QueryRow(ctx, findTicketMessageID, arg.TicketID, arg.ExternalMessageID)
+	row := q.db.QueryRow(ctx, findTicketMessageID, arg.SectorID, arg.ExternalMessageID, arg.TicketID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
