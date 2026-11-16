@@ -42,21 +42,26 @@ func (e *testEnv) sendText(ticketID int64, token, requestID, body string) respon
 // sendFile posts a file to the ticket as the panel does, in a multipart form.
 func (e *testEnv) sendFile(ticketID int64, token, requestID, name, mimeType string, data []byte, caption string) response {
 	e.T.Helper()
-	return e.sendForm(ticketID, token, requestID, "file", name, mimeType, data, caption)
+	return e.sendForm(ticketID, token, requestID, "file", name, mimeType, data, caption, nil)
 }
 
 // sendVoice posts audio recorded in the browser, to go as a voice message.
 func (e *testEnv) sendVoice(ticketID int64, token, requestID string, data []byte, caption string) response {
 	e.T.Helper()
-	return e.sendForm(ticketID, token, requestID, "voice", "gravacao.webm", "audio/webm;codecs=opus", data, caption)
+	return e.sendForm(ticketID, token, requestID, "voice", "gravacao.webm", "audio/webm;codecs=opus", data, caption, nil)
 }
 
-func (e *testEnv) sendForm(ticketID int64, token, requestID, field, name, mimeType string, data []byte, caption string) response {
+// sendForm posts the multipart form of a file or voice message, with any
+// extra text fields of the form.
+func (e *testEnv) sendForm(ticketID int64, token, requestID, field, name, mimeType string, data []byte, caption string, extra map[string]string) response {
 	e.T.Helper()
 	var buf bytes.Buffer
 	form := multipart.NewWriter(&buf)
 	_ = form.WriteField("clientRequestId", requestID)
 	_ = form.WriteField("caption", caption)
+	for k, v := range extra {
+		_ = form.WriteField(k, v)
+	}
 	header := textproto.MIMEHeader{}
 	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, field, name))
 	header.Set("Content-Type", mimeType)
