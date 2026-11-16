@@ -276,14 +276,61 @@ func (s *session) receipt(evt *events.Receipt) bool {
 }
 
 func (a *Adapter) SendText(ctx context.Context, msg messaging.TextMessage) (string, error) {
-	return a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(context.Context, *whatsmeow.Client) (*waE2E.Message, error) {
-		return &waE2E.Message{Conversation: proto.String(msg.Body)}, nil
+	return a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(_ context.Context, cli *whatsmeow.Client, to types.JID) (*waE2E.Message, error) {
+		if msg.Quote == nil {
+			return &waE2E.Message{Conversation: proto.String(msg.Body)}, nil
+		}
+		// A reply carries its context, which a plain conversation has not.
+		return &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: proto.String(msg.Body), ContextInfo: replyContext(cli, to, msg.Quote),
+		}}, nil
 	})
+}
+
+// replyContext is the context that makes a message a reply: the ID of the
+// quoted message, its author (the contact, or the sector number itself) and
+// its snippet, which WhatsApp shows in the bubble of the quote.
+func replyContext(cli *whatsmeow.Client, to types.JID, q *messaging.Quote) *waE2E.ContextInfo {
+	if q == nil {
+		return nil
+	}
+	author := to.ToNonAD()
+	if q.FromSector {
+		author = cli.Store.GetJID().ToNonAD()
+	}
+	return &waE2E.ContextInfo{
+		StanzaID:      proto.String(q.ExternalMessageID),
+		Participant:   proto.String(author.String()),
+		QuotedMessage: quotedMessage(q.Snippet),
+	}
+}
+
+// quotedMessage rebuilds the quoted content from the snippet, without its
+// media; the reverse of snippet. Without a snippet, the text is empty.
+func quotedMessage(sn *messaging.QuoteSnippet) *waE2E.Message {
+	if sn == nil {
+		return &waE2E.Message{Conversation: proto.String("")}
+	}
+	text := optional(sn.Text)
+	switch sn.Type {
+	case messaging.TypeImage:
+		return &waE2E.Message{ImageMessage: &waE2E.ImageMessage{Caption: text}}
+	case messaging.TypeVideo:
+		return &waE2E.Message{VideoMessage: &waE2E.VideoMessage{Caption: text}}
+	case messaging.TypeAudio:
+		return &waE2E.Message{AudioMessage: &waE2E.AudioMessage{PTT: proto.Bool(true)}}
+	case messaging.TypeDocument:
+		return &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{FileName: text, Title: text}}
+	default:
+		// Text, and a file that could not be downloaded, whose original kind
+		// is unknown: its caption or name goes as text.
+		return &waE2E.Message{Conversation: proto.String(sn.Text)}
+	}
 }
 
 // SendMedia uploads the attachment to WhatsApp and sends it.
 func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (string, error) {
-	return a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(ctx context.Context, cli *whatsmeow.Client) (*waE2E.Message, error) {
+	return a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(ctx context.Context, cli *whatsmeow.Client, to types.JID) (*waE2E.Message, error) {
 		mediaType, ok := map[messaging.MessageType]whatsmeow.MediaType{
 			messaging.TypeImage:    whatsmeow.MediaImage,
 			messaging.TypeVideo:    whatsmeow.MediaVideo,
@@ -301,28 +348,29 @@ func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (st
 		mime := proto.String(msg.Media.MimeType)
 		length := proto.Uint64(up.FileLength)
 		seconds := proto.Uint32(uint32(max(msg.Media.DurationSeconds, 0)))
+		reply := replyContext(cli, to, msg.Quote)
 		switch msg.Type {
 		case messaging.TypeImage:
 			return &waE2E.Message{ImageMessage: &waE2E.ImageMessage{
 				URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256,
-				FileSHA256: up.FileSHA256, FileLength: length, Mimetype: mime, Caption: caption,
+				FileSHA256: up.FileSHA256, FileLength: length, Mimetype: mime, Caption: caption, ContextInfo: reply,
 			}}, nil
 		case messaging.TypeVideo:
 			return &waE2E.Message{VideoMessage: &waE2E.VideoMessage{
 				URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256,
-				FileSHA256: up.FileSHA256, FileLength: length, Mimetype: mime, Caption: caption, Seconds: seconds,
+				FileSHA256: up.FileSHA256, FileLength: length, Mimetype: mime, Caption: caption, Seconds: seconds, ContextInfo: reply,
 			}}, nil
 		case messaging.TypeAudio:
 			// Voice note: WhatsApp plays OGG/Opus with PTT set.
 			return &waE2E.Message{AudioMessage: &waE2E.AudioMessage{
 				URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256,
-				FileSHA256: up.FileSHA256, FileLength: length, Mimetype: mime, Seconds: seconds, PTT: proto.Bool(true),
+				FileSHA256: up.FileSHA256, FileLength: length, Mimetype: mime, Seconds: seconds, PTT: proto.Bool(true), ContextInfo: reply,
 			}}, nil
 		default:
 			return &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{
 				URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256,
 				FileSHA256: up.FileSHA256, FileLength: length, Mimetype: mime, Caption: caption,
-				FileName: optional(msg.Media.FileName), Title: optional(msg.Media.FileName),
+				FileName: optional(msg.Media.FileName), Title: optional(msg.Media.FileName), ContextInfo: reply,
 			}}, nil
 		}
 	})
@@ -353,7 +401,7 @@ func (a *Adapter) SendReaction(ctx context.Context, r messaging.Reaction) error 
 	return nil
 }
 
-func (a *Adapter) send(ctx context.Context, sectorID int64, to, key string, build func(context.Context, *whatsmeow.Client) (*waE2E.Message, error)) (string, error) {
+func (a *Adapter) send(ctx context.Context, sectorID int64, to, key string, build func(context.Context, *whatsmeow.Client, types.JID) (*waE2E.Message, error)) (string, error) {
 	cli, err := a.client(sectorID)
 	if err != nil {
 		return "", err
@@ -362,7 +410,7 @@ func (a *Adapter) send(ctx context.Context, sectorID int64, to, key string, buil
 	if err != nil {
 		return "", fmt.Errorf("parse recipient %q: %w", to, err)
 	}
-	msg, err := build(ctx, cli)
+	msg, err := build(ctx, cli, jid)
 	if err != nil {
 		return "", err
 	}

@@ -51,26 +51,36 @@ func (q *Queries) AdvanceMessageStatus(ctx context.Context, arg AdvanceMessageSt
 }
 
 const createAgentMessage = `-- name: CreateAgentMessage :one
-insert into messages (ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, client_request_id, status, sent_at)
-values ($1, $2, $3, 'outbound', 'agent', $4, $5, $6, $7, $8, 'pending', now())
+insert into messages (
+    ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, client_request_id, status, sent_at,
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+)
+values (
+    $1, $2, $3, 'outbound', 'agent', $4, $5, $6, $7, $8, 'pending', now(),
+    $9, $10, $11, $12
+)
 on conflict (client_request_id) where client_request_id is not null do nothing
 returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
 `
 
 type CreateAgentMessageParams struct {
-	TicketID        int64
-	SectorID        int64
-	ContactID       int64
-	AuthorID        *int64
-	Type            MessageType
-	Body            *string
-	MediaID         *int64
-	ClientRequestID pgtype.UUID
+	TicketID                int64
+	SectorID                int64
+	ContactID               int64
+	AuthorID                *int64
+	Type                    MessageType
+	Body                    *string
+	MediaID                 *int64
+	ClientRequestID         pgtype.UUID
+	QuotedExternalMessageID *string
+	QuotedMessageID         *int64
+	QuotedType              NullMessageType
+	QuotedBody              *string
 }
 
 // Message sent by an agent through the system, recorded as pending before it
-// goes to the provider. A repeated request (same client_request_id) returns
-// no row.
+// goes to the provider, with the message of the ticket it quotes, if any. A
+// repeated request (same client_request_id) returns no row.
 func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) (Message, error) {
 	row := q.db.QueryRow(ctx, createAgentMessage,
 		arg.TicketID,
@@ -81,6 +91,10 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 		arg.Body,
 		arg.MediaID,
 		arg.ClientRequestID,
+		arg.QuotedExternalMessageID,
+		arg.QuotedMessageID,
+		arg.QuotedType,
+		arg.QuotedBody,
 	)
 	var i Message
 	err := row.Scan(

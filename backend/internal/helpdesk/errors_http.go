@@ -39,6 +39,8 @@ func (h *Handler) ticketError(w http.ResponseWriter, r *http.Request, err error)
 		httpx.WriteError(w, http.StatusConflict, "Este envio já foi usado em outra mensagem. Tente novamente.")
 	case errors.Is(err, ErrNotFailed):
 		httpx.WriteError(w, http.StatusConflict, "Esta mensagem não está com falha.")
+	case errors.Is(err, ErrNotQuotable):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Não é possível responder citando esta mensagem.")
 	case errors.Is(err, ErrInvalidAudio):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Não foi possível ler o áudio gravado. Grave novamente.")
 	case errors.Is(err, ErrInvalidEmoji):

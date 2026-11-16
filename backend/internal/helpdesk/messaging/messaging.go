@@ -96,11 +96,17 @@ type Message struct {
 	Quote *Quote
 }
 
-// Quote is the message a reply cites. It points at it only by its provider
-// message ID, which every provider has.
+// Quote is the message a reply cites, in a received message or in one to
+// send. It points at it only by its provider message ID, which every provider
+// has; the rest is optional.
 type Quote struct {
-	// ExternalMessageID is the provider ID of the quoted message.
+	// ExternalMessageID is the provider ID of the quoted message. Required.
 	ExternalMessageID string
+	// FromSector reports, when sending, a quoted message sent by the sector
+	// number rather than received from the contact. Optional: providers whose
+	// protocol needs the author of the quoted message use it (Whatsmeow),
+	// others ignore it. Received messages leave it false.
+	FromSector bool
 	// Snippet is the quoted content to show. Optional: a provider that only
 	// delivers the ID (such as the official API) leaves it nil.
 	Snippet *QuoteSnippet
@@ -196,6 +202,8 @@ type TextMessage struct {
 	To             string
 	Body           string
 	IdempotencyKey string
+	// Quote is the message this one replies to; nil when it quotes nothing.
+	Quote *Quote
 }
 
 // MediaMessage is an attachment to send, with an optional caption.
@@ -206,6 +214,8 @@ type MediaMessage struct {
 	Media          Media
 	Caption        string
 	IdempotencyKey string
+	// Quote is the message this one replies to; nil when it quotes nothing.
+	Quote *Quote
 }
 
 // Reaction is the reaction of the sector number to a message of a chat with a

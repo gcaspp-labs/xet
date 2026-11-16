@@ -256,10 +256,13 @@ func (a *Adapter) SavedContacts(_ context.Context, sectorID int64) ([]messaging.
 	return append([]messaging.SavedContact(nil), a.saved[sectorID]...), nil
 }
 
+// SendText records the text among the sent messages, with the quote it
+// carries (the ID and, when given, the author and the snippet).
 func (a *Adapter) SendText(_ context.Context, msg messaging.TextMessage) (string, error) {
 	return a.send(msg.SectorID, msg.IdempotencyKey, msg)
 }
 
+// SendMedia records the attachment like SendText, quote included.
 func (a *Adapter) SendMedia(_ context.Context, msg messaging.MediaMessage) (string, error) {
 	return a.send(msg.SectorID, msg.IdempotencyKey, msg)
 }
