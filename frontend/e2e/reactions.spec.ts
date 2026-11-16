@@ -47,6 +47,47 @@ async function simulateMessaging(
   expect(response.ok()).toBeTruthy()
 }
 
+const received = 'Bom dia, preciso de ajuda'
+
+// Setor conectado e pareado, com uma mensagem do cliente na fila. A reação do cliente e a do
+// celular do setor chegam pelas rotas de teste do adaptador falso.
+async function receiveCustomerMessage(
+  request: APIRequestContext,
+  baseURL: string,
+  contactName = 'Clara Cliente',
+) {
+  const seed = await seedSector(baseURL)
+  const { sector } = seed
+  await connectSector(baseURL, sector.id)
+  await simulateMessaging(request, sector.id, 'pair')
+  const { phone, id } = unique()
+  const messageId = `E2E-REACT-${id}`
+  await simulateMessaging(request, sector.id, 'receive', {
+    externalMessageId: messageId,
+    phone,
+    contactName,
+    body: received,
+  })
+  const customerReacts = (emoji: string, fromSectorPhone = false) =>
+    simulateMessaging(request, sector.id, 'react', {
+      targetExternalMessageId: messageId,
+      phone,
+      emoji,
+      fromSectorPhone,
+    })
+  return { ...seed, customerReacts }
+}
+
+const listMessages = async (page: Page, ticketId: number) =>
+  json<ApiMessage[]>(await page.request.get(`/api/tickets/${ticketId}/messages`))
+
+// As reações guardadas na mensagem recebida do chamado, como a API as entrega.
+async function storedReactions(page: Page, ticketId: number) {
+  const message = (await listMessages(page, ticketId)).find((m) => m.body === received)
+  expect(message).toBeTruthy()
+  return message!.reactions
+}
+
 // A reação recebida chega pela API de mensagens do chamado, troca, some quando removida, e
 // sobrevive a recarregar a página.
 test('reação do cliente e do celular do setor chegam pela API e continuam depois de recarregar', async ({
@@ -54,35 +95,11 @@ test('reação do cliente e do celular do setor chegam pela API e continuam depo
   request,
   baseURL,
 }) => {
-  const { sector, agent } = await seedSector(baseURL!)
-  await connectSector(baseURL!, sector.id)
-  await simulateMessaging(request, sector.id, 'pair')
-  const { phone: number, id } = unique()
-  const messageId = `E2E-REACT-${id}`
-  await simulateMessaging(request, sector.id, 'receive', {
-    externalMessageId: messageId,
-    phone: number,
-    contactName: 'Clara Cliente',
-    body: 'Bom dia, preciso de ajuda',
-  })
+  const { agent, customerReacts: react } = await receiveCustomerMessage(request, baseURL!)
 
   await signIn(page, agent, userPassword)
   const ticketId = await queuedTicketId(page, 'Clara Cliente')
-  const reactions = async () => {
-    const messages = await json<ApiMessage[]>(
-      await page.request.get(`/api/tickets/${ticketId}/messages`),
-    )
-    const message = messages.find((m) => m.body === 'Bom dia, preciso de ajuda')
-    expect(message).toBeTruthy()
-    return message!.reactions
-  }
-  const react = (emoji: string, fromSectorPhone = false) =>
-    simulateMessaging(request, sector.id, 'react', {
-      targetExternalMessageId: messageId,
-      phone: number,
-      emoji,
-      fromSectorPhone,
-    })
+  const reactions = () => storedReactions(page, ticketId)
 
   expect(await reactions()).toEqual({ customer: null, sector: null })
 
@@ -107,51 +124,26 @@ test('reação do cliente e do celular do setor chegam pela API e continuam depo
   expect((await reactions()).sector?.emoji).toBe('🙏')
 
   // Nada foi gravado como mensagem: continua uma só, e o chamado é o mesmo.
-  const messages = await json<ApiMessage[]>(
-    await page.request.get(`/api/tickets/${ticketId}/messages`),
-  )
-  expect(messages).toHaveLength(1)
+  expect(await listMessages(page, ticketId)).toHaveLength(1)
 })
 
-const received = 'Bom dia, preciso de ajuda'
-
-// Chamado assumido pelo atendente, com uma mensagem do cliente. A reação do cliente e a do celular
-// do setor chegam pelas rotas de teste do adaptador falso.
+// Chamado assumido pelo atendente, com uma mensagem do cliente.
 async function openAssignedConversation(
   page: Page,
   request: APIRequestContext,
   baseURL: string,
   contactName = 'Clara Cliente',
 ) {
-  const seed = await seedSector(baseURL)
-  const { sector, agent } = seed
-  await connectSector(baseURL, sector.id)
-  await simulateMessaging(request, sector.id, 'pair')
-  const { phone: number, id } = unique()
-  const messageId = `E2E-REACT-${id}`
-  await simulateMessaging(request, sector.id, 'receive', {
-    externalMessageId: messageId,
-    phone: number,
-    contactName,
-    body: received,
-  })
-  await signIn(page, agent, userPassword)
+  const seed = await receiveCustomerMessage(request, baseURL, contactName)
+  await signIn(page, seed.agent, userPassword)
   await openQueued(page, contactName)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
-  const customerReacts = (emoji: string, fromSectorPhone = false) =>
-    simulateMessaging(request, sector.id, 'react', {
-      targetExternalMessageId: messageId,
-      phone: number,
-      emoji,
-      fromSectorPhone,
-    })
   return {
     ...seed,
     conversation,
     message: conversation.getByRole('listitem', { name: 'Mensagem recebida' }),
-    customerReacts,
     ticketId: Number(new URL(page.url()).pathname.split('/').pop()),
   }
 }
@@ -229,12 +221,7 @@ test('o responsável reage, troca e remove a reação, com a barra de 6 emojis e
     request,
     baseURL!,
   )
-  const stored = async () => {
-    const messages = await json<ApiMessage[]>(
-      await page.request.get(`/api/tickets/${ticketId}/messages`),
-    )
-    return messages.find((m) => m.body === received)!.reactions.sector
-  }
+  const stored = async () => (await storedReactions(page, ticketId)).sector
   await expect(message.getByRole('button', { name: 'Reagir', exact: true })).toBeAttached()
   expect(await stored()).toBeNull()
 
@@ -310,12 +297,7 @@ test('falha no envio desfaz a reação na tela e avisa, sem nova tentativa', asy
   baseURL,
 }) => {
   const { message, sector, ticketId } = await openAssignedConversation(page, request, baseURL!)
-  const stored = async () => {
-    const messages = await json<ApiMessage[]>(
-      await page.request.get(`/api/tickets/${ticketId}/messages`),
-    )
-    return messages.find((m) => m.body === received)!.reactions.sector?.emoji ?? null
-  }
+  const stored = async () => (await storedReactions(page, ticketId)).sector?.emoji ?? null
 
   // Sem reação antes: a escolha some da tela e aparece o aviso.
   await simulateMessaging(request, sector.id, 'fail-next-reaction')
@@ -403,7 +385,13 @@ test('quem não é o responsável e o chamado encerrado veem as reações sem po
     data: { reason: 'Engano.' },
   })
   expect(cancel.ok()).toBeTruthy()
-  await page.goto(`/atendimentos/${ticketId}`)
+  // Pelo histórico: a linha do chamado em Atendimentos abre a ficha.
+  await page.goto('/atendimentos')
+  await page
+    .getByRole('row', { name: /Clara Cliente/ })
+    .getByRole('cell', { name: 'Cancelado' })
+    .click({ force: true })
+  await expect(page).toHaveURL(new RegExp(`/atendimentos/${ticketId}$`))
   const closed = page
     .getByRole('region', { name: 'Conversa', exact: true })
     .getByRole('listitem', { name: 'Mensagem recebida' })
@@ -415,10 +403,7 @@ test('quem não é o responsável e o chamado encerrado veem as reações sem po
   await expect(page).toHaveURL(new RegExp(`/atendimentos/${ticketId}$`))
   await expect(page.getByRole('button', { name: 'Reagir', exact: true })).toHaveCount(0)
   // A API também recusa: o responsável de antes não reage a chamado encerrado.
-  const messages = await json<ApiMessage[]>(
-    await page.request.get(`/api/tickets/${ticketId}/messages`),
-  )
-  const target = messages.find((m) => m.body === received)!
+  const target = (await listMessages(page, ticketId)).find((m) => m.body === received)!
   const refused = await page.request.put(`/api/messages/${target.id}/reaction`, {
     data: { emoji: '👍' },
   })
