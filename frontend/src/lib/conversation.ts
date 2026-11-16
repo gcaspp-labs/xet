@@ -61,6 +61,17 @@ export type Message = {
     durationSeconds: number | null
   } | null
   reactions: MessageReactions
+  quote: MessageQuote | null
+}
+
+// A mensagem que uma resposta cita; `quote` é null quando não há citação. `messageId` liga à
+// mensagem citada só quando ela está no mesmo chamado. `type` e `text` são o trecho que o WhatsApp
+// entregou, e podem faltar: com a ligação a tela mostra a mensagem ligada, e sem os dois, "Mensagem
+// indisponível".
+export type MessageQuote = {
+  messageId: number | null
+  type: MessageType | null
+  text: string | null
 }
 
 // Reação atual de cada lado da mensagem; um lado sem reação é null. O setor tem uma só: `by` é quem
@@ -193,7 +204,14 @@ export function useOrganizationHistory(
 
 type SentMessage = { id: number; status: MessageStatus; failureReason: string | null }
 
-export type Outgoing = { requestId: string; body: string; file: File | null; voice?: Blob }
+export type Outgoing = {
+  requestId: string
+  body: string
+  file: File | null
+  voice?: Blob
+  // A mensagem do chamado que a resposta cita.
+  quotedMessageId?: number
+}
 
 // Extensão do arquivo gravado, só para o nome no envio; o backend lê o conteúdo.
 function recordingName(blob: Blob) {
@@ -207,21 +225,23 @@ function recordingName(blob: Blob) {
 export function useSendMessage(ticketId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ requestId, body, file, voice }: Outgoing) => {
+    mutationFn: ({ requestId, body, file, voice, quotedMessageId }: Outgoing) => {
       if (voice) {
         const form = new FormData()
         form.append('clientRequestId', requestId)
+        if (quotedMessageId !== undefined) form.append('quotedMessageId', String(quotedMessageId))
         form.append('voice', voice, recordingName(voice))
         return api<SentMessage>(`/tickets/${ticketId}/messages`, { method: 'POST', body: form })
       }
       if (!file) {
         return api<SentMessage>(`/tickets/${ticketId}/messages`, {
           method: 'POST',
-          body: { clientRequestId: requestId, body },
+          body: { clientRequestId: requestId, body, quotedMessageId },
         })
       }
       const form = new FormData()
       form.append('clientRequestId', requestId)
+      if (quotedMessageId !== undefined) form.append('quotedMessageId', String(quotedMessageId))
       form.append('caption', body)
       form.append('file', file)
       return api<SentMessage>(`/tickets/${ticketId}/messages`, { method: 'POST', body: form })
@@ -246,6 +266,13 @@ export function canReactTo(message: Message) {
     message.direction === 'inbound' ||
     (message.status !== null && ['sent', 'delivered', 'read'].includes(message.status))
   )
+}
+
+// Só a mensagem que o WhatsApp conhece é citada, como na reação, e a exibida como não suportada
+// (figurinha, localização, aviso antigo de reação) fica de fora. Só o responsável cita; o backend
+// confere de novo.
+export function canQuoteMessage(message: Message) {
+  return canReactTo(message) && message.type !== 'unsupported'
 }
 
 // Reagir pelo setor: o mesmo emoji de agora remove, outro troca (quem decide é o backend). A tela

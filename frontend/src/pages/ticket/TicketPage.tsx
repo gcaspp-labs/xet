@@ -23,12 +23,14 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { EmojiPicker } from '@/components/EmojiPicker'
+import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
@@ -49,6 +51,7 @@ import {
   type Message,
   type MessageStatus,
   type TicketDetail,
+  canQuoteMessage,
   canReactTo,
   maxFileSize,
   newRequestId,
@@ -298,12 +301,19 @@ function timeline(messages: Message[], logs: AssignmentLog[]): TimelineItem[] {
   )
 }
 
+// A mensagem do XET que esta cita, quando a citação está ligada a uma do mesmo chamado.
+function quotedOf(message: Message, byId: Map<number, Message>) {
+  return message.quote?.messageId != null ? byId.get(message.quote.messageId) : undefined
+}
+
 function MessageBubble({
   message,
   canRetry,
   onRetry,
   retrying,
   onReact,
+  onReply,
+  quoted,
   modern = false,
 }: {
   message: Message
@@ -312,6 +322,10 @@ function MessageBubble({
   retrying: boolean
   // Só o responsável reage; sem isto, a mensagem mostra as reações mas não oferece reagir.
   onReact?: (emoji: string) => void
+  // Só o responsável responde citando; sem isto, a mensagem mostra a citação mas não oferece responder.
+  onReply?: () => void
+  // A mensagem do XET que esta cita, quando está na conversa.
+  quoted?: Message
   modern?: boolean
 }) {
   const outbound = message.direction === 'outbound'
@@ -323,6 +337,7 @@ function MessageBubble({
 
   return (
     <li
+      id={`message-${message.id}`}
       aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
       className={cn(
         'group/msg flex max-w-[78%] flex-col gap-1',
@@ -352,6 +367,9 @@ function MessageBubble({
             >
               {author}
             </p>
+          )}
+          {message.quote && (
+            <QuoteBlock quote={message.quote} quoted={quoted} onPrimary={modern && outbound} />
           )}
           <MessageMedia message={message} />
           {message.type === 'media_unavailable' && (
@@ -420,13 +438,23 @@ function MessageBubble({
         {onReact && canReactTo(message) && (
           <ReactButton current={message.reactions.sector?.emoji} onReact={onReact} />
         )}
+        {onReply && canQuoteMessage(message) && <ReplyButton onReply={onReply} />}
       </div>
       <ReactionChips reactions={message.reactions} outbound={outbound} />
     </li>
   )
 }
 
-function Composer({ ticketId }: { ticketId: number }) {
+function Composer({
+  ticketId,
+  quoted,
+  onCancelQuote,
+}: {
+  ticketId: number
+  // A mensagem que a próxima resposta cita, escolhida no botão de responder.
+  quoted: Message | null
+  onCancelQuote: () => void
+}) {
   const send = useSendMessage(ticketId)
   const recorder = useVoiceRecorder()
   const [text, setText] = useState('')
@@ -438,6 +466,14 @@ function Composer({ ticketId }: { ticketId: number }) {
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const messageInput = useRef<HTMLTextAreaElement>(null)
+
+  // Citar outra mensagem, ou cancelar a citação, muda a mensagem a enviar: um novo identificador de
+  // envio. Ao citar, o foco vai para o campo, para escrever a resposta.
+  const quotedId = quoted?.id
+  useEffect(() => {
+    requestId.current = null
+    if (quotedId !== undefined) messageInput.current?.focus()
+  }, [quotedId])
 
   const insertEmoji = (emoji: string) => {
     const input = messageInput.current
@@ -495,13 +531,15 @@ function Composer({ ticketId }: { ticketId: number }) {
       return
     }
     requestId.current ??= newRequestId()
+    const quotedMessageId = quoted?.id
     send.mutate(
       voice
-        ? { requestId: requestId.current, body: '', file: null, voice: voice.blob }
-        : { requestId: requestId.current, body, file },
+        ? { requestId: requestId.current, body: '', file: null, voice: voice.blob, quotedMessageId }
+        : { requestId: requestId.current, body, file, quotedMessageId },
       {
         onSuccess: () => {
           requestId.current = null
+          onCancelQuote()
           if (voice) {
             changeVoice(null)
           } else {
@@ -530,6 +568,7 @@ function Composer({ ticketId }: { ticketId: number }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+      {quoted && <DraftQuote message={quoted} onCancel={onCancelQuote} />}
       {file && !voice && (
         <div className="flex items-center gap-2 self-start rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-1.5">
           <Paperclip strokeWidth={1.7} className="size-[15px]" aria-hidden />
@@ -665,6 +704,18 @@ export function ConversationCard({
   const react = useReactToMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
+  // A citação em preparo é deste chamado: trocar de chamado a descarta, e perder o direito de
+  // responder (transferência, encerramento) também.
+  const [quoting, setQuoting] = useState<number | null>(null)
+  const [quotingTicketId, setQuotingTicketId] = useState(ticket.id)
+  if (quotingTicketId !== ticket.id) {
+    setQuotingTicketId(ticket.id)
+    setQuoting(null)
+  }
+  // Sem direito de responder, a citação em preparo é descartada de vez: ao reassumir, o campo volta limpo.
+  if (!canReply && quoting !== null) setQuoting(null)
+  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
+  const quotedDraft = canReply && quoting !== null ? (byId.get(quoting) ?? null) : null
 
   // Mostra sempre a mensagem mais recente.
   useEffect(() => {
@@ -715,6 +766,7 @@ export function ConversationCard({
                 <MessageBubble
                   key={`message-${item.message.id}`}
                   message={item.message}
+                  quoted={quotedOf(item.message, byId)}
                   modern={modern}
                   canRetry={canReply}
                   retrying={retry.isPending}
@@ -724,6 +776,7 @@ export function ConversationCard({
                       ? (emoji) => react.mutate({ messageId: item.message.id, emoji, actor: user })
                       : undefined
                   }
+                  onReply={canReply ? () => setQuoting(item.message.id) : undefined}
                 />
               ) : (
                 <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
@@ -748,7 +801,11 @@ export function ConversationCard({
         </div>
       )}
       {canReply ? (
-        <Composer ticketId={ticket.id} />
+        <Composer
+          ticketId={ticket.id}
+          quoted={quotedDraft}
+          onCancelQuote={() => setQuoting(null)}
+        />
       ) : (
         notice && (
           <div className="border-t border-line-soft p-3">
@@ -1056,6 +1113,7 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
   const { data: messages = [] } = useMessages(ticket.id)
   const { data: logs = [] } = useAssignments(ticket.id)
   const list = useRef<HTMLDivElement>(null)
+  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
 
   // Abre no fim: o desfecho e as correções ficam à vista.
   useEffect(() => {
@@ -1076,6 +1134,7 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
                 <MessageBubble
                   key={`message-${item.message.id}`}
                   message={item.message}
+                  quoted={quotedOf(item.message, byId)}
                   canRetry={false}
                   retrying={false}
                   onRetry={() => {}}
