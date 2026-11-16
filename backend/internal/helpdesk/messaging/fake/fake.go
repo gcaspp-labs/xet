@@ -62,13 +62,12 @@ var (
 
 func New(handler messaging.EventHandler) *Adapter {
 	return &Adapter{
-		handler:     handler,
-		sessions:    map[int64]*session{},
-		revoked:     map[revokedAccount]bool{},
-		unreachable: map[int64]bool{},
-		saved:       map[int64][]messaging.SavedContact{},
-		sent:        map[string]string{},
-
+		handler:        handler,
+		sessions:       map[int64]*session{},
+		revoked:        map[revokedAccount]bool{},
+		unreachable:    map[int64]bool{},
+		saved:          map[int64][]messaging.SavedContact{},
+		sent:           map[string]string{},
 		refuseReaction: map[int64]bool{},
 	}
 }

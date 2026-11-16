@@ -50,43 +50,54 @@ func (s *Service) React(ctx context.Context, provider messaging.Provider, actor 
 	if !isSingleEmoji(emoji) {
 		return nil, ErrInvalidEmoji
 	}
-	target, err := s.q.GetMessage(ctx, messageID)
+	ref, err := s.q.GetMessage(ctx, messageID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrMessageNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get message: %w", err)
 	}
-	if _, err := s.accessible(ctx, actor, target.TicketID); err != nil {
+	if _, err := s.accessible(ctx, actor, ref.TicketID); err != nil {
 		return nil, err
 	}
 
-	send := emoji
+	// Decided with the ticket locked, on the message as it is now: its status
+	// may have changed since it was read above.
+	var target db.Message
+	removing := false
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, target.TicketID))
+		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ref.TicketID))
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
 		if err := conducts(t, actor); err != nil {
 			return err
 		}
+		if target, err = q.GetMessage(ctx, ref.ID); err != nil {
+			return fmt.Errorf("get message: %w", err)
+		}
 		if !reactable(target) {
 			return ErrNotReactable
 		}
-		current, err := q.GetMessageReaction(ctx, db.GetMessageReactionParams{MessageID: target.ID, Side: db.ReactionSideSector})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("get reaction: %w", err)
+		current, err := sectorReaction(ctx, q, target.ID)
+		if err != nil {
+			return err
 		}
-		if current.Emoji != nil && *current.Emoji == emoji {
-			send = ""
-		}
+		// The emoji the sector already shows removes it. Two equal requests
+		// in a row therefore set and remove the reaction, as in WhatsApp.
+		removing = current.Emoji != nil && *current.Emoji == emoji
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	// An empty emoji is how the contract removes a reaction.
+	send := emoji
+	if removing {
+		send = ""
+	}
 	// The request may be gone by now: what the provider took is recorded anyway.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sendTimeout)
 	defer cancel()
@@ -101,9 +112,9 @@ func (s *Service) React(ctx context.Context, provider messaging.Provider, actor 
 		if _, err := q.GetTicketForUpdate(ctx, target.TicketID); err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
-		current, err := q.GetMessageReaction(ctx, db.GetMessageReactionParams{MessageID: target.ID, Side: db.ReactionSideSector})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("get reaction: %w", err)
+		current, err := sectorReaction(ctx, q, target.ID)
+		if err != nil {
+			return err
 		}
 		// What the provider just took is the newest change of the side, even
 		// if an event of the phone came stamped later by its clock.
@@ -112,8 +123,10 @@ func (s *Service) React(ctx context.Context, provider messaging.Provider, actor 
 			at = current.ReactedAt.Add(time.Microsecond)
 		}
 		var n int64
-		if send == "" {
+		if removing {
 			n, err = q.RemoveMessageReaction(ctx, db.RemoveMessageReactionParams{MessageID: target.ID, Side: db.ReactionSideSector, ReactedAt: at})
+			// The row of a removal stays to keep its time: the panel changes
+			// only when there was a reaction to remove.
 			changed = n > 0 && current.Emoji != nil
 		} else {
 			n, err = q.UpsertMessageReaction(ctx, db.UpsertMessageReactionParams{
@@ -132,10 +145,20 @@ func (s *Service) React(ctx context.Context, provider messaging.Provider, actor 
 	if changed {
 		s.hub.Publish(realtime.TicketChanged(target.SectorID, target.TicketID))
 	}
-	if send == "" {
+	if removing {
 		return nil, nil
 	}
 	return &send, nil
+}
+
+// sectorReaction returns the current reaction of the sector to the message;
+// the zero value when the sector never reacted.
+func sectorReaction(ctx context.Context, q *db.Queries, messageID int64) (db.GetMessageReactionRow, error) {
+	r, err := q.GetMessageReaction(ctx, db.GetMessageReactionParams{MessageID: messageID, Side: db.ReactionSideSector})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return r, fmt.Errorf("get reaction: %w", err)
+	}
+	return r, nil
 }
 
 // reactable reports a message WhatsApp knows: received, or sent with its ID
