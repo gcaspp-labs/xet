@@ -29,6 +29,7 @@ import {
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { EmojiPicker } from '@/components/EmojiPicker'
+import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
 import type { HistoryReturnState } from '@/lib/history-return'
@@ -48,6 +49,7 @@ import {
   type Message,
   type MessageStatus,
   type TicketDetail,
+  canReactTo,
   maxFileSize,
   newRequestId,
   useAssignments,
@@ -55,6 +57,7 @@ import {
   useCorrections,
   useMessages,
   useOrganizationHistory,
+  useReactToMessage,
   useRetryMessage,
   useSendMessage,
   useTicket,
@@ -300,12 +303,15 @@ function MessageBubble({
   canRetry,
   onRetry,
   retrying,
+  onReact,
   modern = false,
 }: {
   message: Message
   canRetry: boolean
   onRetry: () => void
   retrying: boolean
+  // Só o responsável reage; sem isto, a mensagem mostra as reações mas não oferece reagir.
+  onReact?: (emoji: string) => void
   modern?: boolean
 }) {
   const outbound = message.direction === 'outbound'
@@ -319,87 +325,103 @@ function MessageBubble({
     <li
       aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
       className={cn(
-        'flex max-w-[78%] flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
-        modern
-          ? outbound
-            ? 'self-end rounded-br-(--radius-6) border-primary bg-primary text-primary-foreground'
-            : 'self-start rounded-bl-(--radius-6) border-line bg-card'
-          : outbound
-            ? 'self-end border-accent-soft bg-accent-soft'
-            : 'self-start border-line-soft bg-card',
+        'group/msg flex max-w-[78%] flex-col gap-1',
+        outbound ? 'items-end self-end' : 'items-start self-start',
       )}
     >
-      {author && (
-        <p
+      <div className={cn('flex items-center gap-1', outbound && 'flex-row-reverse')}>
+        <div
+          data-slot="message-bubble"
           className={cn(
-            'caption font-medium',
-            modern && outbound ? 'text-primary-foreground' : 'text-ink-soft',
+            'flex min-w-0 flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+            modern
+              ? outbound
+                ? 'rounded-br-(--radius-6) border-primary bg-primary text-primary-foreground'
+                : 'rounded-bl-(--radius-6) border-line bg-card'
+              : outbound
+                ? 'border-accent-soft bg-accent-soft'
+                : 'border-line-soft bg-card',
           )}
         >
-          {author}
-        </p>
-      )}
-      <MessageMedia message={message} />
-      {message.type === 'media_unavailable' && (
-        <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
-      )}
-      {message.type === 'unsupported' ? (
-        <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
-      ) : (
-        message.body && (
-          <p className="whitespace-pre-wrap break-words">
-            {prefix ? (
-              <>
-                <strong>{prefix[1]}</strong>
-                {message.body.slice(prefix[0].length) &&
-                  `\n${message.body.slice(prefix[0].length)}`}
-              </>
-            ) : (
-              message.body
-            )}
-          </p>
-        )
-      )}
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <span
-          className={cn(
-            'mono-num caption',
-            modern && outbound
-              ? 'text-primary-foreground'
-              : modern
-                ? 'text-ink-soft'
-                : 'text-ink-faint',
-          )}
-        >
-          {formatMessageTime(message.sentAt)}
-        </span>
-        {status &&
-          (modern && outbound ? (
-            <span className="caption font-medium text-primary-foreground">· {status.label}</span>
-          ) : (
-            <Badge tone={status.tone}>{status.label}</Badge>
-          ))}
-      </div>
-      {message.status === 'failed' && (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {message.failureReason && (
-            <span
+          {author && (
+            <p
               className={cn(
-                'caption',
-                modern && outbound ? 'text-primary-foreground' : 'text-danger',
+                'caption font-medium',
+                modern && outbound ? 'text-primary-foreground' : 'text-ink-soft',
               )}
             >
-              {message.failureReason}
-            </span>
+              {author}
+            </p>
           )}
-          {canRetry && message.origin === 'agent' && (
-            <Button size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
-              <RotateCw strokeWidth={1.7} aria-hidden />
-              Reenviar
-            </Button>
+          <MessageMedia message={message} />
+          {message.type === 'media_unavailable' && (
+            <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
+          )}
+          {message.type === 'unsupported' ? (
+            <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
+          ) : (
+            message.body && (
+              <p className="whitespace-pre-wrap break-words">
+                {prefix ? (
+                  <>
+                    <strong>{prefix[1]}</strong>
+                    {message.body.slice(prefix[0].length) &&
+                      `\n${message.body.slice(prefix[0].length)}`}
+                  </>
+                ) : (
+                  message.body
+                )}
+              </p>
+            )
+          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span
+              className={cn(
+                'mono-num caption',
+                modern && outbound
+                  ? 'text-primary-foreground'
+                  : modern
+                    ? 'text-ink-soft'
+                    : 'text-ink-faint',
+              )}
+            >
+              {formatMessageTime(message.sentAt)}
+            </span>
+            {status &&
+              (modern && outbound ? (
+                <span className="caption font-medium text-primary-foreground">
+                  · {status.label}
+                </span>
+              ) : (
+                <Badge tone={status.tone}>{status.label}</Badge>
+              ))}
+          </div>
+          {message.status === 'failed' && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {message.failureReason && (
+                <span
+                  className={cn(
+                    'caption',
+                    modern && outbound ? 'text-primary-foreground' : 'text-danger',
+                  )}
+                >
+                  {message.failureReason}
+                </span>
+              )}
+              {canRetry && message.origin === 'agent' && (
+                <Button size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
+                  <RotateCw strokeWidth={1.7} aria-hidden />
+                  Reenviar
+                </Button>
+              )}
+            </div>
           )}
         </div>
-      )}
+        {onReact && canReactTo(message) && (
+          <ReactButton current={message.reactions.sector?.emoji} onReact={onReact} />
+        )}
+      </div>
+      <ReactionChips reactions={message.reactions} outbound={outbound} />
     </li>
   )
 }
@@ -640,6 +662,7 @@ export function ConversationCard({
   const { data: messages = [] } = useMessages(ticket.id)
   const { data: logs = [] } = useAssignments(ticket.id)
   const retry = useRetryMessage(ticket.id)
+  const react = useReactToMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
 
@@ -696,6 +719,11 @@ export function ConversationCard({
                   canRetry={canReply}
                   retrying={retry.isPending}
                   onRetry={() => retry.mutate(item.message.id)}
+                  onReact={
+                    canReply
+                      ? (emoji) => react.mutate({ messageId: item.message.id, emoji, actor: user })
+                      : undefined
+                  }
                 />
               ) : (
                 <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
