@@ -124,7 +124,62 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 	default:
 		msg.Type = messaging.TypeUnsupported
 	}
+	msg.Quote = quote(m)
 	return msg, true
+}
+
+// quote reads the message a reply cites, from the context of a text or media
+// message. Without the ID of the quoted message there is no quote; without its
+// content there is no snippet. The quoted media is not downloaded.
+func quote(m *waE2E.Message) *messaging.Quote {
+	var info *waE2E.ContextInfo
+	switch {
+	case m.GetExtendedTextMessage() != nil:
+		info = m.GetExtendedTextMessage().GetContextInfo()
+	case m.GetImageMessage() != nil:
+		info = m.GetImageMessage().GetContextInfo()
+	case m.GetVideoMessage() != nil:
+		info = m.GetVideoMessage().GetContextInfo()
+	case m.GetAudioMessage() != nil:
+		info = m.GetAudioMessage().GetContextInfo()
+	case m.GetDocumentMessage() != nil:
+		info = m.GetDocumentMessage().GetContextInfo()
+	}
+	if info.GetStanzaID() == "" {
+		return nil
+	}
+	q := &messaging.Quote{ExternalMessageID: info.GetStanzaID()}
+	if quoted := info.GetQuotedMessage(); quoted != nil {
+		q.Snippet = snippet(quoted)
+	}
+	return q
+}
+
+// snippet tells the type and the text of a quoted message: the text, the
+// caption of an image or video, or the name of a document (its caption when it
+// has no name). Other kinds are unsupported, without text.
+func snippet(m *waE2E.Message) *messaging.QuoteSnippet {
+	switch {
+	case m.GetConversation() != "":
+		return &messaging.QuoteSnippet{Type: messaging.TypeText, Text: m.GetConversation()}
+	case m.GetExtendedTextMessage() != nil:
+		return &messaging.QuoteSnippet{Type: messaging.TypeText, Text: m.GetExtendedTextMessage().GetText()}
+	case m.GetImageMessage() != nil:
+		return &messaging.QuoteSnippet{Type: messaging.TypeImage, Text: m.GetImageMessage().GetCaption()}
+	case m.GetVideoMessage() != nil:
+		return &messaging.QuoteSnippet{Type: messaging.TypeVideo, Text: m.GetVideoMessage().GetCaption()}
+	case m.GetAudioMessage() != nil:
+		return &messaging.QuoteSnippet{Type: messaging.TypeAudio}
+	case m.GetDocumentMessage() != nil:
+		doc := m.GetDocumentMessage()
+		name := doc.GetFileName()
+		if name == "" {
+			name = doc.GetCaption()
+		}
+		return &messaging.QuoteSnippet{Type: messaging.TypeDocument, Text: name}
+	default:
+		return &messaging.QuoteSnippet{Type: messaging.TypeUnsupported}
+	}
 }
 
 // contact returns the phone-number JID of the other side of a chat. WhatsApp

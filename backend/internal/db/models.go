@@ -630,23 +630,27 @@ type MediaFile struct {
 }
 
 type Message struct {
-	ID                int64
-	TicketID          int64
-	SectorID          int64
-	ContactID         int64
-	Direction         MessageDirection
-	Origin            MessageOrigin
-	AuthorID          *int64
-	Type              MessageType
-	Body              *string
-	MediaID           *int64
-	ExternalMessageID *string
-	ClientRequestID   pgtype.UUID
-	Status            NullMessageStatus
-	FailureReason     *string
-	SentAt            time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                      int64
+	TicketID                int64
+	SectorID                int64
+	ContactID               int64
+	Direction               MessageDirection
+	Origin                  MessageOrigin
+	AuthorID                *int64
+	Type                    MessageType
+	Body                    *string
+	MediaID                 *int64
+	ExternalMessageID       *string
+	ClientRequestID         pgtype.UUID
+	Status                  NullMessageStatus
+	FailureReason           *string
+	SentAt                  time.Time
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	QuotedExternalMessageID *string
+	QuotedMessageID         *int64
+	QuotedType              NullMessageType
+	QuotedBody              *string
 }
 
 type MessageReaction struct {
