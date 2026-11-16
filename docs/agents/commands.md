@@ -4,7 +4,7 @@ Os comandos do xet que as skills rodam, a partir da raiz do repositório. Este a
 
 | Para | Comando |
 |---|---|
-| Subir o ambiente de desenvolvimento | `make dev` (banco em `:5440`, backend em `:8090`, frontend em `:5173`) |
+| Subir o ambiente de desenvolvimento | `make dev` (banco em `:5440`, backend em `:8090`, frontend em `:5173`); roda `npm ci` no frontend sozinho quando o `package.json` ou o lockfile são mais novos que o `node_modules` |
 | Reiniciar o ambiente na branch atual | `make dev-restart` (em segundo plano, log em `/tmp/xet-dev.log`; necessário a cada mudança no backend) |
 | Testes | `make test` (integração do backend com `go test -race` e ponta a ponta com Playwright); separados: `make test-backend` e `make test-e2e` |
 | Lint e formatação | `make lint` |

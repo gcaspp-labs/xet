@@ -20,7 +20,7 @@ export DOCKER_HOST ?= unix:///var/run/docker.sock
 endif
 endif
 
-.PHONY: dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend ci-ffmpeg up down logs create-admin dev-create-admin
+.PHONY: frontend-deps dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend ci-ffmpeg up down logs create-admin dev-create-admin
 
 ## Desenvolvimento: banco em :5440, backend em :8090 e frontend em :5173 (com proxy para o backend).
 ## Portas fora das padrão (5432/5433/8080/8081) para conviver com outros projetos rodando na mesma máquina.
@@ -61,8 +61,17 @@ dev-create-admin: dev-db
 sqlc:
 	docker run --rm -u "$$(id -u):$$(id -g)" -v "$(CURDIR)/backend":/src -w /src $(SQLC_IMAGE) generate
 
+## Sincroniza as dependências do frontend com o package-lock.json (npm ci) sempre que o
+## package.json ou o lockfile forem mais novos que o node_modules (por exemplo, depois de
+## um git pull que trouxe uma dependência nova). Sem mudança, não faz nada.
+frontend-deps: frontend/node_modules/.package-lock.json
+
+frontend/node_modules/.package-lock.json: frontend/package.json frontend/package-lock.json
+	cd frontend && npm ci
+	@touch $@
+
 # Escuta em todas as interfaces para permitir testar pelo celular via Tailscale.
-dev-frontend:
+dev-frontend: frontend-deps
 	cd frontend && npm run dev -- --host
 
 ## Confere se o código gerado (sqlc) e o go.mod estão em dia com o que foi commitado.
@@ -100,7 +109,7 @@ lint-backend:
 		-e HOME=/tmp -e GOCACHE=/cache/go-build -e GOMODCACHE=/cache/mod -e GOLANGCI_LINT_CACHE=/cache/golangci-lint \
 		$(GOLANGCI_LINT_IMAGE) golangci-lint run ./...
 
-lint-frontend:
+lint-frontend: frontend-deps
 	cd frontend && npm run lint
 
 ## Instala o ffmpeg do CI em /usr/local/bin, copiado da imagem estática (mais rápido e estável que o apt).
