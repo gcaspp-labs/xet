@@ -18,6 +18,9 @@ var (
 	ErrNotConnected = errors.New("sector not connected")
 	// ErrContactNotFound means the phone has no account in the provider.
 	ErrContactNotFound = errors.New("contact not found in provider")
+	// ErrNotAccepted means the provider refused what was sent or could not
+	// take it, whatever the reason the provider gives.
+	ErrNotAccepted = errors.New("provider did not accept the message")
 )
 
 // ConnectionStatus mirrors the connection_status enum of sectors.
@@ -183,6 +186,23 @@ type MediaMessage struct {
 	IdempotencyKey string
 }
 
+// Reaction is the reaction of the sector number to a message of a chat with a
+// contact. It points at the target only by its provider message ID, which
+// every provider has. It goes without the nickname of the agent.
+type Reaction struct {
+	SectorID int64
+	// To is the provider contact ID of the chat, as in TextMessage.
+	To string
+	// TargetExternalMessageID is the provider ID of the message reacted to.
+	TargetExternalMessageID string
+	// TargetFromSector reports a target sent by the sector number (from the
+	// system or the phone) rather than received from the contact. Providers
+	// whose protocol needs the author of the target use it; others ignore it.
+	TargetFromSector bool
+	// Emoji is the reaction; empty removes the one the sector had set.
+	Emoji string
+}
+
 // Provider is the contract every messaging provider implements.
 type Provider interface {
 	// Connect starts the session of the sector. It returns once the session
@@ -197,6 +217,11 @@ type Provider interface {
 	SendText(ctx context.Context, msg TextMessage) (string, error)
 	// SendMedia sends an attachment and returns the provider message ID.
 	SendMedia(ctx context.Context, msg MediaMessage) (string, error)
+	// SendReaction sets the reaction of the sector number to a message, or
+	// removes it with an empty Emoji. It returns ErrNotConnected without a
+	// session and ErrNotAccepted for any refusal of the provider. Nothing may
+	// expect a delivery or read confirmation of a reaction.
+	SendReaction(ctx context.Context, r Reaction) error
 	// ResolveContact returns the provider contact ID of a phone with country code.
 	ResolveContact(ctx context.Context, sectorID int64, phone string) (string, error)
 }

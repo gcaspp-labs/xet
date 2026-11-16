@@ -48,8 +48,10 @@ type Adapter struct {
 	unreachable map[int64]bool
 	// Address book of each sector number.
 	saved map[int64][]messaging.SavedContact
-	sent  map[string]string
-	Sent  []any
+	// Sectors whose next reaction the provider refuses.
+	refuseReaction map[int64]bool
+	sent           map[string]string
+	Sent           []any
 }
 
 var (
@@ -66,6 +68,8 @@ func New(handler messaging.EventHandler) *Adapter {
 		unreachable: map[int64]bool{},
 		saved:       map[int64][]messaging.SavedContact{},
 		sent:        map[string]string{},
+
+		refuseReaction: map[int64]bool{},
 	}
 }
 
@@ -280,6 +284,30 @@ func (a *Adapter) send(sectorID int64, key string, msg any) (string, error) {
 		a.sent[key] = id
 	}
 	return id, nil
+}
+
+// SendReaction records the reaction (or, with an empty emoji, the removal)
+// among the sent messages. A refusal set by FailNextReaction comes back as
+// the neutral error, like any refusal of the real provider.
+func (a *Adapter) SendReaction(_ context.Context, r messaging.Reaction) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.session(r.SectorID).status != messaging.StatusConnected {
+		return messaging.ErrNotConnected
+	}
+	if a.refuseReaction[r.SectorID] {
+		delete(a.refuseReaction, r.SectorID)
+		return messaging.ErrNotAccepted
+	}
+	a.Sent = append(a.Sent, r)
+	return nil
+}
+
+// FailNextReaction makes the provider refuse the next reaction of the sector.
+func (a *Adapter) FailNextReaction(sectorID int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.refuseReaction[sectorID] = true
 }
 
 // SentMessages returns a copy of what was handed to the provider, in order.
