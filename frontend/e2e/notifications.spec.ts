@@ -7,9 +7,12 @@ import {
 } from '@playwright/test'
 import {
   admin,
+  login,
+  openWhenLive,
   seedSector,
   signIn,
   test,
+  trackSocket,
   unique,
   userPassword,
   chooseAction,
@@ -47,30 +50,6 @@ async function connectedSector(baseURL: string, request: APIRequestContext) {
   await connectSector(baseURL, seed.sector.id)
   await phone(request, seed.sector.id, 'pair')
   return seed
-}
-
-declare global {
-  interface Window {
-    __socketOpen: boolean
-  }
-}
-
-// Marca quando o canal de avisos em tempo real abre: o chamado que chega antes disso não gera
-// aviso nenhum.
-async function trackSocket(page: Page) {
-  await page.addInitScript(() => {
-    window.__socketOpen = false
-    const Real = window.WebSocket
-    class Tracked extends Real {
-      constructor(url: string | URL, protocols?: string | string[]) {
-        super(url, protocols)
-        this.addEventListener('open', () => {
-          window.__socketOpen = true
-        })
-      }
-    }
-    window.WebSocket = Tracked
-  })
 }
 
 const bellOf = (page: Page) =>
@@ -313,18 +292,11 @@ test('voltar a rede não repete o aviso dos chamados que entraram durante a qued
 }) => {
   const { sector, agent } = await connectedSector(baseURL!, request)
   await trackSocket(page)
-  const queue = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'GET' &&
-      new URL(response.url()).pathname === `/api/sectors/${sector.id}/tickets`,
-  )
-  await signIn(page, agent, userPassword)
+  await login(page, agent, userPassword)
+  await expect(page).not.toHaveURL(/\/login$/)
+  // A primeira carga da fila é a referência e não avisa: o chamado só pode chegar depois dela.
+  await openWhenLive(page, sector.id, '/chamados')
   await expect(page.getByText('Nenhum chamado esperando.')).toBeVisible()
-  // A fila precisa ter carregado e o canal de avisos, aberto: a primeira carga é a referência e
-  // não avisa. "Nenhum chamado esperando." aparece antes disso, e um chamado que chega nesse
-  // intervalo entra na primeira carga, sem aviso.
-  await (await queue).finished()
-  await page.waitForFunction(() => window.__socketOpen)
   await receive(request, sector.id, 'Gabi Antes')
   await expect(page.getByText('Chamado recebido: Gabi Antes')).toBeVisible()
   await expect(page.getByText('Chamado recebido: Gabi Antes')).toBeHidden()
