@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import emojiData from 'emojibase-data/pt/compact.json'
 import { Smile } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -28,12 +28,17 @@ const emojis = emojiData.filter((emoji) =>
   categories.some((category) => category.group === emoji.group),
 )
 
+// O mesmo seletor serve ao campo de mensagem e ao "+" da barra de reações: só o gatilho muda.
 export function EmojiPicker({
   onSelect,
   returnFocus,
+  triggerLabel = 'Inserir emoji',
+  trigger,
 }: {
   onSelect: (emoji: string) => void
   returnFocus?: RefObject<HTMLElement | null>
+  triggerLabel?: string
+  trigger?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -96,8 +101,8 @@ export function EmojiPicker({
         }
       }}
     >
-      <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="Inserir emoji" />}>
-        <Smile strokeWidth={1.7} aria-hidden />
+      <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label={triggerLabel} />}>
+        {trigger ?? <Smile strokeWidth={1.7} aria-hidden />}
       </PopoverTrigger>
       <PopoverContent
         side="top"

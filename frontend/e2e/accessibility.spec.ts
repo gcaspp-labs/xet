@@ -442,6 +442,19 @@ for (const theme of ['light', 'dark'] as const) {
     await expectContrast(page, 'seletor de emojis')
     await page.keyboard.press('Escape')
     await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeFocused()
+    // Reações: a barra aberta ao lado do balão e as etiquetas embaixo dele, com quem reagiu.
+    const reacted = page
+      .getByRole('listitem', { name: 'Mensagem recebida' })
+      .filter({ hasText: 'Preciso do contracheque' })
+    await reacted.hover()
+    await reacted.getByRole('button', { name: 'Reagir', exact: true }).click()
+    await expect(page.getByRole('group', { name: 'Reagir à mensagem' })).toBeVisible()
+    await expectContrast(page, 'barra de reações')
+    await page.getByRole('button', { name: 'Reagir com 👍' }).click()
+    await expect(
+      reacted.getByRole('listitem', { name: /^Setor reagiu com 👍, agent \d+$/ }),
+    ).toBeVisible()
+    await expectContrast(page, 'reação com quem reagiu')
     await page.getByLabel('Arquivo para enviar').setInputFiles({
       name: 'documento.txt',
       mimeType: 'text/plain',
@@ -469,8 +482,12 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Enviar mensagem' }).click()
     await expect(page.getByText('Número do setor desconectado.')).toBeVisible()
     await expectContrast(page, 'falha no envio')
-    expect(await contrastOf(page, '[aria-label="Mensagem recebida"]')).toBeGreaterThanOrEqual(7)
-    expect(await contrastOf(page, '[aria-label="Mensagem enviada"]')).toBeGreaterThanOrEqual(7)
+    expect(
+      await contrastOf(page, '[aria-label="Mensagem recebida"] [data-slot="message-bubble"]'),
+    ).toBeGreaterThanOrEqual(7)
+    expect(
+      await contrastOf(page, '[aria-label="Mensagem enviada"] [data-slot="message-bubble"]'),
+    ).toBeGreaterThanOrEqual(7)
 
     // Formulário de encerramento, com os erros de validação em cor de perigo.
     await page.getByRole('button', { name: 'Encerrar' }).click()

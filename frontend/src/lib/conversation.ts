@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
+import type { User } from '@/lib/auth'
 import { closedTicketsKey } from '@/lib/closed-tickets'
 import { type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
@@ -57,6 +59,20 @@ export type Message = {
     fileName: string | null
     sizeBytes: number
     durationSeconds: number | null
+  } | null
+  reactions: MessageReactions
+}
+
+// Reação atual de cada lado da mensagem; um lado sem reação é null. O setor tem uma só: `by` é quem
+// reagiu por último, e `viaPhone` diz que veio do celular do setor. Os dois vêm vazios quando o
+// provedor não diz, e nada pode depender deles.
+export type MessageReactions = {
+  customer: { emoji: string; at: string } | null
+  sector: {
+    emoji: string
+    at: string
+    by: { id: number; name: string } | null
+    viaPhone: boolean
   } | null
 }
 
@@ -220,6 +236,61 @@ export function useRetryMessage(ticketId: number) {
     mutationFn: (messageId: number) =>
       api<SentMessage>(`/messages/${messageId}/retry`, { method: 'POST' }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
+  })
+}
+
+// Só mensagem que o WhatsApp conhece recebe reação: a recebida, ou a enviada já com identificador
+// (enviada, entregue ou lida). Mensagem enviando ou com falha, nota e aviso do sistema não.
+export function canReactTo(message: Message) {
+  return (
+    message.direction === 'inbound' ||
+    (message.status !== null && ['sent', 'delivered', 'read'].includes(message.status))
+  )
+}
+
+// Reagir pelo setor: o mesmo emoji de agora remove, outro troca (quem decide é o backend). A tela
+// muda na hora; se o envio falhar, volta a reação anterior daquela mensagem e um aviso explica,
+// sem nova tentativa. Ao terminar, recarrega a conversa para mostrar quem reagiu.
+export function useReactToMessage(ticketId: number) {
+  const queryClient = useQueryClient()
+  const key = messagesKey(ticketId)
+  const setSector = (messageId: number, sector: MessageReactions['sector']) =>
+    queryClient.setQueryData<Message[]>(key, (list) =>
+      list?.map((m) => (m.id === messageId ? { ...m, reactions: { ...m.reactions, sector } } : m)),
+    )
+  return useMutation({
+    mutationFn: ({ messageId, emoji }: { messageId: number; emoji: string; actor: User }) =>
+      api<{ emoji: string | null }>(`/messages/${messageId}/reaction`, {
+        method: 'PUT',
+        body: { emoji },
+      }),
+    onMutate: async ({ messageId, emoji, actor }) => {
+      await queryClient.cancelQueries({ queryKey: key })
+      const before =
+        queryClient.getQueryData<Message[]>(key)?.find((m) => m.id === messageId)?.reactions
+          .sector ?? null
+      setSector(
+        messageId,
+        before?.emoji === emoji
+          ? null
+          : {
+              emoji,
+              at: new Date().toISOString(),
+              by: { id: actor.id, name: actor.name },
+              viaPhone: false,
+            },
+      )
+      return { before }
+    },
+    onError: (error, { messageId }, context) => {
+      setSector(messageId, context?.before ?? null)
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : 'Não foi possível enviar a reação. Tente de novo.',
+      )
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
   })
 }
 
