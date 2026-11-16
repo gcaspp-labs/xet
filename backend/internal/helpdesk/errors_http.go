@@ -21,6 +21,7 @@ func urlTicketID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // ticketError answers the errors shared by the conversation routes.
 func (h *Handler) ticketError(w http.ResponseWriter, r *http.Request, err error) {
+	var notSent ReactionNotSentError
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Chamado não encontrado.")
@@ -40,6 +41,12 @@ func (h *Handler) ticketError(w http.ResponseWriter, r *http.Request, err error)
 		httpx.WriteError(w, http.StatusConflict, "Esta mensagem não está com falha.")
 	case errors.Is(err, ErrInvalidAudio):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Não foi possível ler o áudio gravado. Grave novamente.")
+	case errors.Is(err, ErrInvalidEmoji):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha um emoji para reagir.")
+	case errors.Is(err, ErrNotReactable):
+		httpx.WriteError(w, http.StatusConflict, "Não é possível reagir a esta mensagem.")
+	case errors.As(err, &notSent):
+		httpx.WriteError(w, http.StatusBadGateway, notSent.Reason)
 	default:
 		httpx.InternalError(h.logger, w, r, err)
 	}

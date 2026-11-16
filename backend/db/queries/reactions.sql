@@ -33,3 +33,9 @@ on conflict (message_id, side) do update
 set emoji = null, author_id = null, via_phone = false, reacted_at = excluded.reacted_at
 where message_reactions.reacted_at < excluded.reacted_at
    or (message_reactions.reacted_at = excluded.reacted_at and message_reactions.emoji is not null);
+
+-- name: GetMessageReaction :one
+-- Current state of a side, with the time of its last change. No row: never
+-- reacted.
+select emoji, reacted_at from message_reactions
+where message_id = @message_id and side = @side;

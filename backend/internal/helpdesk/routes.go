@@ -84,6 +84,8 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/tickets/{ticketID}/messages", h.listMessages)
 	r.Post("/tickets/{ticketID}/messages", h.sendMessage)
 	r.Post("/messages/{messageID}/retry", h.retryMessage)
+	// Reação do setor: só o responsável, com o chamado aberto. O mesmo emoji remove.
+	r.Put("/messages/{messageID}/reaction", h.reactToMessage)
 	r.Get("/media/{mediaID}", h.getMedia)
 	// Histórico: chamados dos setores do usuário (todos, para o administrador).
 	r.Get("/contacts/{contactID}/tickets", h.contactHistory)
