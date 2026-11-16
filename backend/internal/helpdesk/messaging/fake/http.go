@@ -135,6 +135,13 @@ func (a *Adapter) Handler() http.Handler {
 			return nil
 		})
 	})
+	// The provider refuses the next reaction of the sector.
+	r.Post("/messaging/sectors/{sectorID}/fail-next-reaction", func(w http.ResponseWriter, r *http.Request) {
+		a.control(w, r, func(sectorID int64) error {
+			a.FailNextReaction(sectorID)
+			return nil
+		})
+	})
 	// The next unlink of the sector cannot reach the device.
 	r.Post("/messaging/sectors/{sectorID}/unreachable", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error {

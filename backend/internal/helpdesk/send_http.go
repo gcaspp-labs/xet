@@ -233,3 +233,33 @@ func (h *Handler) retryMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, http.StatusOK, toSentMessageResponse(msg))
 }
+
+type reactionRequest struct {
+	Emoji string `json:"emoji"`
+}
+
+// reactionResult is the reaction the sector shows after the request: the
+// emoji, or null when the request removed it. The panel reloads the
+// conversation for who reacted.
+type reactionResult struct {
+	Emoji *string `json:"emoji"`
+}
+
+// reactToMessage sets the reaction of the sector to the message; the emoji
+// the sector already shows removes it.
+func (h *Handler) reactToMessage(w http.ResponseWriter, r *http.Request) {
+	messageID, ok := httpx.URLID(w, r, "messageID", "Mensagem não encontrada.")
+	if !ok {
+		return
+	}
+	var req reactionRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	emoji, err := h.service.React(r.Context(), h.provider, auth.CurrentUser(r.Context()), messageID, req.Emoji)
+	if err != nil {
+		h.ticketError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, reactionResult{Emoji: emoji})
+}

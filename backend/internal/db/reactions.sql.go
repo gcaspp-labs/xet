@@ -10,6 +10,30 @@ import (
 	"time"
 )
 
+const getMessageReaction = `-- name: GetMessageReaction :one
+select emoji, reacted_at from message_reactions
+where message_id = $1 and side = $2
+`
+
+type GetMessageReactionParams struct {
+	MessageID int64
+	Side      ReactionSide
+}
+
+type GetMessageReactionRow struct {
+	Emoji     *string
+	ReactedAt time.Time
+}
+
+// Current state of a side, with the time of its last change. No row: never
+// reacted.
+func (q *Queries) GetMessageReaction(ctx context.Context, arg GetMessageReactionParams) (GetMessageReactionRow, error) {
+	row := q.db.QueryRow(ctx, getMessageReaction, arg.MessageID, arg.Side)
+	var i GetMessageReactionRow
+	err := row.Scan(&i.Emoji, &i.ReactedAt)
+	return i, err
+}
+
 const getMessageReactionEmoji = `-- name: GetMessageReactionEmoji :one
 select emoji from message_reactions
 where message_id = $1 and side = $2

@@ -270,21 +270,9 @@ func (s *Service) deliver(ctx context.Context, provider messaging.Provider, msg 
 }
 
 func (s *Service) send(ctx context.Context, provider messaging.Provider, msg db.Message) (string, error) {
-	contact, err := s.q.GetContactWithOrganization(ctx, msg.ContactID)
+	to, err := s.recipient(ctx, provider, msg.SectorID, msg.ContactID)
 	if err != nil {
-		return "", fmt.Errorf("get contact: %w", err)
-	}
-	to := ""
-	switch {
-	case contact.Contact.ExternalContactID != nil:
-		to = *contact.Contact.ExternalContactID
-	case contact.Contact.Phone != nil:
-		to, err = provider.ResolveContact(ctx, msg.SectorID, *contact.Contact.Phone)
-		if err != nil {
-			return "", err
-		}
-	default:
-		return "", messaging.ErrContactNotFound
+		return "", err
 	}
 	key := msg.ClientRequestID.String()
 	body := ""
@@ -313,6 +301,23 @@ func (s *Service) send(ctx context.Context, provider messaging.Provider, msg db.
 	return provider.SendMedia(ctx, messaging.MediaMessage{
 		SectorID: msg.SectorID, To: to, Type: messaging.MessageType(msg.Type), Media: media, Caption: body, IdempotencyKey: key,
 	})
+}
+
+// recipient returns the provider contact ID of the contact, resolving the
+// phone when the provider ID is not known yet.
+func (s *Service) recipient(ctx context.Context, provider messaging.Provider, sectorID, contactID int64) (string, error) {
+	contact, err := s.q.GetContactWithOrganization(ctx, contactID)
+	if err != nil {
+		return "", fmt.Errorf("get contact: %w", err)
+	}
+	switch {
+	case contact.Contact.ExternalContactID != nil:
+		return *contact.Contact.ExternalContactID, nil
+	case contact.Contact.Phone != nil:
+		return provider.ResolveContact(ctx, sectorID, *contact.Contact.Phone)
+	default:
+		return "", messaging.ErrContactNotFound
+	}
 }
 
 func (s *Service) readFile(ctx context.Context, key string) ([]byte, error) {

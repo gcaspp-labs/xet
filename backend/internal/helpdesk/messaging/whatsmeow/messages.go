@@ -275,6 +275,31 @@ func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (st
 	})
 }
 
+// SendReaction sends the reaction of the sector number, an empty text being
+// the removal. WhatsApp finds the target by its ID, the chat and whether the
+// sector sent it; any refusal comes back as the neutral error.
+func (a *Adapter) SendReaction(ctx context.Context, r messaging.Reaction) error {
+	cli, err := a.client(r.SectorID)
+	if err != nil {
+		return err
+	}
+	chat, err := types.ParseJID(r.To)
+	if err != nil {
+		return fmt.Errorf("%w: parse recipient %q: %w", messaging.ErrNotAccepted, r.To, err)
+	}
+	// The author of a received target is the contact; an empty one is the
+	// sector number itself.
+	sender := chat
+	if r.TargetFromSector {
+		sender = types.EmptyJID
+	}
+	msg := cli.BuildReaction(chat, sender, r.TargetExternalMessageID, r.Emoji)
+	if _, err := cli.SendMessage(ctx, chat, msg); err != nil {
+		return fmt.Errorf("%w: send reaction: %w", messaging.ErrNotAccepted, err)
+	}
+	return nil
+}
+
 func (a *Adapter) send(ctx context.Context, sectorID int64, to, key string, build func(context.Context, *whatsmeow.Client) (*waE2E.Message, error)) (string, error) {
 	cli, err := a.client(sectorID)
 	if err != nil {

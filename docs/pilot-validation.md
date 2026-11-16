@@ -153,3 +153,4 @@ O "Pronto quando" destas tasks depende do número real, e os testes foram adiado
 - **T24:** enviar arquivo acima de 100 MB e ver o aviso com a legenda ou o nome do arquivo.
 - **T26:** QR code mostra "Central de Atendimento" no celular; telefone preenchido; "Desvincular número" remove o aparelho; recusa de número ligado a outro setor.
 - **T29:** agenda só com nomes salvos e telefone, inclusive por LID; importar selecionados e todos, com e sem órgão; repetir sem duplicar.
+- **#198:** pela API (a tela vem na #200), reagir a uma mensagem recebida do cliente e a uma enviada pelo setor (pelo painel e pelo celular): a reação aparece no celular do cliente, sem apelido, na mensagem certa; trocar o emoji substitui no celular; repetir o mesmo emoji remove; a reação feita no celular do setor é substituída pela do painel; com o número desconectado, a API avisa e nada muda.
