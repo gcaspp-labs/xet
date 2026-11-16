@@ -144,6 +144,9 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 			ExternalMessageID: &msg.ExternalMessageID,
 			SentAt:            sentAt,
 		}
+		if err := setQuote(ctx, q, &params, msg.Quote); err != nil {
+			return err
+		}
 		if origin == db.MessageOriginPhone {
 			params.Direction = db.MessageDirectionOutbound
 			params.Status = db.NullMessageStatus{MessageStatus: db.MessageStatusSent, Valid: true}
@@ -164,6 +167,38 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		return err
 	}
 	s.hub.Publish(realtime.TicketChanged(sectorID, ticketID))
+	return nil
+}
+
+// setQuote records the quote of the message, when the provider identified
+// one. It links to the quoted message only when it is in the same ticket,
+// already locked by the caller: a message of another ticket, even of the same
+// contact, is never linked, so the quote cannot show its content. The snippet
+// is the one the provider delivered, if any.
+func setQuote(ctx context.Context, q *db.Queries, params *db.CreateProviderMessageParams, quote *messaging.Quote) error {
+	if quote == nil || quote.ExternalMessageID == "" {
+		return nil
+	}
+	params.QuotedExternalMessageID = &quote.ExternalMessageID
+	id, err := q.FindTicketMessageID(ctx, db.FindTicketMessageIDParams{
+		SectorID:          params.SectorID,
+		ExternalMessageID: &quote.ExternalMessageID,
+		TicketID:          params.TicketID,
+	})
+	switch {
+	case err == nil:
+		params.QuotedMessageID = &id
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("find quoted message: %w", err)
+	}
+	if quote.Snippet != nil {
+		t := db.MessageType(quote.Snippet.Type)
+		if !t.Valid() {
+			t = db.MessageTypeUnsupported
+		}
+		params.QuotedType = db.NullMessageType{MessageType: t, Valid: true}
+		params.QuotedBody = optional(quote.Snippet.Text)
+	}
 	return nil
 }
 

@@ -54,7 +54,7 @@ const createAgentMessage = `-- name: CreateAgentMessage :one
 insert into messages (ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, client_request_id, status, sent_at)
 values ($1, $2, $3, 'outbound', 'agent', $4, $5, $6, $7, $8, 'pending', now())
 on conflict (client_request_id) where client_request_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
 `
 
 type CreateAgentMessageParams struct {
@@ -101,6 +101,10 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.QuotedExternalMessageID,
+		&i.QuotedMessageID,
+		&i.QuotedType,
+		&i.QuotedBody,
 	)
 	return i, err
 }
@@ -144,24 +148,34 @@ func (q *Queries) CreateMediaFile(ctx context.Context, arg CreateMediaFileParams
 }
 
 const createProviderMessage = `-- name: CreateProviderMessage :one
-insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at)
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+insert into messages (
+    ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at,
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+)
+values (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+    $12, $13, $14, $15
+)
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
 `
 
 type CreateProviderMessageParams struct {
-	TicketID          int64
-	SectorID          int64
-	ContactID         int64
-	Direction         MessageDirection
-	Origin            MessageOrigin
-	Type              MessageType
-	Body              *string
-	MediaID           *int64
-	ExternalMessageID *string
-	Status            NullMessageStatus
-	SentAt            time.Time
+	TicketID                int64
+	SectorID                int64
+	ContactID               int64
+	Direction               MessageDirection
+	Origin                  MessageOrigin
+	Type                    MessageType
+	Body                    *string
+	MediaID                 *int64
+	ExternalMessageID       *string
+	Status                  NullMessageStatus
+	SentAt                  time.Time
+	QuotedExternalMessageID *string
+	QuotedMessageID         *int64
+	QuotedType              NullMessageType
+	QuotedBody              *string
 }
 
 // Message that came from the provider (received, or sent from the phone).
@@ -179,6 +193,10 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 		arg.ExternalMessageID,
 		arg.Status,
 		arg.SentAt,
+		arg.QuotedExternalMessageID,
+		arg.QuotedMessageID,
+		arg.QuotedType,
+		arg.QuotedBody,
 	)
 	var i Message
 	err := row.Scan(
@@ -199,6 +217,10 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.QuotedExternalMessageID,
+		&i.QuotedMessageID,
+		&i.QuotedType,
+		&i.QuotedBody,
 	)
 	return i, err
 }
@@ -253,6 +275,27 @@ func (q *Queries) FailSentMessages(ctx context.Context, arg FailSentMessagesPara
 	return items, nil
 }
 
+const findTicketMessageID = `-- name: FindTicketMessageID :one
+select id from messages
+where sector_id = $1 and external_message_id = $2 and ticket_id = $3
+`
+
+type FindTicketMessageIDParams struct {
+	SectorID          int64
+	ExternalMessageID *string
+	TicketID          int64
+}
+
+// Message of the ticket with the provider ID, to link a quote. Only the same
+// ticket: a quote never links to a message of another ticket. The sector of
+// the ticket lets the search use the unique (sector_id, external_message_id).
+func (q *Queries) FindTicketMessageID(ctx context.Context, arg FindTicketMessageIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, findTicketMessageID, arg.SectorID, arg.ExternalMessageID, arg.TicketID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getMediaFile = `-- name: GetMediaFile :one
 select id, storage_key, mime_type, size_bytes, file_name, sha256, duration_seconds, created_at from media_files
 where id = $1
@@ -290,7 +333,7 @@ func (q *Queries) GetMediaFileTicket(ctx context.Context, mediaID *int64) (int64
 }
 
 const getMessage = `-- name: GetMessage :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body from messages
 where id = $1
 `
 
@@ -315,12 +358,16 @@ func (q *Queries) GetMessage(ctx context.Context, id int64) (Message, error) {
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.QuotedExternalMessageID,
+		&i.QuotedMessageID,
+		&i.QuotedType,
+		&i.QuotedBody,
 	)
 	return i, err
 }
 
 const getMessageByClientRequestID = `-- name: GetMessageByClientRequestID :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body from messages
 where client_request_id = $1
 `
 
@@ -345,6 +392,10 @@ func (q *Queries) GetMessageByClientRequestID(ctx context.Context, clientRequest
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.QuotedExternalMessageID,
+		&i.QuotedMessageID,
+		&i.QuotedType,
+		&i.QuotedBody,
 	)
 	return i, err
 }
@@ -400,7 +451,8 @@ select
     rc.emoji as customer_reaction_emoji, rc.reacted_at as customer_reaction_at,
     rs.emoji as sector_reaction_emoji, rs.reacted_at as sector_reaction_at,
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
-    rs.via_phone as sector_reaction_via_phone
+    rs.via_phone as sector_reaction_via_phone,
+    m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
@@ -435,6 +487,10 @@ type ListTicketMessagesRow struct {
 	SectorReactionAuthorID   *int64
 	SectorReactionAuthorName *string
 	SectorReactionViaPhone   *bool
+	QuotedExternalMessageID  *string
+	QuotedMessageID          *int64
+	QuotedType               NullMessageType
+	QuotedBody               *string
 }
 
 func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]ListTicketMessagesRow, error) {
@@ -470,6 +526,10 @@ func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]Lis
 			&i.SectorReactionAuthorID,
 			&i.SectorReactionAuthorName,
 			&i.SectorReactionViaPhone,
+			&i.QuotedExternalMessageID,
+			&i.QuotedMessageID,
+			&i.QuotedType,
+			&i.QuotedBody,
 		); err != nil {
 			return nil, err
 		}
@@ -485,7 +545,7 @@ const markMessageFailed = `-- name: MarkMessageFailed :one
 update messages
 set status = 'failed', failure_reason = $1
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
 `
 
 type MarkMessageFailedParams struct {
@@ -514,6 +574,10 @@ func (q *Queries) MarkMessageFailed(ctx context.Context, arg MarkMessageFailedPa
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.QuotedExternalMessageID,
+		&i.QuotedMessageID,
+		&i.QuotedType,
+		&i.QuotedBody,
 	)
 	return i, err
 }
@@ -522,7 +586,7 @@ const markMessageSent = `-- name: MarkMessageSent :one
 update messages
 set status = 'sent', external_message_id = $1, failure_reason = null
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
 `
 
 type MarkMessageSentParams struct {
@@ -551,6 +615,10 @@ func (q *Queries) MarkMessageSent(ctx context.Context, arg MarkMessageSentParams
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.QuotedExternalMessageID,
+		&i.QuotedMessageID,
+		&i.QuotedType,
+		&i.QuotedBody,
 	)
 	return i, err
 }
@@ -577,7 +645,7 @@ const retryMessage = `-- name: RetryMessage :one
 update messages
 set status = 'pending', failure_reason = null
 where id = $1 and status = 'failed'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
 `
 
 // Only a failed message goes back to pending, so a double click retries once.
@@ -602,6 +670,10 @@ func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.QuotedExternalMessageID,
+		&i.QuotedMessageID,
+		&i.QuotedType,
+		&i.QuotedBody,
 	)
 	return i, err
 }

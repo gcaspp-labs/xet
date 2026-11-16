@@ -34,6 +34,18 @@ type messageResponse struct {
 	Author        *httpx.Ref          `json:"author"`
 	Media         *mediaResponse      `json:"media"`
 	Reactions     reactionsResponse   `json:"reactions"`
+	Quote         *quoteResponse      `json:"quote"`
+}
+
+// quoteResponse is the message a reply cites; null when there is no quote.
+// MessageID links to the quoted message only when it is in the same ticket.
+// Type and Text are the snippet the provider delivered, and may be null: with
+// a link, the panel shows the linked message; without both, "mensagem
+// indisponível".
+type quoteResponse struct {
+	MessageID *int64          `json:"messageId"`
+	Type      *db.MessageType `json:"type"`
+	Text      *string         `json:"text"`
 }
 
 // reactionsResponse holds the current reaction of each side of a message; a
@@ -81,6 +93,12 @@ func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
 			r.By = &httpx.Ref{ID: *m.SectorReactionAuthorID, Name: *m.SectorReactionAuthorName}
 		}
 		out.Reactions.Sector = r
+	}
+	if m.QuotedExternalMessageID != nil {
+		out.Quote = &quoteResponse{MessageID: m.QuotedMessageID, Text: m.QuotedBody}
+		if m.QuotedType.Valid {
+			out.Quote.Type = &m.QuotedType.MessageType
+		}
 	}
 	return out
 }

@@ -90,6 +90,28 @@ type Message struct {
 	Body   string
 	Media  *Media
 	SentAt time.Time
+	// Quote is the message this one replies to. Optional: nil when there is
+	// no quote or the provider could not identify it, and nothing may
+	// require it.
+	Quote *Quote
+}
+
+// Quote is the message a reply cites. It points at it only by its provider
+// message ID, which every provider has.
+type Quote struct {
+	// ExternalMessageID is the provider ID of the quoted message.
+	ExternalMessageID string
+	// Snippet is the quoted content to show. Optional: a provider that only
+	// delivers the ID (such as the official API) leaves it nil.
+	Snippet *QuoteSnippet
+}
+
+// QuoteSnippet is what the provider tells of the quoted content, without its
+// media: the type and the text, the caption (image and video) or the file name
+// (document, or its caption when it has no name). Text may be empty, as in audio.
+type QuoteSnippet struct {
+	Type MessageType
+	Text string
 }
 
 // Event is something that happened in a sector session.

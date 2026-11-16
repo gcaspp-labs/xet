@@ -37,7 +37,9 @@ func (a *Adapter) Handler() http.Handler {
 		a.control(w, r, func(sectorID int64) error { return a.Drop(r.Context(), sectorID) })
 	})
 	// Message from a contact, identified by the phone: a text or, with type
-	// and media (content in base64), an image, video, audio or document.
+	// and media (content in base64), an image, video, audio or document. An
+	// optional quote cites another message by its provider ID, with or
+	// without the snippet (type, text by default).
 	r.Post("/messaging/sectors/{sectorID}/receive", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			ExternalMessageID string                `json:"externalMessageId"`
@@ -51,6 +53,13 @@ func (a *Adapter) Handler() http.Handler {
 				FileName        string `json:"fileName"`
 				DurationSeconds int    `json:"durationSeconds"`
 			} `json:"media"`
+			Quote *struct {
+				ExternalMessageID string `json:"externalMessageId"`
+				Snippet           *struct {
+					Type messaging.MessageType `json:"type"`
+					Text string                `json:"text"`
+				} `json:"snippet"`
+			} `json:"quote"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ExternalMessageID == "" || body.Phone == "" {
 			http.Error(w, "externalMessageId and phone are required", http.StatusBadRequest)
@@ -72,6 +81,15 @@ func (a *Adapter) Handler() http.Handler {
 			msg.Media = &messaging.Media{
 				Data: body.Media.Data, MimeType: body.Media.MimeType,
 				FileName: body.Media.FileName, DurationSeconds: body.Media.DurationSeconds,
+			}
+		}
+		if body.Quote != nil {
+			msg.Quote = &messaging.Quote{ExternalMessageID: body.Quote.ExternalMessageID}
+			if sn := body.Quote.Snippet; sn != nil {
+				msg.Quote.Snippet = &messaging.QuoteSnippet{Type: messaging.TypeText, Text: sn.Text}
+				if sn.Type != "" {
+					msg.Quote.Snippet.Type = sn.Type
+				}
 			}
 		}
 		a.control(w, r, func(sectorID int64) error { return a.Receive(r.Context(), sectorID, msg) })

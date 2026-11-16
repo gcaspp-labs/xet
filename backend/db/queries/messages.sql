@@ -8,11 +8,24 @@ insert into media_files (storage_key, mime_type, size_bytes, file_name, sha256, 
 values (@storage_key, @mime_type, @size_bytes, @file_name, @sha256, @duration_seconds)
 returning *;
 
+-- name: FindTicketMessageID :one
+-- Message of the ticket with the provider ID, to link a quote. Only the same
+-- ticket: a quote never links to a message of another ticket. The sector of
+-- the ticket lets the search use the unique (sector_id, external_message_id).
+select id from messages
+where sector_id = @sector_id and external_message_id = @external_message_id and ticket_id = @ticket_id;
+
 -- name: CreateProviderMessage :one
 -- Message that came from the provider (received, or sent from the phone).
 -- A message already recorded returns no row.
-insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at)
-values (@ticket_id, @sector_id, @contact_id, @direction, @origin, @type, @body, @media_id, @external_message_id, @status, @sent_at)
+insert into messages (
+    ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at,
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+)
+values (
+    @ticket_id, @sector_id, @contact_id, @direction, @origin, @type, @body, @media_id, @external_message_id, @status, @sent_at,
+    @quoted_external_message_id, @quoted_message_id, @quoted_type, @quoted_body
+)
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
 returning *;
 
@@ -93,7 +106,8 @@ select
     rc.emoji as customer_reaction_emoji, rc.reacted_at as customer_reaction_at,
     rs.emoji as sector_reaction_emoji, rs.reacted_at as sector_reaction_at,
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
-    rs.via_phone as sector_reaction_via_phone
+    rs.via_phone as sector_reaction_via_phone,
+    m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id

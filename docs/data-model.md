@@ -46,6 +46,7 @@ erDiagram
     users ||--o{ messages : "autor (envio pelo sistema)"
     media_files ||--o| messages : anexo
     messages ||--o{ message_reactions : "reação atual (uma por lado)"
+    messages |o--o{ messages : "citação (só do mesmo chamado)"
     users ||--o{ message_reactions : "autor (reação pelo sistema)"
     tickets ||--o{ audit_logs : ""
     users ||--o{ audit_logs : "autor da ação"
@@ -332,6 +333,10 @@ Chamados não são reabertos. O destino de uma transferência entre setores vê 
 | `status` | message_status | Usado nas mensagens enviadas |
 | `failure_reason` | text | Motivo quando `status = 'failed'` |
 | `sent_at` | timestamptz | Obrigatório; horário da mensagem segundo o WhatsApp |
+| `quoted_external_message_id` | text | Identificador no provedor da mensagem citada (resposta citada); vazio quando não há citação identificada |
+| `quoted_message_id` | bigint → `messages` | Ligação com a mensagem citada, **só quando ela está no mesmo chamado**; vazio se o XET não a tem ou se ela é de outro chamado |
+| `quoted_type` | message_type | Tipo do trecho citado que veio do provedor; vazio quando o provedor não entrega o trecho |
+| `quoted_body` | text | Texto do trecho citado: o texto, a legenda (imagem e vídeo) ou o nome do arquivo (documento; a legenda, se não houver nome); vazio em áudio e quando o provedor não entrega |
 
 Restrições:
 
@@ -339,6 +344,8 @@ Restrições:
 - Único em `client_request_id` quando preenchido: garante idempotência no envio pelo sistema.
 - `direction = 'inbound'` ⇔ `origin = 'customer'`.
 - `type in ('image', 'video', 'audio', 'document')` ⇒ `media_id` preenchido. `media_unavailable` não tem `media_id`; `body` guarda a legenda ou o nome do arquivo.
+- Ligação, tipo ou texto da citação ⇒ `quoted_external_message_id` preenchido (`messages_quote_external_id`); `quoted_body` ⇒ `quoted_type` (`messages_quote_body_type`).
+- Chave estrangeira `(quoted_message_id, ticket_id)` → `messages (id, ticket_id)` (`messages_quote_same_ticket`, com o único `messages_id_ticket_id_key`): a ligação só aponta para mensagem do mesmo chamado, para a citação nunca expor o conteúdo de outro chamado.
 
 Índice: `(ticket_id, sent_at)` para exibir a conversa.
 
@@ -347,6 +354,8 @@ Mensagens enviadas pelo celular fora do sistema (`origin = 'phone'`) são gravad
 Mensagens enviadas pelo sistema são gravadas como `pending` (com `sent_at` no momento do registro) e passam a `sent` com o `external_message_id` quando o provedor aceita, ou a `failed` com `failure_reason`. As confirmações do provedor só avançam a situação (`sent` → `delivered` → `read`); uma falha informada pelo provedor só vale para mensagens `pending` ou `sent`, e uma entrega confirmada vale também sobre `failed`. O reenvio pelo responsável volta a mensagem de `failed` para `pending` com a mesma chave de idempotência (`client_request_id`).
 
 Mensagens não são editadas nem excluídas.
+
+Citação (resposta citada, #201). Escolha de armazenamento: colunas em `messages`, em vez de tabela própria, porque a citação é no máximo uma por mensagem, nasce com ela e nunca muda (mensagens não são editadas). A citação inteira é opcional, e o trecho também: o provedor pode entregar a mensagem sem citação, só com o identificador da citada, ou com identificador e trecho, e as três são gravadas normalmente. Regras de gravação (`helpdesk/inbound.go`), para a mensagem recebida e a enviada pelo celular do setor: com o chamado travado, a ligação procura a citada pelo identificador externo **no mesmo chamado**; se ela não está lá (de antes do XET, de outro chamado, mesmo do mesmo contato, ou ainda não chegou), fica sem ligação e com o trecho do provedor, se houver. O trecho é o que o provedor entrega, não uma cópia da mensagem ligada; a mídia da citação não é baixada nem guardada. A API devolve a ligação, o tipo e o texto do trecho; sem trecho e com ligação, a tela usa a mensagem ligada, e sem os dois mostra "mensagem indisponível".
 
 ### `message_reactions` — Reação atual da mensagem
 
