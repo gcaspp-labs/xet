@@ -455,6 +455,20 @@ for (const theme of ['light', 'dark'] as const) {
       reacted.getByRole('listitem', { name: /^Setor reagiu com 👍, agent \d+$/ }),
     ).toBeVisible()
     await expectContrast(page, 'reação com quem reagiu')
+    // Resposta citando: a faixa em preparo acima do campo e a citação dentro do balão enviado.
+    await reacted.hover()
+    await reacted.getByRole('button', { name: 'Responder', exact: true }).click()
+    await expect(page.getByRole('group', { name: 'Respondendo a Cliente' })).toBeVisible()
+    await expectContrast(page, 'citação em preparo')
+    await page.getByRole('textbox', { name: 'Mensagem' }).fill('Resposta citando o cliente')
+    await page.getByRole('textbox', { name: 'Mensagem' }).press('Enter')
+    await expect(
+      page
+        .getByRole('listitem', { name: 'Mensagem enviada' })
+        .filter({ hasText: 'Resposta citando o cliente' })
+        .getByRole('button', { name: /^Citação de Cliente: / }),
+    ).toBeVisible()
+    await expectContrast(page, 'citação enviada')
     await page.getByLabel('Arquivo para enviar').setInputFiles({
       name: 'documento.txt',
       mimeType: 'text/plain',
