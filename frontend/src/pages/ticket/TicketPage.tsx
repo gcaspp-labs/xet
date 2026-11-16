@@ -706,10 +706,14 @@ export function ConversationCard({
   const canReply = conducts(ticket, user)
   // A citação em preparo é deste chamado: trocar de chamado a descarta, e perder o direito de
   // responder (transferência, encerramento) também.
-  const [quoting, setQuoting] = useState<{ ticketId: number; messageId: number } | null>(null)
+  const [quoting, setQuoting] = useState<number | null>(null)
+  const [quotingTicketId, setQuotingTicketId] = useState(ticket.id)
+  if (quotingTicketId !== ticket.id) {
+    setQuotingTicketId(ticket.id)
+    setQuoting(null)
+  }
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
-  const quotedDraft =
-    canReply && quoting?.ticketId === ticket.id ? (byId.get(quoting.messageId) ?? null) : null
+  const quotedDraft = canReply && quoting !== null ? (byId.get(quoting) ?? null) : null
 
   // Mostra sempre a mensagem mais recente.
   useEffect(() => {
@@ -770,11 +774,7 @@ export function ConversationCard({
                       ? (emoji) => react.mutate({ messageId: item.message.id, emoji, actor: user })
                       : undefined
                   }
-                  onReply={
-                    canReply
-                      ? () => setQuoting({ ticketId: ticket.id, messageId: item.message.id })
-                      : undefined
-                  }
+                  onReply={canReply ? () => setQuoting(item.message.id) : undefined}
                 />
               ) : (
                 <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />

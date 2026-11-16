@@ -93,7 +93,7 @@ export function QuoteBlock({
     return (
       <div role="group" aria-label={`Citação do WhatsApp: ${preview}`} className={style}>
         <span className="line-clamp-2 break-words">{preview}</span>
-        <span className="opacity-80">Trecho do WhatsApp</span>
+        <span>Trecho do WhatsApp</span>
       </div>
     )
   }
