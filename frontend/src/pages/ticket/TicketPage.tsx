@@ -712,6 +712,8 @@ export function ConversationCard({
     setQuotingTicketId(ticket.id)
     setQuoting(null)
   }
+  // Sem direito de responder, a citação em preparo é descartada de vez: ao reassumir, o campo volta limpo.
+  if (!canReply && quoting !== null) setQuoting(null)
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
   const quotedDraft = canReply && quoting !== null ? (byId.get(quoting) ?? null) : null
 

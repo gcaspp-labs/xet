@@ -391,6 +391,58 @@ test('trocar de chamado limpa a citação em preparo', async ({ page, request, b
   await expect(page.getByRole('group', { name: /^Respondendo a/ })).toHaveCount(0)
 })
 
+test('perder a responsabilidade descarta a citação em preparo: ao reassumir, o campo volta sem citação', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { agent, supervisor, sector, receive } = await seedCustomer(request, baseURL!, 'Clara Cita')
+  await receive('1', { body: first })
+  const conversation = await openAssigned(page, agent, 'Clara Cita')
+  const ticketId = currentTicketId(page)
+  await pressReply(bubbleOf(conversation, first))
+  await expect(page.getByRole('group', { name: 'Respondendo a Cliente' })).toBeVisible()
+
+  const login = async (email: string) => {
+    const api = await apiRequest.newContext({ baseURL })
+    expect(
+      (await api.post('/api/auth/login', { data: { email, password: userPassword } })).ok(),
+    ).toBeTruthy()
+    return api
+  }
+  const agentApi = await login(agent)
+  const supervisorApi = await login(supervisor)
+  const people = await json<{ id: number; name: string }[]>(
+    await agentApi.get(`/api/sectors/${sector.id}/workload`),
+  )
+  const idOf = (email: string) =>
+    people.find((p) => p.name === email.replace('.', ' ').split('@')[0])!.id
+
+  // O atendente transfere o chamado ao supervisor: a conversa vira leitura e a citação some.
+  expect(
+    (
+      await agentApi.post(`/api/tickets/${ticketId}/transfer`, {
+        data: { assigneeId: idOf(supervisor) },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+  await expect(page.getByRole('group', { name: /^Respondendo a/ })).toHaveCount(0)
+
+  // O chamado volta ao atendente, sem recarregar a tela: o campo volta limpo.
+  expect(
+    (
+      await supervisorApi.post(`/api/tickets/${ticketId}/transfer`, {
+        data: { assigneeId: idOf(agent) },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  await expect(page.getByRole('group', { name: /^Respondendo a/ })).toHaveCount(0)
+  await agentApi.dispose()
+  await supervisorApi.dispose()
+})
+
 test('teclado e leitor de tela: responder, citação em preparo, cancelar e citação exibida têm nome', async ({
   page,
   request,
