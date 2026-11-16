@@ -24,6 +24,9 @@ const (
 // tone, up to four of them joined into one by zero-width joiners (👩‍💻), a
 // flag (two regional indicators or a black flag with tags) or a keycap (1️⃣).
 // Free text, symbols that are not emojis, two emojis and blank are refused.
+// The check is per component, not per whole sequence: a combination made of
+// valid parts that the catalog does not have (👍‍👨) is accepted. Checking
+// whole sequences would need a table of about 1,400 of them.
 func isSingleEmoji(s string) bool {
 	if s == "" || len(s) > maxEmojiBytes || !utf8.ValidString(s) {
 		return false
