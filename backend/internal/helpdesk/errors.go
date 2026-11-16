@@ -16,6 +16,9 @@ var (
 	ErrNotFailed       = errors.New("message has not failed")
 	ErrMediaNotFound   = errors.New("media file not found")
 	ErrInvalidAudio    = errors.New("recorded audio could not be converted")
+	// ErrNotQuotable is a quote of a message the agent may not cite: of
+	// another ticket, unknown, still sending, failed or unsupported.
+	ErrNotQuotable = errors.New("message cannot be quoted")
 )
 
 var (

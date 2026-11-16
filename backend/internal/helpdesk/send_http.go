@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -140,10 +141,12 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 type textMessageRequest struct {
 	ClientRequestID string `json:"clientRequestId" validate:"required,uuid"`
 	Body            string `json:"body" validate:"required,max=65536"`
+	QuotedMessageID *int64 `json:"quotedMessageId"`
 }
 
 // sendMessage sends a text (JSON) or a file (multipart, fields
-// clientRequestId, file and an optional caption) to the contact.
+// clientRequestId, file and an optional caption) to the contact. Both take an
+// optional quotedMessageId: the message of the ticket it replies to.
 func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 	ticketID, ok := urlTicketID(w, r)
 	if !ok {
@@ -165,6 +168,7 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out.Body = req.Body
+		out.QuotedMessageID = req.QuotedMessageID
 		if !parseRequestID(w, req.ClientRequestID, &out.ClientRequestID) {
 			return
 		}
@@ -195,6 +199,14 @@ func (h *Handler) readFileMessage(w http.ResponseWriter, r *http.Request) (Outgo
 
 	if !parseRequestID(w, r.FormValue("clientRequestId"), &out.ClientRequestID) {
 		return out, false
+	}
+	if raw := strings.TrimSpace(r.FormValue("quotedMessageId")); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			httpx.WriteError(w, http.StatusUnprocessableEntity, "Não é possível responder citando esta mensagem.")
+			return out, false
+		}
+		out.QuotedMessageID = &id
 	}
 	// A recording to go as a voice message comes in the voice field.
 	file, header, err := r.FormFile("file")

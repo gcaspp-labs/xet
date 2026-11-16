@@ -36,12 +36,14 @@ const (
 
 // Outgoing is a message an agent sends from the panel: a text, a file with
 // an optional caption, or audio recorded in the browser to go as a voice
-// message (Voice), without caption.
+// message (Voice), without caption. QuotedMessageID, when set, is the message
+// of the same ticket it replies to.
 type Outgoing struct {
 	ClientRequestID pgtype.UUID
 	Body            string
 	File            *messaging.Media
 	Voice           bool
+	QuotedMessageID *int64
 }
 
 // fileType picks how an attachment goes to WhatsApp: JPEG and PNG as image,
@@ -117,6 +119,12 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 		if err := conducts(t, actor); err != nil {
 			return err
 		}
+		// Checked with the ticket locked: the quoted message may have been
+		// sent or failed since the request started.
+		quote, err := quoteFor(ctx, q, t.ID, out.QuotedMessageID)
+		if err != nil {
+			return err
+		}
 		var mediaID *int64
 		if media != nil {
 			m, err := q.CreateMediaFile(ctx, *media)
@@ -143,6 +151,11 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 			Body:            body,
 			MediaID:         mediaID,
 			ClientRequestID: out.ClientRequestID,
+
+			QuotedExternalMessageID: quote.QuotedExternalMessageID,
+			QuotedMessageID:         quote.QuotedMessageID,
+			QuotedType:              quote.QuotedType,
+			QuotedBody:              quote.QuotedBody,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errDuplicate
@@ -165,6 +178,63 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 	}
 	s.hub.Publish(realtime.TicketChanged(msg.SectorID, msg.TicketID))
 	return s.deliver(ctx, provider, msg), nil
+}
+
+// recordedQuote is the quote of a message as it is recorded: the link to the
+// quoted message and the snippet of it that the client sees.
+type recordedQuote struct {
+	QuotedExternalMessageID *string
+	QuotedMessageID         *int64
+	QuotedType              db.NullMessageType
+	QuotedBody              *string
+}
+
+// quoteFor checks the message the agent quotes and returns what to record of
+// it; the zero value when there is no quote. Only a message of the same
+// ticket that WhatsApp knows (received, or sent with its ID) is quoted, and
+// not one shown as unsupported (stickers, locations, old reaction notices).
+// Any other is refused the same way, without telling whether it exists.
+func quoteFor(ctx context.Context, q *db.Queries, ticketID int64, quotedID *int64) (recordedQuote, error) {
+	if quotedID == nil {
+		return recordedQuote{}, nil
+	}
+	m, err := q.GetMessage(ctx, *quotedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordedQuote{}, ErrNotQuotable
+	}
+	if err != nil {
+		return recordedQuote{}, fmt.Errorf("get quoted message: %w", err)
+	}
+	if m.TicketID != ticketID || !reactable(m) || m.Type == db.MessageTypeUnsupported {
+		return recordedQuote{}, ErrNotQuotable
+	}
+	// The snippet follows the rule of received quotes: the text, the caption
+	// of an image or video, the name of a document (its caption without a
+	// name), nothing for audio; media_unavailable keeps its caption or name.
+	text := m.Body
+	switch m.Type {
+	case db.MessageTypeAudio:
+		text = nil
+	case db.MessageTypeDocument:
+		if m.MediaID != nil {
+			f, err := q.GetMediaFile(ctx, *m.MediaID)
+			if err != nil {
+				return recordedQuote{}, fmt.Errorf("get quoted file: %w", err)
+			}
+			if f.FileName != nil && *f.FileName != "" {
+				text = f.FileName
+			}
+		}
+	}
+	if text != nil && *text == "" {
+		text = nil
+	}
+	return recordedQuote{
+		QuotedExternalMessageID: m.ExternalMessageID,
+		QuotedMessageID:         &m.ID,
+		QuotedType:              db.NullMessageType{MessageType: m.Type, Valid: true},
+		QuotedBody:              text,
+	}, nil
 }
 
 // withNickname puts the current nickname of the sender before the text, as the
@@ -280,8 +350,13 @@ func (s *Service) send(ctx context.Context, provider messaging.Provider, msg db.
 		body = *msg.Body
 	}
 
+	quote, err := s.sentQuote(ctx, msg)
+	if err != nil {
+		return "", err
+	}
+
 	if msg.MediaID == nil {
-		return provider.SendText(ctx, messaging.TextMessage{SectorID: msg.SectorID, To: to, Body: body, IdempotencyKey: key})
+		return provider.SendText(ctx, messaging.TextMessage{SectorID: msg.SectorID, To: to, Body: body, IdempotencyKey: key, Quote: quote})
 	}
 	file, err := s.q.GetMediaFile(ctx, *msg.MediaID)
 	if err != nil {
@@ -299,8 +374,31 @@ func (s *Service) send(ctx context.Context, provider messaging.Provider, msg db.
 		media.DurationSeconds = int(*file.DurationSeconds)
 	}
 	return provider.SendMedia(ctx, messaging.MediaMessage{
-		SectorID: msg.SectorID, To: to, Type: messaging.MessageType(msg.Type), Media: media, Caption: body, IdempotencyKey: key,
+		SectorID: msg.SectorID, To: to, Type: messaging.MessageType(msg.Type), Media: media, Caption: body, IdempotencyKey: key, Quote: quote,
 	})
+}
+
+// sentQuote is the recorded quote of a message, as the provider takes it. It
+// is read from the message, so a retry repeats the same quote.
+func (s *Service) sentQuote(ctx context.Context, msg db.Message) (*messaging.Quote, error) {
+	if msg.QuotedExternalMessageID == nil {
+		return nil, nil
+	}
+	quote := &messaging.Quote{ExternalMessageID: *msg.QuotedExternalMessageID}
+	if msg.QuotedMessageID != nil {
+		quoted, err := s.q.GetMessage(ctx, *msg.QuotedMessageID)
+		if err != nil {
+			return nil, fmt.Errorf("get quoted message: %w", err)
+		}
+		quote.FromSector = quoted.Direction == db.MessageDirectionOutbound
+	}
+	if msg.QuotedType.Valid {
+		quote.Snippet = &messaging.QuoteSnippet{Type: messaging.MessageType(msg.QuotedType.MessageType)}
+		if msg.QuotedBody != nil {
+			quote.Snippet.Text = *msg.QuotedBody
+		}
+	}
+	return quote, nil
 }
 
 // recipient returns the provider contact ID of the contact, resolving the
