@@ -283,7 +283,10 @@ func TestReactionNeedsAMessageKnownToWhatsAppAndASingleEmoji(t *testing.T) {
 	}
 
 	msg := e.messageID(c.ticket.ID, "MSG-1")
-	for _, emoji := range []string{"", " ", "ok", "👍👍", "👍 ", "a👍", "👍a", "🏽", "🇧", "1", "\u200d👍", "👍\u200d", "<b>👍</b>", "👍\n"} {
+	for _, emoji := range []string{"", " ", "ok", "👍👍", "👍 ", "a👍", "👍a", "🏽", "🇧", "1", "\u200d👍", "👍\u200d", "<b>👍</b>", "👍\n",
+		// Símbolos que não são emoji, emojis colados por junção e marcas repetidas.
+		"■", "⌘", "🀀", "🦰", "👍\u200d👍\u200d👍", "👍\u200d👍", "❤\ufe0f\ufe0f", "👍🏽🏽", "🏴\U000e0067", "🏴\U000e007f",
+		"👨\u200d👩\u200d👧\u200d👦\u200d👦"} {
 		if resp := e.reactTo(msg, c.anaToken, emoji); resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Escolha um emoji para reagir." {
 			t.Fatalf("emoji %q: status %d, body %v", emoji, resp.Status, resp.Body)
 		}
@@ -296,7 +299,8 @@ func TestReactionNeedsAMessageKnownToWhatsAppAndASingleEmoji(t *testing.T) {
 	}
 
 	// Emojis com variação, tom de pele, junções, bandeiras e teclas valem.
-	for _, emoji := range []string{"❤️", "👍🏾", "👨\u200d👩\u200d👧", "🇧🇷", "1️⃣", "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f", "☺"} {
+	for _, emoji := range []string{"❤️", "👍🏾", "👨\u200d👩\u200d👧", "🇧🇷", "1️⃣", "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f", "☺",
+		"👩\u200d💻", "🏳️\u200d🌈", "❤️\u200d🔥", "🕵🏽\u200d♂️", "👨\u200d👩\u200d👧\u200d👦", "↔️"} {
 		if resp := e.reactTo(msg, c.anaToken, emoji); resp.Status != http.StatusOK || resp.Body["emoji"] != emoji {
 			t.Fatalf("emoji %q: status %d, body %v", emoji, resp.Status, resp.Body)
 		}
@@ -397,5 +401,16 @@ func TestConcurrentReactionRequestsDoNotDuplicate(t *testing.T) {
 	}
 	if n := e.reactionRows(); n != 1 {
 		t.Fatalf("reaction rows = %d", n)
+	}
+	// O mesmo emoji remove (spec #196): conforme a ordem, os dois pedidos põem
+	// 👍, ou o segundo remove. Cada um vai ao WhatsApp uma vez, e o painel
+	// mostra o que foi enviado por último.
+	sent := e.sentReactions()
+	if len(sent) != 2 || sent[0].Emoji != "👍" || (sent[1].Emoji != "👍" && sent[1].Emoji != "") {
+		t.Fatalf("sent reactions = %+v", sent)
+	}
+	emoji, _, _ := c.sectorReaction("MSG-1")
+	if emoji != sent[1].Emoji {
+		t.Fatalf("sector reaction = %q, last sent %q", emoji, sent[1].Emoji)
 	}
 }
