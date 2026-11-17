@@ -8,7 +8,7 @@ Os comandos do xet que as skills rodam, a partir da raiz do repositório. Este a
 | Reiniciar o ambiente na branch atual | `make dev-restart` (em segundo plano, log em `/tmp/xet-dev.log`; necessário a cada mudança no backend) |
 | Testes | `make test` (integração do backend com `go test -race` e ponta a ponta com Playwright); separados: `make test-backend` e `make test-e2e` |
 | Lint e formatação | `make lint` |
-| Conferência do código gerado | `make check-generated` (depois de mudar `backend/db/queries`, rode `make sqlc` antes) |
+| Conferência do código gerado | `make check-generated` (sqlc, `go.mod` e a tabela de emojis das reações, que pede `npm ci` no frontend e o roda sozinho; depois de mudar `backend/db/queries`, rode `make sqlc` antes) |
 | Protótipo de interface | `make dev-restart` na branch `prototype/*`, com a tela aberta em `http://localhost:5173` |
 
 ## Branch principal

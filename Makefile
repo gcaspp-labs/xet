@@ -20,7 +20,7 @@ export DOCKER_HOST ?= unix:///var/run/docker.sock
 endif
 endif
 
-.PHONY: frontend-deps dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated test test-backend test-e2e lint lint-backend lint-frontend ci-ffmpeg up down logs create-admin dev-create-admin
+.PHONY: frontend-deps dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated check-emoji-catalog test test-backend test-e2e lint lint-backend lint-frontend ci-ffmpeg up down logs create-admin dev-create-admin
 
 ## Desenvolvimento: banco em :5440, backend em :8090 e frontend em :5173 (com proxy para o backend).
 ## Portas fora das padrão (5432/5433/8080/8081) para conviver com outros projetos rodando na mesma máquina.
@@ -74,13 +74,21 @@ frontend/node_modules/.package-lock.json: frontend/package.json frontend/package
 dev-frontend: frontend-deps
 	cd frontend && npm run dev -- --host
 
-## Confere se o código gerado (sqlc) e o go.mod estão em dia com o que foi commitado.
-check-generated: sqlc
+## Confere se o código gerado (sqlc, tabela de emojis das reações) e o go.mod estão em dia com o que foi commitado.
+check-generated: sqlc check-emoji-catalog
 	cd backend && go mod tidy
 	@git diff --exit-code -- backend/internal/db backend/go.mod backend/go.sum || \
 		(echo "Código gerado desatualizado: rode make sqlc e go mod tidy e commite o resultado." && exit 1)
 	@test -z "$$(git status --porcelain -- backend/internal/db)" || \
 		(echo "Arquivos gerados pelo sqlc não commitados em backend/internal/db." && exit 1)
+
+## Regera a tabela de emojis das reações (backend/internal/helpdesk/emoji_catalog.txt) a partir
+## do seletor do frontend (emojibase-data instalado + grupos do EmojiPicker.tsx) e falha se ela
+## mudar. Roda só o teste do catálogo, sem -race nem banco.
+check-emoji-catalog: frontend-deps
+	cd backend && go test ./internal/helpdesk -count=1 -run '^TestEmojiCatalogFollowsThePicker$$' -update-emoji-catalog
+	@git diff --exit-code -- backend/internal/helpdesk/emoji_catalog.txt || \
+		(echo "Tabela de emojis desatualizada: com npm ci no frontend, rode em backend/ go test ./internal/helpdesk -run TestEmojiCatalogFollowsThePicker -update-emoji-catalog e commite o resultado." && exit 1)
 
 ## Testes: integração do backend e ponta a ponta com Playwright.
 test: test-backend test-e2e
