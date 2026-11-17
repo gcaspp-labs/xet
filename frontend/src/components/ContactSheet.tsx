@@ -162,7 +162,7 @@ export function OrganizationPicker({
         <ComboboxList ref={list} onScroll={onScroll}>
           {(organization: Organization) => (
             <ComboboxItem key={organization.id} value={organization} className="items-start">
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-0.5">
+              <span className="flex min-w-0 flex-1 flex-col gap-[calc(var(--space-4)/2)] py-[calc(var(--space-4)/2)]">
                 <span className="whitespace-normal break-words">{organization.name}</span>
                 <span className="caption text-ink-faint">
                   {organization.municipality.name}
