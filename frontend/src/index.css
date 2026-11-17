@@ -76,6 +76,7 @@
   --color-ink-faint: var(--ink-faint);
   --color-sidebar-text-active: var(--ink);
   --color-line-soft: var(--line-soft);
+  --color-on-overlay: var(--on-overlay);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
   --color-success: var(--success);
@@ -100,6 +101,8 @@
  */
 :root {
   --text-scale: 1;
+  /* Texto e ícones sobre o véu overlay, que é escuro nos dois temas (visualizador de imagem). */
+  --on-overlay: #ffffff;
 }
 :root[data-text-size='large'] {
   --text-scale: 1.15;
