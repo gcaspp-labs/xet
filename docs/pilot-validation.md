@@ -156,3 +156,71 @@ O "Pronto quando" destas tasks depende do número real, e os testes foram adiado
 - **#198:** pela API (a tela vem na #200), reagir a uma mensagem recebida do cliente e a uma enviada pelo setor (pelo painel e pelo celular): a reação aparece no celular do cliente, sem apelido, na mensagem certa; trocar o emoji substitui no celular; repetir o mesmo emoji remove; a reação feita no celular do setor é substituída pela do painel; com o número desconectado, a API avisa e nada muda.
 - **#201:** pela API (a tela vem depois), conferir em `GET /api/tickets/{id}/messages` a citação de respostas feitas no celular do cliente: citando uma mensagem do chamado, recebida e enviada pelo setor (fica ligada, com o trecho); citando uma mensagem de antes do XET ou de um chamado já encerrado (sem ligação, com o trecho do WhatsApp); citando áudio, imagem, vídeo e PDF (tipo e legenda ou nome do arquivo, sem a mídia); e uma resposta citada feita no celular do setor. Conferir também a citação vinda de chat por LID e de mensagem temporária ou de visualização única, que o WhatsApp pode embrulhar e chegar como `unsupported` no trecho.
 - **#202:** pela API (a tela vem depois), enviar com `quotedMessageId` um texto, uma imagem com legenda, um PDF e um áudio gravado citando: uma mensagem de texto do cliente, uma mensagem enviada pelo setor, um áudio, uma imagem e um PDF. No celular do cliente, cada resposta aparece com a bolha da citação na mensagem certa (com o trecho: texto, legenda ou nome do arquivo), o texto e a legenda com o apelido, e o áudio como mensagem de voz sem apelido. Desconectar, enviar citando (vira "Falhou"), reconectar e reenviar: chega uma vez só, com a mesma citação. Conferir também num chat por LID (se a bolha aparece citando a mensagem do cliente).
+
+## Roteiro manual: reação e citação com o WhatsApp real
+
+Acompanha a spec [#196](https://github.com/gcaspp-labs/xet/issues/196) (tarefa [#204](https://github.com/gcaspp-labs/xet/issues/204)). Só o aparelho real prova o formato que o adaptador falso simula, por isso estes itens são **manuais**: não entram no CI e não bloqueiam o merge de nenhuma tarefa. A execução e o registro do resultado são da pessoa, depois que as tarefas da spec entrarem.
+
+**Antes de começar**
+
+- Use só um **número de teste** ligado ao setor de teste, e outro celular de teste fazendo o papel do cliente. Nunca um número, contato ou órgão reais: o repositório é público, e o que for registrado aqui também.
+- Mensagens e arquivos de teste com texto fictício (por exemplo "Bom dia, teste 1", `contrato-exemplo.pdf`). Não registre capturas com dados reais.
+- O chamado de teste precisa estar **aberto e assumido** por quem vai reagir e citar. Quem não é o responsável só enxerga reações e citações, sem poder criar.
+- Registre em cada linha a **data**, a **versão** (commit ou tag do XET em teste) e o **resultado** (OK, Falhou, com uma frase do que apareceu). Linhas não executadas ficam como **Pendente**.
+
+### Reação do cliente (celular de teste → painel)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| R1 | No celular do cliente, reagir com 👍 a uma mensagem enviada pelo setor | A reação aparece embaixo da mensagem certa no painel, sem recarregar a página e sem o aviso "tipo de mensagem não suportado" | Pendente |
+| R2 | No celular do cliente, reagir com ❤️ a uma mensagem que o próprio cliente mandou | A reação aparece embaixo dessa mensagem no painel | Pendente |
+| R3 | Trocar o emoji da reação do cliente (por exemplo de 👍 para 😂) | O emoji novo substitui o anterior; não ficam dois | Pendente |
+| R4 | Remover a reação no celular do cliente | A reação some do painel | Pendente |
+| R5 | Recarregar a página e abrir o chamado de novo | As reações que sobraram continuam embaixo das mensagens | Pendente |
+| R6 | Encerrar o chamado e, depois, reagir no celular do cliente a uma mensagem dele | A reação não aparece, nenhum chamado novo é aberto e o chamado encerrado não muda. **Depois deste item, crie e assuma outro chamado de teste antes de seguir para S1**, porque os próximos pedem um chamado aberto e assumido | Pendente |
+
+### Reação do setor (painel → celular do cliente)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| S1 | No painel, reagir a uma mensagem do cliente com um dos 6 emojis rápidos (👍 ❤️ 😂 😮 😢 🙏) | O celular do cliente mostra a reação na mensagem certa, **sem apelido**, como qualquer reação | Pendente |
+| S2 | Reagir a uma mensagem enviada pelo setor | A reação aparece no celular do cliente, na mensagem certa | Pendente |
+| S3 | Reagir com um emoji fora dos 6, escolhido pelo "+" | O celular do cliente mostra esse emoji | Pendente |
+| S4 | Trocar a reação escolhendo outro emoji | No celular, o emoji novo substitui o anterior | Pendente |
+| S5 | Tocar de novo no mesmo emoji | A reação some do painel e do celular do cliente | Pendente |
+| S6 | No painel, conferir quem reagiu por último | O painel mostra quem do setor reagiu, já que o cliente não vê o apelido | Pendente |
+| S7 | No celular do setor (o aparelho do número de teste), reagir a uma mensagem | O painel mostra a reação como feita "pelo celular" | Pendente |
+| S8 | Com uma mensagem ainda enviando ou que falhou, procurar o botão de reagir | A reação não é oferecida nessa mensagem | Pendente |
+| S9 | Desconectar o número, reagir no painel e reconectar | Aparece o aviso de erro, a reação é desfeita na tela e nada chega ao celular do cliente | Pendente |
+
+### Citação recebida (celular de teste → painel)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| C1 | No celular do cliente, responder citando uma mensagem de texto do setor | O painel mostra a citação acima da resposta, com o trecho certo | Pendente |
+| C2 | Responder citando uma mensagem de texto do próprio cliente | O painel mostra a citação, ligada à mensagem do chamado | Pendente |
+| C3 | Responder citando um áudio | A citação mostra o tipo e o nome (por exemplo "🎤 Áudio"), sem a mídia | Pendente |
+| C4 | Responder citando uma imagem (com e sem legenda) | A citação mostra o tipo e a legenda, sem a imagem | Pendente |
+| C5 | Responder citando um arquivo (`contrato-exemplo.pdf`) | A citação mostra "📎 contrato-exemplo.pdf" | Pendente |
+| C6 | Responder citando uma mensagem antiga, de antes do XET ou de outro chamado, que o XET não tem | O painel mostra a citação com o trecho que vem do WhatsApp | Pendente |
+| C7 | Recarregar a página e abrir o chamado de novo | Todas as citações continuam acima das mensagens | Pendente |
+
+### Citação enviada (painel → celular do cliente)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| Q1 | No painel, responder citando uma mensagem de texto do cliente | O celular mostra a resposta com a bolha da citação na mensagem certa, e o apelido no texto | Pendente |
+| Q2 | Responder citando uma mensagem enviada pelo setor | O celular mostra a bolha da citação na mensagem certa | Pendente |
+| Q3 | Responder citando um arquivo, enviando texto | A citação aparece no celular com o nome do arquivo | Pendente |
+| Q4 | Responder citando um áudio | A citação aparece com o tipo "Áudio" | Pendente |
+| Q5 | Enviar um arquivo com legenda citando uma mensagem | O arquivo chega com a citação, e a legenda leva o apelido | Pendente |
+| Q6 | Gravar um áudio citando uma mensagem | O áudio chega como mensagem de voz, sem apelido, com a citação | Pendente |
+| Q7 | Desconectar o número, enviar a resposta citada (vira "Falhou"), reconectar e usar "Reenviar" | Chega uma vez só ao celular, com a mesma citação | Pendente |
+| Q8 | Começar uma citação e cancelá-la antes de enviar | A mensagem sai sem citação | Pendente |
+
+### Seletor de emojis
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| E1 | No campo de mensagem, colocar o cursor no meio do texto, inserir um emoji pelo seletor e enviar | O emoji entra na posição do cursor e chega igual ao celular do cliente, depois do apelido | Pendente |
+| E2 | Receber no painel uma mensagem do cliente com emojis | Os emojis aparecem corretamente no painel | Pendente |
