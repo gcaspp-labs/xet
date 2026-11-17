@@ -95,7 +95,7 @@ export function ImageViewer({ src }: { src: string }) {
               disabled={view.scale <= MIN_ZOOM}
               onClick={() => zoomBy(-BUTTON_STEP)}
             >
-              <Minus />
+              <Minus strokeWidth={1.7} />
             </Button>
             <Button
               variant="ghost"
@@ -105,7 +105,7 @@ export function ImageViewer({ src }: { src: string }) {
               disabled={view.scale >= MAX_ZOOM}
               onClick={() => zoomBy(BUTTON_STEP)}
             >
-              <Plus />
+              <Plus strokeWidth={1.7} />
             </Button>
             <Button
               variant="ghost"
@@ -114,7 +114,7 @@ export function ImageViewer({ src }: { src: string }) {
               className={barButton}
               onClick={fit}
             >
-              <Maximize />
+              <Maximize strokeWidth={1.7} />
             </Button>
             <a
               href={src}
@@ -123,14 +123,14 @@ export function ImageViewer({ src }: { src: string }) {
               aria-label="Abrir original em nova guia"
               className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), barButton)}
             >
-              <ExternalLink />
+              <ExternalLink strokeWidth={1.7} />
             </a>
             <DialogClose
               render={
                 <Button variant="ghost" size="icon" aria-label="Fechar" className={barButton} />
               }
             >
-              <X />
+              <X strokeWidth={1.7} />
             </DialogClose>
           </div>
           {/* Clique na área vazia fecha; na imagem, não. */}
@@ -157,7 +157,7 @@ export function ImageViewer({ src }: { src: string }) {
               style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
               className={cn(
                 'max-h-full max-w-full object-contain select-none',
-                !dragging && 'transition-transform duration-75',
+                !dragging && 'transition-transform duration-150',
                 view.scale > MIN_ZOOM ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in',
               )}
             />

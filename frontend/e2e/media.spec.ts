@@ -276,13 +276,13 @@ test('a imagem abre por cima da conversa, com zoom, arrastar e abrir o original'
     const box = (await picture.boundingBox())!
     return { x: Math.round(box.x), y: Math.round(box.y) }
   }
-  // Espera a animação curta do zoom (75 ms) terminar: duas leituras iguais, 150 ms depois.
+  // Espera a animação curta do zoom (150 ms) terminar: duas leituras iguais, 250 ms depois.
   const settled = async () => {
     let current = await origin()
     await expect
       .poll(async () => {
         const before = current
-        await page.waitForTimeout(150)
+        await page.waitForTimeout(250)
         current = await origin()
         return current.x === before.x && current.y === before.y
       })
