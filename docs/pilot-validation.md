@@ -177,7 +177,7 @@ Acompanha a spec [#196](https://github.com/gcaspp-labs/xet/issues/196) (tarefa [
 | R3 | Trocar o emoji da reação do cliente (por exemplo de 👍 para 😂) | O emoji novo substitui o anterior; não ficam dois | Pendente |
 | R4 | Remover a reação no celular do cliente | A reação some do painel | Pendente |
 | R5 | Recarregar a página e abrir o chamado de novo | As reações que sobraram continuam embaixo das mensagens | Pendente |
-| R6 | Encerrar o chamado e, depois, reagir no celular do cliente a uma mensagem dele | A reação não aparece, nenhum chamado novo é aberto e o chamado encerrado não muda | Pendente |
+| R6 | Encerrar o chamado e, depois, reagir no celular do cliente a uma mensagem dele | A reação não aparece, nenhum chamado novo é aberto e o chamado encerrado não muda. **Depois deste item, crie e assuma outro chamado de teste antes de seguir para S1**, porque os próximos pedem um chamado aberto e assumido | Pendente |
 
 ### Reação do setor (painel → celular do cliente)
 
