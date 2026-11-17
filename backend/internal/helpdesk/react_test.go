@@ -286,7 +286,12 @@ func TestReactionNeedsAMessageKnownToWhatsAppAndASingleEmoji(t *testing.T) {
 	for _, emoji := range []string{"", " ", "ok", "👍👍", "👍 ", "a👍", "👍a", "🏽", "🇧", "1", "\u200d👍", "👍\u200d", "<b>👍</b>", "👍\n",
 		// Símbolos que não são emoji, emojis colados por junção e marcas repetidas.
 		"■", "⌘", "🀀", "🦰", "👍\u200d👍\u200d👍", "👍\u200d👍", "❤\ufe0f\ufe0f", "👍🏽🏽", "🏴\U000e0067", "🏴\U000e007f",
-		"👨\u200d👩\u200d👧\u200d👦\u200d👦"} {
+		"👨\u200d👩\u200d👧\u200d👦\u200d👦",
+		// Sequência inteira: peças válidas que o catálogo não tem, símbolo sem o seletor de variação
+		// (☺ para ☺️), par de indicadores sem bandeira, junção solta, dois emojis e uma peça a mais ou a menos.
+		"👍\u200d👨", "☺", "🇽🇽", "\u200d", "\u200d👩\u200d💻", "👩\u200d💻\u200d", "👍❤️", "🇧🇷🇧🇷", "1️⃣1️⃣",
+		"👩\u200d💻\u200d💻", "👩\u200d", "👨\u200d👩\u200d👧\u200d👦\u200d👧", "👨\u200d👩\u200d👧\u200d", "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074",
+		"🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e0074\U000e007f", "1\ufe0f", "#", "*⃣"} {
 		if resp := e.reactTo(msg, c.anaToken, emoji); resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Escolha um emoji para reagir." {
 			t.Fatalf("emoji %q: status %d, body %v", emoji, resp.Status, resp.Body)
 		}
@@ -299,8 +304,8 @@ func TestReactionNeedsAMessageKnownToWhatsAppAndASingleEmoji(t *testing.T) {
 	}
 
 	// Emojis com variação, tom de pele, junções, bandeiras e teclas valem.
-	for _, emoji := range []string{"❤️", "👍🏾", "👨\u200d👩\u200d👧", "🇧🇷", "1️⃣", "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f", "☺",
-		"👩\u200d💻", "🏳️\u200d🌈", "❤️\u200d🔥", "🕵🏽\u200d♂️", "👨\u200d👩\u200d👧\u200d👦", "↔️"} {
+	for _, emoji := range []string{"❤️", "👍🏾", "👨\u200d👩\u200d👧", "🇧🇷", "1️⃣", "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f", "☺️",
+		"#️⃣", "*️⃣", "👩\u200d💻", "🏳️\u200d🌈", "❤️\u200d🔥", "🕵🏽\u200d♂️", "👨\u200d👩\u200d👧\u200d👦", "↔️"} {
 		if resp := e.reactTo(msg, c.anaToken, emoji); resp.Status != http.StatusOK || resp.Body["emoji"] != emoji {
 			t.Fatalf("emoji %q: status %d, body %v", emoji, resp.Status, resp.Body)
 		}
