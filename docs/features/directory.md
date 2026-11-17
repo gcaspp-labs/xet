@@ -36,13 +36,16 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 30. A lista de contatos mostra os setores do contato e o módulo em cada um.
 31. As alterações de setores e módulos do contato, inclusive as automáticas, ficam registradas na auditoria.
 32. A lista de contatos é paginada e ordena por Contato (padrão) ou por Órgão, como em [interface.md](interface.md). Nomes iguais mantêm sempre a mesma ordem, e contatos sem órgão ficam no fim da ordem por órgão. O total conta cada contato uma vez, mesmo em vários setores.
-33. Na tela Contatos, a busca e os filtros também ficam no endereço (`?busca=`, `?setor=`, `?modulo=`, `?municipio=`, `?orgao=`). A busca de "Novo chamado" mostra os 20 primeiros resultados.
+33. Na tela Contatos, a busca e os filtros também ficam no endereço (`?busca=`, `?setor=`, `?modulo=`, `?municipio=`, `?orgao=`). A busca de "Novo chamado" carrega a próxima página de contatos sozinha ao chegar no fim da lista, até mostrar todos os resultados, respeitando a busca e os filtros atuais. Mudar a busca ou um filtro recomeça do início da lista. A lista não tem rodapé de contagem. Pelo teclado, as setas percorrem os contatos e, ao chegar no último carregado, vem a próxima página.
 34. A lista de órgãos é paginada e ordena por Órgão (padrão), Município ou CNPJ, como em [interface.md](interface.md), com a busca no endereço (`?busca=`). Nomes iguais mantêm sempre a mesma ordem, e órgãos sem CNPJ ficam no fim da ordem por CNPJ.
-35. Os seletores de órgão (filtros, cadastro e importação de contatos, encerramento) mostram os 20 primeiros resultados da busca e avisam quando há mais, pedindo para refinar.
+35. Os seletores de órgão (filtro do Dashboard, filtro de Contatos, cadastro e importação de contatos, encerramento) carregam a próxima página sozinhos ao chegar no fim da lista, até mostrar todos os resultados da busca, também pelo teclado. Digitar no campo ou trocar o município filtra no servidor e recomeça do início da lista. Enquanto falta carregar algo, o fim da lista mostra "Mostrando X de Y órgãos"; com a lista completa, nada aparece.
+36. Em cada opção do seletor de órgão, o nome aparece inteiro, quebrando de linha se for longo, e abaixo vêm o município e o CNPJ ("município · CNPJ"); órgão sem CNPJ mostra só o município. A lista abre mais larga que o campo, até 32rem, sem passar da largura da tela. Depois de escolhido, o campo mostra o nome do órgão com o município.
 
 ## Fora do escopo / limites conhecidos
 
 - A importação de contatos por planilha (CSV) fica para uma etapa posterior.
+- As páginas dos seletores continuam de 20 em 20, e a busca por palavras de campos diferentes (como "câmara jales") não é tratada aqui (#226).
+- Os outros seletores (município, setor, atendente, módulo) já carregam a lista inteira. As listas das telas Contatos e Órgãos seguem paginadas por página (regras 32 e 34).
 
 ## Relacionado
 
@@ -55,3 +58,5 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 - 2026-11-11: regras migradas do `spec.md` (Órgãos e contatos; Órgãos e contatos › Setores e módulos do contato).
 - 2026-11-14: a janela "Nova conversa" passa a "Novo chamado" nas regras 14, 27 e 33, só texto (ticket [#185](https://github.com/gcaspp-labs/xet/issues/185)).
 - 2026-11-15: regra 12 alterada; spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190). Dizia "Cada telefone corresponde a um único contato. Quando um telefone é usado por mais de uma pessoa, o atendente anota no chamado com quem falou.".
+- 2026-11-17: regra 35 alterada e regra 36 adicionada; spec [#227](https://github.com/gcaspp-labs/xet/issues/227), PRs [#231](https://github.com/gcaspp-labs/xet/pull/231), [#232](https://github.com/gcaspp-labs/xet/pull/232). A 35 dizia "Os seletores de órgão (filtros, cadastro e importação de contatos, encerramento) mostram os 20 primeiros resultados da busca e avisam quando há mais, pedindo para refinar.".
+- 2026-11-17: regra 33 alterada; spec [#227](https://github.com/gcaspp-labs/xet/issues/227), PR [#233](https://github.com/gcaspp-labs/xet/pull/233). Dizia, no fim, "A busca de "Novo chamado" mostra os 20 primeiros resultados.".
