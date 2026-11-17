@@ -215,7 +215,7 @@ Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-l
 | `protocol` | text | Obrigatório, único; formato `AAAA-NNNNNN` |
 | `sector_id` | bigint → `sectors` | Obrigatório |
 | `contact_id` | bigint → `contacts` | Obrigatório |
-| `organization_id` | bigint → `organizations` | Copiado do órgão principal do contato; editável no encerramento; obrigatório para encerrar, exceto no cancelamento |
+| `organization_id` | bigint → `organizations` | Copiado do órgão principal do contato; editável no encerramento; obrigatório para encerrar, exceto no cancelamento e na transferência entre setores |
 | `assignee_id` | bigint → `users` | Responsável atual |
 | `status` | ticket_status | Obrigatório |
 | `previous_ticket_id` | bigint → `tickets` | Chamado de origem em transferência entre setores; único |
@@ -227,18 +227,20 @@ Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-l
 | `closed_at` | timestamptz | Momento real do encerramento; não editável |
 | `closed_by_id` | bigint → `users` | Quem encerrou ou cancelou |
 | `closure_type` | closure_type | Preenchido ao encerrar |
-| `subject` | text | Obrigatório para encerrar, exceto no cancelamento |
-| `resolution` | text | Obrigatório para encerrar, exceto no cancelamento |
+| `subject` | text | Obrigatório para encerrar, exceto no cancelamento e na transferência entre setores |
+| `resolution` | text | Obrigatório para encerrar, exceto no cancelamento e na transferência entre setores |
+| `transfer_reason` | text | Motivo da transferência entre setores, texto livre e opcional, na etapa de origem; vazio quando não informado (nunca em branco) |
 
 Restrições:
 
 - `status = 'queued'` ⇒ `assignee_id` vazio.
 - `status in ('in_progress', 'closed')` ⇒ `assignee_id` preenchido.
-- `status = 'closed'` ⇒ `ended_at`, `closed_at`, `closed_by_id` e `closure_type` preenchidos e, exceto em `closure_type = 'cancelled'`, também `organization_id`, `subject` e `resolution`.
+- `status = 'closed'` ⇒ `ended_at`, `closed_at`, `closed_by_id` e `closure_type` preenchidos e, exceto em `closure_type = 'cancelled'` e `closure_type = 'transferred'`, também `organization_id`, `subject` e `resolution`. As transferências feitas com o formulário de encerramento, antes de [#243](https://github.com/gcaspp-labs/xet/issues/243), têm esses campos e continuam válidas.
+- `transfer_reason` preenchido ⇒ não em branco.
 - `ended_at >= started_at`.
 - Índice único parcial em `(sector_id, contact_id) where status <> 'closed'`: um chamado aberto por contato e setor.
-- Encerrar exige ao menos um registro em `ticket_modules` (validado na transação de encerramento).
-- O contato do chamado precisa estar com `registered = true` para encerrar.
+- Encerrar exige ao menos um registro em `ticket_modules` (validado na transação de encerramento), exceto na transferência entre setores.
+- O contato do chamado precisa estar com `registered = true` para encerrar, exceto na transferência entre setores.
 
 Índices: `(sector_id, status)` para a fila; `(assignee_id) where status = 'in_progress'` para a contagem por atendente; `(contact_id)` e `(organization_id)` para o histórico; `(sector_id, closed_at) where status = 'closed'` para os realizados do dia.
 
@@ -304,7 +306,7 @@ stateDiagram-v2
 | Assumir | `update ... set assignee_id = :user, status = 'in_progress', assigned_at = coalesce(assigned_at, now()) where id = :id and status = 'queued'`; nenhuma linha afetada significa que outro atendente assumiu antes |
 | Transferência entre atendentes | Com o chamado travado (`for update`) e `in_progress`, troca `assignee_id`; auditoria `ticket_transferred_user` com `assignee_id` de/para na mesma transação. Repetir a transferência para quem já é o responsável não grava de novo |
 | Encerramento | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável, e o contato travado para leitura (`for share`) e cadastrado: preenche os campos de encerramento com `closure_type = 'resolved'`, `closed_at = now()`, `closed_by_id` = responsável e `ended_at` informado ou `now()`; grava `ticket_modules` (módulos ativos do setor) e a auditoria `ticket_closed` na mesma transação |
-| Transferência entre setores | Com as mesmas travas e conferências do encerramento (somente o responsável), encerra com o formulário completo e `closure_type = 'transferred'`; cria chamado `queued` no destino (outro setor ativo) com `previous_ticket_id`, mesmo contato, o órgão do formulário e `arrived_at` = momento da transferência. Se o contato já tiver chamado aberto no destino (índice único parcial), a transação é desfeita e a transferência recusada. Auditoria `ticket_transferred_sector` na origem, na mesma transação. Os eventos dos dois setores são publicados depois do commit |
+| Transferência entre setores | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável, e o contato travado para leitura (`for share`), sem formulário e sem exigir o cadastro do contato: encerra com `closure_type = 'transferred'`, `closed_at = now()`, `closed_by_id` = responsável, `ended_at` = momento da transferência, `transfer_reason` quando informado, sem assunto, resolução nem módulos; cria chamado `queued` no destino (outro setor ativo) com `previous_ticket_id`, mesmo contato, o órgão principal do contato (vazio quando ele não tem) e `arrived_at` = momento da transferência. Até a janela nova ([#247](https://github.com/gcaspp-labs/xet/issues/247)) a rota antiga ainda encerra com o formulário completo, como antes de [#243](https://github.com/gcaspp-labs/xet/issues/243). Se o contato já tiver chamado aberto no destino (índice único parcial), a transação é desfeita e a transferência recusada. Auditoria `ticket_transferred_sector` na origem, na mesma transação. Os eventos dos dois setores são publicados depois do commit |
 | Cadastro do contato | Na mesma transação do cadastro, os chamados abertos do contato com `organization_id` vazio recebem o órgão do contato (travados com `for update`), com auditoria `ticket_organization_linked` em cada um |
 | Correção | Com o chamado travado (`for update`) e `closed`, por quem encerrou (`closed_by_id`), supervisor do setor ou administrador: altera `subject`, `resolution`, `organization_id`, `started_at` e `ended_at` e acrescenta ou remove linhas de `ticket_modules` (acrescentadas só entre os módulos ativos do setor; as já gravadas podem ficar mesmo inativas); auditoria `ticket_corrected` com `reason` na mesma transação. Sem nenhuma alteração, nada é gravado |
 | Devolver à fila | Com o chamado travado (`for update`) e `in_progress`, pelo responsável, supervisor do setor ou administrador: `status = 'queued'`, `assignee_id` vazio, `assigned_at` mantido; auditoria `ticket_returned` na mesma transação |
@@ -419,7 +421,7 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `ticket_assigned` | Atendente assume chamado |
 | `ticket_started` | Atendente inicia conversa; o chamado nasce assumido por ele |
 | `ticket_transferred_user` | Transferência entre atendentes |
-| `ticket_transferred_sector` | Transferência entre setores (no chamado de origem): `changes` como no `ticket_closed`, com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados, `started_at` e `organization_id`, mais `next_ticket_id` e `sector_id` (de origem para destino) |
+| `ticket_transferred_sector` | Transferência entre setores (no chamado de origem): `changes` com `status`, `closure_type`, `ended_at`, `next_ticket_id`, `sector_id` (de origem para destino) e, quando informado, `transfer_reason`. As transferências feitas com o formulário (antes de [#243](https://github.com/gcaspp-labs/xet/issues/243)) trazem os campos do `ticket_closed` (`subject`, `resolution`, `module_ids` e, quando alterados, `started_at` e `organization_id`) no lugar de `closure_type` e `transfer_reason` |
 | `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |
 | `ticket_closed` | Encerramento: `changes` com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados no formulário, `started_at` (de `arrived_at` para o informado) e `organization_id` |
 | `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at` e `ended_at` |
