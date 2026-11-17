@@ -1,3 +1,4 @@
+import { PhoneCopy } from '@/prototype/PhoneCopy'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRightLeft,
@@ -231,6 +232,8 @@ export default function ConversasPage() {
         wrapTitle
         breadcrumb={ticket ? `Chamados · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
         title={ticket?.contact.name ?? 'Chamados'}
+        // PROTÓTIPO #239: telefone + copiar no cabeçalho do chamado.
+        subtitle={ticket && <PhoneCopy phone={ticket.contact.phone} />}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {user.role === 'admin' && sectors.length > 0 && (

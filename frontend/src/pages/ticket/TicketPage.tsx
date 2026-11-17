@@ -18,6 +18,7 @@ import {
   UserRoundCog,
   X,
 } from 'lucide-react'
+import { PhoneCopy } from '@/prototype/PhoneCopy'
 import {
   type ChangeEvent,
   type KeyboardEvent,
@@ -916,9 +917,8 @@ function DetailsTab({ ticket }: { ticket: TicketDetail }) {
         'Contato',
         <>
           {ticket.contact.name}
-          <span className="mono-num block caption text-ink-faint">
-            {ticket.contact.phone ? formatPhone(ticket.contact.phone) : 'Sem telefone'}
-          </span>
+          {/* PROTÓTIPO #239: botão de copiar só o telefone, ao lado dele. */}
+          <PhoneCopy phone={ticket.contact.phone} />
         </>,
       )}
       {row(

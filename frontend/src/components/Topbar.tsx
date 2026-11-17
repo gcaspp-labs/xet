@@ -10,12 +10,15 @@ export function Topbar({
   back,
   action,
   wrapTitle = false,
+  subtitle,
 }: {
   back?: { to: string; label: string; state?: unknown }
   breadcrumb?: string
   title: string
   action?: ReactNode
   wrapTitle?: boolean
+  // PROTÓTIPO #239: linha abaixo do título (telefone do cliente).
+  subtitle?: ReactNode
 }) {
   return (
     <header className="sticky top-(--header-height) z-10 border-b border-line-soft bg-background">
@@ -39,6 +42,7 @@ export function Topbar({
         >
           {breadcrumb && <p className="caption text-ink-faint">{breadcrumb}</p>}
           <h1 className={wrapTitle ? 'title-page break-words' : 'title-page truncate'}>{title}</h1>
+          {subtitle}
         </div>
         {action}
       </div>
