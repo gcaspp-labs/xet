@@ -11,6 +11,10 @@ import { admin, seedSector, signIn, unique, userPassword, openQueued } from './f
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
+// PNG liso de 240×160 pixels, grande o bastante para arrastar e dar zoom no visualizador.
+const largePng =
+  'iVBORw0KGgoAAAANSUhEUgAAAPAAAACgCAIAAAC9uXYyAAABRElEQVR42u3SQQ0AAAjEsJODRIQhEBV8SJMqWJbqgTciAYYGQ4OhwdAYGgwNhgZDg6ExNBgaDA2GBkNjaDA0GBoMDYbG0GBoMDQYGgyNocHQYGgwNBgaQ4OhwdBgaDA0hgZDg6HB0BgaDA2GBkODoTE0GBoMDYYGQ2NoMDQYGgwNhsbQYGgwNBgaDI2hwdBgaDA0GBpDg6HB0GBoMDSGBkODocHQYGgMDYYGQ4OhMTQYGgwNhgZDY2gwNBgaDA2GxtBgaDA0GBoMjaHB0GBoMDQYGkODocHQYGgwNIYGQ4OhwdBgaAwNhgZDg6ExtAoYGgwNhgZDY2gwNBgaDA2GxtBgaDA0GBoMjaHB0GBoMDQYGkODocHQYGgwNIYGQ4OhwdBgaAwNhgZDg6HB0BgaDA2GBkNjaDA0GBoMDYbG0GBoMDTcWOEhQ6qtXEgpAAAAAElFTkSuQmCC'
+
 async function connectSector(baseURL: string, sectorId: number) {
   const api = await apiRequest.newContext({ baseURL })
   expect(
@@ -93,14 +97,13 @@ test('mídias recebidas aparecem no painel e o áudio gravado vai como mensagem 
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
   await expect(received).toHaveCount(3)
 
-  // Imagem com pré-visualização, que abre em tamanho real.
+  // Imagem com pré-visualização, que abre ampliada por cima da conversa.
   const image = received.nth(0).getByRole('img', { name: 'Imagem' })
   await expect(image).toBeVisible()
   await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1)
   await expect(received.nth(0)).toContainText('Foto do recibo')
-  await expect(
-    received.nth(0).getByRole('link', { name: 'Abrir imagem em tamanho real' }),
-  ).toHaveAttribute('href', /^\/api\/media\/\d+$/)
+  await expect(received.nth(0).getByRole('button', { name: 'Ampliar imagem' })).toBeVisible()
+  await expect(received.nth(0).getByRole('link')).toHaveCount(0)
   // Vídeo e áudio com player no painel.
   await expect(received.nth(1).locator('video[controls]')).toHaveAttribute(
     'src',
@@ -235,4 +238,152 @@ test('player de áudio toca, avança e responde ao teclado na gravação e nas m
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(16, 21, 23)')
   await expect(receivedPlayer).not.toHaveCSS('background-color', lightSurface)
   await playAndPause(receivedPlayer)
+})
+
+test('a imagem abre por cima da conversa, com zoom, arrastar e abrir o original', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName: 'Clara Cliente',
+    type: 'image',
+    body: 'Foto do recibo',
+    media: { data: largePng, mimeType: 'image/png' },
+  })
+  await signIn(page, agent, userPassword)
+  await openQueued(page, 'Clara Cliente')
+  const chamado = page.url()
+
+  const viewer = page.getByRole('dialog', { name: 'Imagem ampliada' })
+  const zoom = viewer.getByLabel('Zoom atual')
+  const zoomIn = viewer.getByRole('button', { name: 'Aumentar zoom' })
+  const zoomOut = viewer.getByRole('button', { name: 'Diminuir zoom' })
+  const fit = viewer.getByRole('button', { name: 'Ajustar à tela' })
+  const picture = viewer.getByRole('img', { name: 'Imagem ampliada' })
+  const thumbnail = page.getByRole('button', { name: 'Ampliar imagem' })
+  const open = async () => {
+    await thumbnail.click()
+    await expect(viewer).toBeVisible()
+  }
+  // Posição da imagem na tela, para saber se ela se mexeu.
+  const origin = async () => {
+    const box = (await picture.boundingBox())!
+    return { x: Math.round(box.x), y: Math.round(box.y) }
+  }
+  // Espera a animação curta do zoom (75 ms) terminar: duas leituras iguais, 150 ms depois.
+  const settled = async () => {
+    let current = await origin()
+    await expect
+      .poll(async () => {
+        const before = current
+        await page.waitForTimeout(150)
+        current = await origin()
+        return current.x === before.x && current.y === before.y
+      })
+      .toBe(true)
+    return current
+  }
+
+  // Abre por cima da conversa, sem guia nova nem mudar o endereço, a 100%.
+  const popups: unknown[] = []
+  page.context().on('page', (opened) => popups.push(opened))
+  await open()
+  expect(page.url()).toBe(chamado)
+  expect(popups).toHaveLength(0)
+  await expect(zoom).toHaveText('100%')
+  await expect(zoomOut).toBeDisabled()
+  await expect(zoomIn).toBeEnabled()
+
+  // Botões + e −.
+  await zoomIn.click()
+  await expect(zoom).toHaveText('150%')
+  await expect(zoomOut).toBeEnabled()
+  await zoomOut.click()
+  await expect(zoom).toHaveText('100%')
+
+  // Ajustar à tela volta a 100%.
+  await zoomIn.click()
+  await zoomIn.click()
+  await expect(zoom).toHaveText('200%')
+  await fit.click()
+  await expect(zoom).toHaveText('100%')
+
+  // A 100% a imagem não arrasta.
+  const fitted = await settled()
+  const box = (await picture.boundingBox())!
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(center.x, center.y)
+  await page.mouse.down()
+  await page.mouse.move(center.x + 80, center.y + 60, { steps: 4 })
+  await page.mouse.up()
+  expect(await settled()).toEqual(fitted)
+
+  // Roda do mouse: de 100% até o máximo de 500%, que desativa o +.
+  await page.mouse.move(center.x, center.y)
+  await page.mouse.wheel(0, -100)
+  await expect(zoom).toHaveText('125%')
+  for (let i = 0; i < 20; i++) await page.mouse.wheel(0, -100)
+  await expect(zoom).toHaveText('500%')
+  await expect(zoomIn).toBeDisabled()
+  await page.mouse.wheel(0, 100)
+  await expect(zoom).toHaveText('475%')
+  await fit.click()
+
+  // Acima de 100% a imagem arrasta.
+  await zoomIn.click()
+  await expect(zoom).toHaveText('150%')
+  const zoomed = await settled()
+  await page.mouse.move(center.x, center.y)
+  await page.mouse.down()
+  await page.mouse.move(center.x + 80, center.y + 60, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(origin).toEqual({ x: zoomed.x + 80, y: zoomed.y + 60 })
+  // Clicar na própria imagem não fecha.
+  await expect(viewer).toBeVisible()
+  await fit.click()
+
+  // Duplo clique alterna 100% e 200%.
+  await picture.dblclick()
+  await expect(zoom).toHaveText('200%')
+  await picture.dblclick()
+  await expect(zoom).toHaveText('100%')
+
+  // Abrir original: guia nova, para o mesmo arquivo.
+  const original = viewer.getByRole('link', { name: 'Abrir original em nova guia' })
+  await expect(original).toHaveAttribute('href', /^\/api\/media\/\d+$/)
+  await expect(original).toHaveAttribute('target', '_blank')
+  await expect(original).toHaveAttribute('rel', /noopener/)
+  await expect(picture).toHaveAttribute('src', (await original.getAttribute('href'))!)
+
+  // Esc fecha, o foco volta à miniatura, e a próxima abertura começa a 100%.
+  await zoomIn.click()
+  await expect(zoom).toHaveText('150%')
+  await page.keyboard.press('Escape')
+  await expect(viewer).toBeHidden()
+  await expect(thumbnail).toBeFocused()
+  await open()
+  await expect(zoom).toHaveText('100%')
+
+  // O foco fica preso no visualizador.
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press('Tab')
+    await expect(viewer.locator(':focus')).toHaveCount(1)
+  }
+
+  // X fecha.
+  await viewer.getByRole('button', { name: 'Fechar' }).click()
+  await expect(viewer).toBeHidden()
+
+  // Clique na área vazia, fora da imagem, fecha.
+  await open()
+  await page.mouse.click(20, 400)
+  await expect(viewer).toBeHidden()
+  expect(page.url()).toBe(chamado)
+  expect(popups).toHaveLength(0)
 })

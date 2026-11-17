@@ -454,7 +454,7 @@ test('20 por página, e página e filtro sobrevivem ao recarregar', async ({ pag
   const admins = await adminApi(baseURL!)
   ok(await admins.post(`/api/sectors/${origin.sector.id}/connection`))
   ok(await admins.post(`/api/test/messaging/sectors/${origin.sector.id}/pair`))
-  const module = await json<{ id: number }>(
+  const sectorModule = await json<{ id: number }>(
     await admins.post(`/api/sectors/${origin.sector.id}/modules`, { data: { name: 'Folha' } }),
   )
   await admins.dispose()
@@ -483,7 +483,7 @@ test('20 por página, e página e filtro sobrevivem ao recarregar', async ({ pag
         data: {
           subject: 'Assunto',
           resolution: 'Resolvido.',
-          moduleIds: [module.id],
+          moduleIds: [sectorModule.id],
           organizationId: organization.id,
         },
       }),
@@ -629,4 +629,67 @@ test('o chamado encerrado entra na lista aberta, sem recarregar', async ({ page,
   await expect(bodyRows(page).first()).toContainText('Novo assunto')
   await h.firstApi.dispose()
   await h.secondApi.dispose()
+})
+
+test('a imagem do chamado encerrado também abre ampliada em /atendimentos/:id', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone } = unique()
+  const [organization] = await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: `Rita ${id}`, phone, organization: 0, sector: sector.id }],
+  )
+  const admins = await adminApi(baseURL!)
+  ok(await admins.post(`/api/sectors/${sector.id}/connection`))
+  ok(await admins.post(`/api/test/messaging/sectors/${sector.id}/pair`))
+  const sectorModule = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
+  ok(
+    await admins.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+      data: {
+        externalMessageId: `E2E-${id}`,
+        phone,
+        contactName: `Rita ${id}`,
+        type: 'image',
+        body: 'Foto do recibo',
+        // PNG de 1×1 pixel, para a imagem carregar de verdade.
+        media: {
+          data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          mimeType: 'image/png',
+        },
+      },
+    }),
+  )
+  await admins.dispose()
+  const agents = await agentApi(baseURL!, agent)
+  const ticket = await queued(agents, sector.id, `Rita ${id}`)
+  ok(await agents.post(`/api/tickets/${ticket.id}/assign`))
+  ok(
+    await agents.post(`/api/tickets/${ticket.id}/close`, {
+      data: {
+        subject: 'Recibo',
+        resolution: 'Resolvido.',
+        moduleIds: [sectorModule.id],
+        organizationId: organization.id,
+      },
+    }),
+  )
+  await agents.dispose()
+
+  await login(page, agent, userPassword)
+  await expect(page).not.toHaveURL(/\/login$/)
+  await page.goto(`/atendimentos/${ticket.id}`)
+  await expect(page.getByRole('status', { name: 'Só leitura' })).toBeVisible()
+  await page.getByRole('button', { name: 'Ampliar imagem' }).click()
+  const viewer = page.getByRole('dialog', { name: 'Imagem ampliada' })
+  await expect(viewer).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`/atendimentos/${ticket.id}$`))
+  await viewer.getByRole('button', { name: 'Aumentar zoom' }).click()
+  await expect(viewer.getByLabel('Zoom atual')).toHaveText('150%')
+  await page.keyboard.press('Escape')
+  await expect(viewer).toBeHidden()
 })
