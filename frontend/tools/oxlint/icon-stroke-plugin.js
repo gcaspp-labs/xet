@@ -5,12 +5,14 @@
 // e <content.icon /> só é ícone se o objeto content guarda um ícone na chave icon. Origens seguidas:
 // - imports nomeados (<X />) e por namespace (<Icons.X />);
 // - variáveis inicializadas com um ícone (const Icon = aberto ? ChevronUp : ChevronDown);
-// - variáveis, parâmetros e propriedades com o tipo LucideIcon (inclusive por alias ou interface);
+// - variáveis, parâmetros e propriedades com o tipo LucideIcon (inclusive por alias ou interface,
+//   resolvidos pelo escopo: dois tipos Item em funções diferentes são tipos distintos);
 // - objetos e listas de objetos com um ícone na chave (<item.icon /> dentro de lista.map(...)).
 // O strokeWidth vale pelo último atributo, como no React: um spread depois dele pode sobrescrevê-lo.
 const STROKE = 1.7
 const SOURCE = 'lucide-react'
 const ARRAY_PASSTHROUGH = new Set(['filter', 'slice', 'concat', 'toSorted', 'toReversed'])
+const BLOCKS = new Set(['Program', 'BlockStatement', 'StaticBlock', 'TSModuleBlock'])
 const ARRAY_CALLBACKS = new Set(['map', 'filter', 'forEach', 'find', 'some', 'every', 'flatMap'])
 
 function keyName(key) {
@@ -64,7 +66,6 @@ const rule = {
     let importsLucide = false
     const iconTypes = new Set() // nomes locais do tipo LucideIcon importado
     const namespaces = new Set() // import * as Icons from 'lucide-react'
-    const types = new Map() // type alias e interface do arquivo, por nome
     const elements = []
     const memo = new Map() // Variable -> boolean (em curso = false, evita ciclo)
 
@@ -77,10 +78,38 @@ const rule = {
     }
 
     // ---- tipos ----
+    // Declarações de tipo (type/interface) visíveis no ponto node com o nome dado, resolvidas pelo
+    // escopo como o TypeScript: sobe pelos blocos até o primeiro que declara o nome. Um parâmetro de
+    // tipo genérico com o mesmo nome esconde as declarações de fora. Interfaces repetidas no mesmo
+    // bloco se somam.
+    function typeDeclarations(node, name) {
+      for (let current = node.parent; current; current = current.parent) {
+        if (current.typeParameters?.params?.some((param) => keyName(param.name) === name)) return []
+        const body = BLOCKS.has(current.type) ? current.body : undefined
+        if (!Array.isArray(body)) continue
+        const found = []
+        for (let statement of body) {
+          if (
+            (statement.type === 'ExportNamedDeclaration' ||
+              statement.type === 'ExportDefaultDeclaration') &&
+            statement.declaration
+          )
+            statement = statement.declaration
+          if (statement.type === 'TSTypeAliasDeclaration' && statement.id.name === name)
+            found.push(statement.typeAnnotation)
+          else if (statement.type === 'TSInterfaceDeclaration' && statement.id.name === name)
+            found.push(statement.body)
+        }
+        if (found.length) return found
+      }
+      return []
+    }
+
     function isIconType(type) {
       if (!type || type.type !== 'TSTypeReference') return false
       const name = type.typeName
-      if (name.type === 'Identifier') return iconTypes.has(name.name)
+      if (name.type === 'Identifier')
+        return iconTypes.has(name.name) && typeDeclarations(type, name.name).length === 0
       return (
         name.type === 'TSQualifiedName' &&
         name.left.type === 'Identifier' &&
@@ -101,9 +130,12 @@ const rule = {
           return type.types.flatMap((item) => members(item, seen))
         case 'TSTypeReference': {
           const name = type.typeName.type === 'Identifier' && type.typeName.name
-          if (!name || seen.has(name) || !types.has(name)) return []
-          seen.add(name)
-          return members(types.get(name), seen)
+          if (!name) return []
+          return typeDeclarations(type, name).flatMap((declaration) => {
+            if (seen.has(declaration)) return []
+            seen.add(declaration)
+            return members(declaration, seen)
+          })
         }
         default:
           return []
@@ -339,12 +371,6 @@ const rule = {
           )
             iconTypes.add(specifier.local.name)
         }
-      },
-      TSTypeAliasDeclaration(node) {
-        types.set(node.id.name, node.typeAnnotation)
-      },
-      TSInterfaceDeclaration(node) {
-        types.set(node.id.name, node.body)
       },
       JSXOpeningElement(node) {
         elements.push(node)
