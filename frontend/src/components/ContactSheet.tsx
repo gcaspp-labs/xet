@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useDeferredValue, useState } from 'react'
+import { type UIEvent, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -36,7 +36,7 @@ import {
   type Organization,
   useActiveModulesOf,
   useContact,
-  useOrganizations,
+  useOrganizationOptions,
   useSaveContact,
   useSaveContactName,
 } from '@/lib/directory'
@@ -100,13 +100,42 @@ export function OrganizationPicker({
   const [input, setInput] = useState(value ? label(value) : '')
   const deferredInput = useDeferredValue(input)
   // Com um órgão escolhido, o campo mostra o nome dele; a lista volta a ter todos.
-  const { data } = useOrganizations(
-    value && deferredInput === label(value) ? '' : deferredInput,
+  const search = value && deferredInput === label(value) ? '' : deferredInput
+  const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useOrganizationOptions(
+    search,
     municipalityId,
   )
-  const organizations = data?.items ?? []
-  // A lista traz só a primeira página: o aviso diz que há mais e como chegar a eles.
-  const more = data && data.total > organizations.length ? data.total : undefined
+  const organizations = data?.pages.flatMap((page) => page.items) ?? []
+  // Enquanto falta carregar, o rodapé diz quantos órgãos a busca encontrou.
+  const total = data?.pages[0]?.total
+  const more = total !== undefined && total > organizations.length ? total : undefined
+  const list = useRef<HTMLDivElement>(null)
+
+  // Nova busca ou outro município: a lista recomeça na página 1, e volta ao topo.
+  useEffect(() => {
+    if (list.current) {
+      list.current.scrollTop = 0
+    }
+  }, [search, municipalityId])
+
+  const loadMore = () => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage()
+    }
+  }
+  // A próxima página vem quando a última opção aparece na rolagem...
+  const onScroll = (event: UIEvent<HTMLDivElement>) => {
+    const { scrollTop, clientHeight, scrollHeight } = event.currentTarget
+    if (scrollHeight - scrollTop - clientHeight <= 8) {
+      loadMore()
+    }
+  }
+  // ...ou quando o teclado a destaca.
+  const onItemHighlighted = (highlighted: Organization | undefined) => {
+    if (highlighted && highlighted.id === organizations.at(-1)?.id) {
+      loadMore()
+    }
+  }
 
   return (
     <Combobox
@@ -117,6 +146,7 @@ export function OrganizationPicker({
       onInputValueChange={setInput}
       itemToStringLabel={label}
       isItemEqualToValue={(a: Organization, b: Organization) => a.id === b.id}
+      onItemHighlighted={onItemHighlighted}
       filter={null}
     >
       <ComboboxInput
@@ -128,7 +158,7 @@ export function OrganizationPicker({
       />
       <ComboboxContent>
         <ComboboxEmpty>Nenhum órgão encontrado.</ComboboxEmpty>
-        <ComboboxList>
+        <ComboboxList ref={list} onScroll={onScroll}>
           {(organization: Organization) => (
             <ComboboxItem key={organization.id} value={organization}>
               <span className="min-w-0 flex-1 truncate">{label(organization)}</span>
@@ -143,7 +173,7 @@ export function OrganizationPicker({
         {more !== undefined && (
           <p className="caption border-t border-line px-3 py-2 text-ink-faint">
             Mostrando <span className="mono-num">{organizations.length}</span> de{' '}
-            <span className="mono-num">{more}</span> órgãos. Digite para refinar a busca.
+            <span className="mono-num">{more}</span> órgãos
           </p>
         )}
       </ComboboxContent>

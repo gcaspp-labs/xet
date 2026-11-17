@@ -1,5 +1,6 @@
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQueries,
   useQuery,
@@ -127,6 +128,37 @@ export function useOrganizations(
         searchPath('/organizations', query, { municipalityId }, pageParams(request)),
       ),
     placeholderData: keepPreviousData,
+  })
+}
+
+// Os mesmos órgãos da busca, em consulta contínua para os seletores: cada página de 20
+// vem do servidor quando a lista chega ao fim. Mudar o termo ou o município volta à
+// página 1, também ao digitar de novo o mesmo termo. A chave difere da de
+// useOrganizations porque o formato do dado é outro.
+export function useOrganizationOptions(query: string, municipalityId?: number) {
+  return useInfiniteQuery({
+    queryKey: [...organizationsKey, 'options', query.trim(), municipalityId],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      api<Page<Organization>>(
+        searchPath(
+          '/organizations',
+          query,
+          { municipalityId },
+          pageParams({
+            page: pageParam,
+            sort: 'name',
+            direction: 'asc',
+          }),
+        ),
+      ),
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((total, page) => total + page.items.length, 0)
+      return loaded < last.total && last.items.length > 0 ? last.page + 1 : undefined
+    },
+    placeholderData: keepPreviousData,
+    // Sair de uma busca joga fora as páginas dela: voltar a ela recomeça na página 1.
+    gcTime: 0,
   })
 }
 

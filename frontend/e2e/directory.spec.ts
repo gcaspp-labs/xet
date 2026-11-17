@@ -1017,7 +1017,7 @@ test('órgãos em páginas de 20, ordenados pela coluna, com busca, página e or
   )
 })
 
-test('o seletor de órgão avisa quando há mais resultados que os mostrados', async ({
+test('o seletor de órgão carrega o resto da lista ao chegar no fim e avisa quantos faltam', async ({
   page,
   baseURL,
 }) => {
@@ -1035,16 +1035,55 @@ test('o seletor de órgão avisa quando há mais resultados que os mostrados', a
   await signIn(page, own.agent, userPassword)
   await page.goto('/contatos')
   const picker = page.getByRole('combobox', { name: 'Filtrar por órgão' })
+  const options = page.getByRole('option').filter({ hasText: id })
+  const footer = page.getByText('Mostrando 20 de 23 órgãos')
 
-  // A busca mostra os 20 primeiros e avisa quantos há.
+  // A busca mostra os 20 primeiros e avisa quantos há; não pede mais para refinar.
   await picker.fill(id)
-  await expect(page.getByRole('option').filter({ hasText: id })).toHaveCount(20)
-  await expect(
-    page.getByText('Mostrando 20 de 23 órgãos. Digite para refinar a busca.'),
-  ).toBeVisible()
+  await expect(options).toHaveCount(20)
+  await expect(footer).toBeVisible()
+  await expect(page.getByText('Digite para refinar a busca')).toHaveCount(0)
 
-  // Refinar chega ao que estava fora da primeira página, e o aviso some.
-  await picker.fill(`${id} 23`)
-  await expect(page.getByRole('option', { name: new RegExp(`${names[22]}`) })).toBeVisible()
+  // Rolar até o fim traz o resto, e o aviso some.
+  await page.getByRole('listbox').evaluate((list) => list.scrollTo({ top: list.scrollHeight }))
+  await expect(options).toHaveCount(23)
+  await expect(page.getByRole('option', { name: new RegExp(names[22]) })).toBeVisible()
+  await expect(page.getByText(/Mostrando \d+ de/)).toBeHidden()
+
+  // Digitar de novo recomeça na página 1, e a lista volta ao topo.
+  await picker.fill(`${id} 0`)
+  await expect(options).toHaveCount(9)
+  await expect(page.getByText(/Mostrando \d+ de/)).toBeHidden()
+  await picker.fill(id)
+  await expect(options).toHaveCount(20)
+  await expect(footer).toBeVisible()
+  expect(await page.getByRole('listbox').evaluate((list) => list.scrollTop)).toBe(0)
+})
+
+test('o seletor de órgão carrega a próxima página pelo teclado', async ({ page, baseURL }) => {
+  const own = await seedSector(baseURL!)
+  const { id } = unique()
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Órgão ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  await seedDirectory(
+    baseURL!,
+    names.map((name) => ({ name })),
+    [],
+  )
+  await signIn(page, own.agent, userPassword)
+  await page.goto('/contatos')
+  const picker = page.getByRole('combobox', { name: 'Filtrar por órgão' })
+  const options = page.getByRole('option').filter({ hasText: id })
+
+  await picker.fill(id)
+  await expect(options).toHaveCount(20)
+
+  // As setas descem até a última opção carregada, e a próxima página chega.
+  for (let i = 0; i < 20; i++) {
+    await picker.press('ArrowDown')
+  }
+  await expect(options).toHaveCount(23)
   await expect(page.getByText(/Mostrando \d+ de/)).toBeHidden()
 })
