@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -297,5 +298,300 @@ func TestTransferLinksTheContactToTheTargetSector(t *testing.T) {
 	actions, changes := e.AuditChanges("contact", c.ticket.ContactID)
 	if last := len(actions) - 1; actions[last] != "contact_sector_linked" || changes[last]["sector_id"]["to"] != float64(c.rh) {
 		t.Fatalf("audit: %v %v", actions, changes)
+	}
+}
+
+// Transferência para outro setor sem o formulário de encerramento (#243).
+
+func (e *testEnv) sectorTransfer(ticketID int64, token string, body map[string]any) response {
+	e.T.Helper()
+	return e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/sector-transfer", ticketID), token, body)
+}
+
+// originStep is what the origin of a transfer keeps of the closing.
+type originStep struct {
+	status, closureType         string
+	subject, resolution, reason *string
+	organizationID              *int64
+	endedAt, closedAt           *time.Time
+	closedBy                    int64
+}
+
+func (e *testEnv) originStep(ticketID int64) originStep {
+	e.T.Helper()
+	var o originStep
+	if err := e.Pool.QueryRow(e.T.Context(), `
+		select status::text, coalesce(closure_type::text, ''), subject, resolution, transfer_reason, organization_id,
+		       ended_at, closed_at, coalesce(closed_by_id, 0)
+		from tickets where id = $1`, ticketID).
+		Scan(&o.status, &o.closureType, &o.subject, &o.resolution, &o.reason, &o.organizationID,
+			&o.endedAt, &o.closedAt, &o.closedBy); err != nil {
+		e.T.Fatal(err)
+	}
+	return o
+}
+
+func TestSectorTransferWithoutFormClosesOriginAndQueuesLinkedTicket(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		reason any
+		want   *string
+	}{
+		"without reason": {reason: nil},
+		"blank reason":   {reason: "   "},
+		"with reason":    {reason: "  Assunto de férias, é com o RH.  ", want: new("Assunto de férias, é com o RH.")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := newSectorTransfer(t)
+			e := c.e
+			e.connectSector(c.rh)
+			origin := e.subscribe(c.supToken)
+			destination := e.subscribe(c.rhToken)
+
+			body := map[string]any{"sectorId": c.rh}
+			if tc.reason != nil {
+				body["reason"] = tc.reason
+			}
+			before := time.Now()
+			resp := e.sectorTransfer(c.ticket.ID, c.anaToken, body)
+			after := time.Now()
+			if resp.Status != http.StatusOK {
+				t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+			}
+			nextID := int64(resp.Body["id"].(float64))
+			if ev := e.nextEvent(origin); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
+				t.Fatalf("origin event = %+v", ev)
+			}
+			if ev := e.nextEvent(destination); ev != realtime.TicketChanged(c.rh, nextID) {
+				t.Fatalf("destination event = %+v", ev)
+			}
+
+			// A origem encerra como transferida, sem assunto, resolução e módulos,
+			// e termina na hora da transferência.
+			o := e.originStep(c.ticket.ID)
+			if o.status != "closed" || o.closureType != "transferred" || o.closedBy != c.ana.ID ||
+				o.subject != nil || o.resolution != nil {
+				t.Fatalf("origin = %+v", o)
+			}
+			if o.endedAt == nil || o.closedAt == nil || !o.endedAt.Equal(*o.closedAt) || o.endedAt.Before(before.Add(-time.Second)) || o.endedAt.After(after.Add(time.Second)) {
+				t.Fatalf("origin ended at %v, closed at %v, transfer between %v and %v", o.endedAt, o.closedAt, before, after)
+			}
+			if n := e.Count("ticket_modules"); n != 0 {
+				t.Fatalf("ticket_modules rows = %d", n)
+			}
+			if (o.reason == nil) != (tc.want == nil) || (o.reason != nil && *o.reason != *tc.want) {
+				t.Fatalf("reason = %v, want %v", o.reason, tc.want)
+			}
+
+			// O destino entra na fila, ligado à origem, com o contato e o órgão dele.
+			tickets := e.tickets(c.rh)
+			if len(tickets) != 1 || tickets[0].ID != nextID || tickets[0].Protocol != resp.Body["protocol"] ||
+				tickets[0].Status != "queued" || tickets[0].ContactID != c.ticket.ContactID ||
+				tickets[0].OrganizationID == nil || *tickets[0].OrganizationID != c.org ||
+				tickets[0].ArrivedAt.Before(before.Add(-time.Second)) {
+				t.Fatalf("destination tickets = %+v", tickets)
+			}
+			var previous int64
+			if err := e.Pool.QueryRow(t.Context(), "select previous_ticket_id from tickets where id = $1", nextID).Scan(&previous); err != nil {
+				t.Fatal(err)
+			}
+			if previous != c.ticket.ID {
+				t.Fatalf("previous ticket = %d", previous)
+			}
+
+			// A auditoria da origem registra a transferência e, quando houver, o motivo.
+			actions, changes := c.ticketActions()
+			last := changes[len(changes)-1]
+			if actions[len(actions)-1] != "ticket_transferred_sector" || last["status"]["to"] != "closed" ||
+				last["closure_type"]["to"] != "transferred" || last["ended_at"]["to"] == nil ||
+				last["sector_id"]["from"] != float64(c.sector.ID) || last["sector_id"]["to"] != float64(c.rh) ||
+				last["next_ticket_id"]["to"] != float64(nextID) || last["subject"] != nil || last["module_ids"] != nil {
+				t.Fatalf("audit = %v, %v", actions, last)
+			}
+			reason, recorded := last["transfer_reason"]
+			if tc.want == nil && recorded || tc.want != nil && reason["to"] != *tc.want {
+				t.Fatalf("audit reason = %v", last)
+			}
+
+			// O contato passa a ser também do setor de destino.
+			want := []int64{c.sector.ID, c.rh}
+			slices.Sort(want)
+			if got := e.contactSectors(c.ticket.ContactID); fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Fatalf("sectors = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestSectorTransferTakesTheMainOrganizationOfTheContact(t *testing.T) {
+	t.Parallel()
+	c := newSectorTransfer(t)
+	e := c.e
+	// Depois de cadastrado, o contato passa a outro órgão; a origem fica com o primeiro.
+	other := e.Organization(c.supToken, "Câmara de Campinas", "")
+	if resp := e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", c.ticket.ContactID), c.anaToken,
+		map[string]any{"name": "Maria", "phone": "5511988887777", "organizationId": other, "sectorIds": []int64{c.sector.ID}}); resp.Status != http.StatusOK {
+		t.Fatalf("edit contact: status %d, body %v", resp.Status, resp.Body)
+	}
+	if resp := e.sectorTransfer(c.ticket.ID, c.anaToken, map[string]any{"sectorId": c.rh}); resp.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+	}
+	if o := e.originStep(c.ticket.ID); o.organizationID == nil || *o.organizationID != c.org {
+		t.Fatalf("origin organization = %v", o.organizationID)
+	}
+	if got := e.tickets(c.rh); len(got) != 1 || got[0].OrganizationID == nil || *got[0].OrganizationID != other {
+		t.Fatalf("destination tickets = %+v", got)
+	}
+}
+
+func TestUnregisteredContactIsTransferredToAnotherSectorWithoutOrganization(t *testing.T) {
+	t.Parallel()
+	c := sectorTransfer{closing: newClosing(t)}
+	c.rh = *c.e.userSector("rh@exemplo.com")
+	e := c.e
+	resp := e.sectorTransfer(c.ticket.ID, c.anaToken, map[string]any{"sectorId": c.rh})
+	if resp.Status != http.StatusOK {
+		t.Fatalf("status %d, body %v", resp.Status, resp.Body)
+	}
+	if o := e.originStep(c.ticket.ID); o.status != "closed" || o.closureType != "transferred" || o.organizationID != nil {
+		t.Fatalf("origin = %+v", o)
+	}
+	if got := e.tickets(c.rh); len(got) != 1 || got[0].Status != "queued" || got[0].OrganizationID != nil {
+		t.Fatalf("destination tickets = %+v", got)
+	}
+	var registered bool
+	if err := e.Pool.QueryRow(t.Context(), "select registered from contacts where id = $1", c.ticket.ContactID).Scan(&registered); err != nil {
+		t.Fatal(err)
+	}
+	if registered {
+		t.Fatal("contact registered by the transfer")
+	}
+}
+
+func TestOnlyTheAssigneeTransfersToAnotherSectorWithoutForm(t *testing.T) {
+	t.Parallel()
+	c := newSectorTransfer(t)
+	e := c.e
+	body := map[string]any{"sectorId": c.rh, "reason": "RH"}
+
+	for name, token := range map[string]string{
+		"agent of the sector": c.biaToken, "supervisor": c.supToken, "admin": c.adminToken, "other sector": c.rhToken,
+	} {
+		if resp := e.sectorTransfer(c.ticket.ID, token, body); resp.Status != http.StatusForbidden {
+			t.Fatalf("%s: status %d", name, resp.Status)
+		}
+	}
+	for name, b := range map[string]map[string]any{
+		"same sector":    with(body, "sectorId", c.sector.ID),
+		"unknown sector": with(body, "sectorId", 999999),
+		"no sector":      with(body, "sectorId", nil),
+	} {
+		if resp := e.sectorTransfer(c.ticket.ID, c.anaToken, b); resp.Status != http.StatusUnprocessableEntity {
+			t.Fatalf("%s: status %d, body %v", name, resp.Status, resp.Body)
+		}
+	}
+	inactive := e.Sector("Inativo")
+	if _, err := e.Pool.Exec(t.Context(), "update sectors set active = false where id = $1", inactive.ID); err != nil {
+		t.Fatal(err)
+	}
+	if resp := e.sectorTransfer(c.ticket.ID, c.anaToken, with(body, "sectorId", inactive.ID)); resp.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("inactive sector: status %d, body %v", resp.Status, resp.Body)
+	}
+	if got := e.assignment(c.ticket.ID); got.Status != "in_progress" {
+		t.Fatalf("origin = %+v", got)
+	}
+	if got := e.tickets(c.rh); len(got) != 0 {
+		t.Fatalf("destination tickets = %+v", got)
+	}
+	if actions, _ := c.ticketActions(); actions[len(actions)-1] == "ticket_transferred_sector" {
+		t.Fatalf("audit = %v", actions)
+	}
+
+	// Chamado na fila não é transferido: é assumido.
+	queued := e.queuedTicket(c.sector.ID, "MSG-2", "5511977776666")
+	if resp := e.sectorTransfer(queued.ID, c.anaToken, body); resp.Status != http.StatusConflict {
+		t.Fatalf("queued ticket: status %d", resp.Status)
+	}
+}
+
+func TestSectorTransferToSectorWithOpenTicketIsRefused(t *testing.T) {
+	t.Parallel()
+	c := newSectorTransfer(t)
+	e := c.e
+	e.connectSector(c.rh)
+	// O contato já escreveu para o número do RH.
+	e.receive(c.rh, text("RH-1", "5511988887777@s.whatsapp.net", "5511988887777", "Férias"))
+
+	resp := e.sectorTransfer(c.ticket.ID, c.anaToken, map[string]any{"sectorId": c.rh, "reason": "Férias"})
+	if resp.Status != http.StatusConflict || resp.Body["error"] != "O contato já tem chamado aberto no setor de destino. Nada foi transferido." {
+		t.Fatalf("status %d, body %v", resp.Status, resp.Body)
+	}
+	// Nada foi encerrado nem criado.
+	if o := e.originStep(c.ticket.ID); o.status != "in_progress" || o.reason != nil {
+		t.Fatalf("origin = %+v", o)
+	}
+	if got := e.tickets(c.rh); len(got) != 1 {
+		t.Fatalf("destination tickets = %+v", got)
+	}
+	if actions, _ := c.ticketActions(); actions[len(actions)-1] == "ticket_transferred_sector" {
+		t.Fatalf("audit = %v", actions)
+	}
+}
+
+func TestConcurrentSectorTransfersWithoutFormTransferOnce(t *testing.T) {
+	t.Parallel()
+	c := newSectorTransfer(t)
+	e := c.e
+
+	const attempts = 5
+	statuses := make([]int, attempts)
+	var wg sync.WaitGroup
+	for i := range attempts {
+		wg.Go(func() {
+			statuses[i] = e.sectorTransfer(c.ticket.ID, c.anaToken, map[string]any{"sectorId": c.rh}).Status
+		})
+	}
+	wg.Wait()
+	ok := 0
+	for _, s := range statuses {
+		switch s {
+		case http.StatusOK:
+			ok++
+		case http.StatusConflict:
+		default:
+			t.Fatalf("statuses = %v", statuses)
+		}
+	}
+	if ok != 1 {
+		t.Fatalf("statuses = %v, want one success", statuses)
+	}
+	if got := e.tickets(c.rh); len(got) != 1 {
+		t.Fatalf("destination tickets = %+v", got)
+	}
+	if actions, _ := c.ticketActions(); slices.Index(actions, "ticket_transferred_sector") != len(actions)-1 {
+		t.Fatalf("audit = %v", actions)
+	}
+}
+
+// Uma transferência feita com o formulário, antes da #243, continua válida na
+// trava do banco; um encerramento comum continua exigindo o formulário.
+func TestClosedFieldsStillRequiredOutsideTransfersAndCancellations(t *testing.T) {
+	t.Parallel()
+	c := newSectorTransfer(t)
+	e := c.e
+	if resp := e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)); resp.Status != http.StatusOK {
+		t.Fatalf("transfer with form: status %d, body %v", resp.Status, resp.Body)
+	}
+	if o := e.originStep(c.ticket.ID); o.closureType != "transferred" || o.subject == nil || *o.subject != "Contracheque" {
+		t.Fatalf("origin = %+v", o)
+	}
+	_, err := e.Pool.Exec(t.Context(), "update tickets set closure_type = 'resolved', subject = null where id = $1", c.ticket.ID)
+	if err == nil || !strings.Contains(err.Error(), "tickets_closed_fields") {
+		t.Fatalf("resolved without subject: %v", err)
+	}
+	_, err = e.Pool.Exec(t.Context(), "update tickets set transfer_reason = '  ' where id = $1", c.ticket.ID)
+	if err == nil || !strings.Contains(err.Error(), "tickets_transfer_reason_not_blank") {
+		t.Fatalf("blank reason: %v", err)
 	}
 }

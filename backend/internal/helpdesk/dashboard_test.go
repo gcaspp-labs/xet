@@ -824,6 +824,29 @@ func TestDashboardHandlingTimeUsesTheAssignmentAndTheEnd(t *testing.T) {
 	}
 }
 
+// A etapa transferida sem formulário (#243) conta de quando foi assumida até
+// a hora da transferência, gravada como o fim pela própria transferência.
+func TestDashboardHandlingTimeOfASectorTransferEndsAtTheTransfer(t *testing.T) {
+	t.Parallel()
+	d := newDashboard(t)
+	query := filtered("sectorId", d.contab.ID)
+	origin := d.assigned(d.contab.ID, d.orgA, d.anaToken)
+	if resp := d.e.sectorTransfer(origin.ID, d.anaToken, map[string]any{"sectorId": d.rh.ID}); resp.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+	}
+	var endedAt time.Time
+	if err := d.e.Pool.QueryRow(t.Context(), "select ended_at from tickets where id = $1", origin.ID).Scan(&endedAt); err != nil {
+		t.Fatal(err)
+	}
+	// Assumido 40 minutos antes da transferência; o dia da conta é o do encerramento.
+	assignedAt := endedAt.Add(-40 * time.Minute)
+	d.setTimes(origin.ID, ticketTimes{arrived: &assignedAt, assigned: &assignedAt, closed: &dashboardNoon})
+	numbers := d.numbers(d.supToken, query)
+	if numbers["averageHandlingSeconds"] != 2400 || numbers["transferred"] != 1 {
+		t.Fatalf("numbers = %v", numbers)
+	}
+}
+
 func TestDashboardReflectsCorrections(t *testing.T) {
 	t.Parallel()
 	d := newDashboard(t)
