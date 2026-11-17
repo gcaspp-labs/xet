@@ -156,17 +156,24 @@ export function OrganizationPicker({
         aria-invalid={invalid}
         clearLabel={clearLabel}
       />
-      <ComboboxContent>
+      {/* Mais larga que o campo (até 32rem, sem passar da tela): o nome cabe mesmo no filtro estreito. */}
+      <ComboboxContent className="w-max min-w-(--anchor-width) max-w-[min(32rem,var(--available-width))]">
         <ComboboxEmpty>Nenhum órgão encontrado.</ComboboxEmpty>
         <ComboboxList ref={list} onScroll={onScroll}>
           {(organization: Organization) => (
-            <ComboboxItem key={organization.id} value={organization}>
-              <span className="min-w-0 flex-1 truncate">{label(organization)}</span>
-              {organization.cnpj && (
-                <span className="mono-num caption text-ink-faint">
-                  {formatCnpj(organization.cnpj)}
+            <ComboboxItem key={organization.id} value={organization} className="items-start">
+              <span className="flex min-w-0 flex-1 flex-col gap-[calc(var(--space-4)/2)] py-[calc(var(--space-4)/2)]">
+                <span className="whitespace-normal break-words">{organization.name}</span>
+                <span className="caption text-ink-faint">
+                  {organization.municipality.name}
+                  {organization.cnpj && (
+                    <>
+                      {' · '}
+                      <span className="mono-num">{formatCnpj(organization.cnpj)}</span>
+                    </>
+                  )}
                 </span>
-              )}
+              </span>
             </ComboboxItem>
           )}
         </ComboboxList>

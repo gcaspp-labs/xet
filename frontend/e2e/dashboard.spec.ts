@@ -1,5 +1,15 @@
 import { expect, request as apiRequest, test, type Locator, type Page } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  defaultMunicipality,
+  formatCnpj,
+  seedDirectory,
+  seedSector,
+  signIn,
+  unique,
+  uniqueCnpj,
+  userPassword,
+} from './fixtures'
 
 type Sector = { id: number; name: string }
 
@@ -570,6 +580,43 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   // Limpar o órgão tira o filtro do endereço.
   await page.getByRole('button', { name: 'Limpar órgão' }).click()
   await expect(page).not.toHaveURL(/organizationId/)
+})
+
+test('o seletor de órgão do filtro mostra o nome inteiro e município · CNPJ em uma lista mais larga', async ({
+  page,
+  baseURL,
+}) => {
+  const { supervisor } = await seedSector(baseURL!)
+  const { id } = unique()
+  const cnpj = uniqueCnpj()
+  const longName = `Fundação Municipal de Amparo ao Desenvolvimento Científico, Cultural e Tecnológico ${id}`
+  await seedDirectory(baseURL!, [{ name: longName, cnpj }, { name: `Sem CNPJ ${id}` }], [])
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+
+  const field = page.getByRole('combobox', { name: 'Órgão' })
+  await field.fill(id)
+  const long = page.getByRole('option', { name: new RegExp(longName) })
+  await expect(long).toBeVisible()
+
+  // O nome aparece inteiro, quebrado em linhas e sem corte com reticências.
+  const name = long.getByText(longName, { exact: true })
+  await expect(name).toBeVisible()
+  expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await name.evaluate((el) => getComputedStyle(el).textOverflow)).not.toBe('ellipsis')
+  // Abaixo, município · CNPJ formatado.
+  await expect(long.getByText(`${defaultMunicipality} · ${formatCnpj(cnpj)}`)).toBeVisible()
+
+  // Órgão sem CNPJ mostra só o município.
+  const bare = page.getByRole('option', { name: new RegExp(`Sem CNPJ ${id}`) })
+  await expect(bare.getByText(defaultMunicipality, { exact: true })).toBeVisible()
+  await expect(bare).not.toContainText('·')
+
+  // A lista é mais larga que o campo estreito, até 32rem.
+  const fieldWidth = (await field.boundingBox())!.width
+  const listWidth = (await page.getByRole('listbox').boundingBox())!.width
+  expect(listWidth).toBeGreaterThan(fieldWidth)
+  expect(listWidth).toBeLessThanOrEqual(512)
 })
 
 test('cada seção recolhe e abre, por clique e por teclado, sem afetar a outra', async ({

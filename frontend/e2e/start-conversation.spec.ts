@@ -261,7 +261,7 @@ test('a busca de Novo chamado filtra por município e órgão', async ({ page, b
   // A lista de órgãos acompanha o município.
   await sheet.getByRole('combobox', { name: 'Filtrar por órgão' }).fill(id)
   await expect(page.getByRole('option')).toHaveCount(2)
-  await page.getByRole('option', { name: `Prefeitura ${id} — Iacanga` }).click()
+  await page.getByRole('option', { name: new RegExp(`Prefeitura ${id}\\s*Iacanga`) }).click()
   await expect(results).toHaveCount(1)
   await expect(results.first()).toContainText(`Léo ${id}`)
 
