@@ -1,0 +1,31 @@
+diff --git a/frontend/src/pages/ticket/TicketPage.tsx b/frontend/src/pages/ticket/TicketPage.tsx
+index 50e877a..f7583b2 100644
+--- a/frontend/src/pages/ticket/TicketPage.tsx
++++ b/frontend/src/pages/ticket/TicketPage.tsx
+@@ -80,6 +80,7 @@ import { type Recording, useVoiceRecorder } from '@/lib/recorder'
+ import { parseTicketId } from '@/lib/tickets'
+ import { cn } from '@/lib/utils'
+ import NotFoundPage from '@/pages/NotFoundPage'
++import { ImageViewerPrototype } from '@/pages/ticket/ImageViewerPrototype'
+ import { useTicketView } from '@/pages/ticket/useTicketView'
+ 
+ const messageStatusLabels: Record<
+@@ -111,16 +112,8 @@ function MessageMedia({ message }: { message: Message }) {
+   const src = `/api/media/${message.media.id}`
+   switch (message.type) {
+     case 'image':
+-      return (
+-        <a href={src} target="_blank" rel="noopener" aria-label="Abrir imagem em tamanho real">
+-          <img
+-            src={src}
+-            alt="Imagem"
+-            loading="lazy"
+-            className="max-h-72 max-w-full rounded-(--radius-8) border border-line-soft bg-muted object-contain"
+-          />
+-        </a>
+-      )
++      // PROTÓTIPO #237: abre por cima da conversa, com zoom.
++      return <ImageViewerPrototype src={src} />
+     case 'video':
+       return (
+         <video
