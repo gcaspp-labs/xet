@@ -8,7 +8,9 @@
       {
         "allowConstantExport": true
       }
-    ]
+    ],
+    "xet/icon-stroke": "error"
   },
-  "ignorePatterns": ["src/components/ui"]
+  "ignorePatterns": ["src/components/ui"],
+  "jsPlugins": ["./tools/oxlint/icon-stroke-plugin.js"]
 }

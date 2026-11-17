@@ -12,7 +12,7 @@ A troca de mensagens com o cliente dentro do chamado: texto, arquivos, áudio, s
 6. O responsável grava áudio no painel, pode ouvi-lo ou descartá-lo antes de enviar, e o envia como mensagem de voz do WhatsApp, sem legenda e com até 16 MB.
 7. Uma gravação que não pode ser lida como áudio é recusada com aviso para gravar de novo.
 8. O navegador só libera o microfone com o painel acessado por HTTPS (ou em `localhost`); fora disso, a tela avisa que a gravação está indisponível.
-9. Imagens e vídeos, recebidos ou enviados, aparecem com pré-visualização na conversa, e a imagem abre em tamanho real numa nova aba. Áudios tocam num player no painel. Os demais arquivos abrem ou são baixados pelo link.
+9. Imagens e vídeos, recebidos ou enviados, aparecem com pré-visualização na conversa, e a imagem abre por cima da conversa, com zoom (roda e botões), arrastar e botão para abrir o original em nova guia. Áudios tocam num player no painel. Os demais arquivos abrem ou são baixados pelo link.
 10. Arquivos recebidos têm até 100 MB. Arquivo acima do limite, ou que não baixa depois de algumas tentativas, vira mensagem com o aviso "arquivo não pôde ser baixado", sem se perder nem ficar preso em reentrega.
 11. Cada mensagem enviada mostra a situação de entrega: enviando, enviada, entregue, lida ou falhou.
 12. A situação de entrega só avança: uma confirmação atrasada de entrega não desfaz a leitura, e uma mensagem com falha volta a avançar se o WhatsApp confirmar a entrega.

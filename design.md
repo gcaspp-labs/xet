@@ -86,7 +86,7 @@ Player de áudio: componente próprio, usado na gravação e nas mensagens. Bot�
 
 ## Ícones
 
-- `lucide-react` com `strokeWidth={1.7}`, para ficar no traço do design system (grade 24, traço 1,7, pontas arredondadas, `currentColor`). O conjunto próprio do design system é pequeno para as necessidades de um chat (microfone, enviar, play…), por isso o lucide é a fonte única de ícones, configurado nesse traço.
+- `lucide-react` com `strokeWidth={1.7}`, para ficar no traço do design system (grade 24, traço 1,7, pontas arredondadas, `currentColor`). O conjunto próprio do design system é pequeno para as necessidades de um chat (microfone, enviar, play…), por isso o lucide é a fonte única de ícones, configurado nesse traço. A regra de lint `xet/icon-stroke` (`frontend/tools/oxlint/icon-stroke-plugin.js`, rodada por `make lint`) falha quando um ícone do `lucide-react` fica sem `strokeWidth={1.7}` ou usa outro valor.
 - Tamanhos: 17px no menu, 15px em botões, 30px em estados vazios. Sem emoji e sem ícones preenchidos.
 
 ## Marca e layout

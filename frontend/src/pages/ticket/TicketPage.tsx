@@ -80,6 +80,7 @@ import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 import NotFoundPage from '@/pages/NotFoundPage'
+import { ImageViewer } from '@/pages/ticket/ImageViewer'
 import { useTicketView } from '@/pages/ticket/useTicketView'
 
 const messageStatusLabels: Record<
@@ -103,7 +104,8 @@ const fileLabels: Record<string, string> = {
 }
 
 // Imagens e vídeos com pré-visualização e áudios com player na própria
-// conversa; os demais arquivos abrem ou são baixados pelo link.
+// conversa (a imagem abre ampliada por cima dela); os demais arquivos abrem ou
+// são baixados pelo link.
 function MessageMedia({ message }: { message: Message }) {
   if (!message.media) {
     return null
@@ -111,16 +113,7 @@ function MessageMedia({ message }: { message: Message }) {
   const src = `/api/media/${message.media.id}`
   switch (message.type) {
     case 'image':
-      return (
-        <a href={src} target="_blank" rel="noopener" aria-label="Abrir imagem em tamanho real">
-          <img
-            src={src}
-            alt="Imagem"
-            loading="lazy"
-            className="max-h-72 max-w-full rounded-(--radius-8) border border-line-soft bg-muted object-contain"
-          />
-        </a>
-      )
+      return <ImageViewer src={src} />
     case 'video':
       return (
         <video
