@@ -23,6 +23,7 @@ import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
 import NotFoundPage from '@/pages/NotFoundPage'
 import { TransferSheet } from '@/components/TransferSheet'
+import { PrototypeSwitcher, SectorTransferSheet } from '@/prototype/SectorTransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -186,7 +187,10 @@ export default function ConversasPage() {
   const sector = sectors.find((item) => item.id === sectorId)
   const sectorItems = sectors.map((item) => ({ value: item.id.toString(), label: item.name }))
   const [query, setQuery] = useConversasSearch(ticketId ?? 0)
-  const [action, setAction] = useState('')
+  // PROTÓTIPO #247: com ?estado=, a janela Outro setor já abre.
+  const [action, setAction] = useState(() =>
+    new URLSearchParams(window.location.search).has('estado') ? 'sector' : '',
+  )
   const [closingKey, setClosingKey] = useState(0)
   const tickets: SectorTicket[] = visible.flatMap((sector, i) =>
     (results[i]?.data ?? []).map((item) => ({ ...item, sectorId: sector.id })),
@@ -304,14 +308,14 @@ export default function ConversasPage() {
             onOpenChange={(open) => !open && setAction('')}
             successTo="/chamados"
           />
-          <ClosingSheet
-            key={`sector-${closingKey}`}
+          {/* PROTÓTIPO #247: "Outro setor" abre a janela nova, sem formulário de encerramento. */}
+          <SectorTransferSheet
             ticket={ticket}
             open={action === 'sector'}
             onOpenChange={(open) => !open && setAction('')}
-            successTo="/chamados"
-            transfer
+            onSuccess={leave}
           />
+          <PrototypeSwitcher />
           <TransferSheet
             ticket={ticket}
             open={action === 'transfer'}
