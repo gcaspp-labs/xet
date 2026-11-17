@@ -197,7 +197,7 @@ func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Ticke
 const closeTransferredTicket = `-- name: CloseTransferredTicket :one
 update tickets
 set status = 'closed', closure_type = 'transferred', closed_at = now(), closed_by_id = assignee_id,
-    ended_at = greatest(now(), started_at), transfer_reason = $1
+    started_at = least(started_at, now()), ended_at = now(), transfer_reason = $1
 where id = $2
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason
 `
@@ -210,7 +210,9 @@ type CloseTransferredTicketParams struct {
 // Origin of a transfer between sectors, without the closing form: no subject,
 // resolution or modules, and the end is the moment of the transfer. The
 // caller holds the lock of the ticket and checked it may be transferred. The
-// start comes from the clock of the phone and may be ahead of the database.
+// start comes from the clock of the phone and may be ahead of the database:
+// then it moves back to the transfer, so the end stays the transfer and is
+// never before the start.
 func (q *Queries) CloseTransferredTicket(ctx context.Context, arg CloseTransferredTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, closeTransferredTicket, arg.TransferReason, arg.ID)
 	var i Ticket

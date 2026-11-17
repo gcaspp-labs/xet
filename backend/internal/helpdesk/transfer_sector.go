@@ -103,6 +103,9 @@ func (s *Service) TransferToSector(ctx context.Context, actor auth.User, ticketI
 		changes.Set("status", string(t.Status), string(closed.Status))
 		changes["closure_type"] = audit.Change{From: nil, To: string(closed.ClosureType.ClosureType)}
 		changes["ended_at"] = audit.Change{From: nil, To: closed.EndedAt.UTC()}
+		if !closed.StartedAt.Equal(t.StartedAt) {
+			changes["started_at"] = audit.Change{From: t.StartedAt.UTC(), To: closed.StartedAt.UTC()}
+		}
 		changes["sector_id"] = audit.Change{From: closed.SectorID, To: next.SectorID}
 		changes["next_ticket_id"] = audit.Change{From: nil, To: next.ID}
 		if transferReason != nil {

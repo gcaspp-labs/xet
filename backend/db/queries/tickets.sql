@@ -242,10 +242,12 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 -- Origin of a transfer between sectors, without the closing form: no subject,
 -- resolution or modules, and the end is the moment of the transfer. The
 -- caller holds the lock of the ticket and checked it may be transferred. The
--- start comes from the clock of the phone and may be ahead of the database.
+-- start comes from the clock of the phone and may be ahead of the database:
+-- then it moves back to the transfer, so the end stays the transfer and is
+-- never before the start.
 update tickets
 set status = 'closed', closure_type = 'transferred', closed_at = now(), closed_by_id = assignee_id,
-    ended_at = greatest(now(), started_at), transfer_reason = sqlc.narg(transfer_reason)
+    started_at = least(started_at, now()), ended_at = now(), transfer_reason = sqlc.narg(transfer_reason)
 where id = @id
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
 
