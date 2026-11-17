@@ -504,7 +504,7 @@ test('filtra contatos por município e órgão, junto com setor, módulo e texto
   const options = page.getByRole('option')
   await expect(options).toHaveCount(2)
   await expect(options.filter({ hasText: 'Salto' })).toHaveCount(0)
-  await page.getByRole('option', { name: `Prefeitura ${id} — Ibiúna` }).click()
+  await page.getByRole('option', { name: new RegExp(`Prefeitura ${id}\\s*Ibiúna`) }).click()
   await expect(organizationFilter).toHaveValue(`Prefeitura ${id} — Ibiúna`)
   await expect(rows).toHaveCount(2)
   await expect(rows.filter({ hasText: `Gina ${id}` })).toHaveCount(0)
@@ -543,7 +543,7 @@ test('filtra contatos por município e órgão, junto com setor, módulo e texto
 
   // O órgão também filtra sem município e também pode ser limpo.
   await organizationFilter.fill(`Câmara ${id}`)
-  await page.getByRole('option', { name: `Câmara ${id} — Salto` }).click()
+  await page.getByRole('option', { name: new RegExp(`Câmara ${id}\\s*Salto`) }).click()
   await expect(rows).toHaveCount(1)
   await page.getByRole('button', { name: 'Limpar órgão' }).click()
   await expect(rows).toHaveCount(5)
