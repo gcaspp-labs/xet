@@ -343,3 +343,65 @@ test('a lista de Novo chamado carrega o resto dos contatos ao rolar até o fim',
   await expect(results).toHaveCount(20)
   expect(await body.evaluate((element) => element.scrollTop)).toBe(0)
 })
+
+test('Novo chamado alcança e escolhe um contato depois do 20º só pelo teclado', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Contato ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    names.map((name, i) => ({
+      name,
+      phone: `5511${id.slice(0, 7)}${String(i).padStart(2, '0')}`,
+      organization: 0,
+      sector: sector.id,
+    })),
+  )
+  await signIn(page, agent, userPassword)
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
+  const search = sheet.getByRole('searchbox', { name: 'Buscar contato' })
+  const contacts = sheet.getByRole('list', { name: 'Contatos' }).getByRole('button')
+  const results = contacts.filter({ hasText: id })
+  await search.fill(id)
+  await expect(results).toHaveCount(20)
+
+  // Do campo de busca, Tab chega ao primeiro contato; as setas descem e voltam.
+  await search.focus()
+  for (
+    let i = 0;
+    i < 20 && !(await results.first().evaluate((el) => el === document.activeElement));
+    i++
+  ) {
+    await page.keyboard.press('Tab')
+  }
+  await expect(results.first()).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(results.nth(1)).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(results.first()).toBeFocused()
+
+  // Chegar ao 20º contato carrega o resto, e a seta seguinte chega ao 21º.
+  for (let i = 0; i < 19; i++) {
+    await page.keyboard.press('ArrowDown')
+  }
+  await expect(results.nth(19)).toBeFocused()
+  await expect(results).toHaveCount(23)
+  await page.keyboard.press('ArrowDown')
+  await expect(results.nth(20)).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await expect(results.nth(22)).toBeFocused()
+
+  // Enter escolhe o 23º contato: a janela passa para a mensagem.
+  await page.keyboard.press('Enter')
+  await expect(sheet.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  await expect(sheet.getByText(names[22])).toBeVisible()
+})
