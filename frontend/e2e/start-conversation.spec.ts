@@ -279,3 +279,129 @@ test('a busca de Novo chamado filtra por município e órgão', async ({ page, b
   await expect(results).toHaveCount(2)
   await expect(results.filter({ hasText: `Nina ${id}` })).toHaveCount(0)
 })
+
+test('a lista de Novo chamado carrega o resto dos contatos ao rolar até o fim', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  // 23 contatos com o mesmo marcador: uma página cheia de 20 e mais 3.
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Contato ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  await seedDirectory(
+    baseURL!,
+    // O último contato é de um órgão em outro município, para o filtro.
+    [{ name: `Prefeitura ${id}` }, { name: `Câmara ${id}`, municipality: 'Iacanga' }],
+    names.map((name, i) => ({
+      name,
+      phone: `5511${id.slice(0, 7)}${String(i).padStart(2, '0')}`,
+      organization: i === 22 ? 1 : 0,
+      sector: sector.id,
+    })),
+  )
+  await signIn(page, agent, userPassword)
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
+  const search = sheet.getByRole('searchbox', { name: 'Buscar contato' })
+  const contacts = sheet.getByRole('list', { name: 'Contatos' }).getByRole('button')
+  const results = contacts.filter({ hasText: id })
+  const body = sheet.locator('[data-slot="dialog-body"]')
+  const scrollToEnd = () =>
+    body.evaluate((element) => element.scrollTo({ top: element.scrollHeight }))
+
+  // A busca mostra os 20 primeiros, sem rodapé de contagem nem pedido para refinar.
+  await search.fill(id)
+  await expect(results).toHaveCount(20)
+  await expect(results.last()).toContainText(names[19])
+  await expect(sheet.getByText(/Mostrando \d+ de/)).toHaveCount(0)
+  await expect(sheet.getByText(/refinar/i)).toHaveCount(0)
+
+  // Rolar até o fim traz o resto, e a lista para de crescer.
+  await scrollToEnd()
+  await expect(results).toHaveCount(23)
+  await expect(results.last()).toContainText(names[22])
+  await expect(sheet.getByText(/Mostrando \d+ de/)).toHaveCount(0)
+
+  // Mudar a busca recomeça na página 1, e a rolagem volta ao topo.
+  await search.fill(`${id} 0`)
+  await expect(results).toHaveCount(9)
+  await search.fill(id)
+  await expect(results).toHaveCount(20)
+  expect(await body.evaluate((element) => element.scrollTop)).toBe(0)
+
+  // Mudar um filtro também recomeça na página 1, e limpá-lo volta à lista de 20.
+  await scrollToEnd()
+  await expect(results).toHaveCount(23)
+  await sheet.getByRole('combobox', { name: 'Filtrar por município' }).fill('iacanga')
+  await page.getByRole('option', { name: 'Iacanga', exact: true }).click()
+  await expect(results).toHaveCount(1)
+  await expect(results.first()).toContainText(names[22])
+  await sheet.getByRole('button', { name: 'Limpar município' }).click()
+  await expect(results).toHaveCount(20)
+  expect(await body.evaluate((element) => element.scrollTop)).toBe(0)
+})
+
+test('Novo chamado alcança e escolhe um contato depois do 20º só pelo teclado', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Contato ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    names.map((name, i) => ({
+      name,
+      phone: `5511${id.slice(0, 7)}${String(i).padStart(2, '0')}`,
+      organization: 0,
+      sector: sector.id,
+    })),
+  )
+  await signIn(page, agent, userPassword)
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
+  const search = sheet.getByRole('searchbox', { name: 'Buscar contato' })
+  const contacts = sheet.getByRole('list', { name: 'Contatos' }).getByRole('button')
+  const results = contacts.filter({ hasText: id })
+  await search.fill(id)
+  await expect(results).toHaveCount(20)
+
+  // Do campo de busca, Tab chega ao primeiro contato; as setas descem e voltam.
+  await search.focus()
+  for (
+    let i = 0;
+    i < 20 && !(await results.first().evaluate((el) => el === document.activeElement));
+    i++
+  ) {
+    await page.keyboard.press('Tab')
+  }
+  await expect(results.first()).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(results.nth(1)).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(results.first()).toBeFocused()
+
+  // Chegar ao 20º contato carrega o resto, e a seta seguinte chega ao 21º.
+  for (let i = 0; i < 19; i++) {
+    await page.keyboard.press('ArrowDown')
+  }
+  await expect(results.nth(19)).toBeFocused()
+  await expect(results).toHaveCount(23)
+  await page.keyboard.press('ArrowDown')
+  await expect(results.nth(20)).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await expect(results.nth(22)).toBeFocused()
+
+  // Enter escolhe o 23º contato: a janela passa para a mensagem.
+  await page.keyboard.press('Enter')
+  await expect(sheet.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  await expect(sheet.getByText(names[22])).toBeVisible()
+})

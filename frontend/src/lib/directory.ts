@@ -241,6 +241,44 @@ export function useContacts(
   })
 }
 
+// A mesma busca de contatos em consulta contínua para o "Novo chamado": cada página de
+// 20 vem do servidor quando a lista chega ao fim, respeitando a busca e os filtros.
+// Mudar o termo ou um filtro volta à página 1, também ao repetir o mesmo termo. A chave
+// leva o id da lista, como em useOrganizationOptions, e fica sob contactsKey para salvar
+// um contato ou um órgão atualizar a lista.
+export function useContactOptions(query: string, filter: ContactFilter = {}) {
+  const picker = useId()
+  return useInfiniteQuery({
+    queryKey: [
+      ...contactsKey,
+      'options',
+      picker,
+      query.trim(),
+      filter.sectorId,
+      filter.moduleId,
+      filter.municipalityId,
+      filter.organizationId,
+    ],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      api<Page<Contact>>(
+        searchPath(
+          '/contacts',
+          query,
+          filter,
+          pageParams({ page: pageParam, sort: 'name', direction: 'asc' }),
+        ),
+      ),
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((total, page) => total + page.items.length, 0)
+      return loaded < last.total && last.items.length > 0 ? last.page + 1 : undefined
+    },
+    placeholderData: keepPreviousData,
+    // Sair de uma busca joga fora as páginas dela: voltar a ela recomeça na página 1.
+    gcTime: 0,
+  })
+}
+
 export function useContact(id: number, enabled: boolean) {
   return useQuery({
     queryKey: [...contactsKey, 'detail', id],
