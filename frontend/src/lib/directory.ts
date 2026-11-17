@@ -1,11 +1,12 @@
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQueries,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { Module } from '@/lib/admin'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
@@ -127,6 +128,40 @@ export function useOrganizations(
         searchPath('/organizations', query, { municipalityId }, pageParams(request)),
       ),
     placeholderData: keepPreviousData,
+  })
+}
+
+// Os mesmos órgãos da busca, em consulta contínua para os seletores: cada página de 20
+// vem do servidor quando a lista chega ao fim. Mudar o termo ou o município volta à
+// página 1, também ao digitar de novo o mesmo termo. A chave difere da de
+// useOrganizations porque o formato do dado é outro, e leva o id do seletor: dois
+// seletores abertos ao mesmo tempo (filtro e cadastro) não dividem as páginas, então
+// limpar a busca de um nunca devolve as páginas que o outro já carregou.
+export function useOrganizationOptions(query: string, municipalityId?: number) {
+  const picker = useId()
+  return useInfiniteQuery({
+    queryKey: [...organizationsKey, 'options', picker, query.trim(), municipalityId],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      api<Page<Organization>>(
+        searchPath(
+          '/organizations',
+          query,
+          { municipalityId },
+          pageParams({
+            page: pageParam,
+            sort: 'name',
+            direction: 'asc',
+          }),
+        ),
+      ),
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((total, page) => total + page.items.length, 0)
+      return loaded < last.total && last.items.length > 0 ? last.page + 1 : undefined
+    },
+    placeholderData: keepPreviousData,
+    // Sair de uma busca joga fora as páginas dela: voltar a ela recomeça na página 1.
+    gcTime: 0,
   })
 }
 
