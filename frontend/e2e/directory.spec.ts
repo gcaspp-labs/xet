@@ -1017,24 +1017,31 @@ test('órgãos em páginas de 20, ordenados pela coluna, com busca, página e or
   )
 })
 
-test('o seletor de órgão carrega o resto da lista ao chegar no fim e avisa quantos faltam', async ({
-  page,
-  baseURL,
-}) => {
-  const own = await seedSector(baseURL!)
+// 23 órgãos de nomes únicos (mais que uma página de 20) e a tela de contatos aberta,
+// com o filtro de órgão pronto para usar.
+async function openOrganizationPicker(page: Page, baseURL: string) {
+  const own = await seedSector(baseURL)
   const { id } = unique()
   const names = Array.from(
     { length: 23 },
     (_, i) => `Órgão ${id} ${String(i + 1).padStart(2, '0')}`,
   )
   await seedDirectory(
-    baseURL!,
+    baseURL,
     names.map((name) => ({ name })),
     [],
   )
   await signIn(page, own.agent, userPassword)
   await page.goto('/contatos')
   const picker = page.getByRole('combobox', { name: 'Filtrar por órgão' })
+  return { id, names, picker }
+}
+
+test('o seletor de órgão carrega o resto da lista ao chegar no fim e avisa quantos faltam', async ({
+  page,
+  baseURL,
+}) => {
+  const { id, names, picker } = await openOrganizationPicker(page, baseURL!)
   const options = page.getByRole('option').filter({ hasText: id })
   const footer = page.getByText('Mostrando 20 de 23 órgãos')
 
@@ -1061,20 +1068,7 @@ test('o seletor de órgão carrega o resto da lista ao chegar no fim e avisa qua
 })
 
 test('o seletor de órgão carrega a próxima página pelo teclado', async ({ page, baseURL }) => {
-  const own = await seedSector(baseURL!)
-  const { id } = unique()
-  const names = Array.from(
-    { length: 23 },
-    (_, i) => `Órgão ${id} ${String(i + 1).padStart(2, '0')}`,
-  )
-  await seedDirectory(
-    baseURL!,
-    names.map((name) => ({ name })),
-    [],
-  )
-  await signIn(page, own.agent, userPassword)
-  await page.goto('/contatos')
-  const picker = page.getByRole('combobox', { name: 'Filtrar por órgão' })
+  const { id, picker } = await openOrganizationPicker(page, baseURL!)
   const options = page.getByRole('option').filter({ hasText: id })
 
   await picker.fill(id)
@@ -1086,4 +1080,29 @@ test('o seletor de órgão carrega a próxima página pelo teclado', async ({ pa
   }
   await expect(options).toHaveCount(23)
   await expect(page.getByText(/Mostrando \d+ de/)).toBeHidden()
+})
+
+test('o seletor do cadastro recomeça na página 1 mesmo com o filtro já na segunda', async ({
+  page,
+  baseURL,
+}) => {
+  const { id, picker } = await openOrganizationPicker(page, baseURL!)
+
+  // O filtro, sem termo, carrega a segunda página e fica montado atrás do cadastro.
+  await picker.click()
+  const options = page.getByRole('option')
+  await expect(options).toHaveCount(20)
+  await page.getByRole('listbox').evaluate((list) => list.scrollTo({ top: list.scrollHeight }))
+  await expect.poll(() => options.count()).toBeGreaterThan(20)
+  await page.keyboard.press('Escape')
+
+  // No cadastro, buscar e apagar o termo volta à primeira página, não às já carregadas.
+  await page.getByRole('button', { name: 'Novo contato' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Novo contato' })
+  const field = dialog.getByLabel('Órgão')
+  await field.fill(id)
+  await expect(page.getByRole('option').filter({ hasText: id })).toHaveCount(20)
+  await field.fill('')
+  await expect(page.getByRole('option')).toHaveCount(20)
+  await expect(page.getByText(/Mostrando 20 de \d+ órgãos/)).toBeVisible()
 })

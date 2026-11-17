@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { Module } from '@/lib/admin'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
@@ -134,10 +134,13 @@ export function useOrganizations(
 // Os mesmos órgãos da busca, em consulta contínua para os seletores: cada página de 20
 // vem do servidor quando a lista chega ao fim. Mudar o termo ou o município volta à
 // página 1, também ao digitar de novo o mesmo termo. A chave difere da de
-// useOrganizations porque o formato do dado é outro.
+// useOrganizations porque o formato do dado é outro, e leva o id do seletor: dois
+// seletores abertos ao mesmo tempo (filtro e cadastro) não dividem as páginas, então
+// limpar a busca de um nunca devolve as páginas que o outro já carregou.
 export function useOrganizationOptions(query: string, municipalityId?: number) {
+  const picker = useId()
   return useInfiniteQuery({
-    queryKey: [...organizationsKey, 'options', query.trim(), municipalityId],
+    queryKey: [...organizationsKey, 'options', picker, query.trim(), municipalityId],
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
       api<Page<Organization>>(
