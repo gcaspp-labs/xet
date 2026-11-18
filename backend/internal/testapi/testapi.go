@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/directory"
@@ -30,6 +32,19 @@ import (
 )
 
 const Password = "Cofre#Azul47"
+
+// passwordHash is the hash of Password shared by the users the tests create.
+// It uses the minimum bcrypt cost: at the default cost each hash and each
+// login take seconds under -race, and that made up most of the time of the
+// suites. The login checks the cost written in the hash, so it stays the
+// same code path; the users created through the API keep the default cost.
+var passwordHash = sync.OnceValues(func() (string, error) {
+	if err := users.ValidatePassword(Password); err != nil {
+		return "", err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(Password), bcrypt.MinCost)
+	return string(hash), err
+})
 
 type Env struct {
 	T             *testing.T
@@ -102,7 +117,7 @@ func (e *Env) Sector(name string) db.Sector {
 
 func (e *Env) User(email string, role db.UserRole, sectorID *int64) db.User {
 	e.T.Helper()
-	hash, err := users.HashPassword(Password)
+	hash, err := passwordHash()
 	if err != nil {
 		e.T.Fatal(err)
 	}
