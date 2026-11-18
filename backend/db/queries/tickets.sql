@@ -96,7 +96,9 @@ select
     t.closed_by_id, cb.name as closed_by_name, t.closure_type,
     p.id as previous_id, p.protocol as previous_protocol, ps.name as previous_sector_name,
     p.subject as previous_subject, p.resolution as previous_resolution, pb.name as previous_closed_by_name,
-    n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name
+    p.transfer_reason as previous_transfer_reason,
+    n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name,
+    t.transfer_reason as next_transfer_reason
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id

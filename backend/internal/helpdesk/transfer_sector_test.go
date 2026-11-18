@@ -595,3 +595,107 @@ func TestClosedFieldsStillRequiredOutsideTransfersAndCancellations(t *testing.T)
 		t.Fatalf("blank reason: %v", err)
 	}
 }
+
+// O motivo da transferência (#245) aparece nos dois lados: no chamado de
+// origem, no quadro de origem do destino e no aviso da conversa de cada um.
+func TestSectorTransferReasonShowsOnBothSides(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		reason any
+		want   any
+	}{
+		"with reason":    {reason: "  Assunto de férias, é com o RH.  ", want: "Assunto de férias, é com o RH."},
+		"without reason": {reason: nil, want: nil},
+		"blank reason":   {reason: "   ", want: nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := newSectorTransfer(t)
+			e := c.e
+			e.connectSector(c.rh)
+			body := map[string]any{"sectorId": c.rh}
+			if tc.reason != nil {
+				body["reason"] = tc.reason
+			}
+			resp := e.sectorTransfer(c.ticket.ID, c.anaToken, body)
+			if resp.Status != http.StatusOK {
+				t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+			}
+			nextID := int64(resp.Body["id"].(float64))
+			protocol := resp.Body["protocol"]
+
+			// A origem devolve o motivo com o setor e o protocolo do destino.
+			detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil).Body
+			next, _ := detail["next"].(map[string]any)
+			if next == nil || next["sectorName"] != "RH" || next["protocol"] != protocol || next["reason"] != tc.want {
+				t.Fatalf("origin detail next = %v", detail["next"])
+			}
+
+			// O destino devolve a origem com o motivo e sem assunto nem resolução.
+			detail = e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", nextID), c.rhToken, nil).Body
+			prev, _ := detail["previous"].(map[string]any)
+			if prev == nil || prev["id"] != float64(c.ticket.ID) || prev["sectorName"] != "Contabilidade" ||
+				prev["closedByName"] != "ana@exemplo.com" || prev["reason"] != tc.want ||
+				prev["subject"] != nil || prev["resolution"] != nil {
+				t.Fatalf("destination detail previous = %v", detail["previous"])
+			}
+
+			// O aviso da conversa da origem e o do destino mostram o motivo, quem transferiu e o setor.
+			if r := e.assign(nextID, c.rhToken); r.Status != http.StatusOK {
+				t.Fatalf("assign at the destination: status %d, body %v", r.Status, r.Body)
+			}
+			for name, tt := range map[string]struct {
+				ticket int64
+				token  string
+				from   any
+			}{
+				"origin":      {c.ticket.ID, c.anaToken, nil},
+				"destination": {nextID, c.rhToken, "Contabilidade"},
+			} {
+				logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", tt.ticket), tt.token)
+				var notices []map[string]any
+				for _, l := range logs {
+					if l["action"] == "ticket_transferred_sector" {
+						notices = append(notices, l)
+					}
+				}
+				if len(notices) != 1 {
+					t.Fatalf("%s: transfer notices = %v", name, logs)
+				}
+				n := notices[0]
+				if n["reason"] != tc.want || n["toSectorName"] != "RH" || n["fromSectorName"] != tt.from ||
+					n["actor"].(map[string]any)["name"] != "ana@exemplo.com" {
+					t.Fatalf("%s: notice = %v", name, n)
+				}
+			}
+		})
+	}
+}
+
+// Uma transferência antiga, com o formulário, continua mostrando assunto e
+// resolução no quadro de origem e sem motivo; o aviso do destino mostra a origem.
+func TestOldSectorTransferStillShowsSubjectAndResolution(t *testing.T) {
+	t.Parallel()
+	c := newSectorTransfer(t)
+	e := c.e
+	resp := e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh))
+	if resp.Status != http.StatusOK {
+		t.Fatalf("transfer with form: status %d, body %v", resp.Status, resp.Body)
+	}
+	nextID := int64(resp.Body["id"].(float64))
+
+	detail := e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", nextID), c.rhToken, nil).Body
+	prev, _ := detail["previous"].(map[string]any)
+	if prev == nil || prev["subject"] != "Contracheque" || prev["resolution"] != "Enviada a segunda via." || prev["reason"] != nil {
+		t.Fatalf("destination detail previous = %v", detail["previous"])
+	}
+	detail = e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil).Body
+	if next, _ := detail["next"].(map[string]any); next == nil || next["reason"] != nil {
+		t.Fatalf("origin detail next = %v", detail["next"])
+	}
+	logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", nextID), c.rhToken)
+	if len(logs) != 1 || logs[0]["action"] != "ticket_transferred_sector" || logs[0]["reason"] != nil ||
+		logs[0]["fromSectorName"] != "Contabilidade" || logs[0]["toSectorName"] != "RH" {
+		t.Fatalf("destination timeline = %v", logs)
+	}
+}

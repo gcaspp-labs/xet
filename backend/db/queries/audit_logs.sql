@@ -12,19 +12,28 @@ order by id;
 
 -- name: ListTicketAssignmentLogs :many
 -- Start, assignment, transfers, return to the queue, closing, cancellation and corrections of the ticket, oldest first, with the names of
--- the actor, of the previous and new assignees and of the target of a transfer between sectors.
+-- the actor, of the previous and new assignees and of the target of a transfer between sectors. The
+-- transfer between sectors that opened this ticket (written on the origin) comes too, with the sector
+-- it came from, so the destination sees it among its messages.
 select
-    a.id, a.action, a.created_at, a.reason,
+    a.id, a.action, a.created_at,
+    coalesce(a.reason, a.changes -> 'transfer_reason' ->> 'to') as reason,
     a.actor_id, actor.name as actor_name,
     from_user.name as from_name,
     to_user.name as to_name,
-    to_sector.name as to_sector_name
+    to_sector.name as to_sector_name,
+    from_sector.name as from_sector_name
 from audit_logs a
 left join users actor on actor.id = a.actor_id
 left join users from_user on from_user.id = (a.changes -> 'assignee_id' ->> 'from')::bigint
 left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::bigint
 left join sectors to_sector on to_sector.id = (a.changes -> 'sector_id' ->> 'to')::bigint
-where a.ticket_id = @ticket_id and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_returned', 'ticket_closed', 'ticket_transferred_sector', 'ticket_cancelled', 'ticket_corrected')
+left join sectors from_sector on a.ticket_id <> @ticket_id and from_sector.id = (a.changes -> 'sector_id' ->> 'from')::bigint
+where (
+    a.ticket_id = @ticket_id and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_returned', 'ticket_closed', 'ticket_transferred_sector', 'ticket_cancelled', 'ticket_corrected')
+) or (
+    a.action = 'ticket_transferred_sector' and a.ticket_id = (select t.previous_ticket_id from tickets t where t.id = @ticket_id)
+)
 order by a.created_at, a.id;
 
 -- name: ListTicketCorrections :many

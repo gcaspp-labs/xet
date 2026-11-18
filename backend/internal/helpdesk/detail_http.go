@@ -39,13 +39,16 @@ type previousTicketResponse struct {
 	Subject    *string `json:"subject"`
 	Resolution *string `json:"resolution"`
 	ClosedBy   *string `json:"closedByName"`
+	// Reason is the one written in the transfer, if any.
+	Reason *string `json:"reason"`
 }
 
 // nextTicketResponse is the ticket the origin was transferred to; the origin
-// sees its sector and protocol only.
+// sees its sector and protocol, and the reason it wrote, only.
 type nextTicketResponse struct {
-	Protocol   string `json:"protocol"`
-	SectorName string `json:"sectorName"`
+	Protocol   string  `json:"protocol"`
+	SectorName string  `json:"sectorName"`
+	Reason     *string `json:"reason"`
 }
 
 func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
@@ -85,10 +88,11 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 		out.Previous = &previousTicketResponse{
 			ID: *t.PreviousID, Protocol: *t.PreviousProtocol, SectorName: *t.PreviousSectorName,
 			Subject: t.PreviousSubject, Resolution: t.PreviousResolution, ClosedBy: t.PreviousClosedByName,
+			Reason: t.PreviousTransferReason,
 		}
 	}
 	if t.NextProtocol != nil && t.NextSectorName != nil {
-		out.Next = &nextTicketResponse{Protocol: *t.NextProtocol, SectorName: *t.NextSectorName}
+		out.Next = &nextTicketResponse{Protocol: *t.NextProtocol, SectorName: *t.NextSectorName, Reason: t.NextTransferReason}
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
