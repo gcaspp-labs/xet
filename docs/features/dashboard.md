@@ -35,7 +35,7 @@ Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, 
 | Transferidos | Transferências para outro setor; a troca de atendente não conta, porque o chamado continua aberto | Momento real do encerramento |
 | Cancelados | Cancelamentos | Momento real do encerramento |
 | Tempo médio de espera | Da chegada até a primeira vez que alguém assumiu, nos chamados recebidos | Momento em que foi assumido |
-| Tempo médio de atendimento | De quando foi assumido até o "Fim" do formulário, em encerrados e transferidos | Momento real do encerramento |
+| Tempo médio de atendimento | De quando foi assumido até o "Fim" do formulário, nos encerrados, e até o momento da transferência, nos transferidos | Momento real do encerramento |
 
 ## Filtros
 
@@ -62,3 +62,4 @@ Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, 
 ## Histórico
 
 - 2026-11-11: regras migradas do `spec.md` (Dashboard do atendimento).
+- 2026-11-18: linha "Tempo médio de atendimento" da tabela de números alterada; spec [#243](https://github.com/gcaspp-labs/xet/issues/243), PR [#250](https://github.com/gcaspp-labs/xet/pull/250). Dizia "De quando foi assumido até o \"Fim\" do formulário, em encerrados e transferidos".
