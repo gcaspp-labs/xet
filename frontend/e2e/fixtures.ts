@@ -408,7 +408,9 @@ export async function seedTransferredTicket(baseURL: string, options: { withForm
 
   const agentApi = await request.newContext({ baseURL })
   ok(
-    await agentApi.post('/api/auth/login', { data: { email: origin.agent, password: userPassword } }),
+    await agentApi.post('/api/auth/login', {
+      data: { email: origin.agent, password: userPassword },
+    }),
   )
   const [ticket] = await json<{ id: number }[]>(
     await agentApi.get(`/api/sectors/${origin.sector.id}/tickets`),
