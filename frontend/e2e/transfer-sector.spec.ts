@@ -8,7 +8,10 @@ import {
   unique,
   userPassword,
   chooseAction,
+  json,
+  ok,
   openQueued,
+  queuedTicketId,
 } from './fixtures'
 
 // Liga os números dos setores pelo adaptador falso e cadastra os módulos da origem.
@@ -153,3 +156,94 @@ test('transferência entre setores encerra a origem e o destino continua com o h
   await expect(page).toHaveURL(new RegExp(`/atendimentos/${link.id}$`))
   await expect(conversation).toContainText('Folha de março')
 })
+
+// Transferência sem formulário, pela rota nova, com e sem motivo: o quadro de origem e os avisos
+// da conversa nos dois chamados.
+for (const withReason of [true, false]) {
+  test(`transferência sem formulário ${withReason ? 'com' : 'sem'} motivo aparece no quadro de origem e nos avisos`, async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    const origin = await seedSector(baseURL!)
+    const destination = await seedSector(baseURL!)
+    await prepare(baseURL!, origin.sector.id, destination.sector.id)
+    const { id, phone } = unique()
+    const contact = `Marta ${id}`
+    await seedDirectory(
+      baseURL!,
+      [{ name: `Prefeitura ${id}` }],
+      [{ name: contact, phone, organization: 0, sector: origin.sector.id }],
+    )
+    ok(
+      await request.post(`/api/test/messaging/sectors/${origin.sector.id}/receive`, {
+        data: {
+          externalMessageId: `E2E-${id}`,
+          phone,
+          contactName: contact,
+          body: 'Férias de julho',
+        },
+      }),
+    )
+    const reason = 'Quem cuida de férias é o RH.'
+    const originName = origin.agent.replace(/^agent\.(\d+)@.*$/, 'agent $1')
+
+    // A origem assume e transfere pela rota nova, sem formulário.
+    await signIn(page, origin.agent, userPassword)
+    const originId = await queuedTicketId(page, contact)
+    ok(await page.request.post(`/api/tickets/${originId}/assign`))
+    const next = await json<{ id: number; protocol: string }>(
+      await page.request.post(`/api/tickets/${originId}/sector-transfer`, {
+        data: withReason
+          ? { sectorId: destination.sector.id, reason }
+          : { sectorId: destination.sector.id },
+      }),
+    )
+
+    // O aviso da origem mostra quem transferiu, para onde e o motivo, quando houver.
+    await page.goto(`/atendimentos/${originId}`)
+    const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+    const notice = conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
+      hasText: `${originName} transferiu o chamado para o setor ${destination.sector.name}`,
+    })
+    await expect(notice).toBeVisible()
+    if (withReason) {
+      await expect(notice).toContainText(`Motivo: ${reason}`)
+    } else {
+      await expect(notice).not.toContainText('Motivo')
+    }
+    await clearSession(page)
+
+    // O destino vê o mesmo aviso, com o setor de origem, na conversa do chamado novo na fila.
+    await signIn(page, destination.agent, userPassword)
+    await page.goto(`/chamados/${next.id}`)
+    const arrival = conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
+      hasText: `${originName} transferiu o chamado do setor ${origin.sector.name} para o setor ${destination.sector.name}`,
+    })
+    await expect(arrival).toBeVisible()
+    if (withReason) {
+      await expect(arrival).toContainText(`Motivo: ${reason}`)
+    } else {
+      await expect(arrival).not.toContainText('Motivo')
+    }
+
+    // Encerrado o chamado do destino, o quadro de origem mostra setor, protocolo, quem
+    // transferiu e o motivo, sem assunto nem resolução vazios.
+    ok(await page.request.post(`/api/tickets/${next.id}/assign`))
+    ok(await page.request.post(`/api/tickets/${next.id}/cancel`, { data: { reason: 'Teste.' } }))
+    await page.goto(`/atendimentos/${next.id}`)
+    const previous = page
+      .getByRole('region', { name: 'Atendimento', exact: true })
+      .getByRole('region', { name: 'Chamado anterior' })
+    await expect(previous).toContainText(origin.sector.name)
+    await expect(previous).toContainText(`transferido por ${originName}`)
+    if (withReason) {
+      await expect(previous).toContainText(`Motivo: ${reason}`)
+    } else {
+      await expect(previous).not.toContainText('Motivo')
+    }
+    await expect(previous).not.toContainText('Assunto:')
+    await expect(previous).not.toContainText('Resolução:')
+    await expect(previous.getByRole('link', { name: 'Ver chamado anterior' })).toBeVisible()
+  })
+}

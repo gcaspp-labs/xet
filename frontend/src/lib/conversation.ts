@@ -37,9 +37,11 @@ export type TicketDetail = {
     subject: string | null
     resolution: string | null
     closedByName: string | null
+    // Motivo escrito na transferência, quando houver.
+    reason: string | null
   } | null
-  // Setor e protocolo para onde este chamado foi transferido, sem acesso a ele.
-  next: { protocol: string; sectorName: string } | null
+  // Setor e protocolo para onde este chamado foi transferido, com o motivo escrito, sem acesso a ele.
+  next: { protocol: string; sectorName: string; reason: string | null } | null
 }
 
 export type Message = {
@@ -121,6 +123,9 @@ export type AssignmentLog = {
   fromName: string | null
   toName: string | null
   toSectorName: string | null
+  // Setor de origem da transferência que abriu este chamado; vem só no aviso do destino.
+  fromSectorName: string | null
+  // Motivo do cancelamento, da correção ou da transferência entre setores.
   reason: string | null
 }
 

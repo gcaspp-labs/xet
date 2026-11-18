@@ -226,7 +226,10 @@ function assignmentText(log: AssignmentLog) {
     return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
   }
   if (log.action === 'ticket_transferred_sector') {
-    return `${log.actor?.name ?? 'Sistema'} transferiu o chamado para o setor ${log.toSectorName}`
+    const who = log.actor?.name ?? 'Sistema'
+    return log.fromSectorName
+      ? `${who} transferiu o chamado do setor ${log.fromSectorName} para o setor ${log.toSectorName}`
+      : `${who} transferiu o chamado para o setor ${log.toSectorName}`
   }
   if (log.action === 'ticket_cancelled') {
     return `${log.actor?.name ?? 'Sistema'} cancelou o chamado`
@@ -265,7 +268,8 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
       )}
       <span className="min-w-0">
         {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
-        {log.action === 'ticket_cancelled' && (
+        {(log.action === 'ticket_cancelled' ||
+          (log.action === 'ticket_transferred_sector' && log.reason)) && (
           <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
         )}
       </span>
@@ -1046,6 +1050,12 @@ function TransferChain({ ticket }: { ticket: TicketDetail }) {
                 Origem
                 {previous.closedByName && ` · transferido por ${previous.closedByName}`}
               </p>
+              {previous.reason && (
+                <p className="caption whitespace-pre-wrap break-words">
+                  <span className="text-ink-soft">Motivo: </span>
+                  {previous.reason}
+                </p>
+              )}
               {previous.subject && (
                 <p className="caption">
                   <span className="text-ink-soft">Assunto: </span>
