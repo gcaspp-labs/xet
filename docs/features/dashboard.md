@@ -1,10 +1,10 @@
 # Dashboard do atendimento
 
-Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, para supervisores e administradores.
+Mostra a situação e o desempenho do atendimento, com filtros. Além dos números, mostra ao vivo a fila e os chamados em atendimento, e a fila tem o botão Assumir. É para supervisores e administradores.
 
 ## Regras
 
-1. O administrador vê todos os setores, e o supervisor, só o próprio. O atendente não vê: não tem o item no menu, e a API recusa.
+1. O administrador vê todos os setores, e o supervisor, só o próprio. O atendente não vê: não tem o item no menu, e a API recusa. O Dashboard é um item próprio do menu, fora do grupo Helpdesk, e é a tela inicial do supervisor e do administrador (ver [interface.md](interface.md)).
 2. Os filtros são período (hoje, 7 dias, 30 dias ou datas à escolha), setor (só para o administrador), atendente, módulo e órgão. Abre em "Hoje" e, para o administrador, em todos os setores.
 3. "7 dias" e "30 dias" contam o dia de hoje. Os dias seguem o horário de Brasília.
 4. Atendente e módulo pertencem a um setor: para o administrador, ficam desabilitados até ele escolher um setor, e trocar de setor limpa os dois.
@@ -22,6 +22,9 @@ Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, 
 16. Na visão de todos os setores, cada linha da tabela por atendente é uma pessoa em um setor e mostra o setor.
 17. O atendimento é atribuído ao responsável final do chamado, mesmo que ele tenha passado por outras pessoas ou que outra pessoa o tenha cancelado.
 18. Os números se atualizam sozinhos quando um chamado muda, sem recarregar a tela.
+19. Abaixo de "Agora", o Dashboard mostra duas listas ao vivo: **Fila** e **Em atendimento**, cada uma com a quantidade no título. Cada linha mostra contato, protocolo, órgão (ou "Não cadastrado") e há quanto tempo (na fila, desde a chegada; em atendimento, desde que foi assumido, com o responsável, ou "Você"). Na visão de todos os setores, a linha mostra também o setor.
+20. As listas seguem os filtros dos números "Na fila" e "Em atendimento" (tabela "Filtros"): a fila, por setor e órgão; os em atendimento, por setor, atendente (responsável atual) e órgão. Período e módulo não se aplicam a elas. Se nada está na fila, aparece "Nenhum chamado na fila"; se nada está em atendimento, "Nenhum chamado em atendimento".
+21. Na Fila, o botão Assumir segue a mesma regra de permissão de assumir de [queue.md](queue.md): ao assumir, aparece o aviso "Chamado assumido" e o chamado abre em Chamados (`/chamados/:id`). Clicar na linha, fora do botão, abre o chamado ali, tanto na Fila quanto em Em atendimento. As listas se atualizam sozinhas, como os números (regra 18).
 
 ## Números
 
@@ -53,6 +56,7 @@ Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, 
 
 ## Fora do escopo / limites conhecidos
 
+- A carga de cada atendente fica na coluna "em atendimento" da tabela por atendente; não há cartão separado para isso.
 - Como há atendimentos simultâneos, o tempo de atendimento não representa trabalho exclusivo naquele cliente.
 
 ## Relacionado
@@ -63,3 +67,4 @@ Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, 
 
 - 2026-11-11: regras migradas do `spec.md` (Dashboard do atendimento).
 - 2026-11-18: linha "Tempo médio de atendimento" da tabela de números alterada; spec [#243](https://github.com/gcaspp-labs/xet/issues/243), PR [#250](https://github.com/gcaspp-labs/xet/pull/250). Dizia "De quando foi assumido até o \"Fim\" do formulário, em encerrados e transferidos".
+- 2026-11-18: regra 1 alterada (acrescentado o item de menu e a tela inicial) e regras 19 a 21 acrescentadas (listas Fila e Em atendimento, com Assumir); o cabeçalho dizia "É só leitura, para supervisores e administradores."; spec [#159](https://github.com/gcaspp-labs/xet/issues/159), PRs [#171](https://github.com/gcaspp-labs/xet/pull/171) e [#170](https://github.com/gcaspp-labs/xet/pull/170).
