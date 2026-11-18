@@ -1,5 +1,5 @@
-import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
-import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
+import symbol from '@/prototype/logos/glab-simbolo.svg' // PROTÓTIPO #262: logo na cor nova
+import symbolDark from '@/prototype/logos/glab-simbolo-escuro.svg' // PROTÓTIPO #262: logo na cor nova
 import {
   ALargeSmall,
   BellRing,

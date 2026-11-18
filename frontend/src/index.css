@@ -112,22 +112,87 @@
 }
 
 /*
+ * PROTÓTIPO #262: paleta GCASPP (tirada do logo) sobre os tokens do design system.
+ * Descartável: a implementação troca os valores em glab-design-system/tokens e apaga este bloco.
+ * Cores de aviso (success, warning, danger), overlay e shadow não mudam.
+ */
+:root, [data-theme='light'] {
+  --ink: #15232F;
+  --ink-soft: #4F6170;
+  --ink-faint: #8396A4;
+  --paper: #EBEEF0;
+  --surface: #FFFFFF;
+  --surface-2: #F4F6F7;
+  --line: #D8DFE4;
+  --line-soft: #E6E8E9;
+  --accent: #01466F;
+  --accent-strong: #00304D;
+  --accent-soft: #DDEEF5;
+  --on-accent: #FFFFFF;
+  --sidebar-bg: #0B2233;
+  --sidebar-surface: #112B3F;
+  --sidebar-line: #1D3A50;
+  --sidebar-text: #C3D0D9;
+  --sidebar-text-active: #FFFFFF;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ink: #E6ECEF;
+    --ink-soft: #9DADB8;
+    --ink-faint: #6B7D89;
+    --paper: #0C151C;
+    --surface: #131F28;
+    --surface-2: #192731;
+    --line: #263744;
+    --line-soft: #1D2C37;
+    --accent: #4BAECE;
+    --accent-strong: #86CBE2;
+    --accent-soft: #143649;
+    --on-accent: #04131C;
+    --sidebar-bg: #08121A;
+    --sidebar-surface: #0F1A23;
+    --sidebar-line: #1B2833;
+    --sidebar-text: #8FA2AF;
+    --sidebar-text-active: #FFFFFF;
+  }
+}
+[data-theme='dark'] {
+  --ink: #E6ECEF;
+  --ink-soft: #9DADB8;
+  --ink-faint: #6B7D89;
+  --paper: #0C151C;
+  --surface: #131F28;
+  --surface-2: #192731;
+  --line: #263744;
+  --line-soft: #1D2C37;
+  --accent: #4BAECE;
+  --accent-strong: #86CBE2;
+  --accent-soft: #143649;
+  --on-accent: #04131C;
+  --sidebar-bg: #08121A;
+  --sidebar-surface: #0F1A23;
+  --sidebar-line: #1B2833;
+  --sidebar-text: #8FA2AF;
+  --sidebar-text-active: #FFFFFF;
+}
+
+/*
  * Alto contraste (design.md): camada do projeto sobre os tokens, com texto em 7:1 ou mais.
  * Os três blocos seguem a regra de tema de tokens.css: claro, escuro pelo sistema e escuro forçado.
  * Fora de @layer, como tokens.css, e com seletores mais específicos que os dele.
  */
 :root[data-contrast='high'] {
   --ink: #000000;
-  --ink-soft: #1f2428;
-  --ink-faint: #33393e;
+  --ink-soft: #16222c;
+  --ink-faint: #2b3945;
   --paper: #ffffff;
   --surface: #ffffff;
-  --surface-2: #eef0f0;
-  --line: #4d555b;
-  --line-soft: #6b7379;
-  --accent: #0b3d41;
-  --accent-strong: #062629;
-  --accent-soft: #d5ebeb;
+  --surface-2: #ecf0f3;
+  --line: #45535e;
+  --line-soft: #64727c;
+  --accent: #01466f;
+  --accent-strong: #002a44;
+  --accent-soft: #d6e9f3;
   --on-accent: #ffffff;
   --focus: #000000;
   --success: #0b5535;
@@ -142,16 +207,16 @@
 @media (prefers-color-scheme: dark) {
   :root[data-contrast='high']:not([data-theme='light']) {
     --ink: #ffffff;
-    --ink-soft: #e6ebe9;
-    --ink-faint: #c9d1ce;
+    --ink-soft: #e4ecf1;
+    --ink-faint: #c5d2da;
     --paper: #000000;
-    --surface: #0a0d0e;
-    --surface-2: #181d1f;
-    --line: #a3adaa;
-    --line-soft: #7f8a87;
-    --accent: #8fdde0;
-    --accent-strong: #c2f0f2;
-    --accent-soft: #123235;
+    --surface: #070c10;
+    --surface-2: #131b21;
+    --line: #9fadb7;
+    --line-soft: #7c8a94;
+    --accent: #8fd0e8;
+    --accent-strong: #c4e8f5;
+    --accent-soft: #0d2d3f;
     --on-accent: #000000;
     --focus: #ffffff;
     --success: #7fe0b5;
@@ -166,16 +231,16 @@
 }
 :root[data-contrast='high'][data-theme='dark'] {
   --ink: #ffffff;
-  --ink-soft: #e6ebe9;
-  --ink-faint: #c9d1ce;
+  --ink-soft: #e4ecf1;
+  --ink-faint: #c5d2da;
   --paper: #000000;
-  --surface: #0a0d0e;
-  --surface-2: #181d1f;
-  --line: #a3adaa;
-  --line-soft: #7f8a87;
-  --accent: #8fdde0;
-  --accent-strong: #c2f0f2;
-  --accent-soft: #123235;
+  --surface: #070c10;
+  --surface-2: #131b21;
+  --line: #9fadb7;
+  --line-soft: #7c8a94;
+  --accent: #8fd0e8;
+  --accent-strong: #c4e8f5;
+  --accent-soft: #0d2d3f;
   --on-accent: #000000;
   --focus: #ffffff;
   --success: #7fe0b5;

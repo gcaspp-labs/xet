@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import logo from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-lab-horizontal.svg'
-import logoDark from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-lab-horizontal-escuro.svg'
+import logo from '@/prototype/logos/gcaspp-lab-horizontal.svg' // PROTÓTIPO #262: logo na cor nova
+import logoDark from '@/prototype/logos/gcaspp-lab-horizontal-escuro.svg' // PROTÓTIPO #262: logo na cor nova
 import { TriangleAlert } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Navigate, useNavigate } from 'react-router'
