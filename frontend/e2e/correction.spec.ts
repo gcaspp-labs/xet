@@ -7,6 +7,7 @@ import {
   json,
   ok,
   seedClosedTicket,
+  seedTransferredTicket,
   signIn,
   userPassword,
 } from './fixtures'
@@ -203,3 +204,39 @@ test('a janela de correção tem bloqueio', async ({ page, baseURL }) => {
     field: 'Motivo da correção',
   })
 })
+
+// A etapa transferida para outro setor não tem correção, nem a antiga, com assunto e resolução:
+// o botão some para quem encerrou e para a supervisão, e a API recusa. O resolvido continua
+// com o botão (testes acima).
+for (const withForm of [false, true]) {
+  test(`etapa transferida ${withForm ? 'antiga, com formulário,' : 'sem formulário'} não tem correção`, async ({
+    page,
+    baseURL,
+  }) => {
+    const { ticketId, origin } = await seedTransferredTicket(baseURL!, { withForm })
+    const details = page.getByRole('region', { name: 'Atendimento', exact: true })
+
+    for (const email of [origin.agent, origin.supervisor]) {
+      await signIn(page, email, userPassword)
+      await page.goto(`/atendimentos/${ticketId}`)
+      await expect(details).toContainText('Encerrado')
+      await expect(page.getByRole('button', { name: 'Corrigir' })).toHaveCount(0)
+      const refused = await page.request.post(`/api/tickets/${ticketId}/correct`, {
+        data: {
+          subject: 'Outro',
+          resolution: 'Outra',
+          moduleIds: [1],
+          organizationId: 1,
+          startedAt: new Date(Date.now() - 3_600_000).toISOString(),
+          endedAt: new Date(Date.now() - 60_000).toISOString(),
+          reason: 'Teste',
+        },
+      })
+      expect(refused.status()).toBe(409)
+      expect(await refused.json()).toMatchObject({
+        error: 'Chamado transferido para outro setor não é corrigido.',
+      })
+      await clearSession(page)
+    }
+  })
+}

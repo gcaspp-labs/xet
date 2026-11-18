@@ -200,11 +200,12 @@ export function canReturn(ticket: TicketDetail, user: User) {
 }
 
 // Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
-// cancelado não é corrigido (spec.md, Encerramento, retorno e correções).
+// cancelado e o transferido para outro setor não são corrigidos (closing.md, regra 14).
 export function canCorrect(ticket: TicketDetail, user: User) {
   return (
     ticket.status === 'closed' &&
     ticket.closureType !== 'cancelled' &&
+    ticket.closureType !== 'transferred' &&
     worksIn(ticket, user) &&
     (ticket.closedBy?.id === user.id || user.role !== 'agent')
   )
@@ -1221,7 +1222,7 @@ export default function TicketPage() {
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={
-          // Única ação da ficha, visível e sem menu ⋯; nunca em chamado cancelado.
+          // Única ação da ficha, visível e sem menu ⋯; nunca em chamado cancelado ou transferido.
           canCorrect(ticket, user) && (
             <Button onClick={() => setCorrecting(true)}>
               <PencilLine strokeWidth={1.7} aria-hidden />

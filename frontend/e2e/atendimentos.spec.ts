@@ -5,7 +5,17 @@ import {
   request as apiRequest,
   test,
 } from '@playwright/test'
-import { admin, json, login, ok, seedDirectory, seedSector, unique, userPassword } from './fixtures'
+import {
+  admin,
+  json,
+  login,
+  ok,
+  seedDirectory,
+  seedSector,
+  seedTransferredTicket,
+  unique,
+  userPassword,
+} from './fixtures'
 
 type Ticket = { id: number; protocol: string; contact: { name: string } }
 
@@ -692,4 +702,33 @@ test('a imagem do chamado encerrado também abre ampliada em /atendimentos/:id',
   await expect(viewer.getByLabel('Zoom atual')).toHaveText('150%')
   await page.keyboard.press('Escape')
   await expect(viewer).toBeHidden()
+})
+
+test('etapa transferida sem formulário aparece com Transferido e o destino, sem assunto e módulos', async ({
+  page,
+  baseURL,
+}) => {
+  const { contact, origin, destination } = await seedTransferredTicket(baseURL!)
+  await openList(page, origin.agent, userPassword)
+
+  // A linha traz a situação e o setor de destino; assunto e módulos ficam vazios.
+  await expect(bodyRows(page)).toHaveCount(1)
+  const row = bodyRows(page).first()
+  await expect(row).toContainText(contact)
+  await expect(row).toContainText('Transferido')
+  await expect(row).toContainText(`para ${destination.sector.name}`)
+  const cells = row.getByRole('cell')
+  await expect(cells.nth(5)).toHaveText('—')
+  await expect(cells.nth(6)).toHaveText('—')
+
+  // Os filtros de assunto e de módulo não encontram a etapa.
+  await page.getByRole('combobox', { name: 'Assunto' }).fill('folha')
+  await page.keyboard.press('Escape')
+  await expect(bodyRows(page).filter({ hasText: contact })).toHaveCount(0)
+  await page.getByRole('combobox', { name: 'Assunto' }).fill('')
+  await page.keyboard.press('Escape')
+  await expect(bodyRows(page).filter({ hasText: contact })).toHaveCount(1)
+  await page.getByRole('combobox', { name: 'Módulo' }).fill('folha')
+  await page.keyboard.press('Escape')
+  await expect(bodyRows(page).filter({ hasText: contact })).toHaveCount(0)
 })
