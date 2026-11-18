@@ -15,47 +15,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
-// TransferSector closes the ticket with the closing form as transferred and
-// opens a ticket linked to it in the queue of another sector (spec.md,
-// Transferências entre setores). Only the assignee transfers, as in the
-// closing. The closing, the new ticket and the audit go in one transaction:
-// an open ticket of the contact in the target refuses the whole transfer.
-func (s *Service) TransferSector(ctx context.Context, actor auth.User, ticketID, sectorID int64, in Closing) (db.Ticket, error) {
-	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
-		return db.Ticket{}, err
-	}
-	in, err := normalizeClosing(in)
-	if err != nil {
-		return db.Ticket{}, err
-	}
-
-	var closed, next db.Ticket
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		var changes audit.Changes
-		closed, changes, err = closeLocked(ctx, q, actor, ticketID, in, db.ClosureTypeTransferred)
-		if err != nil {
-			return err
-		}
-		next, err = queueInSector(ctx, q, actor, closed, sectorID, closed.OrganizationID)
-		if err != nil {
-			return err
-		}
-		if err := addFormItems(ctx, q, actor.ID, closed.SectorID, in.Subject, in.Resolution, in.ModuleIDs, in.SubjectModuleID, in.SolutionModuleID, in.AddSubject, in.AddSolution); err != nil {
-			return err
-		}
-		changes["sector_id"] = audit.Change{From: closed.SectorID, To: next.SectorID}
-		changes["next_ticket_id"] = audit.Change{From: nil, To: next.ID}
-		return recordTicket(ctx, q, closed.ID, "ticket_transferred_sector", actor.ID, changes)
-	})
-	if err != nil {
-		return db.Ticket{}, err
-	}
-	s.hub.Publish(realtime.TicketChanged(closed.SectorID, closed.ID))
-	s.hub.Publish(realtime.TicketChanged(next.SectorID, next.ID))
-	return next, nil
-}
-
 // TransferToSector closes the ticket as transferred, without the closing
 // form, and opens a ticket linked to it in the queue of another sector
 // (#243): only the target sector and an optional reason, and the contact

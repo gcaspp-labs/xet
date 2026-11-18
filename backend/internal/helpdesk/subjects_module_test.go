@@ -61,47 +61,38 @@ func TestCorrectionRequiresAnActiveSelectedModule(t *testing.T) {
 	}
 }
 
-func TestClosingAndTransferRequireReplacementForDeactivatedModules(t *testing.T) {
-	for _, transfer := range []bool{false, true} {
-		t.Run(fmt.Sprintf("transfer=%t", transfer), func(t *testing.T) {
-			t.Parallel()
-			c := newSectorTransfer(t)
-			for i, name := range []string{"Folha", "Patrimônio"} {
-				if _, err := c.e.Q.UpdateModule(t.Context(), db.UpdateModuleParams{ID: c.modules[i], Name: name, Active: false}); err != nil {
-					t.Fatal(err)
-				}
-			}
-			body := with(c.transferForm(c.rh), "addSubject", true)
-			save := func() response {
-				if transfer {
-					return c.e.transferSector(c.ticket.ID, c.anaToken, body)
-				}
-				return c.e.closeForm(c.ticket.ID, c.anaToken, body)
-			}
-			resp := save()
-			if resp.Status != http.StatusUnprocessableEntity {
-				t.Fatalf("save without active module: %d %v", resp.Status, resp.Body)
-			}
-			detail := c.e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil)
-			if detail.Body["status"] != "in_progress" || c.e.Count("subjects") != 0 {
-				t.Fatalf("rejected request changed ticket or subjects: %v", detail.Body)
-			}
-			module, err := c.e.Q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: c.sector.ID, Name: "Ativo"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			body["moduleIds"] = []int64{module.ID}
-			body["subjectModuleId"] = module.ID
-			resp = save()
-			if resp.Status != http.StatusOK {
-				t.Fatalf("save with replacement: %d %v", resp.Status, resp.Body)
-			}
-			modules := c.e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/modules", c.ticket.ID), c.anaToken)
-			subjects := c.e.DoList(http.MethodGet, subjectsPath(c.sector.ID), c.supToken)
-			if len(modules) != 1 || modules[0]["id"] != float64(module.ID) || len(subjects) != 1 || subjects[0]["moduleId"] != float64(module.ID) {
-				t.Fatalf("replacement module and subject: %v %v", modules, subjects)
-			}
-		})
+func TestClosingRequiresReplacementForDeactivatedModules(t *testing.T) {
+	t.Parallel()
+	c := newClosing(t)
+	c.register()
+	for i, name := range []string{"Folha", "Patrimônio"} {
+		if _, err := c.e.Q.UpdateModule(t.Context(), db.UpdateModuleParams{ID: c.modules[i], Name: name, Active: false}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := with(c.form(c.org), "addSubject", true)
+	resp := c.e.closeForm(c.ticket.ID, c.anaToken, body)
+	if resp.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("save without active module: %d %v", resp.Status, resp.Body)
+	}
+	detail := c.e.Do(http.MethodGet, fmt.Sprintf("/api/tickets/%d", c.ticket.ID), c.anaToken, nil)
+	if detail.Body["status"] != "in_progress" || c.e.Count("subjects") != 0 {
+		t.Fatalf("rejected request changed ticket or subjects: %v", detail.Body)
+	}
+	module, err := c.e.Q.CreateModule(t.Context(), db.CreateModuleParams{SectorID: c.sector.ID, Name: "Ativo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body["moduleIds"] = []int64{module.ID}
+	body["subjectModuleId"] = module.ID
+	resp = c.e.closeForm(c.ticket.ID, c.anaToken, body)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("save with replacement: %d %v", resp.Status, resp.Body)
+	}
+	modules := c.e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/modules", c.ticket.ID), c.anaToken)
+	subjects := c.e.DoList(http.MethodGet, subjectsPath(c.sector.ID), c.supToken)
+	if len(modules) != 1 || modules[0]["id"] != float64(module.ID) || len(subjects) != 1 || subjects[0]["moduleId"] != float64(module.ID) {
+		t.Fatalf("replacement module and subject: %v %v", modules, subjects)
 	}
 }
 
