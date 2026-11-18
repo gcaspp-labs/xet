@@ -158,9 +158,9 @@ func (a *Adapter) Connect(ctx context.Context, account messaging.Account) error 
 //
 // The store keys a device by its full JID, with the device part
 // (5511999999999:23@s.whatsapp.net), while the account is saved without it
-// (5511999999999@s.whatsapp.net). A full JID is matched exactly; otherwise the
-// device is the only stored one of the same number. More than one is not
-// guessed: it is logged and treated as logged out.
+// (5511999999999@s.whatsapp.net). Either form finds the only stored device of
+// the same number. More than one is not guessed, even when the full JID names
+// one of them: it is logged and treated as logged out.
 func (a *Adapter) device(ctx context.Context, accountID string) (*store.Device, error) {
 	if accountID == "" {
 		return a.container.NewDevice(), nil
@@ -168,13 +168,6 @@ func (a *Adapter) device(ctx context.Context, accountID string) (*store.Device, 
 	jid, err := types.ParseJID(accountID)
 	if err != nil {
 		return nil, fmt.Errorf("parse account %q: %w", accountID, err)
-	}
-	device, err := a.container.GetDevice(ctx, jid)
-	if err != nil {
-		return nil, fmt.Errorf("get device: %w", err)
-	}
-	if device != nil {
-		return device, nil
 	}
 	all, err := a.container.GetAllDevices(ctx)
 	if err != nil {

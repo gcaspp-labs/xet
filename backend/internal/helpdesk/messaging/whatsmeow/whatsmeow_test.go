@@ -25,6 +25,12 @@ type recorder struct {
 	events []messaging.Event
 }
 
+func (r *recorder) reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = nil
+}
+
 func (r *recorder) handle(_ context.Context, ev messaging.Event) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -123,24 +129,36 @@ func TestDeviceLookupMissingAccount(t *testing.T) {
 
 func TestDeviceLookupAmbiguousAccount(t *testing.T) {
 	a, rec, logs := newTestAdapter(t)
-	storeDevice(t, a, "5511999999999", 23)
+	full := storeDevice(t, a, "5511999999999", 23)
 	storeDevice(t, a, "5511999999999", 24)
 
-	got, err := a.device(t.Context(), "5511999999999@s.whatsapp.net")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != nil {
-		t.Fatalf("device picked %s among two stored devices of the same number, want nil", got.ID)
-	}
-	if !strings.Contains(logs.String(), "more than one stored device") {
-		t.Fatalf("ambiguous account not logged; logs:\n%s", logs)
+	for name, accountID := range map[string]string{
+		"account without device part": full.ToNonAD().String(),
+		"full device JID":             full.String(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := strings.Count(logs.String(), "more than one stored device")
+			got, err := a.device(t.Context(), accountID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != nil {
+				t.Fatalf("device(%q) picked %s among two stored devices of the same number, want nil", accountID, got.ID)
+			}
+			if strings.Count(logs.String(), "more than one stored device") != before+1 {
+				t.Fatalf("ambiguous account %q not logged; logs:\n%s", accountID, logs)
+			}
+		})
 	}
 
-	if err := a.Connect(t.Context(), messaging.Account{SectorID: 2, AccountID: "5511999999999@s.whatsapp.net"}); err != nil {
-		t.Fatal(err)
+	for i, accountID := range []string{full.ToNonAD().String(), full.String()} {
+		sectorID := int64(i + 2)
+		rec.reset()
+		if err := a.Connect(t.Context(), messaging.Account{SectorID: sectorID, AccountID: accountID}); err != nil {
+			t.Fatal(err)
+		}
+		assertLoggedOut(t, rec, sectorID)
 	}
-	assertLoggedOut(t, rec, 2)
 }
 
 func assertLoggedOut(t *testing.T, rec *recorder, sectorID int64) {
