@@ -155,6 +155,12 @@ func (a *Adapter) Connect(ctx context.Context, account messaging.Account) error 
 
 // device returns the stored device of the account, a new device when there
 // is no account, or nil when the account is no longer in the store.
+//
+// The store keys a device by its full JID, with the device part
+// (5511999999999:23@s.whatsapp.net), while the account is saved without it
+// (5511999999999@s.whatsapp.net). A full JID is matched exactly; otherwise the
+// device is the only stored one of the same number. More than one is not
+// guessed: it is logged and treated as logged out.
 func (a *Adapter) device(ctx context.Context, accountID string) (*store.Device, error) {
 	if accountID == "" {
 		return a.container.NewDevice(), nil
@@ -167,7 +173,32 @@ func (a *Adapter) device(ctx context.Context, accountID string) (*store.Device, 
 	if err != nil {
 		return nil, fmt.Errorf("get device: %w", err)
 	}
-	return device, nil
+	if device != nil {
+		return device, nil
+	}
+	all, err := a.container.GetAllDevices(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get all devices: %w", err)
+	}
+	account := jid.ToNonAD()
+	var found []*store.Device
+	for _, d := range all {
+		if d.ID != nil && d.ID.ToNonAD() == account {
+			found = append(found, d)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return nil, nil
+	case 1:
+		return found[0], nil
+	}
+	ids := make([]string, len(found))
+	for i, d := range found {
+		ids[i] = d.ID.String()
+	}
+	a.logger.Error("whatsapp account has more than one stored device: treated as logged out", "account_id", accountID, "devices", ids)
+	return nil, nil
 }
 
 // Disconnect unlinks the account of the sector from the phone and deletes its
