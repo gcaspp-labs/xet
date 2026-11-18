@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/prototype/PasswordInput'
 import { useCurrentUser, useLogin } from '@/lib/auth'
 
 const schema = z.object({
@@ -70,9 +71,8 @@ export default function LoginPage() {
               </Field>
               <Field data-invalid={!!errors.password}>
                 <FieldLabel htmlFor="password">Senha</FieldLabel>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   aria-invalid={!!errors.password}
                   {...register('password')}

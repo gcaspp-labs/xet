@@ -1,3 +1,4 @@
+import PasswordStatesPage from './prototype/PasswordStatesPage'
 import { Navigate, Outlet, Route, Routes } from 'react-router'
 import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
@@ -45,6 +46,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/prototype/senha" element={<PasswordStatesPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Home />} />
