@@ -331,6 +331,37 @@ test('administrador redefine a senha de um usuário', async ({ page, browser, ba
   await context.close()
 })
 
+test('o olho mostra e oculta a Senha inicial e a Nova senha', async ({ page, baseURL }) => {
+  const { agent } = await seedSector(baseURL!)
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/usuarios')
+
+  await page.getByRole('button', { name: 'Novo usuário' }).click()
+  const create = page.getByRole('dialog', { name: 'Novo usuário' })
+  const initial = create.getByLabel('Senha inicial')
+  await initial.fill(userPassword)
+  await expect(initial).toHaveAttribute('type', 'password')
+  await create.getByRole('button', { name: 'Mostrar senha' }).click()
+  await expect(initial).toHaveAttribute('type', 'text')
+  await create.getByRole('button', { name: 'Ocultar senha' }).click()
+  await expect(initial).toHaveAttribute('type', 'password')
+  await page.keyboard.press('Escape')
+  await expect(create).toBeHidden()
+
+  await page
+    .getByRole('row', { name: new RegExp(agent) })
+    .getByRole('button', { name: /^Editar/ })
+    .click()
+  const edit = page.getByRole('dialog', { name: 'Editar usuário' })
+  const reset = edit.getByLabel('Nova senha')
+  await reset.fill('fraca')
+  await expect(reset).toHaveAttribute('type', 'password')
+  await edit.getByRole('button', { name: 'Mostrar senha' }).click()
+  await expect(reset).toHaveAttribute('type', 'text')
+  await edit.getByRole('button', { name: 'Ocultar senha' }).click()
+  await expect(reset).toHaveAttribute('type', 'password')
+})
+
 test('administrador não desativa a própria conta', async ({ page }) => {
   await signIn(page, admin.email, admin.password)
   await page.goto('/admin/usuarios')

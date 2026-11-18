@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { Navigate, useNavigate } from 'react-router'
 import { z } from 'zod'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { PasswordInput } from '@/components/PasswordInput'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -70,9 +71,8 @@ export default function LoginPage() {
               </Field>
               <Field data-invalid={!!errors.password}>
                 <FieldLabel htmlFor="password">Senha</FieldLabel>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   aria-invalid={!!errors.password}
                   {...register('password')}
