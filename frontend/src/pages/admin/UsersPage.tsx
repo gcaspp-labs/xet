@@ -5,6 +5,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormDialog } from '@/components/FormDialog'
+import { PasswordInput } from '@/components/PasswordInput'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -119,9 +120,8 @@ function ResetPasswordForm({ user }: { user: AdminUser }) {
         <h3 className="title-panel">Redefinir senha</h3>
         <Field data-invalid={!!errors.password || !!reset.error}>
           <FieldLabel htmlFor="reset-password">Nova senha</FieldLabel>
-          <Input
+          <PasswordInput
             id="reset-password"
-            type="password"
             autoComplete="new-password"
             aria-invalid={!!errors.password}
             {...register('password')}
@@ -323,9 +323,8 @@ function UserSheet({
       ) : (
         <Field data-invalid={!!errors.password}>
           <FieldLabel htmlFor="user-password">Senha inicial</FieldLabel>
-          <Input
+          <PasswordInput
             id="user-password"
-            type="password"
             autoComplete="new-password"
             aria-invalid={!!errors.password}
             {...register('password')}

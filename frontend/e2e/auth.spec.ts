@@ -13,6 +13,41 @@ test('senha incorreta mostra aviso', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/)
 })
 
+test('o olho mostra e oculta a senha do login', async ({ page }) => {
+  await page.goto('/login')
+  const password = page.getByLabel('Senha')
+  await password.fill('Qualquer@123')
+  await expect(password).toHaveAttribute('type', 'password')
+
+  await page.getByRole('button', { name: 'Mostrar senha' }).click()
+  await expect(password).toHaveAttribute('type', 'text')
+  await expect(page.getByRole('button', { name: 'Ocultar senha' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  await page.getByRole('button', { name: 'Ocultar senha' }).click()
+  await expect(password).toHaveAttribute('type', 'password')
+  await expect(page.getByRole('button', { name: 'Mostrar senha' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  )
+})
+
+test('senha incorreta volta a esconder a senha mostrada', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('E-mail').fill(admin.email)
+  const password = page.getByLabel('Senha')
+  await password.fill('Errada@123')
+  await page.getByRole('button', { name: 'Mostrar senha' }).click()
+  await expect(password).toHaveAttribute('type', 'text')
+
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await expect(page.getByRole('alert')).toHaveText('E-mail ou senha incorretos.')
+  await expect(password).toHaveAttribute('type', 'password')
+  await expect(page.getByRole('button', { name: 'Mostrar senha' })).toBeVisible()
+})
+
 test('login bloqueia depois de tentativas erradas seguidas', async ({ page }) => {
   const email = `bloqueio.${unique().id}@e2e.test`
   for (let attempt = 0; attempt < 5; attempt++) {
