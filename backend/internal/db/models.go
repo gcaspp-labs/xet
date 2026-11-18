@@ -755,6 +755,7 @@ type Ticket struct {
 	Resolution       *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	TransferReason   *string
 }
 
 type TicketModule struct {

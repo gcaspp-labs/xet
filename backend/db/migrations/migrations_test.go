@@ -349,3 +349,57 @@ func TestInternalNotesAndSpokeWithAreDropped(t *testing.T) {
 		t.Fatalf("audit_logs after migration:\n got %q\nwant %q", got, want)
 	}
 }
+
+// A transferência sem formulário (00029) dispensa órgão, assunto e resolução
+// só na etapa transferida; as transferências antigas, com o formulário,
+// continuam válidas.
+func TestSectorTransferWithoutFormRelaxesOnlyTransfers(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 28); err != nil {
+		t.Fatalf("up to 28: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into organizations (name, municipality_id) select 'Prefeitura', min(id) from municipalities;
+		insert into contacts (name, registered, organization_id) select 'Maria', false, id from organizations;
+		insert into contacts (name, registered) values ('João', false);
+		insert into users (name, nickname, email, password_hash, role, sector_id) values ('Ana', 'Ana', 'ana@exemplo.com', 'x', 'agent', 1);
+		insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at, subject, resolution)
+		select '2026-000001', 1, 1, id, 'closed', 1, 1, 'transferred', now(), now(), now(), now(), 'Contracheque', 'Segunda via' from organizations;`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := p.UpTo(ctx, 29); err != nil {
+		t.Fatalf("up to 29: %v", err)
+	}
+
+	if _, err := db.ExecContext(ctx, `
+		insert into tickets (protocol, sector_id, contact_id, status, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at, transfer_reason)
+		values ('2026-000002', 1, 2, 'closed', 1, 1, 'transferred', now(), now(), now(), now(), 'É com o RH')`); err != nil {
+		t.Fatalf("transfer without form: %v", err)
+	}
+	for name, stmt := range map[string]string{
+		"resolved without form": `insert into tickets (protocol, sector_id, contact_id, status, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at)
+			values ('2026-000003', 1, 2, 'closed', 1, 1, 'resolved', now(), now(), now(), now())`,
+		"blank reason": `update tickets set transfer_reason = ' ' where protocol = '2026-000001'`,
+	} {
+		if _, err := db.ExecContext(ctx, stmt); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+	var n int
+	if err := db.QueryRowContext(ctx, `select count(*) from tickets where closure_type = 'transferred'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("transferred tickets = %d", n)
+	}
+}

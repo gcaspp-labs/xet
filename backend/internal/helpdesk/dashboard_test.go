@@ -824,6 +824,71 @@ func TestDashboardHandlingTimeUsesTheAssignmentAndTheEnd(t *testing.T) {
 	}
 }
 
+// A etapa transferida sem formulário (#243) conta de quando foi assumida até
+// a hora da transferência, gravada como o fim pela própria transferência.
+func TestDashboardHandlingTimeOfASectorTransferEndsAtTheTransfer(t *testing.T) {
+	t.Parallel()
+	d := newDashboard(t)
+	query := filtered("sectorId", d.contab.ID)
+	origin := d.assigned(d.contab.ID, d.orgA, d.anaToken)
+	if resp := d.e.sectorTransfer(origin.ID, d.anaToken, map[string]any{"sectorId": d.rh.ID}); resp.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+	}
+	var endedAt time.Time
+	if err := d.e.Pool.QueryRow(t.Context(), "select ended_at from tickets where id = $1", origin.ID).Scan(&endedAt); err != nil {
+		t.Fatal(err)
+	}
+	// Assumido 40 minutos antes da transferência; o dia da conta é o do encerramento.
+	assignedAt := endedAt.Add(-40 * time.Minute)
+	d.setTimes(origin.ID, ticketTimes{arrived: &assignedAt, assigned: &assignedAt, closed: &dashboardNoon})
+	numbers := d.numbers(d.supToken, query)
+	if numbers["averageHandlingSeconds"] != 2400 || numbers["transferred"] != 1 {
+		t.Fatalf("numbers = %v", numbers)
+	}
+}
+
+// O início vem do relógio do celular e pode estar à frente da transferência.
+// O fim continua sendo a hora da transferência, o início volta para ela e
+// o tempo de atendimento conta só de quando foi assumido até a transferência.
+func TestDashboardHandlingTimeOfASectorTransferWithTheStartAhead(t *testing.T) {
+	t.Parallel()
+	d := newDashboard(t)
+	query := filtered("sectorId", d.contab.ID)
+	origin := d.assigned(d.contab.ID, d.orgA, d.anaToken)
+	if _, err := d.e.Pool.Exec(t.Context(), `update tickets
+		set started_at = now() + interval '1 hour', assigned_at = now() - interval '10 minutes'
+		where id = $1`, origin.ID); err != nil {
+		t.Fatal(err)
+	}
+	if resp := d.e.sectorTransfer(origin.ID, d.anaToken, map[string]any{"sectorId": d.rh.ID}); resp.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	var startedAt, endedAt, closedAt time.Time
+	if err := d.e.Pool.QueryRow(t.Context(), "select started_at, ended_at, closed_at from tickets where id = $1", origin.ID).
+		Scan(&startedAt, &endedAt, &closedAt); err != nil {
+		t.Fatal(err)
+	}
+	if !endedAt.Equal(closedAt) || !startedAt.Equal(endedAt) {
+		t.Fatalf("started %v, ended %v, closed %v", startedAt, endedAt, closedAt)
+	}
+	var changes map[string]map[string]any
+	if err := d.e.Pool.QueryRow(t.Context(), `select changes from audit_logs
+		where ticket_id = $1 and action = 'ticket_transferred_sector'`, origin.ID).Scan(&changes); err != nil {
+		t.Fatal(err)
+	}
+	if changes["started_at"]["from"] == nil || changes["started_at"]["to"] == nil {
+		t.Fatalf("audit = %v", changes)
+	}
+
+	// O dia da conta é o do encerramento; o fim e a hora em que foi assumido ficam como gravados.
+	d.setTimes(origin.ID, ticketTimes{closed: &dashboardNoon})
+	numbers := d.numbers(d.supToken, query)
+	if s, ok := numbers["averageHandlingSeconds"].(int); !ok || s < 600 || s >= 660 || numbers["transferred"] != 1 {
+		t.Fatalf("numbers = %v", numbers)
+	}
+}
+
 func TestDashboardReflectsCorrections(t *testing.T) {
 	t.Parallel()
 	d := newDashboard(t)

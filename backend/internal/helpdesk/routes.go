@@ -77,6 +77,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/tickets/{ticketID}/cancel", h.cancelTicket)
 	r.Get("/tickets/{ticketID}/transfer-sectors", h.listTransferSectors)
 	r.Post("/tickets/{ticketID}/transfer-sector", h.transferSector)
+	r.Post("/tickets/{ticketID}/sector-transfer", h.sectorTransfer)
 	r.Get("/tickets/{ticketID}/modules", h.listTicketModules)
 	r.Post("/tickets/{ticketID}/correct", h.correctTicket)
 	r.Get("/tickets/{ticketID}/corrections", h.listCorrections)
