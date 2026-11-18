@@ -10,12 +10,16 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 - [jornada] O novo responsável passa a responder sem recarregar.
 - [jornada] Pela API, o responsável anterior recebe 403.
 - [jornada] O supervisor transfere o chamado de outra pessoa.
-- [jornada] A transferência para outro setor é sem formulário (setor e motivo opcional, sem exigir cadastro do contato), encerra a origem e cria um chamado na fila do destino.
-- [jornada] O destino vê "Transferido de ...", assume e responde pelo adaptador falso.
-- [jornada] A origem, encerrada como transferida, abre a ficha só leitura com o destino na cadeia de transferências.
-- [jornada] Cancelado o chamado novo, a ficha do destino traz o chamado anterior (setor, motivo e quem transferiu), e o link abre a ficha da origem.
+- [jornada] A transferência para outro setor é sem formulário (setor e motivo opcional, sem exigir cadastro do contato), encerra a origem, cria um chamado na fila do destino e volta a `/chamados` (regra 11 de `docs/features/transfers.md`).
+- [jornada] O contato sem cadastro chega ao destino sem órgão (regra 14).
+- [jornada] O destino vê "Transferido de ..." e, na conversa, o aviso "transferiu o chamado do setor ... para o setor ..." com o motivo; assume e responde pelo adaptador falso.
+- [jornada] A origem, encerrada como transferida, abre a ficha só leitura com o destino na cadeia de transferências, o aviso "transferiu o chamado para o setor ..." com o motivo (regra 18) e sem o botão "Corrigir", mesmo para quem a encerrou.
+- [jornada] Cancelado o chamado novo, a ficha do destino traz o chamado anterior (setor, protocolo, quem transferiu e motivo, sem assunto nem resolução), e o link abre a ficha da origem (regra 16).
+- [jornada] A auditoria `ticket_transferred_sector` guarda o motivo.
 - [não coberto] Devolver à fila (`return.spec.ts`).
 - [não coberto] Abrir o chamado anterior pelo destino, sem poder agir nela (`transfer-sector.spec.ts`).
+- [não coberto] Contato com órgão principal: o chamado chega ao destino com esse órgão (regra 14; `TestSectorTransferTakesTheMainOrganizationOfTheContact`).
+- [não coberto] Transferência sem motivo e quadro de origem de uma transferência antiga, com assunto e resolução (`transfer-sector.spec.ts`).
 - [não coberto] Recusa da transferência para um setor onde o contato já tem chamado aberto (`transfer-sector.spec.ts` e testes de integração).
 - [manual] Primeira mensagem do destino chegando ao celular do contato pelo número do destino. Exige um segundo número de teste.
 
@@ -32,7 +36,7 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 1. O responsável abre "Mais ações" e escolhe "Outro setor".
 2. Escolhe o setor de destino e, se quiser, escreve o motivo. Não há formulário de encerramento, e o contato não precisa de cadastro.
 3. Confirma e volta a `/chamados`. Em Atendimentos, a origem é uma linha do histórico, marcada "Transferido", com "para <setor de destino>".
-4. No setor de destino, o chamado está na fila, com a mensagem "Transferido de ...". Quem assume escreve a primeira mensagem ao contato. O chamado da fila só abre pelo endereço `/chamados/<id>`, até alguém assumir.
+4. No setor de destino, o chamado está na fila, com a mensagem "Transferido de ..." e, na conversa, o aviso da transferência com o motivo. Quem assume escreve a primeira mensagem ao contato. O chamado da fila só abre pelo endereço `/chamados/<id>`, até alguém assumir.
 
 ## Driving it
 
@@ -54,9 +58,9 @@ scripts/verify/scripts/drive.sh transfer
 
 ## Estado final observável
 
-- **Tela:** a conversa com "X transferiu o chamado para Y" e "Supervisor transferiu o chamado de Y para X"; só o responsável atual com a caixa de resposta; o destino com "Transferido de ...".
+- **Tela:** a conversa com "X transferiu o chamado para Y" e "Supervisor transferiu o chamado de Y para X"; só o responsável atual com a caixa de resposta; o destino com "Transferido de ..." e o aviso "X transferiu o chamado do setor A para o setor B" com "Motivo: ..."; a ficha da origem com "X transferiu o chamado para o setor B" e "Motivo: ...", sem "Corrigir"; o quadro "Chamado anterior" com setor, protocolo, quem transferiu e motivo, sem assunto nem resolução.
 - **`tickets`, mesmo setor:** `in_progress`, com o último destino como responsável e as duas mensagens preservadas.
 - **`audit_logs`, mesmo setor:** `ticket_assigned` e dois `ticket_transferred_user`, com autor e `assignee_id` de/para corretos.
-- **`tickets`, outro setor:** origem `closed` com `closure_type = 'transferred'`; destino com `previous_ticket_id` apontando para a origem.
-- **`audit_logs`, outro setor:** `ticket_transferred_sector` na origem.
+- **`tickets`, outro setor:** origem `closed` com `closure_type = 'transferred'`, sem `subject` e com `transfer_reason`; destino com `previous_ticket_id` apontando para a origem e, como o contato não tem cadastro, sem `organization_id`.
+- **`audit_logs`, outro setor:** `ticket_transferred_sector` na origem, com `changes.transfer_reason`.
 - **`tickets`, destino cancelado no fim:** `closed` com `closure_type = 'cancelled'` e `previous_ticket_id` ainda apontando para a origem.

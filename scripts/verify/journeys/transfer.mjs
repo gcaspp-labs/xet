@@ -209,6 +209,12 @@ await journey('transfer', async (t) => {
     await expect(destinationConversation).toContainText(
       `Transferido de ${sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
     )
+    // O aviso da transferência, na ordem do tempo, traz o setor de origem e o motivo.
+    await expect(
+      destinationConversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
+        hasText: `${agent.name} transferiu o chamado do setor ${sector.name} para o setor ${destination.name}`,
+      }),
+    ).toContainText('Motivo: Folha de março é com o outro setor.')
     await t.shot(destinationPage, 'destino-na-fila')
 
     await destinationPage.getByRole('button', { name: 'Assumir', exact: true }).click()
@@ -227,7 +233,8 @@ await journey('transfer', async (t) => {
 
   await t.step('Estado final da transferência entre setores no banco', async () => {
     const chain = t.sql(
-      `select s.name as sector, t.status, t.closure_type, t.previous_ticket_id, t.subject, t.transfer_reason
+      `select s.name as sector, t.status, t.closure_type, t.previous_ticket_id, t.subject, t.transfer_reason,
+              t.organization_id
          from tickets t join sectors s on s.id = t.sector_id
         where t.id = ${otherTicketId} or t.previous_ticket_id = ${otherTicketId} order by t.id`,
     )
@@ -239,6 +246,7 @@ await journey('transfer', async (t) => {
         previous_ticket_id: null,
         subject: null,
         transfer_reason: 'Folha de março é com o outro setor.',
+        organization_id: null,
       },
       {
         sector: destination.name,
@@ -247,13 +255,20 @@ await journey('transfer', async (t) => {
         previous_ticket_id: otherTicketId,
         subject: null,
         transfer_reason: null,
+        // O contato não tem cadastro nem órgão: o chamado chega sem órgão.
+        organization_id: null,
       },
     ])
     t.observe('Origem e destino', chain)
     const audit = t.sql(
-      `select action from audit_logs where ticket_id = ${otherTicketId} order by id`,
+      `select action, changes from audit_logs where ticket_id = ${otherTicketId} order by id`,
     )
-    expect(audit.map((entry) => entry.action)).toContain('ticket_transferred_sector')
+    const transfer = audit.find((entry) => entry.action === 'ticket_transferred_sector')
+    expect(transfer).toBeTruthy()
+    expect(transfer.changes.transfer_reason).toEqual({
+      from: null,
+      to: 'Folha de março é com o outro setor.',
+    })
     t.observe('Auditoria da origem', audit)
   })
 
@@ -268,6 +283,15 @@ await journey('transfer', async (t) => {
     await expect(chain).toContainText(sector.name)
     await expect(chain).toContainText(destination.name)
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+    // Quem encerrou corrigiria um atendimento comum, mas a etapa transferida não tem correção.
+    await expect(agentPage.getByRole('button', { name: 'Corrigir' })).toHaveCount(0)
+    // O aviso da origem mostra o setor de destino, quem transferiu e o motivo.
+    await expect(
+      agentPage
+        .getByRole('region', { name: 'Conversa', exact: true })
+        .getByRole('listitem', { name: 'Registro do chamado' })
+        .filter({ hasText: `${agent.name} transferiu o chamado para o setor ${destination.name}` }),
+    ).toContainText('Motivo: Folha de março é com o outro setor.')
     await t.shot(agentPage, 'ficha-origem')
   })
 
@@ -279,9 +303,14 @@ await journey('transfer', async (t) => {
     await expect(destinationPage.getByText('Chamado cancelado', { exact: true })).toBeVisible()
     await destinationPage.goto(`/atendimentos/${destinationTicketId}`)
     const previous = details(destinationPage).getByRole('region', { name: 'Chamado anterior' })
+    const [origin] = t.sql(`select protocol from tickets where id = ${otherTicketId}`)
     await expect(previous).toContainText(sector.name)
+    await expect(previous).toContainText(origin.protocol)
     await expect(previous).toContainText('Motivo: Folha de março é com o outro setor.')
     await expect(previous).toContainText(`transferido por ${agent.name}`)
+    // Sem formulário, o quadro não mostra assunto nem resolução vazios.
+    await expect(previous).not.toContainText('Assunto:')
+    await expect(previous).not.toContainText('Resolução:')
     await t.shot(destinationPage, 'ficha-destino-com-origem')
     await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
     await expect(destinationPage).toHaveURL(new RegExp(`/atendimentos/${otherTicketId}$`))
