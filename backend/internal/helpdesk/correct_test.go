@@ -3,6 +3,7 @@ package helpdesk_test
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -341,5 +342,52 @@ func TestConcurrentCorrectionsChainTheirChanges(t *testing.T) {
 	}
 	if subject != prev {
 		t.Fatalf("subject %q, last correction %q", subject, prev)
+	}
+}
+
+// A etapa transferida para outro setor não tem correção: nem a nova, sem
+// formulário, nem a antiga, com assunto e resolução (spec #243).
+func TestTransferredStepIsNotCorrected(t *testing.T) {
+	t.Parallel()
+	for name, withForm := range map[string]bool{"without form": false, "old, with form": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := newSectorTransfer(t)
+			e := c.e
+			var resp response
+			if withForm {
+				resp = e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh))
+			} else {
+				resp = e.sectorTransfer(c.ticket.ID, c.anaToken, map[string]any{"sectorId": c.rh})
+			}
+			if resp.Status != http.StatusOK {
+				t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
+			}
+			before := e.originStep(c.ticket.ID)
+			actionsBefore, _ := c.ticketActions()
+
+			body := map[string]any{
+				"subject": "Outro assunto", "resolution": "Outra resolução.",
+				"moduleIds": c.modules, "organizationId": c.org,
+				"startedAt": c.ticket.ArrivedAt.Add(-30 * time.Minute).Truncate(time.Minute),
+				"endedAt":   time.Now().Add(-10 * time.Minute).Truncate(time.Minute),
+				"reason":    "Tentativa de correção.",
+			}
+			// Nem quem transferiu nem a supervisão corrigem.
+			for who, token := range map[string]string{"who transferred": c.anaToken, "supervisor": c.supToken, "admin": c.adminToken} {
+				resp := e.correct(c.ticket.ID, token, body)
+				if resp.Status != http.StatusConflict || resp.Body["error"] != "Chamado transferido para outro setor não é corrigido." {
+					t.Fatalf("%s: status %d, body %v", who, resp.Status, resp.Body)
+				}
+			}
+
+			// Nada é gravado: nem dados, nem auditoria.
+			if after := e.originStep(c.ticket.ID); !reflect.DeepEqual(after, before) {
+				t.Fatalf("origin changed: %+v, was %+v", after, before)
+			}
+			if actions, _ := c.ticketActions(); fmt.Sprint(actions) != fmt.Sprint(actionsBefore) {
+				t.Fatalf("audit actions = %v, was %v", actions, actionsBefore)
+			}
+		})
 	}
 }

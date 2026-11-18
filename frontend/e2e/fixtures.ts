@@ -376,6 +376,69 @@ export async function seedClosedTicket(baseURL: string) {
   return { ticketId: ticket.id, agent, otherAgent, supervisor, sector, modules }
 }
 
+// Um chamado da origem transferido para outro setor. Sem `withForm`, pela rota `sector-transfer`
+// (sem formulário: sem assunto, resolução nem módulos); com ele, como as transferências antigas,
+// pela rota `transfer-sector`, com assunto e resolução.
+export async function seedTransferredTicket(baseURL: string, options: { withForm?: boolean } = {}) {
+  const origin = await seedSector(baseURL)
+  const destination = await seedSector(baseURL)
+  const { id, phone } = unique()
+  const contact = `Lúcia ${id}`
+  const [organization] = await seedDirectory(
+    baseURL,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: contact, phone, organization: 0, sector: origin.sector.id }],
+  )
+
+  const api = await request.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
+  for (const sectorId of [origin.sector.id, destination.sector.id]) {
+    ok(await api.post(`/api/sectors/${sectorId}/connection`))
+    ok(await api.post(`/api/test/messaging/sectors/${sectorId}/pair`))
+  }
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${origin.sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
+  ok(
+    await api.post(`/api/test/messaging/sectors/${origin.sector.id}/receive`, {
+      data: { externalMessageId: `E2E-${id}`, phone, contactName: contact, body: 'Folha de março' },
+    }),
+  )
+  await api.dispose()
+
+  const agentApi = await request.newContext({ baseURL })
+  ok(
+    await agentApi.post('/api/auth/login', {
+      data: { email: origin.agent, password: userPassword },
+    }),
+  )
+  const [ticket] = await json<{ id: number }[]>(
+    await agentApi.get(`/api/sectors/${origin.sector.id}/tickets`),
+  )
+  ok(await agentApi.post(`/api/tickets/${ticket.id}/assign`))
+  if (options.withForm) {
+    ok(
+      await agentApi.post(`/api/tickets/${ticket.id}/transfer-sector`, {
+        data: {
+          subject: 'Folha de março',
+          resolution: 'Encaminhado ao setor responsável.',
+          moduleIds: [module.id],
+          organizationId: organization.id,
+          sectorId: destination.sector.id,
+        },
+      }),
+    )
+  } else {
+    ok(
+      await agentApi.post(`/api/tickets/${ticket.id}/sector-transfer`, {
+        data: { sectorId: destination.sector.id },
+      }),
+    )
+  }
+  await agentApi.dispose()
+  return { ticketId: ticket.id, contact, origin, destination }
+}
+
 // Abre o menu "Mais ações" (⋯) do cabeçalho de Chamados e escolhe um item.
 export async function chooseAction(page: Page, name: string) {
   await page.getByRole('button', { name: 'Mais ações' }).click()

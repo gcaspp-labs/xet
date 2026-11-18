@@ -52,6 +52,7 @@ var (
 	ErrReasonRequired = errors.New("reason missing")
 	ErrNoChanges      = errors.New("correction changes nothing")
 	ErrCancelled      = errors.New("ticket cancelled")
+	ErrTransferred    = errors.New("ticket transferred to another sector")
 )
 
 var (

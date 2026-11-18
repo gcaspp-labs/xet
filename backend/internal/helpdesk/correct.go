@@ -74,6 +74,11 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 		if t.ClosureType.ClosureType == db.ClosureTypeCancelled {
 			return ErrCancelled
 		}
+		// A etapa transferida para outro setor não tem formulário para corrigir,
+		// nem a antiga, que tem (spec #243).
+		if t.ClosureType.ClosureType == db.ClosureTypeTransferred {
+			return ErrTransferred
+		}
 		if (t.ClosedByID == nil || *t.ClosedByID != actor.ID) && !actor.HasRole(db.UserRoleSupervisor, db.UserRoleAdmin) {
 			return ErrCannotCorrect
 		}
