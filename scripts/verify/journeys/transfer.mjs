@@ -2,17 +2,16 @@
 import { expect, journey } from '../scripts/journey-lib.mjs'
 
 await journey('transfer', async (t) => {
-  const { sector, destination, joana, lucia, organization } = await t.step(
-    'Preparar dois setores conectados, pessoas, módulo, órgão e dois chamados na fila',
+  const { sector, destination, joana, lucia } = await t.step(
+    'Preparar dois setores conectados, pessoas e dois chamados na fila',
     async () => {
-      const seeded = await t.seedSector({ agents: 2, modules: ['Folha'] })
+      const seeded = await t.seedSector({ agents: 2 })
       const other = await t.seedSector({ agents: 1 })
-      const org = await t.seedOrganization()
       const first = t.customer('Joana Cliente')
       const second = t.customer('Lúcia Cliente')
       await t.phone(seeded.id).receive(first, 'Preciso da segunda via da guia')
       await t.phone(seeded.id).receive(second, 'Folha de março')
-      return { sector: seeded, destination: other, joana: first, lucia: second, organization: org }
+      return { sector: seeded, destination: other, joana: first, lucia: second }
     },
   )
   const [agent, colleague] = sector.agents
@@ -166,26 +165,19 @@ await journey('transfer', async (t) => {
     },
   )
 
-  await t.step('Transferência para outro setor exige o formulário e encerra a origem', async () => {
+  await t.step('Transferência para outro setor é sem formulário e encerra a origem', async () => {
     await chooseAction(agentPage, 'Outro setor')
     const sheet = agentPage.getByRole('dialog', { name: 'Transferir para outro setor' })
+    // Só o setor e o motivo opcional: nada de formulário de encerramento nem de cadastro do contato.
+    await expect(sheet.getByLabel('Assunto')).toHaveCount(0)
+    await expect(sheet.getByRole('button', { name: 'Cadastrar contato' })).toHaveCount(0)
     await sheet.getByRole('button', { name: 'Transferir' }).click()
-    await expect(sheet).toContainText('Escolha o setor de destino.')
-    await expect(sheet).toContainText('Informe o assunto.')
-    await t.shot(agentPage, 'formulario-outro-setor')
-    await sheet.getByRole('button', { name: 'Cadastrar contato' }).click()
-    const contactSheet = agentPage.getByRole('dialog', { name: 'Editar contato' })
-    await contactSheet.getByLabel('Órgão').fill(organization.name)
-    await agentPage.getByRole('option', { name: organization.name }).click()
-    await contactSheet.getByRole('button', { name: 'Salvar' }).click()
-    await expect(agentPage.getByText('Contato salvo')).toBeVisible()
-    await sheet.getByLabel('Assunto').fill('Folha de março')
-    await sheet.getByLabel('Resolução').fill('Encaminhado ao setor responsável.')
-    await sheet.getByRole('checkbox', { name: 'Folha' }).click()
+    await expect(sheet.getByRole('alert')).toContainText('Escolha o setor de destino.')
+    await t.shot(agentPage, 'janela-outro-setor')
     await sheet.getByLabel('Setor de destino').click()
     await agentPage.getByRole('option', { name: destination.name }).click()
+    await sheet.getByLabel('Motivo da transferência (opcional)').fill('Folha de março é com o outro setor.')
     await sheet.getByRole('button', { name: 'Transferir' }).click()
-    await sheet.getByRole('button', { name: 'Não adicionar' }).click()
     await expect(agentPage.getByText('Chamado transferido para outro setor')).toBeVisible()
     await expect(agentPage).toHaveURL(/\/chamados$/)
     // O chamado de origem, encerrado como transferido, vai para o histórico em Atendimentos.
@@ -235,7 +227,7 @@ await journey('transfer', async (t) => {
 
   await t.step('Estado final da transferência entre setores no banco', async () => {
     const chain = t.sql(
-      `select s.name as sector, t.status, t.closure_type, t.previous_ticket_id, t.subject
+      `select s.name as sector, t.status, t.closure_type, t.previous_ticket_id, t.subject, t.transfer_reason
          from tickets t join sectors s on s.id = t.sector_id
         where t.id = ${otherTicketId} or t.previous_ticket_id = ${otherTicketId} order by t.id`,
     )
@@ -245,7 +237,8 @@ await journey('transfer', async (t) => {
         status: 'closed',
         closure_type: 'transferred',
         previous_ticket_id: null,
-        subject: 'Folha de março',
+        subject: null,
+        transfer_reason: 'Folha de março é com o outro setor.',
       },
       {
         sector: destination.name,
@@ -253,6 +246,7 @@ await journey('transfer', async (t) => {
         closure_type: null,
         previous_ticket_id: otherTicketId,
         subject: null,
+        transfer_reason: null,
       },
     ])
     t.observe('Origem e destino', chain)
@@ -286,8 +280,7 @@ await journey('transfer', async (t) => {
     await destinationPage.goto(`/atendimentos/${destinationTicketId}`)
     const previous = details(destinationPage).getByRole('region', { name: 'Chamado anterior' })
     await expect(previous).toContainText(sector.name)
-    await expect(previous).toContainText('Folha de março')
-    await expect(previous).toContainText('Encaminhado ao setor responsável.')
+    await expect(previous).toContainText('Motivo: Folha de março é com o outro setor.')
     await expect(previous).toContainText(`transferido por ${agent.name}`)
     await t.shot(destinationPage, 'ficha-destino-com-origem')
     await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()

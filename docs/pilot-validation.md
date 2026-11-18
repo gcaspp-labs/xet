@@ -28,7 +28,7 @@ Legenda da última coluna: **Automatizado** tem teste passando e falta conferir 
 | 8 | Formulário ao finalizar e registro persistido | `TestCloseRecordsTheClosingForm` | `closing.spec` | Não depende | Automatizado |
 | 9 | Vários módulos do setor e correção de horários com auditoria | `TestCorrectionRecordsAuthorReasonAndChanges` | `closing.spec`, `correction.spec` | Não depende | Automatizado |
 | 10 | Transferir entre atendentes preservando o histórico | `TestTransferMovesTheReplyToTheNewAssignee` | `transfer.spec` | Não depende | Automatizado |
-| 11 | Transferência entre setores com número de destino, chamados relacionados e resolução da origem | `TestTransferBetweenSectorsClosesOriginAndQueuesLinkedTicket` | `transfer-sector.spec` | Precisa de um segundo número: a primeira mensagem do destino chega pelo número dele | Pendente |
+| 11 | Transferência entre setores com número de destino, chamados relacionados e resolução da origem | `TestSectorTransferWithoutFormClosesOriginAndQueuesLinkedTicket` | `transfer-sector.spec` | Precisa de um segundo número: a primeira mensagem do destino chega pelo número dele | Pendente |
 | 12 | Novo chamado quando há mensagem após o encerramento | `TestMessageAfterClosingByTheFormOpensNewTicket` | Sem teste próprio | Não depende | Automatizado |
 | 13 | Corrigir encerrados com motivo e auditoria, só responsável e supervisores | `TestOnlyWhoClosedAndSupervisionCorrect`, `TestCorrectionWithoutReasonIsRefused` | `correction.spec` | Não depende | Automatizado |
 | 14 | Ignorar grupos e registrar mensagens enviadas pelo celular | `TestGroupMessagesAreIgnored`, `TestMessagesSentFromThePhone` | Sem teste próprio | Mensagem em grupo não aparece; resposta pelo celular aparece no chamado | Pendente |

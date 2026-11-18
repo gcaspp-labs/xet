@@ -164,8 +164,7 @@ func (d *dashboardFixture) resolved(org int64, token string, modules ...int64) t
 func (d *dashboardFixture) transferred(org int64, token string, modules ...int64) (origin, destination ticketRow) {
 	d.e.T.Helper()
 	origin = d.assigned(d.contab.ID, org, token)
-	form := with(d.form(org, modules...), "sectorId", d.rh.ID)
-	if resp := d.e.transferSector(origin.ID, token, form); resp.Status != http.StatusOK {
+	if resp := d.e.legacyTransfer(origin.ID, token, d.rh.ID, org, "Dúvida", "Resolvida.", modules...); resp.Status != http.StatusOK {
 		d.e.T.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
 	}
 	return origin, d.openTicket(d.rh.ID, origin.ContactID)

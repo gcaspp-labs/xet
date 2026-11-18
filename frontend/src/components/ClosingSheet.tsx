@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -11,24 +11,10 @@ import { RegisterContactSheet } from '@/components/ContactSheet'
 import { FormDialog } from '@/components/FormDialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { FieldDescription } from '@/components/ui/field'
 import { useClosingQuestions } from '@/hooks/use-closing-questions'
 import { checkPeriod, closingShape, localInput } from '@/lib/closing'
-import {
-  type TicketDetail,
-  ticketKey,
-  useCloseTicket,
-  useClosingForm,
-  useTransferSector,
-  useTransferSectors,
-} from '@/lib/conversation'
+import { type TicketDetail, ticketKey, useCloseTicket, useClosingForm } from '@/lib/conversation'
 import { formatPhone } from '@/lib/format'
 
 const schema = z.object(closingShape).superRefine(checkPeriod)
@@ -38,31 +24,24 @@ type Values = z.output<typeof schema>
 
 // Janela de encerramento (spec.md, Formulário de encerramento): assunto,
 // resolução e módulos obrigatórios; contato, atendente e setor automáticos;
-// órgão, início e fim sugeridos e editáveis. Com `transfer`, o mesmo
-// formulário encerra a etapa e transfere o chamado para outro setor
-// (spec.md, Transferências entre setores). O backend confere tudo de novo.
+// órgão, início e fim sugeridos e editáveis. O backend confere tudo de novo.
+// A transferência para outro setor não passa por aqui: tem janela própria
+// (SectorTransferSheet).
 export function ClosingSheet({
   ticket,
   open,
   onOpenChange,
-  transfer = false,
   successTo = '/chamados',
 }: {
   ticket: TicketDetail
   open: boolean
   onOpenChange: (open: boolean) => void
   successTo?: string
-  transfer?: boolean
 }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { data: form, refetch: refetchForm } = useClosingForm(ticket.id, open)
   const close = useCloseTicket(ticket.id, ticket.sector.id)
-  const transferSector = useTransferSector(ticket.id, ticket.sector.id)
-  const save = transfer ? transferSector : close
-  const { data: sectors } = useTransferSectors(ticket.id, open && transfer)
-  const [sectorId, setSectorId] = useState<string | null>(null)
-  const [sectorError, setSectorError] = useState<string>()
   const [registering, setRegistering] = useState(false)
   // Horários sugeridos na abertura; só os alterados vão ao backend.
   const [suggested] = useState(() => ({
@@ -109,7 +88,7 @@ export function ClosingSheet({
     subjectModuleId?: number,
     solutionModuleId?: number,
   ) => {
-    if (save.isPending || (transfer && !sectorId)) {
+    if (close.isPending) {
       return
     }
     const body = {
@@ -129,9 +108,9 @@ export function ClosingSheet({
       solutionModuleId,
     }
     const onSuccess = () => {
-      toast.success(transfer ? 'Chamado transferido para outro setor' : 'Chamado encerrado')
+      toast.success('Chamado encerrado')
       onOpenChange(false)
-      // A próxima ação depois de encerrar ou transferir está no painel.
+      // A próxima ação depois de encerrar está no painel.
       void navigate(successTo)
     }
     // Se o servidor recusar, o aviso aparece no formulário.
@@ -160,11 +139,7 @@ export function ClosingSheet({
         questions.reset()
       }
     }
-    if (transfer) {
-      transferSector.mutate({ ...body, sectorId: Number(sectorId) }, { onSuccess, onError })
-    } else {
-      close.mutate(body, { onSuccess, onError })
-    }
+    close.mutate(body, { onSuccess, onError })
   }
 
   // Assunto fora da lista do setor e resolução fora da lista do assunto:
@@ -177,24 +152,13 @@ export function ClosingSheet({
 
   const onSubmit = handleSubmit(
     (values) => {
-      if (save.isPending || (transfer && !sectorId)) {
+      if (close.isPending) {
         return
       }
       questions.start(values)
     },
     () => undefined,
   )
-
-  // O destino é conferido junto com os campos do formulário.
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    setSectorError(transfer && !sectorId ? 'Escolha o setor de destino.' : undefined)
-    void onSubmit(event)
-  }
-
-  const sectorItems = (sectors ?? []).map((sector) => ({
-    value: String(sector.id),
-    label: sector.name,
-  }))
 
   const row = (label: string, value: string) => (
     <div>
@@ -209,24 +173,19 @@ export function ClosingSheet({
         locked
         open={open}
         onOpenChange={onOpenChange}
-        title={transfer ? 'Transferir para outro setor' : 'Encerrar chamado'}
-        description={
-          transfer
-            ? 'A etapa deste setor é encerrada com o registro do atendimento, e um novo chamado entra na fila do destino.'
-            : 'O chamado só é encerrado depois de salvar o registro do atendimento.'
-        }
-        submitLabel={transfer ? 'Transferir' : 'Encerrar'}
-        pending={save.isPending}
-        error={save.error?.message}
-        onSubmit={submit}
+        title="Encerrar chamado"
+        description="O chamado só é encerrado depois de salvar o registro do atendimento."
+        submitLabel="Encerrar"
+        pending={close.isPending}
+        error={close.error?.message}
+        onSubmit={onSubmit}
         question={questions.question}
       >
         {!ticket.contact.registered && (
           <Alert variant="warning">
             <TriangleAlert strokeWidth={1.7} aria-hidden />
             <AlertDescription className="flex flex-col items-start gap-2">
-              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de{' '}
-              {transfer ? 'transferir' : 'encerrar'}.
+              Contato não cadastrado. Cadastre o contato e vincule-o a um órgão antes de encerrar.
               <Button
                 type="button"
                 variant="outline"
@@ -248,31 +207,6 @@ export function ClosingSheet({
           {row('Setor', ticket.sector.name)}
           {row('Atendente', ticket.assignee?.name ?? '')}
         </dl>
-        {transfer && (
-          <Field data-invalid={!!sectorError}>
-            <FieldLabel htmlFor="transfer-sector">Setor de destino</FieldLabel>
-            <Select
-              items={sectorItems}
-              value={sectorId}
-              onValueChange={(value) => setSectorId(value)}
-            >
-              <SelectTrigger id="transfer-sector" aria-invalid={!!sectorError}>
-                <SelectValue placeholder="Escolha o setor" />
-              </SelectTrigger>
-              <SelectContent>
-                {sectorItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {sectors && sectors.length === 0 && (
-              <FieldDescription>Não há outro setor ativo.</FieldDescription>
-            )}
-            <FieldError errors={sectorError ? [{ message: sectorError }] : []} />
-          </Field>
-        )}
         <FormProvider {...methods}>
           <ClosingFields
             idPrefix="closing"

@@ -495,17 +495,18 @@ for (const action of ['Encerrar', 'Outro setor', 'Transferir'] as const) {
       const sheet = page.getByRole('dialog', {
         name: action === 'Encerrar' ? 'Encerrar chamado' : 'Transferir para outro setor',
       })
-      await sheet.getByLabel('Assunto').fill('Folha de março')
-      await sheet.getByLabel('Resolução').fill('Solicitação atendida.')
-      await sheet.getByRole('checkbox', { name: 'Folha' }).click()
       if (action === 'Outro setor') {
+        // Sem formulário: só o setor de destino.
         await sheet.getByLabel('Setor de destino').click()
         await page.getByRole('option', { name: destination.sector.name }).click()
+        await sheet.getByRole('button', { name: 'Transferir' }).click()
+      } else {
+        await sheet.getByLabel('Assunto').fill('Folha de março')
+        await sheet.getByLabel('Resolução').fill('Solicitação atendida.')
+        await sheet.getByRole('checkbox', { name: 'Folha' }).click()
+        await sheet.getByRole('button', { name: 'Encerrar' }).click()
+        await sheet.getByRole('button', { name: 'Não adicionar' }).click()
       }
-      await sheet
-        .getByRole('button', { name: action === 'Encerrar' ? 'Encerrar' : 'Transferir' })
-        .click()
-      await sheet.getByRole('button', { name: 'Não adicionar' }).click()
     }
     await expect(page).toHaveURL(/\/chamados$/)
     await expect(page.getByText('Sem atendimentos disponíveis')).toBeVisible()

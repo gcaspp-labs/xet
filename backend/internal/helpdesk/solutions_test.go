@@ -620,42 +620,6 @@ func TestRefusedClosingAddsNoSolution(t *testing.T) {
 	}
 }
 
-func TestTransferWithAddSolutionAddsItToTheListOfTheOrigin(t *testing.T) {
-	t.Parallel()
-	c := newSectorTransfer(t)
-	e := c.e
-	subject := e.createSubject(c.sector.ID, c.supToken, "Contracheque")
-
-	// Sem addSolution, nada entra; a transferência recusada também não deixa item.
-	e.connectSector(c.rh)
-	e.receive(c.rh, text("RH-1", "5511988887777@s.whatsapp.net", "5511988887777", "Férias"))
-	if resp := e.transferSector(c.ticket.ID, c.anaToken, with(c.transferForm(c.rh), "addSolution", true)); resp.Status != http.StatusConflict {
-		t.Fatalf("refused transfer: status %d, body %v", resp.Status, resp.Body)
-	}
-	if n := e.Count("subject_solutions"); n != 0 {
-		t.Fatalf("solutions after refusal = %d", n)
-	}
-
-	other := e.Sector("Compras")
-	if resp := e.transferSector(c.ticket.ID, c.anaToken, with(c.transferForm(other.ID), "addSolution", true)); resp.Status != http.StatusOK {
-		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
-	}
-	wantSolutions(t, e.solutionBodies(subject), "Enviada a segunda via.")
-	e.wantSolutionCreatedBy(subject, c.ana.ID, "Enviada a segunda via.")
-}
-
-func TestTransferWithoutAddSolutionLeavesTheListAlone(t *testing.T) {
-	t.Parallel()
-	c := newSectorTransfer(t)
-	c.e.createSubject(c.sector.ID, c.supToken, "Contracheque")
-	if resp := c.e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)); resp.Status != http.StatusOK {
-		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
-	}
-	if n := c.e.Count("subject_solutions"); n != 0 {
-		t.Fatalf("solutions = %d", n)
-	}
-}
-
 func TestCorrectionWithAddSolutionAddsItToTheList(t *testing.T) {
 	t.Parallel()
 	c := newCorrection(t)
@@ -748,19 +712,6 @@ func TestResolutionOverTheLimitDoesNotEnterAndTheFormIsSaved(t *testing.T) {
 		form := with(with(c.form(c.org), "resolution", long), "addSolution", true)
 		if resp := c.e.closeForm(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusOK {
 			t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
-		}
-		if n := c.e.Count("subject_solutions"); n != 0 {
-			t.Fatalf("solutions = %d", n)
-		}
-		wantResolution(t, c.e, c.ticket.ID, long)
-	})
-	t.Run("transfer", func(t *testing.T) {
-		t.Parallel()
-		c := newSectorTransfer(t)
-		c.e.createSubject(c.sector.ID, c.supToken, "Contracheque")
-		form := with(with(c.transferForm(c.rh), "resolution", long), "addSolution", true)
-		if resp := c.e.transferSector(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusOK {
-			t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
 		}
 		if n := c.e.Count("subject_solutions"); n != 0 {
 			t.Fatalf("solutions = %d", n)

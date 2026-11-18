@@ -144,11 +144,8 @@ async function seedHistory(baseURL: string) {
   )
   await step(first, 3, async (ticket) =>
     ok(
-      await first.post(`/api/tickets/${ticket.id}/transfer-sector`, {
-        data: {
-          ...closing(3, 'Folha de março', [modules[1].id]),
-          sectorId: destination.sector.id,
-        },
+      await first.post(`/api/tickets/${ticket.id}/sector-transfer`, {
+        data: { sectorId: destination.sector.id },
       }),
     ),
   )
@@ -280,7 +277,7 @@ test('busca e filtros no servidor, sem diferenciar acentos e maiúsculas, guarda
 }) => {
   const h = await seedHistory(baseURL!)
   await openList(page, h.origin.supervisor, userPassword)
-  const [rita, paulo, lucia, marcos] = h.people
+  const [rita, paulo, lucia] = h.people
   const search = page.getByRole('searchbox', { name: 'Buscar chamados' })
 
   // Busca: protocolo, contato, telefone ou órgão.
@@ -318,13 +315,13 @@ test('busca e filtros no servidor, sem diferenciar acentos e maiúsculas, guarda
   await module.fill('patrimonio')
   await expect(page.getByRole('option', { name: 'Patrimônio' })).toBeVisible()
   await page.keyboard.press('Escape')
-  await expect(bodyRows(page)).toHaveCount(2)
-  await expect(bodyRows(page).first()).toContainText(marcos.name)
-  await expect(bodyRows(page).last()).toContainText(paulo.name)
+  // O transferido (Marcos) não tem módulos: só Paulo atendeu Patrimônio.
+  await expect(bodyRows(page)).toHaveCount(1)
+  await expect(bodyRows(page).first()).toContainText(paulo.name)
   // Um texto que está no nome de mais de um módulo traz os chamados de qualquer um deles, uma vez só.
   await module.fill('o')
   await page.keyboard.press('Escape')
-  await expect(bodyRows(page)).toHaveCount(3)
+  await expect(bodyRows(page)).toHaveCount(2)
   await module.fill('')
   await page.keyboard.press('Escape')
   await expect(bodyRows(page)).toHaveCount(4)
@@ -444,9 +441,9 @@ test('colunas ordenam no servidor e a ordem fica no endereço', async ({ page, b
   await header('Situação').click()
   await expect(bodyRows(page).first()).toContainText('Cancelado')
   await expect(bodyRows(page).last()).toContainText('Transferido')
-  // Assunto: os sem assunto (cancelado) ficam por último.
+  // Assunto: os sem assunto (cancelado e transferido) ficam por último.
   await header('Assunto').click()
-  await order(rita, paulo, marcos, lucia)
+  await order(rita, paulo, lucia, marcos)
   // Responsável e órgão.
   await header('Órgão').click()
   await expect(bodyRows(page).first()).toContainText(`Prefeitura de Itu ${h.id}`)

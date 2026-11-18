@@ -22,6 +22,7 @@ import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
 import NotFoundPage from '@/pages/NotFoundPage'
+import { SectorTransferSheet } from '@/components/SectorTransferSheet'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -304,13 +305,11 @@ export default function ConversasPage() {
             onOpenChange={(open) => !open && setAction('')}
             successTo="/chamados"
           />
-          <ClosingSheet
-            key={`sector-${closingKey}`}
+          <SectorTransferSheet
             ticket={ticket}
             open={action === 'sector'}
             onOpenChange={(open) => !open && setAction('')}
-            successTo="/chamados"
-            transfer
+            onSuccess={leave}
           />
           <TransferSheet
             ticket={ticket}

@@ -356,7 +356,7 @@ func TestTransferredStepIsNotCorrected(t *testing.T) {
 			e := c.e
 			var resp response
 			if withForm {
-				resp = e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh))
+				resp = e.legacyTransfer(c.ticket.ID, c.anaToken, c.rh, c.org, "Contracheque", "Enviada a segunda via.", c.modules...)
 			} else {
 				resp = e.sectorTransfer(c.ticket.ID, c.anaToken, map[string]any{"sectorId": c.rh})
 			}

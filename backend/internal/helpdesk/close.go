@@ -100,7 +100,7 @@ func (s *Service) Close(ctx context.Context, actor auth.User, ticketID int64, in
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		var changes audit.Changes
-		ticket, changes, err = closeLocked(ctx, q, actor, ticketID, in, db.ClosureTypeResolved)
+		ticket, changes, err = closeLocked(ctx, q, actor, ticketID, in)
 		if err != nil {
 			return err
 		}
@@ -132,7 +132,7 @@ func normalizeClosing(in Closing) (Closing, error) {
 // the changes for the audit. The ticket is locked, so no message or transfer
 // crosses the closing, and the contact is locked for share, so its
 // registration does not change meanwhile.
-func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID int64, in Closing, closure db.ClosureType) (db.Ticket, audit.Changes, error) {
+func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID int64, in Closing) (db.Ticket, audit.Changes, error) {
 	t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
 	if err != nil {
 		return db.Ticket{}, nil, fmt.Errorf("lock ticket: %w", err)
@@ -175,7 +175,7 @@ func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID i
 
 	ticket, err := db.AsTicket(q.CloseTicket(ctx, db.CloseTicketParams{
 		ID:             t.ID,
-		ClosureType:    closure,
+		ClosureType:    db.ClosureTypeResolved,
 		Subject:        &in.Subject,
 		Resolution:     &in.Resolution,
 		OrganizationID: &in.OrganizationID,

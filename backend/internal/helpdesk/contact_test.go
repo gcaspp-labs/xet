@@ -97,12 +97,11 @@ func TestContactNameRefusals(t *testing.T) {
 	}
 }
 
-// Só com o nome, encerrar e transferir continuam exigindo o cadastro completo,
-// que depois completa o chamado aberto, com auditoria.
+// Só com o nome, encerrar continua exigindo o cadastro completo, que depois
+// completa o chamado aberto, com auditoria.
 func TestContactNameDoesNotReplaceTheRegistration(t *testing.T) {
 	t.Parallel()
-	c := sectorTransfer{closing: newClosing(t)}
-	c.rh = *c.e.userSector("rh@exemplo.com")
+	c := newClosing(t)
 	e := c.e
 	if resp := e.saveContactName(c.ticket.ContactID, c.anaToken, "Maria Souza"); resp.Status != http.StatusOK {
 		t.Fatalf("save name: status %d, body %v", resp.Status, resp.Body)
@@ -116,11 +115,6 @@ func TestContactNameDoesNotReplaceTheRegistration(t *testing.T) {
 	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Cadastre o contato e vincule-o a um órgão antes de encerrar." {
 		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
 	}
-	resp = e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh))
-	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Cadastre o contato e vincule-o a um órgão antes de transferir." {
-		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
-	}
-
 	// O cadastro completo tira o aviso e dá o órgão ao chamado, que agora encerra.
 	events := e.subscribe(c.supToken)
 	c.register()

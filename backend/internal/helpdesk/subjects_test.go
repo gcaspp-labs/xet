@@ -457,17 +457,6 @@ func TestSubjectOverTheLimitDoesNotEnterAndTheFormIsSaved(t *testing.T) {
 			t.Fatalf("ticket = %s, subject %v", ticket.Status, ticket.Subject)
 		}
 	})
-	t.Run("transfer", func(t *testing.T) {
-		t.Parallel()
-		c := newSectorTransfer(t)
-		form := with(with(c.transferForm(c.rh), "subject", long), "addSubject", true)
-		if resp := c.e.transferSector(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusOK {
-			t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
-		}
-		if n := c.e.Count("subjects"); n != 0 {
-			t.Fatalf("subjects = %d", n)
-		}
-	})
 	t.Run("correction", func(t *testing.T) {
 		t.Parallel()
 		c := newCorrection(t)
@@ -489,48 +478,6 @@ func TestSubjectOverTheLimitDoesNotEnterAndTheFormIsSaved(t *testing.T) {
 		}
 		wantSubjects(t, c.e.subjectNames(c.sector.ID), exact)
 	})
-}
-
-func TestTransferWithAddSubjectAddsItToTheListOfTheOrigin(t *testing.T) {
-	t.Parallel()
-	c := newSectorTransfer(t)
-	e := c.e
-
-	form := with(c.transferForm(c.rh), "addSubject", true)
-	if resp := e.transferSector(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusOK {
-		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
-	}
-	wantSubjects(t, e.subjectNames(c.sector.ID), "Contracheque")
-	wantSubjects(t, e.subjectNames(c.rh))
-	wantSubjectCreatedBy(t, e.subjectAudit(c.sector.ID), c.ana.ID)
-}
-
-func TestTransferWithoutAddSubjectLeavesTheListAlone(t *testing.T) {
-	t.Parallel()
-	c := newSectorTransfer(t)
-	if resp := c.e.transferSector(c.ticket.ID, c.anaToken, c.transferForm(c.rh)); resp.Status != http.StatusOK {
-		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
-	}
-	if n := c.e.Count("subjects"); n != 0 {
-		t.Fatalf("subjects = %d", n)
-	}
-}
-
-func TestRefusedTransferAddsNothing(t *testing.T) {
-	t.Parallel()
-	c := newSectorTransfer(t)
-	e := c.e
-	e.connectSector(c.rh)
-	// O contato já tem chamado aberto no destino: a recusa vem depois do encerramento na transação.
-	e.receive(c.rh, text("RH-1", "5511988887777@s.whatsapp.net", "5511988887777", "Férias"))
-
-	form := with(c.transferForm(c.rh), "addSubject", true)
-	if resp := e.transferSector(c.ticket.ID, c.anaToken, form); resp.Status != http.StatusConflict {
-		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
-	}
-	if n := e.Count("subjects"); n != 0 {
-		t.Fatalf("subjects = %d", n)
-	}
 }
 
 func TestCorrectionWithAddSubjectAddsItToTheList(t *testing.T) {

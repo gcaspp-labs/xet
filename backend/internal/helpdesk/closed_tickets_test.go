@@ -467,11 +467,7 @@ func TestClosedTicketsListWhatTheSectorClosed(t *testing.T) {
 	if resp := e.assign(moved.ID, c.anaToken); resp.Status != http.StatusOK {
 		t.Fatalf("assign: status %d", resp.Status)
 	}
-	if resp := e.Do(http.MethodPut, fmt.Sprintf("/api/contacts/%d", moved.ContactID), c.anaToken,
-		map[string]any{"name": "Rui", "phone": "5511977776666", "organizationId": c.org, "sectorIds": []int64{c.sector.ID}}); resp.Status != http.StatusOK {
-		t.Fatalf("register contact: status %d, body %v", resp.Status, resp.Body)
-	}
-	if resp := e.transferSector(moved.ID, c.anaToken, c.transferForm(c.rh)); resp.Status != http.StatusOK {
+	if resp := e.sectorTransfer(moved.ID, c.anaToken, map[string]any{"sectorId": c.rh}); resp.Status != http.StatusOK {
 		t.Fatalf("transfer: status %d, body %v", resp.Status, resp.Body)
 	}
 

@@ -78,7 +78,7 @@ func TestSubjectAuditRecordsModuleOnCreationAndChange(t *testing.T) {
 }
 
 func TestAddingSubjectRejectsChosenModuleDeactivatedBeforeSave(t *testing.T) {
-	for _, flow := range []string{"close", "transfer", "correction"} {
+	for _, flow := range []string{"close", "correction"} {
 		t.Run(flow, func(t *testing.T) {
 			t.Parallel()
 			var c closing
@@ -90,14 +90,10 @@ func TestAddingSubjectRejectsChosenModuleDeactivatedBeforeSave(t *testing.T) {
 				body = with(corrected.data("Corrigir assunto"), "subject", "Novo assunto")
 				save = func() response { return c.e.correct(c.ticket.ID, c.anaToken, body) }
 			} else {
-				transfer := newSectorTransfer(t)
-				c = transfer.closing
-				body = transfer.transferForm(transfer.rh)
-				if flow == "transfer" {
-					save = func() response { return c.e.transferSector(c.ticket.ID, c.anaToken, body) }
-				} else {
-					save = func() response { return c.e.closeForm(c.ticket.ID, c.anaToken, body) }
-				}
+				c = newClosing(t)
+				c.register()
+				body = c.form(c.org)
+				save = func() response { return c.e.closeForm(c.ticket.ID, c.anaToken, body) }
 			}
 			body["addSubject"] = true
 			body["subjectModuleId"] = c.modules[0]

@@ -540,13 +540,13 @@ export function useTransferSectors(ticketId: number, enabled: boolean) {
   })
 }
 
-// Salva o formulário, encerra a etapa como transferida e abre o chamado
-// vinculado na fila do destino; o backend confere tudo como no encerramento.
-export function useTransferSector(ticketId: number, sectorId: number) {
+// Encerra a etapa como transferida, sem formulário, e abre o chamado vinculado
+// na fila do destino; o motivo é opcional. O backend confere tudo de novo.
+export function useSectorTransfer(ticketId: number, sectorId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (body: ClosingInput & { sectorId: number }) =>
-      api<{ id: number; protocol: string }>(`/tickets/${ticketId}/transfer-sector`, {
+    mutationFn: (body: { sectorId: number; reason?: string }) =>
+      api<{ id: number; protocol: string }>(`/tickets/${ticketId}/sector-transfer`, {
         method: 'POST',
         body,
       }),
