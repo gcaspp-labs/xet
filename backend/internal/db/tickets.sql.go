@@ -655,7 +655,9 @@ select
     t.closed_by_id, cb.name as closed_by_name, t.closure_type,
     p.id as previous_id, p.protocol as previous_protocol, ps.name as previous_sector_name,
     p.subject as previous_subject, p.resolution as previous_resolution, pb.name as previous_closed_by_name,
-    n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name
+    p.transfer_reason as previous_transfer_reason,
+    n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name,
+    t.transfer_reason as next_transfer_reason
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
@@ -672,40 +674,42 @@ where t.id = $1
 `
 
 type GetTicketDetailRow struct {
-	ID                   int64
-	Protocol             string
-	Status               TicketStatus
-	SectorID             int64
-	SectorName           string
-	ArrivedAt            time.Time
-	AssignedAt           *time.Time
-	StartedAt            time.Time
-	EndedAt              *time.Time
-	ClosedAt             *time.Time
-	Subject              *string
-	Resolution           *string
-	ContactID            int64
-	ContactName          string
-	ContactPhone         *string
-	ContactRegistered    bool
-	OrganizationID       *int64
-	OrganizationName     *string
-	MunicipalityID       *int64
-	MunicipalityName     *string
-	AssigneeID           *int64
-	AssigneeName         *string
-	ClosedByID           *int64
-	ClosedByName         *string
-	ClosureType          NullClosureType
-	PreviousID           *int64
-	PreviousProtocol     *string
-	PreviousSectorName   *string
-	PreviousSubject      *string
-	PreviousResolution   *string
-	PreviousClosedByName *string
-	NextID               *int64
-	NextProtocol         *string
-	NextSectorName       *string
+	ID                     int64
+	Protocol               string
+	Status                 TicketStatus
+	SectorID               int64
+	SectorName             string
+	ArrivedAt              time.Time
+	AssignedAt             *time.Time
+	StartedAt              time.Time
+	EndedAt                *time.Time
+	ClosedAt               *time.Time
+	Subject                *string
+	Resolution             *string
+	ContactID              int64
+	ContactName            string
+	ContactPhone           *string
+	ContactRegistered      bool
+	OrganizationID         *int64
+	OrganizationName       *string
+	MunicipalityID         *int64
+	MunicipalityName       *string
+	AssigneeID             *int64
+	AssigneeName           *string
+	ClosedByID             *int64
+	ClosedByName           *string
+	ClosureType            NullClosureType
+	PreviousID             *int64
+	PreviousProtocol       *string
+	PreviousSectorName     *string
+	PreviousSubject        *string
+	PreviousResolution     *string
+	PreviousClosedByName   *string
+	PreviousTransferReason *string
+	NextID                 *int64
+	NextProtocol           *string
+	NextSectorName         *string
+	NextTransferReason     *string
 }
 
 func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetailRow, error) {
@@ -743,9 +747,11 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.PreviousSubject,
 		&i.PreviousResolution,
 		&i.PreviousClosedByName,
+		&i.PreviousTransferReason,
 		&i.NextID,
 		&i.NextProtocol,
 		&i.NextSectorName,
+		&i.NextTransferReason,
 	)
 	return i, err
 }

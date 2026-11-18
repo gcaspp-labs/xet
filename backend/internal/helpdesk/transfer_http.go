@@ -47,7 +47,11 @@ type assignmentLogResponse struct {
 	ToName    *string    `json:"toName"`
 	// ToSectorName is the target of a transfer between sectors.
 	ToSectorName *string `json:"toSectorName"`
-	// Reason is the one given for a cancellation or a correction.
+	// FromSectorName is the origin of the transfer between sectors that opened
+	// this ticket; the origin ticket itself has none.
+	FromSectorName *string `json:"fromSectorName"`
+	// Reason is the one given for a cancellation, a correction or a transfer
+	// between sectors.
 	Reason *string `json:"reason"`
 }
 
@@ -65,7 +69,7 @@ func (h *Handler) listAssignments(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]assignmentLogResponse, len(rows))
 	for i, l := range rows {
-		out[i] = assignmentLogResponse{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt, FromName: l.FromName, ToName: l.ToName, ToSectorName: l.ToSectorName, Reason: l.Reason}
+		out[i] = assignmentLogResponse{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt, FromName: l.FromName, ToName: l.ToName, ToSectorName: l.ToSectorName, FromSectorName: l.FromSectorName, Reason: l.Reason}
 		if l.ActorID != nil && l.ActorName != nil {
 			out[i].Actor = &httpx.Ref{ID: *l.ActorID, Name: *l.ActorName}
 		}
