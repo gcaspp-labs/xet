@@ -113,66 +113,67 @@
 
 /*
  * PROTÓTIPO #262: paleta GCASPP (tirada do logo) sobre os tokens do design system.
+ * v2: cinzas neutros (sem matiz azul), escolha de Laboratório; mesma luminosidade dos cinzas da v1.
  * Descartável: a implementação troca os valores em glab-design-system/tokens e apaga este bloco.
  * Cores de aviso (success, warning, danger), overlay e shadow não mudam.
  */
 :root, [data-theme='light'] {
-  --ink: #15232F;
-  --ink-soft: #4F6170;
-  --ink-faint: #8396A4;
-  --paper: #EBEEF0;
+  --ink: #222222;
+  --ink-soft: #5F5F5F;
+  --ink-faint: #939393;
+  --paper: #EEEEEE;
   --surface: #FFFFFF;
-  --surface-2: #F4F6F7;
-  --line: #D8DFE4;
-  --line-soft: #E6E8E9;
+  --surface-2: #F6F6F6;
+  --line: #DEDEDE;
+  --line-soft: #E8E8E8;
   --accent: #01466F;
   --accent-strong: #00304D;
   --accent-soft: #DDEEF5;
   --on-accent: #FFFFFF;
-  --sidebar-bg: #0B2233;
-  --sidebar-surface: #112B3F;
-  --sidebar-line: #1D3A50;
-  --sidebar-text: #C3D0D9;
+  --sidebar-bg: #202020;
+  --sidebar-surface: #292929;
+  --sidebar-line: #373737;
+  --sidebar-text: #CECECE;
   --sidebar-text-active: #FFFFFF;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --ink: #E6ECEF;
-    --ink-soft: #9DADB8;
-    --ink-faint: #6B7D89;
-    --paper: #0C151C;
-    --surface: #131F28;
-    --surface-2: #192731;
-    --line: #263744;
-    --line-soft: #1D2C37;
+    --ink: #EBEBEB;
+    --ink-soft: #ABABAB;
+    --ink-faint: #7A7A7A;
+    --paper: #141414;
+    --surface: #1E1E1E;
+    --surface-2: #252525;
+    --line: #353535;
+    --line-soft: #2A2A2A;
     --accent: #4BAECE;
     --accent-strong: #86CBE2;
     --accent-soft: #143649;
     --on-accent: #04131C;
-    --sidebar-bg: #08121A;
-    --sidebar-surface: #0F1A23;
-    --sidebar-line: #1B2833;
-    --sidebar-text: #8FA2AF;
+    --sidebar-bg: #111111;
+    --sidebar-surface: #191919;
+    --sidebar-line: #272727;
+    --sidebar-text: #9F9F9F;
     --sidebar-text-active: #FFFFFF;
   }
 }
 [data-theme='dark'] {
-  --ink: #E6ECEF;
-  --ink-soft: #9DADB8;
-  --ink-faint: #6B7D89;
-  --paper: #0C151C;
-  --surface: #131F28;
-  --surface-2: #192731;
-  --line: #263744;
-  --line-soft: #1D2C37;
+  --ink: #EBEBEB;
+  --ink-soft: #ABABAB;
+  --ink-faint: #7A7A7A;
+  --paper: #141414;
+  --surface: #1E1E1E;
+  --surface-2: #252525;
+  --line: #353535;
+  --line-soft: #2A2A2A;
   --accent: #4BAECE;
   --accent-strong: #86CBE2;
   --accent-soft: #143649;
   --on-accent: #04131C;
-  --sidebar-bg: #08121A;
-  --sidebar-surface: #0F1A23;
-  --sidebar-line: #1B2833;
-  --sidebar-text: #8FA2AF;
+  --sidebar-bg: #111111;
+  --sidebar-surface: #191919;
+  --sidebar-line: #272727;
+  --sidebar-text: #9F9F9F;
   --sidebar-text-active: #FFFFFF;
 }
 
@@ -183,13 +184,13 @@
  */
 :root[data-contrast='high'] {
   --ink: #000000;
-  --ink-soft: #16222c;
-  --ink-faint: #2b3945;
+  --ink-soft: #212121;
+  --ink-faint: #373737;
   --paper: #ffffff;
   --surface: #ffffff;
-  --surface-2: #ecf0f3;
-  --line: #45535e;
-  --line-soft: #64727c;
+  --surface-2: #EFEFEF;
+  --line: #515151;
+  --line-soft: #707070;
   --accent: #01466f;
   --accent-strong: #002a44;
   --accent-soft: #d6e9f3;
@@ -207,13 +208,13 @@
 @media (prefers-color-scheme: dark) {
   :root[data-contrast='high']:not([data-theme='light']) {
     --ink: #ffffff;
-    --ink-soft: #e4ecf1;
-    --ink-faint: #c5d2da;
+    --ink-soft: #EBEBEB;
+    --ink-faint: #D0D0D0;
     --paper: #000000;
-    --surface: #070c10;
-    --surface-2: #131b21;
-    --line: #9fadb7;
-    --line-soft: #7c8a94;
+    --surface: #0B0B0B;
+    --surface-2: #1A1A1A;
+    --line: #ABABAB;
+    --line-soft: #888888;
     --accent: #8fd0e8;
     --accent-strong: #c4e8f5;
     --accent-soft: #0d2d3f;
@@ -231,13 +232,13 @@
 }
 :root[data-contrast='high'][data-theme='dark'] {
   --ink: #ffffff;
-  --ink-soft: #e4ecf1;
-  --ink-faint: #c5d2da;
+  --ink-soft: #EBEBEB;
+  --ink-faint: #D0D0D0;
   --paper: #000000;
-  --surface: #070c10;
-  --surface-2: #131b21;
-  --line: #9fadb7;
-  --line-soft: #7c8a94;
+  --surface: #0B0B0B;
+  --surface-2: #1A1A1A;
+  --line: #ABABAB;
+  --line-soft: #888888;
   --accent: #8fd0e8;
   --accent-strong: #c4e8f5;
   --accent-soft: #0d2d3f;
