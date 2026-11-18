@@ -44,6 +44,8 @@ func (h *Handler) correctTicket(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusConflict, "Só atendimentos encerrados são corrigidos.")
 	case errors.Is(err, ErrCancelled):
 		httpx.WriteError(w, http.StatusConflict, "Chamado cancelado não é corrigido.")
+	case errors.Is(err, ErrTransferred):
+		httpx.WriteError(w, http.StatusConflict, "Chamado transferido para outro setor não é corrigido.")
 	case errors.Is(err, ErrReasonRequired):
 		httpx.WriteError(w, http.StatusUnprocessableEntity, "Informe o motivo da correção.")
 	case errors.Is(err, ErrNoChanges):
