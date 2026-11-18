@@ -376,15 +376,13 @@ export async function seedClosedTicket(baseURL: string) {
   return { ticketId: ticket.id, agent, otherAgent, supervisor, sector, modules }
 }
 
-// Um chamado da origem transferido para outro setor. Sem `withForm`, pela rota `sector-transfer`
-// (sem formulário: sem assunto, resolução nem módulos); com ele, como as transferências antigas,
-// pela rota `transfer-sector`, com assunto e resolução.
-export async function seedTransferredTicket(baseURL: string, options: { withForm?: boolean } = {}) {
+// Um chamado da origem transferido para outro setor pela rota `sector-transfer`, sem formulário.
+export async function seedTransferredTicket(baseURL: string) {
   const origin = await seedSector(baseURL)
   const destination = await seedSector(baseURL)
   const { id, phone } = unique()
   const contact = `Lúcia ${id}`
-  const [organization] = await seedDirectory(
+  await seedDirectory(
     baseURL,
     [{ name: `Prefeitura ${id}` }],
     [{ name: contact, phone, organization: 0, sector: origin.sector.id }],
@@ -396,9 +394,6 @@ export async function seedTransferredTicket(baseURL: string, options: { withForm
     ok(await api.post(`/api/sectors/${sectorId}/connection`))
     ok(await api.post(`/api/test/messaging/sectors/${sectorId}/pair`))
   }
-  const module = await json<{ id: number }>(
-    await api.post(`/api/sectors/${origin.sector.id}/modules`, { data: { name: 'Folha' } }),
-  )
   ok(
     await api.post(`/api/test/messaging/sectors/${origin.sector.id}/receive`, {
       data: { externalMessageId: `E2E-${id}`, phone, contactName: contact, body: 'Folha de março' },
@@ -416,25 +411,11 @@ export async function seedTransferredTicket(baseURL: string, options: { withForm
     await agentApi.get(`/api/sectors/${origin.sector.id}/tickets`),
   )
   ok(await agentApi.post(`/api/tickets/${ticket.id}/assign`))
-  if (options.withForm) {
-    ok(
-      await agentApi.post(`/api/tickets/${ticket.id}/transfer-sector`, {
-        data: {
-          subject: 'Folha de março',
-          resolution: 'Encaminhado ao setor responsável.',
-          moduleIds: [module.id],
-          organizationId: organization.id,
-          sectorId: destination.sector.id,
-        },
-      }),
-    )
-  } else {
-    ok(
-      await agentApi.post(`/api/tickets/${ticket.id}/sector-transfer`, {
-        data: { sectorId: destination.sector.id },
-      }),
-    )
-  }
+  ok(
+    await agentApi.post(`/api/tickets/${ticket.id}/sector-transfer`, {
+      data: { sectorId: destination.sector.id },
+    }),
+  )
   await agentApi.dispose()
   return { ticketId: ticket.id, contact, origin, destination }
 }

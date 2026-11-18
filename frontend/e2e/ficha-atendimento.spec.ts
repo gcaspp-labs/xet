@@ -190,7 +190,7 @@ test('a ficha mostra a cadeia de transferências e o destino lê o chamado anter
   const destination = await seedSector(baseURL!)
   const { id, phone } = unique()
   const contact = `Lúcia ${id}`
-  const [organization] = await seedDirectory(
+  await seedDirectory(
     baseURL!,
     [{ name: `Prefeitura ${id}` }],
     [{ name: contact, phone, organization: 0, sector: origin.sector.id }],
@@ -205,9 +205,6 @@ test('a ficha mostra a cadeia de transferências e o destino lê o chamado anter
     ok(await admins.post(`/api/sectors/${sectorId}/connection`))
     ok(await admins.post(`/api/test/messaging/sectors/${sectorId}/pair`))
   }
-  const module = await json<{ id: number }>(
-    await admins.post(`/api/sectors/${origin.sector.id}/modules`, { data: { name: 'Folha' } }),
-  )
   ok(
     await admins.post(`/api/test/messaging/sectors/${origin.sector.id}/receive`, {
       data: { externalMessageId: `E2E-${id}`, phone, contactName: contact, body: 'Folha de março' },
@@ -226,14 +223,8 @@ test('a ficha mostra a cadeia de transferências e o destino lê o chamado anter
   )
   ok(await originApi.post(`/api/tickets/${originTicket.id}/assign`))
   const next = await json<{ id: number; protocol: string }>(
-    await originApi.post(`/api/tickets/${originTicket.id}/transfer-sector`, {
-      data: {
-        subject: 'Folha de março',
-        resolution: 'Encaminhado ao setor responsável.',
-        moduleIds: [module.id],
-        organizationId: organization.id,
-        sectorId: destination.sector.id,
-      },
+    await originApi.post(`/api/tickets/${originTicket.id}/sector-transfer`, {
+      data: { sectorId: destination.sector.id },
     }),
   )
   await originApi.dispose()
@@ -268,8 +259,6 @@ test('a ficha mostra a cadeia de transferências e o destino lê o chamado anter
   await page.goto(`/atendimentos/${next.id}`)
   const previous = details(page).getByRole('region', { name: 'Chamado anterior' })
   await expect(previous).toContainText(origin.sector.name)
-  await expect(previous).toContainText('Folha de março')
-  await expect(previous).toContainText('Encaminhado ao setor responsável.')
   await expect(previous).toContainText(`transferido por ${originName}`)
   await expectReadOnly(page)
   await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()

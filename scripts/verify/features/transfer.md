@@ -10,13 +10,13 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 - [jornada] O novo responsável passa a responder sem recarregar.
 - [jornada] Pela API, o responsável anterior recebe 403.
 - [jornada] O supervisor transfere o chamado de outra pessoa.
-- [jornada] A transferência para outro setor exige o formulário, encerra a origem e cria um chamado na fila do destino.
+- [jornada] A transferência para outro setor é sem formulário (setor e motivo opcional, sem exigir cadastro do contato), encerra a origem e cria um chamado na fila do destino.
 - [jornada] O destino vê "Transferido de ...", assume e responde pelo adaptador falso.
 - [jornada] A origem, encerrada como transferida, abre a ficha só leitura com o destino na cadeia de transferências.
-- [jornada] Cancelado o chamado novo, a ficha do destino traz o chamado anterior (setor, assunto, resolução e quem transferiu), e o link abre a ficha da origem.
+- [jornada] Cancelado o chamado novo, a ficha do destino traz o chamado anterior (setor, motivo e quem transferiu), e o link abre a ficha da origem.
 - [não coberto] Devolver à fila (`return.spec.ts`).
 - [não coberto] Abrir o chamado anterior pelo destino, sem poder agir nela (`transfer-sector.spec.ts`).
-- [não coberto] Recusa da transferência para um setor onde o contato já tem chamado aberto (só testes de integração).
+- [não coberto] Recusa da transferência para um setor onde o contato já tem chamado aberto (`transfer-sector.spec.ts` e testes de integração).
 - [manual] Primeira mensagem do destino chegando ao celular do contato pelo número do destino. Exige um segundo número de teste.
 
 ## How to get to it
@@ -30,7 +30,7 @@ O chamado muda de responsável no mesmo setor ou segue para outro setor, sem per
 **Para outro setor:**
 
 1. O responsável abre "Mais ações" e escolhe "Outro setor".
-2. Preenche assunto, resolução e módulos e escolhe o setor de destino. Se o contato não tiver cadastro, cadastra pelo próprio formulário.
+2. Escolhe o setor de destino e, se quiser, escreve o motivo. Não há formulário de encerramento, e o contato não precisa de cadastro.
 3. Confirma e volta a `/chamados`. Em Atendimentos, a origem é uma linha do histórico, marcada "Transferido", com "para <setor de destino>".
 4. No setor de destino, o chamado está na fila, com a mensagem "Transferido de ...". Quem assume escreve a primeira mensagem ao contato. O chamado da fila só abre pelo endereço `/chamados/<id>`, até alguém assumir.
 
@@ -41,13 +41,12 @@ scripts/verify/scripts/drive.sh transfer
 ```
 
 - Mesmo setor: `getByRole('dialog', { name: 'Transferir chamado' })`, com `getByRole('combobox', { name: 'Transferir para' })` e `getByRole('option', { name: /^Nome · Atendente/ })`.
-- Outro setor: `getByRole('dialog', { name: 'Transferir para outro setor' })`, com `getByLabel('Setor de destino')`.
+- Outro setor: `getByRole('dialog', { name: 'Transferir para outro setor' })`, com `getByLabel('Setor de destino')` e `getByLabel('Motivo da transferência (opcional)')`.
 - Pessoas diferentes ficam em sessões separadas do mesmo navegador, para provar a atualização sem recarregar. A jornada fecha as sessões de que não precisa mais, para poupar memória.
 
 ## Gotchas
 
 - O destino lista também o supervisor do setor, com a contagem "0 em atendimento". Quem não é atendente pode receber o chamado; não trate isso como erro.
-- A transferência para outro setor exige contato cadastrado com órgão e ao menos um módulo no setor de origem. Sem isso, o formulário não conclui, e a jornada precisa falhar. Os módulos vêm do `seedSector({ modules })`.
 - Os dois setores precisam estar conectados, ou a resposta do destino falha.
 - "Transferir" é um item do menu "Mais ações" e também o botão de confirmar do diálogo: dentro do diálogo, use sempre o botão do próprio `getByRole('dialog', ...)`.
 - O "Chamado anterior" só aparece na ficha (`/atendimentos/<id>`), dentro dos detalhes, e a ficha só existe para chamado encerrado. Por isso a jornada cancela o chamado do destino no fim.

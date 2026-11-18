@@ -56,9 +56,7 @@ test('as janelas do atendimento têm bloqueio', async ({ page, baseURL }) => {
   await expectLockedDialog(
     page,
     page.getByRole('dialog', { name: 'Transferir para outro setor' }),
-    {
-      field: 'Assunto',
-    },
+    { field: 'Motivo da transferência (opcional)' },
   )
 
   await chooseAction(page, 'Cancelar chamado')

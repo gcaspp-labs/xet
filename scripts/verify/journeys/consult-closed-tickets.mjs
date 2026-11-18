@@ -64,9 +64,7 @@ await journey('consult-closed-tickets', async (t) => {
     )
     tickets[3] = await take(first, people[3])
     await t.apiOk(
-      first.post(`/api/tickets/${tickets[3].id}/transfer-sector`, {
-        data: { ...form(people[3], 'Folha de março', ['Patrimônio']), sectorId: destination.id },
-      }),
+      first.post(`/api/tickets/${tickets[3].id}/sector-transfer`, { data: { sectorId: destination.id } }),
       'transferir Marcos',
     )
     // Um chamado ainda aberto, que não é histórico.
@@ -113,11 +111,12 @@ await journey('consult-closed-tickets', async (t) => {
     await module.fill('patrimonio')
     await expect(agentPage.getByRole('option', { name: 'Patrimônio' })).toBeVisible()
     await agentPage.keyboard.press('Escape')
-    await expect(rows(agentPage)).toHaveCount(2)
+    // O transferido (Marcos) não tem módulos: só Paulo atendeu Patrimônio.
+    await expect(rows(agentPage)).toHaveCount(1)
     // Um texto que está no nome dos dois módulos traz os chamados de qualquer um, uma vez só.
     await module.fill('o')
     await agentPage.keyboard.press('Escape')
-    await expect(rows(agentPage)).toHaveCount(3)
+    await expect(rows(agentPage)).toHaveCount(2)
     await module.fill('')
     await agentPage.keyboard.press('Escape')
     await expect(rows(agentPage)).toHaveCount(4)
