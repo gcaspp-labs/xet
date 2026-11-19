@@ -428,6 +428,7 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `ticket_cancelled` | Cancelamento (exige `reason`): `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
 | `ticket_returned` | Devolver à fila: `changes` com `status` e `assignee_id` |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
+| `user_password_changed` | O próprio usuário troca a senha em Configurações: `actor_id` é o próprio usuário; sem `changes` |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |
 | `module_created`, `module_updated` | Administração de módulos |
 | `subject_created`, `subject_updated`, `subject_deleted` | Tela de assuntos e, em `subject_created`, também a pergunta do formulário. `changes` com `sector_id` e `name`; criação e edição incluem `module_id`; `subject_deleted` guarda também o texto das soluções apagadas (`solutions`) |
