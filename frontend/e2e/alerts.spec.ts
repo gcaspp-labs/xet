@@ -487,6 +487,92 @@ test('fechar a aba que alertou não deixa a outra, atrasada, repetir o alerta', 
   await expect.poll(() => beeps(other)).toBe(1)
 })
 
+test('duas abas que alertam chamados diferentes ao mesmo tempo guardam as duas reservas', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await context.grantPermissions(['notifications'])
+  await context.addInitScript(() => {
+    localStorage.setItem('alerts.browser', 'on')
+    localStorage.setItem('alerts.sound', 'on')
+  })
+  await spyOnAlerts(page)
+  await trackSocket(page)
+  await signIn(page, agent, userPassword)
+  const second = await context.newPage()
+  const late = await context.newPage()
+  for (const tab of [second, late]) {
+    await spyOnAlerts(tab)
+    await trackSocket(tab)
+  }
+  await openWhenLive(page, sector.id)
+  await openWhenLive(second, sector.id, '/chamados')
+  await openWhenLive(late, sector.id, '/chamados')
+  // O navegador só libera o som depois de uma interação com a página.
+  for (const tab of [late, second, page]) {
+    await tab.bringToFront()
+    await tab.locator('body').click({ position: { x: 1, y: 1 } })
+  }
+  for (const tab of [page, second, late]) {
+    await setHidden(tab, true)
+  }
+
+  // As duas primeiras abas recebem a fila juntas, cada uma vendo só um dos chamados novos: as
+  // duas reservam ao mesmo tempo, cada uma o seu. A terceira só recebe depois que elas fecham.
+  const queue = `**/api/sectors/${sector.id}/tickets`
+  let openFirst!: () => void
+  const first = new Promise<void>((resolve) => {
+    openFirst = resolve
+  })
+  let openLate!: () => void
+  const lateGate = new Promise<void>((resolve) => {
+    openLate = resolve
+  })
+  const only = (tab: Page, name: string) =>
+    tab.route(queue, async (route) => {
+      await first
+      const response = await route.fetch()
+      const tickets = (await response.json()) as { contact: { name: string } }[]
+      await route.fulfill({
+        response,
+        json: tickets.filter(
+          (t) =>
+            !['Caio Cruzado', 'Dora Cruzada'].includes(t.contact.name) || t.contact.name === name,
+        ),
+      })
+    })
+  await only(page, 'Caio Cruzado')
+  await only(second, 'Dora Cruzada')
+  await late.route(queue, async (route) => {
+    await lateGate
+    await route.continue()
+  })
+
+  await receive(request, sector.id, 'Caio Cruzado')
+  await receive(request, sector.id, 'Dora Cruzada')
+  openFirst()
+  await expect.poll(() => notified(page)).toEqual(['Caio Cruzado'])
+  await expect.poll(() => notified(second)).toEqual(['Dora Cruzada'])
+  await expect.poll(() => beeps(page)).toBe(1)
+  await expect.poll(() => beeps(second)).toBe(1)
+  await page.close()
+  await second.close()
+
+  openLate()
+  await expect(late.getByText('Chamado recebido: Caio Cruzado')).toBeVisible()
+  await expect(late.getByText('Chamado recebido: Dora Cruzada')).toBeVisible()
+  await late.unroute(queue)
+
+  // O chamado seguinte prova que os alertas seguem ligados; os dois de antes, se repetissem, já
+  // estariam na lista e no som.
+  await receive(request, sector.id, 'Edu Seguinte')
+  await expect.poll(() => notified(late)).toEqual(['Edu Seguinte'])
+  await expect.poll(() => beeps(late)).toBe(1)
+})
+
 test('mudar as opções numa aba vale na outra, sem abrir o menu nela', async ({
   page,
   context,
