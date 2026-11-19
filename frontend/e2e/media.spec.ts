@@ -235,7 +235,7 @@ test('player de áudio toca, avança e responde ao teclado na gravação e nas m
   const lightSurface = await receivedPlayer.evaluate((el) => getComputedStyle(el).backgroundColor)
 
   await page.emulateMedia({ colorScheme: 'dark' })
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(16, 21, 23)')
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(20, 20, 20)')
   await expect(receivedPlayer).not.toHaveCSS('background-color', lightSurface)
   await playAndPause(receivedPlayer)
 })
