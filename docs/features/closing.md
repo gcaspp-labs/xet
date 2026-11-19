@@ -15,7 +15,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 9. Um chamado pode tratar de vários módulos, com uma resolução geral.
 10. O momento em que o chamado foi assumido é registrado à parte, para medir o tempo de espera na fila.
 11. Alterações nos horários ficam registradas na auditoria. O intervalo entre início e fim é o tempo decorrido do atendimento; como há atendimentos simultâneos, não representa necessariamente trabalho exclusivo naquele cliente.
-12. Os assuntos e as soluções do formulário vêm das listas do setor (ver [subjects.md](subjects.md)).
+12. Os assuntos e as soluções do formulário vêm das listas dos módulos marcados no chamado (ver [subjects.md](subjects.md)).
 13. Chamados encerrados não são reabertos. Uma mensagem nova depois do encerramento cria outro chamado (ver [queue.md](queue.md)).
 14. Os dados de um atendimento encerrado são corrigidos pelo atendente que o encerrou e pelos supervisores e administradores do setor. Os demais atendentes não corrigem. Atendimento transferido para outro setor não é corrigido, nem o antigo, feito com o formulário.
 15. A correção altera os dados do formulário (assunto, resolução, módulos, órgão, início e fim), com as mesmas regras do encerramento.
@@ -27,9 +27,9 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 
 | Campo | Comportamento |
 | --- | --- |
-| Assunto | Escolhido na lista do setor ou digitado; obrigatório; nenhum vem marcado |
-| Resolução | Preenchida pelo atendente, a partir de uma solução da lista ou digitada; obrigatória |
 | Módulos/sistemas | Seleção de um ou mais módulos atendidos pelo setor; ao menos um obrigatório |
+| Assunto | Escolhido na lista dos módulos marcados ou digitado; obrigatório; nenhum vem marcado |
+| Resolução | Preenchida pelo atendente, a partir de uma solução da lista ou digitada; obrigatória |
 | Contato | Automático |
 | Órgão | Automático, com base no órgão principal do contato; editável |
 | Atendente | Automático, com base no responsável |
@@ -51,3 +51,4 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 - 2026-11-14: campo Início passa a dizer "chamado aberto" em vez de "conversa iniciada" (padronização dos nomes: Chamados, Atendimentos; #185). Só texto.
 - 2026-11-15: regra 15 alterada, sem o "falou com"; spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190). Dizia "A correção altera os dados do formulário (assunto, resolução, módulos, órgão, início e fim) e o "falou com", com as mesmas regras do encerramento.". O histórico de alterações antigo também deixa de mostrar o "falou com" (regra 18 sem mudança).
 - 2026-11-18: regra 14 alterada; spec [#243](https://github.com/gcaspp-labs/xet/issues/243), PR [#252](https://github.com/gcaspp-labs/xet/pull/252). Terminava em "Os demais atendentes não corrigem.".
+- 2026-11-18: regra 12 alterada e campo Módulos/sistemas passa a vir antes de Assunto na tabela; spec [#149](https://github.com/gcaspp-labs/xet/issues/149), PR [#156](https://github.com/gcaspp-labs/xet/pull/156). A regra dizia "vêm das listas do setor".
