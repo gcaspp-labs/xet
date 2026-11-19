@@ -1,6 +1,7 @@
 import { expect, request as apiRequest, test, type Locator, type Page } from '@playwright/test'
 import {
   admin,
+  adminApi,
   defaultMunicipality,
   formatCnpj,
   seedDirectory,
@@ -24,15 +25,6 @@ async function expectKpi(page: Page, label: string, value: string) {
 async function choose(page: Page, label: string, option: string | RegExp) {
   await page.getByRole('combobox', { name: label }).click()
   await page.getByRole('option', { name: option }).click()
-}
-
-async function adminApi(baseURL: string) {
-  const api = await apiRequest.newContext({ baseURL })
-  const login = await api.post('/api/auth/login', {
-    data: { email: admin.email, password: admin.password },
-  })
-  expect(login.ok()).toBeTruthy()
-  return api
 }
 
 async function receive(baseURL: string, sectorId: number, contactName: string, phone?: string) {

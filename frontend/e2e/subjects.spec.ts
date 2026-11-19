@@ -1,11 +1,14 @@
 import { execFileSync } from 'node:child_process'
 import { expect, type Locator, request as apiRequest, test } from '@playwright/test'
 import {
+  addSolutions,
   admin,
+  adminApi,
   clearSession,
   expectClosableDialog,
   seedDirectory,
   seedSector,
+  seedSubjects,
   signIn,
   unique,
   userPassword,
@@ -19,16 +22,6 @@ type Response = { ok(): boolean; json(): Promise<unknown> }
 const json = async <T>(response: Response) => {
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as T
-}
-
-const adminApi = async (baseURL: string) => {
-  const api = await apiRequest.newContext({ baseURL })
-  expect(
-    (
-      await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
-    ).ok(),
-  ).toBeTruthy()
-  return api
 }
 
 // Nomes da lista de assuntos do setor, lida como administrador.
@@ -51,23 +44,6 @@ async function solutionBodies(baseURL: string, sectorId: number) {
   return Object.fromEntries(
     subjects.map((subject) => [subject.name, subject.solutions.map((solution) => solution.body)]),
   )
-}
-
-// Acrescenta soluções a um assunto do setor, pela API.
-async function addSolutions(baseURL: string, sectorId: number, subject: string, bodies: string[]) {
-  const api = await adminApi(baseURL)
-  const subjects = await json<{ id: number; name: string }[]>(
-    await api.get(`/api/sectors/${sectorId}/subjects`),
-  )
-  const id = subjects.find((item) => item.name === subject)!.id
-  for (const body of bodies) {
-    expect(
-      (
-        await api.post(`/api/sectors/${sectorId}/subjects/${id}/solutions`, { data: { body } })
-      ).ok(),
-    ).toBeTruthy()
-  }
-  await api.dispose()
 }
 
 // Setor com número ligado, um módulo, os assuntos dados e um chamado por contato
@@ -1079,25 +1055,6 @@ test('a correção só pergunta sobre a solução quando a resolução é altera
     Contracheque: ['Enviada a segunda via por e-mail.'],
   })
 })
-
-// Setor com os assuntos dados, cada um com as suas soluções, criados pela API.
-async function seedSubjects(baseURL: string, sectorId: number, list: Record<string, string[]>) {
-  const api = await adminApi(baseURL)
-  const module = await json<{ id: number }>(
-    await api.post(`/api/sectors/${sectorId}/modules`, { data: { name: 'Sistema' } }),
-  )
-  for (const name of Object.keys(list)) {
-    expect(
-      (
-        await api.post(`/api/sectors/${sectorId}/subjects`, { data: { name, moduleId: module.id } })
-      ).ok(),
-    ).toBeTruthy()
-  }
-  await api.dispose()
-  for (const [name, bodies] of Object.entries(list)) {
-    await addSolutions(baseURL, sectorId, name, bodies)
-  }
-}
 
 // Textos da tabela na ordem: assunto em uma linha, soluções nas seguintes.
 async function tableRows(page: import('@playwright/test').Page) {

@@ -1,5 +1,5 @@
 import { expect, request as apiRequest, test, type Page } from '@playwright/test'
-import { admin, login, seedSector, signIn, unique, userPassword } from './fixtures'
+import { admin, adminApi, login, seedSector, signIn, unique, userPassword } from './fixtures'
 
 async function chooseOption(page: Page, label: string, option: string) {
   await page.getByRole('combobox', { name: label, exact: true }).click()
@@ -230,13 +230,10 @@ test('usuário com chamado em atendimento só é desativado ou trocado de setor 
   const { sector, agent, supervisor } = await seedSector(baseURL!)
   const other = await seedSector(baseURL!)
 
-  const adminApi = await apiRequest.newContext({ baseURL })
-  await adminApi.post('/api/auth/login', {
-    data: { email: admin.email, password: admin.password },
-  })
-  expect((await adminApi.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
-  expect((await adminApi.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
-  await adminApi.dispose()
+  const api = await adminApi(baseURL!)
+  expect((await api.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
+  expect((await api.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
+  await api.dispose()
   const received = await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
     data: {
       externalMessageId: `E2E-${unique().id}`,
