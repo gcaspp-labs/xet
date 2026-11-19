@@ -88,13 +88,13 @@ test('usuário entra, mantém a sessão ao recarregar e sai', async ({ page }) =
 for (const theme of [
   {
     scheme: 'light' as const,
-    paper: 'rgb(238, 238, 238)',
+    paper: 'rgb(228, 228, 231)',
     accent: 'rgb(1, 70, 111)',
     logo: 'gcaspp-lab-horizontal',
   },
   {
     scheme: 'dark' as const,
-    paper: 'rgb(20, 20, 20)',
+    paper: 'rgb(9, 9, 11)',
     accent: 'rgb(75, 174, 206)',
     logo: 'gcaspp-lab-horizontal-escuro',
   },

@@ -112,6 +112,46 @@
 }
 
 /*
+ * Escala de cinza do projeto (design.md, "Tokens e tema"): zinc do Tailwind sobre os tokens, para separar
+ * fundo da página, cartões, cabeçalho de tabela e bordas nos temas claro e escuro. Texto com ao menos 4,5:1
+ * sobre paper, surface e surface-2. O alto contraste fica de fora (:not) e tem a camada própria, abaixo.
+ * Os três blocos seguem a regra de tema de tokens.css: claro, escuro pelo sistema e escuro forçado.
+ * Fora de @layer, como tokens.css, e com seletores mais específicos que os dele.
+ */
+:root:not([data-contrast='high']) {
+  --ink: #18181b;
+  --ink-soft: #52525b;
+  --ink-faint: #62626a;
+  --paper: #e4e4e7;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --line: #d4d4d8;
+  --line-soft: #e4e4e7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-contrast='high']):not([data-theme='light']) {
+    --ink: #f4f4f5;
+    --ink-soft: #a1a1aa;
+    --ink-faint: #8e8e97;
+    --paper: #09090b;
+    --surface: #18181b;
+    --surface-2: #27272a;
+    --line: #3f3f46;
+    --line-soft: #27272a;
+  }
+}
+:root[data-theme='dark']:not([data-contrast='high']) {
+  --ink: #f4f4f5;
+  --ink-soft: #a1a1aa;
+  --ink-faint: #8e8e97;
+  --paper: #09090b;
+  --surface: #18181b;
+  --surface-2: #27272a;
+  --line: #3f3f46;
+  --line-soft: #27272a;
+}
+
+/*
  * Alto contraste (design.md): camada do projeto sobre os tokens, com texto em 7:1 ou mais.
  * Os três blocos seguem a regra de tema de tokens.css: claro, escuro pelo sistema e escuro forçado.
  * Fora de @layer, como tokens.css, e com seletores mais específicos que os dele.
