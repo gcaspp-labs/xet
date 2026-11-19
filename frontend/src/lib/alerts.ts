@@ -106,17 +106,17 @@ export function useAlertSettings() {
   return { browser, sound, block, setBrowserAlerts, setSoundAlerts }
 }
 
+// Cada chamado tem a própria chave: duas abas que reservam chamados diferentes ao mesmo tempo
+// não apagam a reserva uma da outra.
+const claimKey = (ticketId: number) => `${claimsKey}.${ticketId}`
+
 function reserve(ticketId: number) {
   try {
     const now = Date.now()
-    const stored = JSON.parse(localStorage.getItem(claimsKey) ?? '{}') as Record<string, number>
-    if (now - (stored[ticketId] ?? 0) < claimDuration) {
+    if (now - Number(localStorage.getItem(claimKey(ticketId)) ?? 0) < claimDuration) {
       return false
     }
-    const claims = Object.fromEntries(
-      Object.entries(stored).filter(([, at]) => now - at < claimDuration),
-    )
-    localStorage.setItem(claimsKey, JSON.stringify({ ...claims, [ticketId]: now }))
+    localStorage.setItem(claimKey(ticketId), String(now))
     return true
   } catch {
     // Sem armazenamento, a etiqueta da notificação ainda evita repeti-la.
@@ -124,13 +124,50 @@ function reserve(ticketId: number) {
   }
 }
 
+// Apaga as reservas vencidas, para não acumular uma chave por chamado. Com trava, cada chave só
+// sai com a trava do próprio chamado: ninguém está gravando nela, e a leitura está em dia.
+function dropExpiredClaims() {
+  try {
+    const now = Date.now()
+    const expired = Object.keys(localStorage).filter(
+      (key) =>
+        key.startsWith(`${claimsKey}.`) &&
+        now - Number(localStorage.getItem(key) ?? 0) >= claimDuration,
+    )
+    // Formato antigo, um objeto só com todas as reservas.
+    localStorage.removeItem(claimsKey)
+    for (const key of expired) {
+      if (!('locks' in navigator)) {
+        localStorage.removeItem(key)
+        continue
+      }
+      void navigator.locks.request(key, { ifAvailable: true }, (lock) => {
+        if (lock && Date.now() - Number(localStorage.getItem(key) ?? 0) >= claimDuration) {
+          localStorage.removeItem(key)
+        }
+      })
+    }
+  } catch {
+    // Sem armazenamento, não há o que apagar.
+  }
+}
+
 // Só uma aba alerta cada chamado. A trava existe em HTTPS e localhost, os mesmos endereços em
 // que há notificação; sem ela, só o som pode repetir, se duas abas reservarem ao mesmo tempo.
+// A aba que ganha segura a trava do chamado durante a reserva: o navegador garante que só uma
+// aba a tem, e a gravação no localStorage, que chega às outras com atraso, já chegou quando a
+// trava for solta. A gravação guarda a reserva se a aba que alertou fechar antes do fim.
 function claim(ticketId: number): Promise<boolean> {
   if (!('locks' in navigator)) {
     return Promise.resolve(reserve(ticketId))
   }
-  return navigator.locks.request(claimsKey, () => reserve(ticketId))
+  return new Promise((resolve) => {
+    void navigator.locks.request(claimKey(ticketId), { ifAvailable: true }, (lock) => {
+      const won = lock !== null && reserve(ticketId)
+      resolve(won)
+      return won ? new Promise((release) => setTimeout(release, claimDuration)) : undefined
+    })
+  })
 }
 
 let releaseVisibleTab: (() => void) | undefined
@@ -228,6 +265,7 @@ export function alertQueueEntry(ticketId: number, contactName: string, onOpen: (
     if (!(await claim(ticketId))) {
       return
     }
+    dropExpiredClaims()
     // Só notifica quem não viu o aviso na tela: a aba estava fora ao chegar e continua fora agora,
     // e nenhuma outra aba do sistema está à vista. A pessoa pode ter voltado durante a espera.
     if (hiddenOnArrival && isHidden() && browserEnabled() && !(await someTabVisible())) {
