@@ -55,6 +55,15 @@ export function useLogout() {
   })
 }
 
+// O próprio usuário troca a senha; as outras sessões dele são encerradas e esta continua.
+// Senha atual errada volta 422 (não 401, que é sessão expirada).
+export function useChangeOwnPassword() {
+  return useMutation({
+    mutationFn: (body: { current_password: string; new_password: string }) =>
+      api<void>('/auth/me/password', { method: 'PUT', body }),
+  })
+}
+
 // Mesma regra de senha do backend (spec.md): mínimo de 8 caracteres, com
 // maiúscula, minúscula, número e caractere especial; até 72 bytes (bcrypt).
 export const passwordSchema = z
