@@ -1,0 +1,137 @@
+/* GCASPP LAB (g-lab) — gerado a partir de tokens/tokens.json. Não edite à mão: rode scripts/build-tokens.py */
+
+/* Tema claro (padrão) */
+:root, [data-theme="light"] {
+  --ink: #222222;
+  --ink-soft: #5F5F5F;
+  --ink-faint: #939393;
+  --paper: #EEEEEE;
+  --surface: #FFFFFF;
+  --surface-2: #F6F6F6;
+  --line: #DEDEDE;
+  --line-soft: #E8E8E8;
+  --accent: #01466F;
+  --accent-strong: #00304D;
+  --accent-soft: #DDEEF5;
+  --on-accent: #FFFFFF;
+  --focus: var(--accent);
+  --success: #2F7D5D;
+  --success-soft: #DEEEE3;
+  --warning: #B8722A;
+  --warning-soft: #F4E3CC;
+  --warning-ink: #7A4B14;
+  --danger: #B23A3A;
+  --danger-soft: #F5DCDC;
+  --sidebar-bg: #202020;
+  --sidebar-surface: #292929;
+  --sidebar-line: #373737;
+  --sidebar-text: #CECECE;
+  --sidebar-text-active: #FFFFFF;
+  --overlay: rgba(10, 14, 16, 0.42);
+  --shadow: 0 12px 28px rgba(18, 26, 30, 0.10);
+}
+
+/* Tema escuro: segue o sistema, a menos que data-theme="light" force o claro */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #EBEBEB;
+    --ink-soft: #ABABAB;
+    --ink-faint: #7A7A7A;
+    --paper: #141414;
+    --surface: #1E1E1E;
+    --surface-2: #252525;
+    --line: #353535;
+    --line-soft: #2A2A2A;
+    --accent: #4BAECE;
+    --accent-strong: #86CBE2;
+    --accent-soft: #143649;
+    --on-accent: #04131C;
+    --focus: var(--accent);
+    --success: #55B48B;
+    --success-soft: #1B3A2C;
+    --warning: #DD9E52;
+    --warning-soft: #3E2E17;
+    --warning-ink: #DD9E52;
+    --danger: #E27A7A;
+    --danger-soft: #3E1F1F;
+    --sidebar-bg: #111111;
+    --sidebar-surface: #191919;
+    --sidebar-line: #272727;
+    --sidebar-text: #9F9F9F;
+    --sidebar-text-active: #FFFFFF;
+    --overlay: rgba(10, 14, 16, 0.42);
+    --shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  }
+}
+[data-theme="dark"] {
+  --ink: #EBEBEB;
+  --ink-soft: #ABABAB;
+  --ink-faint: #7A7A7A;
+  --paper: #141414;
+  --surface: #1E1E1E;
+  --surface-2: #252525;
+  --line: #353535;
+  --line-soft: #2A2A2A;
+  --accent: #4BAECE;
+  --accent-strong: #86CBE2;
+  --accent-soft: #143649;
+  --on-accent: #04131C;
+  --focus: var(--accent);
+  --success: #55B48B;
+  --success-soft: #1B3A2C;
+  --warning: #DD9E52;
+  --warning-soft: #3E2E17;
+  --warning-ink: #DD9E52;
+  --danger: #E27A7A;
+  --danger-soft: #3E1F1F;
+  --sidebar-bg: #111111;
+  --sidebar-surface: #191919;
+  --sidebar-line: #272727;
+  --sidebar-text: #9F9F9F;
+  --sidebar-text-active: #FFFFFF;
+  --overlay: rgba(10, 14, 16, 0.42);
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+:root {
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-14: 14px;
+  --space-16: 16px;
+  --space-18: 18px;
+  --space-20: 20px;
+  --space-26: 26px;
+  --space-30: 30px;
+  --radius-6: 6px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-9: 9px;
+  --radius-10: 10px;
+  --radius-12: 12px;
+  --radius-pill: 999px;
+  --sidebar-width: 258px;
+  --drawer-width: 460px;
+  --content-max: 1180px;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "IBM Plex Serif", "IBM Plex Sans", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+/* Estilos de texto */
+.t-title-detail { font-family: var(--font-serif); font-size: 21px; line-height: 1.5; font-weight: 600; }
+.t-title-page { font-family: var(--font-serif); font-size: 19px; line-height: 1.5; font-weight: 600; }
+.t-title-drawer { font-family: var(--font-serif); font-size: 16px; line-height: 1.5; font-weight: 600; }
+.t-title-panel { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.5; font-weight: 600; }
+.t-body { font-family: var(--font-sans); font-size: 14px; line-height: 1.5; font-weight: 400; }
+.t-body-strong { font-family: var(--font-sans); font-size: 13.5px; line-height: 1.5; font-weight: 500; }
+.t-body-sm { font-family: var(--font-sans); font-size: 13px; line-height: 1.5; font-weight: 400; }
+.t-label { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; font-weight: 600; }
+.t-caption { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; font-weight: 400; }
+.t-overline { font-family: var(--font-sans); font-size: 11.5px; line-height: 1.5; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
+.t-table-head { font-family: var(--font-sans); font-size: 11px; line-height: 1.5; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.t-kpi-value { font-family: var(--font-mono); font-size: 26px; line-height: 1.5; font-weight: 500; font-variant-numeric: tabular-nums; }
+.t-mono-num { font-family: var(--font-mono); font-size: 13px; line-height: 1.5; font-weight: 400; font-variant-numeric: tabular-nums; }
+.t-wordmark-short { font-family: var(--font-mono); font-size: 15px; line-height: 1.2; font-weight: 500; font-variant-numeric: tabular-nums; }
