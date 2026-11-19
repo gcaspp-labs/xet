@@ -30,6 +30,8 @@ var (
 	ErrSectorRequired  = errors.New("sector required for agents and supervisors")
 	ErrSectorNotFound  = errors.New("sector not found")
 	ErrSelfLockout     = errors.New("admin cannot deactivate or change the role of their own account")
+	ErrWrongPassword   = errors.New("current password is wrong")
+	ErrSamePassword    = errors.New("new password equals the current one")
 )
 
 // UserHasTicketsError refuses deactivating or moving a user who still has
@@ -100,6 +102,52 @@ func (s *Service) ResetPassword(ctx context.Context, actor auth.User, targetID i
 			EntityID:   target.ID,
 			Action:     "user_password_reset",
 			ActorID:    &actor.ID,
+		}); err != nil {
+			return fmt.Errorf("audit: %w", err)
+		}
+		return nil
+	})
+}
+
+// ChangeOwnPassword lets any signed-in user change their own password. The
+// current password must match; a wrong one is not a login failure and does not
+// count towards the login lock. In one transaction it updates the hash, ends
+// the user's other sessions (keeping the one of currentToken) and records the
+// audit log.
+func (s *Service) ChangeOwnPassword(ctx context.Context, actor auth.User, currentToken, current, next string) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		u, err := q.GetUserForUpdate(ctx, actor.ID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+		if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(current)) != nil {
+			return ErrWrongPassword
+		}
+		if next == current {
+			return ErrSamePassword
+		}
+		hash, err := HashPassword(next)
+		if err != nil {
+			return err
+		}
+		if err := q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{ID: u.ID, PasswordHash: hash}); err != nil {
+			return fmt.Errorf("update password: %w", err)
+		}
+		if err := q.DeleteOtherUserSessions(ctx, db.DeleteOtherUserSessionsParams{
+			UserID:    u.ID,
+			TokenHash: auth.HashToken(currentToken),
+		}); err != nil {
+			return fmt.Errorf("delete other sessions: %w", err)
+		}
+		if err := q.CreateAuditLog(ctx, db.CreateAuditLogParams{
+			EntityType: "user",
+			EntityID:   u.ID,
+			Action:     "user_password_changed",
+			ActorID:    &u.ID,
 		}); err != nil {
 			return fmt.Errorf("audit: %w", err)
 		}

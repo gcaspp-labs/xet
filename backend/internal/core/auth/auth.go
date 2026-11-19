@@ -125,7 +125,7 @@ func (s *Service) Login(ctx context.Context, email, password, ip string) (string
 			return fmt.Errorf("delete expired sessions: %w", err)
 		}
 		if err := q.CreateSession(ctx, db.CreateSessionParams{
-			TokenHash: hashToken(token),
+			TokenHash: HashToken(token),
 			UserID:    u.ID,
 			ExpiresAt: expiresAt,
 		}); err != nil {
@@ -210,7 +210,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, time.Ti
 		return User{}, time.Time{}, ErrInvalidSession
 	}
 	row, err := s.q.TouchSession(ctx, db.TouchSessionParams{
-		TokenHash: hashToken(token),
+		TokenHash: HashToken(token),
 		ExpiresAt: time.Now().Add(SessionTTL),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -228,7 +228,7 @@ func (s *Service) CheckSession(ctx context.Context, token string) (User, error) 
 	if token == "" {
 		return User{}, ErrInvalidSession
 	}
-	row, err := s.q.GetSessionUser(ctx, hashToken(token))
+	row, err := s.q.GetSessionUser(ctx, HashToken(token))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrInvalidSession
 	}
@@ -243,7 +243,7 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}
-	if err := s.q.DeleteSession(ctx, hashToken(token)); err != nil {
+	if err := s.q.DeleteSession(ctx, HashToken(token)); err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
 	return nil
@@ -257,7 +257,8 @@ func newToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func hashToken(token string) string {
+// HashToken is how a session token is stored: sessions keep only its hash.
+func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }

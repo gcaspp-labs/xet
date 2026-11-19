@@ -9,6 +9,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/testapi"
 )
 
 func TestAdministrationRequiresAdmin(t *testing.T) {
@@ -595,5 +596,183 @@ func TestEditingKeepsOrChangesTheNickname(t *testing.T) {
 		if r := e.Do(http.MethodPut, path, other, body("Ana Maria Souza", "Outro")); r.Status != http.StatusForbidden {
 			t.Fatalf("%s: status %d", who, r.Status)
 		}
+	}
+}
+
+const ownPasswordPath = "/api/auth/me/password"
+
+func changeOwn(e *testEnv, token, current, next string) testapi.Response {
+	e.T.Helper()
+	return e.Do(http.MethodPut, ownPasswordPath, token, map[string]string{"current_password": current, "new_password": next})
+}
+
+func passwordHashOf(e *testEnv, userID int64) string {
+	e.T.Helper()
+	var hash string
+	if err := e.Pool.QueryRow(e.T.Context(), "select password_hash from users where id = $1", userID).Scan(&hash); err != nil {
+		e.T.Fatal(err)
+	}
+	return hash
+}
+
+func TestEveryRoleChangesTheirOwnPassword(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	e.User("sup@exemplo.com", db.UserRoleSupervisor, &sector.ID)
+	e.User("agente@exemplo.com", db.UserRoleAgent, &sector.ID)
+
+	for _, email := range []string{"admin@exemplo.com", "sup@exemplo.com", "agente@exemplo.com"} {
+		token := e.Login(email, testPassword)
+		if resp := changeOwn(e, token, testPassword, "Nova#Senha26"); resp.Status != http.StatusNoContent {
+			t.Fatalf("%s: status %d, body %v", email, resp.Status, resp.Body)
+		}
+		e.Login(email, "Nova#Senha26")
+	}
+
+	if resp := changeOwn(e, "", testPassword, "Nova#Senha26"); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("no session: status %d, want 401", resp.Status)
+	}
+}
+
+func TestChangeOwnPasswordWrongCurrent(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	token := e.Login("ana@exemplo.com", testPassword)
+	other := e.Login("ana@exemplo.com", testPassword)
+	before := passwordHashOf(e, ana.ID)
+
+	// More wrong tries than the login lock allows: none of them counts as a login failure.
+	for range auth.MaxEmailFailures + 1 {
+		resp := changeOwn(e, token, "Errada#Azul47", "Nova#Senha26")
+		if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Senha atual incorreta." {
+			t.Fatalf("wrong current: status %d, body %v", resp.Status, resp.Body)
+		}
+	}
+
+	if passwordHashOf(e, ana.ID) != before {
+		t.Fatal("password changed with a wrong current password")
+	}
+	for _, tk := range []string{token, other} {
+		if resp := e.Do(http.MethodGet, "/api/auth/me", tk, nil); resp.Status != http.StatusOK {
+			t.Fatalf("session after wrong current: status %d", resp.Status)
+		}
+	}
+	var failures int
+	if err := e.Pool.QueryRow(t.Context(), "select coalesce(sum(failures), 0) from login_attempts").Scan(&failures); err != nil {
+		t.Fatal(err)
+	}
+	if failures != 0 {
+		t.Fatalf("login failures = %d, want 0", failures)
+	}
+	e.Login("ana@exemplo.com", testPassword)
+	if actions, _ := e.AuditChanges("user", ana.ID); len(actions) != 0 {
+		t.Fatalf("audit after wrong current: %v", actions)
+	}
+}
+
+func TestChangeOwnPasswordPolicy(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	token := e.Login("ana@exemplo.com", testPassword)
+	before := passwordHashOf(e, ana.ID)
+
+	weak := "A senha precisa ter no mínimo 8 caracteres, com letra maiúscula, letra minúscula, número e caractere especial."
+	cases := []struct{ password, want string }{
+		{"Ab1!xyz", weak},  // 7 characters
+		{"abcdef1!", weak}, // no uppercase
+		{"ABCDEF1!", weak}, // no lowercase
+		{"Abcdefg!", weak}, // no digit
+		{"Abcdefg1", weak}, // no special character
+		{"Senha@123", "Senha muito comum. Escolha outra, mais difícil de adivinhar."},
+		{"Aa1!" + strings.Repeat("x", 69), "A senha pode ter no máximo 72 caracteres."}, // 73 bytes
+		{testPassword, "A nova senha precisa ser diferente da atual."},
+	}
+	for _, tc := range cases {
+		resp := changeOwn(e, token, testPassword, tc.password)
+		if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != tc.want {
+			t.Fatalf("new password %q: status %d, body %v, want 422 %q", tc.password, resp.Status, resp.Body, tc.want)
+		}
+	}
+	if passwordHashOf(e, ana.ID) != before {
+		t.Fatal("refused password changed the hash")
+	}
+}
+
+func TestChangeOwnPasswordKeepsThisSessionAndEndsTheOthers(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	e.User("bia@exemplo.com", db.UserRoleAgent, &sector.ID)
+	current := e.Login("ana@exemplo.com", testPassword)
+	other := e.Login("ana@exemplo.com", testPassword)
+	bia := e.Login("bia@exemplo.com", testPassword)
+
+	const newPassword = "Nova#Senha26"
+	if resp := changeOwn(e, current, testPassword, newPassword); resp.Status != http.StatusNoContent {
+		t.Fatalf("change: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	if resp := e.Do(http.MethodGet, "/api/auth/me", current, nil); resp.Status != http.StatusOK {
+		t.Fatalf("current session: status %d, want 200", resp.Status)
+	}
+	if resp := e.Do(http.MethodGet, "/api/auth/me", other, nil); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("other session of the user: status %d, want 401", resp.Status)
+	}
+	if resp := e.Do(http.MethodGet, "/api/auth/me", bia, nil); resp.Status != http.StatusOK {
+		t.Fatalf("session of another user: status %d, want 200", resp.Status)
+	}
+	if resp := e.Do(http.MethodPost, "/api/auth/login", "", map[string]string{"email": "ana@exemplo.com", "password": testPassword}); resp.Status != http.StatusUnauthorized {
+		t.Fatalf("old password: status %d, want 401", resp.Status)
+	}
+	e.Login("ana@exemplo.com", newPassword)
+
+	logs, err := e.Q.ListAuditLogsByEntity(t.Context(), db.ListAuditLogsByEntityParams{EntityType: "user", EntityID: ana.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 || logs[0].Action != "user_password_changed" || logs[0].ActorID == nil || *logs[0].ActorID != ana.ID {
+		t.Fatalf("audit logs: %+v", logs)
+	}
+	if logs[0].Changes != nil && strings.Contains(string(logs[0].Changes), newPassword) {
+		t.Fatal("audit must not contain the password")
+	}
+}
+
+func TestChangeOwnPasswordIsAllOrNothing(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	current := e.Login("ana@exemplo.com", testPassword)
+	other := e.Login("ana@exemplo.com", testPassword)
+	before := passwordHashOf(e, ana.ID)
+
+	// The audit, the last step, fails: the new hash and the ended sessions roll back.
+	if _, err := e.Pool.Exec(t.Context(), `
+		create function fail_password_changed() returns trigger language plpgsql as $$
+		begin
+			if new.action = 'user_password_changed' then raise exception 'audit down'; end if;
+			return new;
+		end $$;
+		create trigger fail_password_changed before insert on audit_logs
+		for each row execute function fail_password_changed();`); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp := changeOwn(e, current, testPassword, "Nova#Senha26"); resp.Status != http.StatusInternalServerError {
+		t.Fatalf("change with the audit down: status %d, want 500", resp.Status)
+	}
+	if passwordHashOf(e, ana.ID) != before {
+		t.Fatal("hash changed although the transaction failed")
+	}
+	if resp := e.Do(http.MethodGet, "/api/auth/me", other, nil); resp.Status != http.StatusOK {
+		t.Fatalf("other session after the failure: status %d, want 200", resp.Status)
 	}
 }
