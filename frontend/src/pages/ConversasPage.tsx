@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { CancelSheet } from '@/components/CancelSheet'
 import { ClosingSheet } from '@/components/ClosingSheet'
 import { RegisterContactSheet } from '@/components/ContactSheet'
+import { PhoneCopy } from '@/components/PhoneCopy'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
@@ -232,6 +233,7 @@ export default function ConversasPage() {
         wrapTitle
         breadcrumb={ticket ? `Chamados · ${ticket.sector.name} · ${ticket.protocol}` : 'Helpdesk'}
         title={ticket?.contact.name ?? 'Chamados'}
+        subtitle={ticket && <PhoneCopy phone={ticket.contact.phone} />}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {user.role === 'admin' && sectors.length > 0 && (
