@@ -60,7 +60,7 @@ values (
     $9, $10, $11, $12
 )
 on conflict (client_request_id) where client_request_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
 `
 
 type CreateAgentMessageParams struct {
@@ -119,6 +119,10 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 		&i.QuotedMessageID,
 		&i.QuotedType,
 		&i.QuotedBody,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.DeletionScope,
+		&i.DeletionOrigin,
 	)
 	return i, err
 }
@@ -161,6 +165,71 @@ func (q *Queries) CreateMediaFile(ctx context.Context, arg CreateMediaFileParams
 	return i, err
 }
 
+const createMessageChange = `-- name: CreateMessageChange :one
+insert into message_changes (
+    sector_id, message_id, target_external_message_id, kind, origin, author_id,
+    external_contact_id, phone, body, deletion_scope, external_event_id, occurred_at
+)
+values (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11, $12
+)
+on conflict (sector_id, external_event_id) where external_event_id is not null do nothing
+returning id
+`
+
+type CreateMessageChangeParams struct {
+	SectorID                int64
+	MessageID               *int64
+	TargetExternalMessageID *string
+	Kind                    MessageChangeKind
+	Origin                  MessageOrigin
+	AuthorID                *int64
+	ExternalContactID       *string
+	Phone                   *string
+	Body                    *string
+	DeletionScope           NullMessageDeletionScope
+	ExternalEventID         *string
+	OccurredAt              time.Time
+}
+
+// A change of a message, or one waiting for it (message_id empty). The same
+// provider event recorded again returns no row.
+func (q *Queries) CreateMessageChange(ctx context.Context, arg CreateMessageChangeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createMessageChange,
+		arg.SectorID,
+		arg.MessageID,
+		arg.TargetExternalMessageID,
+		arg.Kind,
+		arg.Origin,
+		arg.AuthorID,
+		arg.ExternalContactID,
+		arg.Phone,
+		arg.Body,
+		arg.DeletionScope,
+		arg.ExternalEventID,
+		arg.OccurredAt,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createOriginalVersion = `-- name: CreateOriginalVersion :exec
+insert into message_changes (sector_id, message_id, target_external_message_id, kind, origin, author_id, body, occurred_at)
+select m.sector_id, m.id, m.external_message_id, 'original', m.origin, m.author_id, m.body, m.sent_at
+from messages m
+where m.id = $1
+on conflict (message_id) where kind = 'original' do nothing
+`
+
+// Keeps the content of the message as it was sent, before its first edit
+// replaces it. Only once per message.
+func (q *Queries) CreateOriginalVersion(ctx context.Context, messageID int64) error {
+	_, err := q.db.Exec(ctx, createOriginalVersion, messageID)
+	return err
+}
+
 const createProviderMessage = `-- name: CreateProviderMessage :one
 insert into messages (
     ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at,
@@ -171,7 +240,7 @@ values (
     $12, $13, $14, $15
 )
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
 `
 
 type CreateProviderMessageParams struct {
@@ -235,6 +304,10 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 		&i.QuotedMessageID,
 		&i.QuotedType,
 		&i.QuotedBody,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.DeletionScope,
+		&i.DeletionOrigin,
 	)
 	return i, err
 }
@@ -347,7 +420,7 @@ func (q *Queries) GetMediaFileTicket(ctx context.Context, mediaID *int64) (int64
 }
 
 const getMessage = `-- name: GetMessage :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin from messages
 where id = $1
 `
 
@@ -376,12 +449,16 @@ func (q *Queries) GetMessage(ctx context.Context, id int64) (Message, error) {
 		&i.QuotedMessageID,
 		&i.QuotedType,
 		&i.QuotedBody,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.DeletionScope,
+		&i.DeletionOrigin,
 	)
 	return i, err
 }
 
 const getMessageByClientRequestID = `-- name: GetMessageByClientRequestID :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin from messages
 where client_request_id = $1
 `
 
@@ -410,8 +487,71 @@ func (q *Queries) GetMessageByClientRequestID(ctx context.Context, clientRequest
 		&i.QuotedMessageID,
 		&i.QuotedType,
 		&i.QuotedBody,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.DeletionScope,
+		&i.DeletionOrigin,
 	)
 	return i, err
+}
+
+const getMessageForChange = `-- name: GetMessageForChange :one
+select m.id, m.ticket_id, m.origin, m.body, m.edited_at, m.deleted_at,
+       c.external_contact_id as contact_external_id, c.phone as contact_phone
+from messages m
+join contacts c on c.id = m.contact_id
+where m.sector_id = $1 and m.external_message_id = $2
+`
+
+type GetMessageForChangeParams struct {
+	SectorID          int64
+	ExternalMessageID *string
+}
+
+type GetMessageForChangeRow struct {
+	ID                int64
+	TicketID          int64
+	Origin            MessageOrigin
+	Body              *string
+	EditedAt          *time.Time
+	DeletedAt         *time.Time
+	ContactExternalID *string
+	ContactPhone      *string
+}
+
+// Message of the sector with the provider ID, with its contact, to apply a
+// change received from the provider.
+func (q *Queries) GetMessageForChange(ctx context.Context, arg GetMessageForChangeParams) (GetMessageForChangeRow, error) {
+	row := q.db.QueryRow(ctx, getMessageForChange, arg.SectorID, arg.ExternalMessageID)
+	var i GetMessageForChangeRow
+	err := row.Scan(
+		&i.ID,
+		&i.TicketID,
+		&i.Origin,
+		&i.Body,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.ContactExternalID,
+		&i.ContactPhone,
+	)
+	return i, err
+}
+
+const linkMessageChange = `-- name: LinkMessageChange :exec
+update message_changes
+set message_id = $1
+where id = $2 and message_id is null
+`
+
+type LinkMessageChangeParams struct {
+	MessageID *int64
+	ID        int64
+}
+
+// Links a change that arrived before its message, once.
+func (q *Queries) LinkMessageChange(ctx context.Context, arg LinkMessageChangeParams) error {
+	_, err := q.db.Exec(ctx, linkMessageChange, arg.MessageID, arg.ID)
+	return err
 }
 
 const listLastMessages = `-- name: ListLastMessages :many
@@ -456,6 +596,103 @@ func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]Li
 	return items, nil
 }
 
+const listMessageChanges = `-- name: ListMessageChanges :many
+select c.id, c.kind, c.origin, c.author_id, u.name as author_name, c.body, c.deletion_scope, c.occurred_at
+from message_changes c
+left join users u on u.id = c.author_id
+where c.message_id = $1
+order by c.occurred_at, c.id
+`
+
+type ListMessageChangesRow struct {
+	ID            int64
+	Kind          MessageChangeKind
+	Origin        MessageOrigin
+	AuthorID      *int64
+	AuthorName    *string
+	Body          *string
+	DeletionScope NullMessageDeletionScope
+	OccurredAt    time.Time
+}
+
+// Versions (original and edits) and deletions of the message, in the order
+// they happened.
+func (q *Queries) ListMessageChanges(ctx context.Context, messageID *int64) ([]ListMessageChangesRow, error) {
+	rows, err := q.db.Query(ctx, listMessageChanges, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMessageChangesRow
+	for rows.Next() {
+		var i ListMessageChangesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Origin,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.Body,
+			&i.DeletionScope,
+			&i.OccurredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingMessageChanges = `-- name: ListPendingMessageChanges :many
+select id, sector_id, message_id, target_external_message_id, kind, origin, author_id, external_contact_id, phone, body, deletion_scope, external_event_id, occurred_at, created_at from message_changes
+where sector_id = $1 and target_external_message_id = $2 and message_id is null
+order by occurred_at, id
+`
+
+type ListPendingMessageChangesParams struct {
+	SectorID                int64
+	TargetExternalMessageID *string
+}
+
+// Changes received before the message they point at, oldest first.
+func (q *Queries) ListPendingMessageChanges(ctx context.Context, arg ListPendingMessageChangesParams) ([]MessageChange, error) {
+	rows, err := q.db.Query(ctx, listPendingMessageChanges, arg.SectorID, arg.TargetExternalMessageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MessageChange
+	for rows.Next() {
+		var i MessageChange
+		if err := rows.Scan(
+			&i.ID,
+			&i.SectorID,
+			&i.MessageID,
+			&i.TargetExternalMessageID,
+			&i.Kind,
+			&i.Origin,
+			&i.AuthorID,
+			&i.ExternalContactID,
+			&i.Phone,
+			&i.Body,
+			&i.DeletionScope,
+			&i.ExternalEventID,
+			&i.OccurredAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTicketMessages = `-- name: ListTicketMessages :many
 select
     m.id, m.ticket_id, m.direction, m.origin, m.type, m.body, m.status, m.failure_reason, m.sent_at,
@@ -466,7 +703,8 @@ select
     rs.emoji as sector_reaction_emoji, rs.reacted_at as sector_reaction_at,
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
     rs.via_phone as sector_reaction_via_phone,
-    m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body
+    m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body,
+    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
@@ -505,6 +743,10 @@ type ListTicketMessagesRow struct {
 	QuotedMessageID          *int64
 	QuotedType               NullMessageType
 	QuotedBody               *string
+	EditedAt                 *time.Time
+	DeletedAt                *time.Time
+	DeletionScope            NullMessageDeletionScope
+	DeletionOrigin           NullMessageOrigin
 }
 
 func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]ListTicketMessagesRow, error) {
@@ -544,6 +786,10 @@ func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]Lis
 			&i.QuotedMessageID,
 			&i.QuotedType,
 			&i.QuotedBody,
+			&i.EditedAt,
+			&i.DeletedAt,
+			&i.DeletionScope,
+			&i.DeletionOrigin,
 		); err != nil {
 			return nil, err
 		}
@@ -555,11 +801,57 @@ func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]Lis
 	return items, nil
 }
 
+const lockMessageExternalID = `-- name: LockMessageExternalID :exec
+select pg_advisory_xact_lock(hashtextextended('message:' || $1::bigint || ':' || $2::text, 0))
+`
+
+type LockMessageExternalIDParams struct {
+	SectorID          int64
+	ExternalMessageID string
+}
+
+// Serializes, until the transaction ends, recording a message from the
+// provider and the changes (edit, deletion) that point at it, so a change
+// that arrives with the original is never left unlinked. Taken before the
+// ticket lock.
+func (q *Queries) LockMessageExternalID(ctx context.Context, arg LockMessageExternalIDParams) error {
+	_, err := q.db.Exec(ctx, lockMessageExternalID, arg.SectorID, arg.ExternalMessageID)
+	return err
+}
+
+const markMessageDeleted = `-- name: MarkMessageDeleted :execrows
+update messages
+set deleted_at = $1, deletion_scope = $2, deletion_origin = $3
+where id = $4 and deleted_at is null
+`
+
+type MarkMessageDeletedParams struct {
+	DeletedAt      *time.Time
+	DeletionScope  NullMessageDeletionScope
+	DeletionOrigin NullMessageOrigin
+	ID             int64
+}
+
+// Deletion is a state of its own, apart from the delivery status, and keeps
+// the content and the file. The first deletion recorded holds.
+func (q *Queries) MarkMessageDeleted(ctx context.Context, arg MarkMessageDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markMessageDeleted,
+		arg.DeletedAt,
+		arg.DeletionScope,
+		arg.DeletionOrigin,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markMessageFailed = `-- name: MarkMessageFailed :one
 update messages
 set status = 'failed', failure_reason = $1
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
 `
 
 type MarkMessageFailedParams struct {
@@ -592,6 +884,10 @@ func (q *Queries) MarkMessageFailed(ctx context.Context, arg MarkMessageFailedPa
 		&i.QuotedMessageID,
 		&i.QuotedType,
 		&i.QuotedBody,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.DeletionScope,
+		&i.DeletionOrigin,
 	)
 	return i, err
 }
@@ -600,7 +896,7 @@ const markMessageSent = `-- name: MarkMessageSent :one
 update messages
 set status = 'sent', external_message_id = $1, failure_reason = null
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
 `
 
 type MarkMessageSentParams struct {
@@ -633,8 +929,70 @@ func (q *Queries) MarkMessageSent(ctx context.Context, arg MarkMessageSentParams
 		&i.QuotedMessageID,
 		&i.QuotedType,
 		&i.QuotedBody,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.DeletionScope,
+		&i.DeletionOrigin,
 	)
 	return i, err
+}
+
+const messageChangeEventExists = `-- name: MessageChangeEventExists :one
+select exists (
+    select 1 from message_changes where sector_id = $1 and external_event_id = $2
+)
+`
+
+type MessageChangeEventExistsParams struct {
+	SectorID        int64
+	ExternalEventID *string
+}
+
+// A change with the provider event ID was already recorded in the sector.
+func (q *Queries) MessageChangeEventExists(ctx context.Context, arg MessageChangeEventExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, messageChangeEventExists, arg.SectorID, arg.ExternalEventID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const messageChangeRecorded = `-- name: MessageChangeRecorded :one
+select exists (
+    select 1 from message_changes
+    where sector_id = $1 and kind = $2 and occurred_at = $3
+      and body is not distinct from $4::text
+      and origin = $5
+      and (message_id = $6::bigint
+           or ($6::bigint is null and message_id is null
+               and target_external_message_id = $7))
+)
+`
+
+type MessageChangeRecordedParams struct {
+	SectorID                int64
+	Kind                    MessageChangeKind
+	OccurredAt              time.Time
+	Body                    *string
+	Origin                  MessageOrigin
+	MessageID               *int64
+	TargetExternalMessageID *string
+}
+
+// The same change, by kind, time and content, is already recorded for the
+// message, or waiting for it when the message is unknown (message_id empty).
+func (q *Queries) MessageChangeRecorded(ctx context.Context, arg MessageChangeRecordedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, messageChangeRecorded,
+		arg.SectorID,
+		arg.Kind,
+		arg.OccurredAt,
+		arg.Body,
+		arg.Origin,
+		arg.MessageID,
+		arg.TargetExternalMessageID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const messageExists = `-- name: MessageExists :one
@@ -659,7 +1017,7 @@ const retryMessage = `-- name: RetryMessage :one
 update messages
 set status = 'pending', failure_reason = null
 where id = $1 and status = 'failed'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
 `
 
 // Only a failed message goes back to pending, so a double click retries once.
@@ -688,6 +1046,32 @@ func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
 		&i.QuotedMessageID,
 		&i.QuotedType,
 		&i.QuotedBody,
+		&i.EditedAt,
+		&i.DeletedAt,
+		&i.DeletionScope,
+		&i.DeletionOrigin,
 	)
 	return i, err
+}
+
+const setMessageCurrentVersion = `-- name: SetMessageCurrentVersion :execrows
+update messages
+set body = $1, edited_at = $2
+where id = $3 and (edited_at is null or edited_at < $2)
+`
+
+type SetMessageCurrentVersionParams struct {
+	Body     *string
+	EditedAt *time.Time
+	ID       int64
+}
+
+// The edit becomes the current content only when it is newer than the current
+// one: a late edit is kept as a version but never undoes a newer one.
+func (q *Queries) SetMessageCurrentVersion(ctx context.Context, arg SetMessageCurrentVersionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMessageCurrentVersion, arg.Body, arg.EditedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

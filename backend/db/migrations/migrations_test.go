@@ -403,3 +403,71 @@ func TestSectorTransferWithoutFormRelaxesOnlyTransfers(t *testing.T) {
 		t.Fatalf("transferred tickets = %d", n)
 	}
 }
+
+// As alterações de mensagens (#291) chegam sem mexer nas mensagens gravadas, e
+// voltar à migração anterior devolve as mensagens como estavam.
+func TestMessageChangesKeepMessagesUpAndDown(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 29); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into contacts (name, registered) values ('Maria', false);
+		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000001', 1, 1, 'queued', now(), now());
+		insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, body, external_message_id, sent_at)
+		values (1, 1, 1, 'inbound', 'customer', 'text', 'Oi', 'IN-1', now());`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 30); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err := db.QueryRowContext(ctx, `
+		select body || ' | ' || (edited_at is null) || ' | ' || (deleted_at is null) from messages where id = 1`).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "Oi | true | true" {
+		t.Fatalf("message after up = %q", state)
+	}
+	// Exclusão parcial (sem alcance ou origem) é recusada pelo banco.
+	if _, err := db.ExecContext(ctx, `update messages set deleted_at = now() where id = 1`); err == nil {
+		t.Fatal("deletion without scope and origin accepted")
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into message_changes (sector_id, message_id, target_external_message_id, kind, origin, body, occurred_at)
+		values (1, 1, 'IN-1', 'original', 'customer', 'Oi', now()), (1, 1, 'IN-1', 'edit', 'customer', 'Olá', now());
+		update messages set body = 'Olá', edited_at = now(), deleted_at = now(), deletion_scope = 'everyone', deletion_origin = 'customer' where id = 1;`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 29); err != nil {
+		t.Fatalf("down: %v", err)
+	}
+	var columns int
+	if err := db.QueryRowContext(ctx, `
+		select count(*) from information_schema.columns
+		where table_schema = 'public' and table_name = 'messages'
+		  and column_name in ('edited_at', 'deleted_at', 'deletion_scope', 'deletion_origin')`).Scan(&columns); err != nil {
+		t.Fatal(err)
+	}
+	var messages int
+	if err := db.QueryRowContext(ctx, `select count(*) from messages`).Scan(&messages); err != nil {
+		t.Fatal(err)
+	}
+	if columns != 0 || messages != 1 {
+		t.Fatalf("after down: %d columns left, %d messages", columns, messages)
+	}
+	if _, err := p.Up(ctx); err != nil {
+		t.Fatalf("up again: %v", err)
+	}
+}

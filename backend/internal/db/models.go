@@ -137,6 +137,125 @@ func AllConnectionStatusValues() []ConnectionStatus {
 	}
 }
 
+type MessageChangeKind string
+
+const (
+	MessageChangeKindOriginal MessageChangeKind = "original"
+	MessageChangeKindEdit     MessageChangeKind = "edit"
+	MessageChangeKindDeletion MessageChangeKind = "deletion"
+)
+
+func (e *MessageChangeKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageChangeKind(s)
+	case string:
+		*e = MessageChangeKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageChangeKind: %T", src)
+	}
+	return nil
+}
+
+type NullMessageChangeKind struct {
+	MessageChangeKind MessageChangeKind
+	Valid             bool // Valid is true if MessageChangeKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageChangeKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageChangeKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageChangeKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageChangeKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageChangeKind), nil
+}
+
+func (e MessageChangeKind) Valid() bool {
+	switch e {
+	case MessageChangeKindOriginal,
+		MessageChangeKindEdit,
+		MessageChangeKindDeletion:
+		return true
+	}
+	return false
+}
+
+func AllMessageChangeKindValues() []MessageChangeKind {
+	return []MessageChangeKind{
+		MessageChangeKindOriginal,
+		MessageChangeKindEdit,
+		MessageChangeKindDeletion,
+	}
+}
+
+type MessageDeletionScope string
+
+const (
+	MessageDeletionScopeEveryone MessageDeletionScope = "everyone"
+	MessageDeletionScopeLocal    MessageDeletionScope = "local"
+)
+
+func (e *MessageDeletionScope) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageDeletionScope(s)
+	case string:
+		*e = MessageDeletionScope(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageDeletionScope: %T", src)
+	}
+	return nil
+}
+
+type NullMessageDeletionScope struct {
+	MessageDeletionScope MessageDeletionScope
+	Valid                bool // Valid is true if MessageDeletionScope is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageDeletionScope) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageDeletionScope, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageDeletionScope.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageDeletionScope) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageDeletionScope), nil
+}
+
+func (e MessageDeletionScope) Valid() bool {
+	switch e {
+	case MessageDeletionScopeEveryone,
+		MessageDeletionScopeLocal:
+		return true
+	}
+	return false
+}
+
+func AllMessageDeletionScopeValues() []MessageDeletionScope {
+	return []MessageDeletionScope{
+		MessageDeletionScopeEveryone,
+		MessageDeletionScopeLocal,
+	}
+}
+
 type MessageDirection string
 
 const (
@@ -651,6 +770,27 @@ type Message struct {
 	QuotedMessageID         *int64
 	QuotedType              NullMessageType
 	QuotedBody              *string
+	EditedAt                *time.Time
+	DeletedAt               *time.Time
+	DeletionScope           NullMessageDeletionScope
+	DeletionOrigin          NullMessageOrigin
+}
+
+type MessageChange struct {
+	ID                      int64
+	SectorID                int64
+	MessageID               *int64
+	TargetExternalMessageID *string
+	Kind                    MessageChangeKind
+	Origin                  MessageOrigin
+	AuthorID                *int64
+	ExternalContactID       *string
+	Phone                   *string
+	Body                    *string
+	DeletionScope           NullMessageDeletionScope
+	ExternalEventID         *string
+	OccurredAt              time.Time
+	CreatedAt               time.Time
 }
 
 type MessageReaction struct {
