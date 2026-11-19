@@ -41,7 +41,7 @@ As regras de cada funcionalidade, como o sistema funciona hoje, ficam em `docs/f
 | Dashboard do atendimento | [dashboard.md](docs/features/dashboard.md) | Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, para supervisores e administradores. |
 | Interface geral | [interface.md](docs/features/interface.md) | Regras que valem para todas as telas: acessibilidade e o comportamento das janelas de formulário. |
 
-Fora do piloto: etiquetas, importação por planilha, grupos, exibição de reações, figurinhas e localização, e tratamento de mensagens editadas ou apagadas pelo cliente.
+Fora do piloto: etiquetas, importação por planilha, grupos, exibição de reações, figurinhas e localização. Edição e exclusão de mensagens deixaram de ser "fora do piloto" quanto ao **registro**: o que o cliente ou o celular do setor edita ou exclui para todos fica gravado na mensagem, com o histórico de versões, sem apagar nada (#290, #291). Continuam fora: exibir a etiqueta de editada/excluída na tela (#293) e editar ou excluir pelo XET (#292).
 
 ### Onde foram as seções antigas
 
@@ -72,6 +72,7 @@ Comentários no código e nas migrações citam seções antigas deste documento
 
 - O sistema armazenará mensagens e anexos durante o piloto. Isso é necessário porque o Whatsmeow não recupera o histórico antigo sob demanda, os links de mídia do WhatsApp expiram e a transferência entre setores exige histórico compartilhado entre números diferentes.
 - No piloto não haverá política de exclusão. Retenção e adequação à LGPD serão definidas antes da expansão; o backup será a última etapa a ser resolvida.
+- Alterações de mensagens (edições e exclusões) que chegam para uma mensagem que o XET nunca recebeu (por exemplo, de antes do XET) ficam pendentes em `message_changes` sem prazo de limpeza. Elas entram na política de retenção a ser definida.
 
 ## Critérios de validação do piloto
 
