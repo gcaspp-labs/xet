@@ -9,6 +9,7 @@ import {
   CircleAlert,
   ClipboardCheck,
   Contrast,
+  KeyRound,
   Landmark,
   LayoutDashboard,
   LogOut,
@@ -23,8 +24,9 @@ import {
   Volume2,
   type LucideIcon,
 } from 'lucide-react'
-import type { CSSProperties } from 'react'
+import { type CSSProperties, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { ChangePasswordDialog } from '@/components/ChangePasswordDialog'
 import { NotificationBell } from '@/components/NotificationBell'
 import { RealtimeNote } from '@/components/RealtimeNote'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -202,57 +204,66 @@ function SettingsMenu({ role }: { role: Role }) {
   const logout = useLogout()
   const navigate = useNavigate()
   const { setOpenMobile } = useSidebar()
+  const [changingPassword, setChangingPassword] = useState(false)
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<SidebarMenuButton />}>
-        <Settings strokeWidth={1.7} className="size-[15px]!" aria-hidden />
-        <span>Configurações</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" className="min-w-60">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Tema</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-            {themeItems.map((item) => (
-              <DropdownMenuRadioItem key={item.value} value={item.value}>
-                <item.icon strokeWidth={1.7} aria-hidden />
-                {item.label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <AccessibilitySettings />
-        <DropdownMenuSeparator />
-        {role !== 'admin' && (
-          <>
-            <AlertSettings />
-            <DropdownMenuSeparator />
-          </>
-        )}
-        {role === 'admin' && (
-          <DropdownMenuItem
-            onClick={() => {
-              setOpenMobile(false)
-              navigate('/admin/usuarios')
-            }}
-          >
-            <Users strokeWidth={1.7} aria-hidden />
-            Usuários
+    <>
+      <ChangePasswordDialog open={changingPassword} onOpenChange={setChangingPassword} />
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<SidebarMenuButton />}>
+          <Settings strokeWidth={1.7} className="size-[15px]!" aria-hidden />
+          <span>Configurações</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" className="min-w-60">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Tema</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+              {themeItems.map((item) => (
+                <DropdownMenuRadioItem key={item.value} value={item.value}>
+                  <item.icon strokeWidth={1.7} aria-hidden />
+                  {item.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <AccessibilitySettings />
+          <DropdownMenuSeparator />
+          {role !== 'admin' && (
+            <>
+              <AlertSettings />
+              <DropdownMenuSeparator />
+            </>
+          )}
+          {role === 'admin' && (
+            <DropdownMenuItem
+              onClick={() => {
+                setOpenMobile(false)
+                navigate('/admin/usuarios')
+              }}
+            >
+              <Users strokeWidth={1.7} aria-hidden />
+              Usuários
+            </DropdownMenuItem>
+          )}
+          {/* A barra lateral fica aberta no celular: fechá-la desmontaria a janela. */}
+          <DropdownMenuItem onClick={() => setChangingPassword(true)}>
+            <KeyRound strokeWidth={1.7} aria-hidden />
+            Alterar senha
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem
-          disabled={logout.isPending}
-          onClick={() =>
-            logout.mutate(undefined, {
-              onSuccess: () => navigate('/login', { replace: true }),
-            })
-          }
-        >
-          <LogOut strokeWidth={1.7} aria-hidden />
-          Sair
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuItem
+            disabled={logout.isPending}
+            onClick={() =>
+              logout.mutate(undefined, {
+                onSuccess: () => navigate('/login', { replace: true }),
+              })
+            }
+          >
+            <LogOut strokeWidth={1.7} aria-hidden />
+            Sair
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   )
 }
 

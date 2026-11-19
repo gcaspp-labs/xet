@@ -26,6 +26,9 @@ func NewHandler(logger *slog.Logger, service *Service) *Handler {
 
 // Routes registers the routes of the users, behind the session middleware.
 func (h *Handler) Routes(r chi.Router) {
+	// Qualquer usuário logado troca a própria senha.
+	r.Put("/auth/me/password", h.changeOwnPassword)
+
 	r.With(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin)).
 		Put("/users/{userID}/password", h.resetPassword)
 
@@ -186,6 +189,38 @@ func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusNotFound, "Usuário não encontrado.")
 	case errors.Is(err, ErrForbidden):
 		httpx.WriteError(w, http.StatusForbidden, "Você não tem permissão para redefinir a senha deste usuário.")
+	default:
+		httpx.InternalError(h.logger, w, r, err)
+	}
+}
+
+type changeOwnPasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required"`
+	NewPassword     string `json:"new_password" validate:"required"`
+}
+
+// changeOwnPassword answers a wrong current password with 422, not 401: the
+// frontend treats 401 as an expired session and signs out.
+func (h *Handler) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	var req changeOwnPasswordRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+
+	err := h.service.ChangeOwnPassword(r.Context(), auth.CurrentUser(r.Context()), auth.SessionToken(r), req.CurrentPassword, req.NewPassword)
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, ErrWrongPassword):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Senha atual incorreta.")
+	case errors.Is(err, ErrSamePassword):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "A nova senha precisa ser diferente da atual.")
+	case errors.Is(err, ErrWeakPassword):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, msgWeakPassword)
+	case errors.Is(err, ErrCommonPassword):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Senha muito comum. Escolha outra, mais difícil de adivinhar.")
+	case errors.Is(err, ErrPasswordTooLong):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "A senha pode ter no máximo 72 caracteres.")
 	default:
 		httpx.InternalError(h.logger, w, r, err)
 	}

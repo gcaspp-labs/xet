@@ -5,10 +5,10 @@ Como cada funcionário entra no sistema e o que cada papel pode fazer. Vale para
 ## Regras
 
 1. Cada funcionário tem login individual, com e-mail e senha.
-2. Não há recuperação automática de senha: administradores e supervisores redefinem a senha quando necessário. Quem redefine digita a nova senha e a repassa ao usuário, e as sessões abertas dele são encerradas.
+2. Não há recuperação automática de senha: administradores e supervisores redefinem a senha quando necessário. Quem redefine digita a nova senha e a repassa ao usuário, e as sessões abertas dele são encerradas. Qualquer usuário também troca a própria senha em Configurações › Alterar senha, informando a senha atual: as outras sessões dele são encerradas e a atual continua. Senha atual errada é recusada e não conta como tentativa de login (regras 6 e 7); a nova senha não pode ser igual à atual.
 3. A senha tem no mínimo 8 caracteres, com ao menos uma letra maiúscula, uma minúscula, um número e um caractere especial. É a regra de complexidade adotada pela empresa, como recomenda o guia de segurança da ANPD para agentes de pequeno porte (item 41).
 4. A senha não pode ser comum ou fácil de adivinhar (NIST SP 800-63B-4): o sistema recusa senhas de uma lista própria, inclusive com variações de maiúsculas, com números e símbolos no começo ou no fim, ou com letras trocadas por símbolos (`Senha@123`, `P@ssw0rd1!`).
-5. As regras de senha valem ao cadastrar e ao redefinir; senhas já gravadas continuam valendo.
+5. As regras de senha valem ao cadastrar, ao redefinir e ao trocar a própria senha; senhas já gravadas continuam valendo.
 6. Depois de 5 tentativas de login erradas seguidas com o mesmo e-mail, ou 30 vindas do mesmo IP, o login fica bloqueado por 15 minutos, mesmo com a senha certa. O limite por IP é maior porque um escritório costuma sair por um único IP.
 7. Tentativas erradas com mais de 15 minutos deixam de contar, e o login certo zera a contagem do e-mail. E-mail não cadastrado conta da mesma forma, para a resposta não revelar quais e-mails existem.
 8. Não há botão de desbloqueio: redefinir a senha do usuário libera o e-mail dele na hora.
@@ -31,6 +31,7 @@ Como cada funcionário entra no sistema e o que cada papel pode fazer. Vale para
 | Gerenciar assuntos e soluções pela tela | — | Próprio setor | Todos os setores |
 | Adicionar assunto ou solução ao salvar o formulário | Quem pode salvar o formulário | Quem pode salvar o formulário | Quem pode salvar o formulário |
 | Redefinir senha | — | Usuários do próprio setor | Todos |
+| Alterar a própria senha | Sim | Sim | Sim |
 | Conectar e desvincular número (QR code) e ver status | — | Próprio setor | Todos os setores |
 | Cadastrar setores e usuários | — | — | Sim |
 | Cadastrar contatos e vinculá-los a um órgão | Sim | Sim | Sim |
@@ -54,3 +55,4 @@ Encerrar: somente o responsável pelo chamado em atendimento, inclusive quando �
 ## Histórico
 
 - 2026-11-11: regras migradas do `spec.md` (Usuários e acesso). A tabela de permissões veio de `docs/data-model.md`.
+- 2026-11-19: troca da própria senha em Configurações (regras 2 e 5, tabela de permissões) ([#259](https://github.com/gcaspp-labs/xet/issues/259)).

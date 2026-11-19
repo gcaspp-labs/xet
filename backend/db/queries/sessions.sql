@@ -27,6 +27,11 @@ where token_hash = @token_hash;
 delete from sessions
 where user_id = @user_id;
 
+-- Encerra as outras sessões do usuário e mantém a desta requisição.
+-- name: DeleteOtherUserSessions :exec
+delete from sessions
+where user_id = @user_id and token_hash <> @token_hash;
+
 -- Confere a sessão sem renovar a expiração (conexões WebSocket abertas).
 -- name: GetSessionUser :one
 select u.id, u.name, u.email, u.role, u.sector_id, s.expires_at

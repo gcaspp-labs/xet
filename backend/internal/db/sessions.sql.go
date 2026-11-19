@@ -46,6 +46,22 @@ func (q *Queries) DeleteExpiredUserSessions(ctx context.Context, userID int64) e
 	return err
 }
 
+const deleteOtherUserSessions = `-- name: DeleteOtherUserSessions :exec
+delete from sessions
+where user_id = $1 and token_hash <> $2
+`
+
+type DeleteOtherUserSessionsParams struct {
+	UserID    int64
+	TokenHash string
+}
+
+// Encerra as outras sessões do usuário e mantém a desta requisição.
+func (q *Queries) DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) error {
+	_, err := q.db.Exec(ctx, deleteOtherUserSessions, arg.UserID, arg.TokenHash)
+	return err
+}
+
 const deleteSession = `-- name: DeleteSession :exec
 delete from sessions
 where token_hash = $1
