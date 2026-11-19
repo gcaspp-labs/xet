@@ -3,12 +3,21 @@ import type { Sector } from '@/lib/admin'
 import type { Role } from '@/lib/auth'
 
 // Telefone com DDI no formato pt-BR: 5511999990000 → +55 (11) 99999-0000.
+const brazilianPhone = /^55(\d{2})(\d{4,5})(\d{4})$/
+
 export function formatPhone(digits: string) {
-  const match = /^55(\d{2})(\d{4,5})(\d{4})$/.exec(digits)
+  const match = brazilianPhone.exec(digits)
   if (!match) {
     return `+${digits}`
   }
   return `+55 (${match[1]}) ${match[2]}-${match[3]}`
+}
+
+// Telefone para discar: só números, 0 + DDD + número, sem o +55 (5561987654321 → 061987654321).
+// Número de fora do Brasil (que não casa com o padrão acima): só os dígitos, como estão.
+export function dialPhone(digits: string) {
+  const match = brazilianPhone.exec(digits)
+  return match ? `0${match[1]}${match[2]}${match[3]}` : digits.replace(/\D/g, '')
 }
 
 export const roleLabels: Record<Role, string> = {

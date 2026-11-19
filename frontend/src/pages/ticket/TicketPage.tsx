@@ -38,6 +38,7 @@ import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
 import type { HistoryReturnState } from '@/lib/history-return'
+import { PhoneCopy } from '@/components/PhoneCopy'
 import { Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -74,7 +75,6 @@ import {
   formatDuration,
   formatFileSize,
   formatMessageTime,
-  formatPhone,
   organizationLabel,
   ticketStatusLabel,
 } from '@/lib/format'
@@ -992,9 +992,7 @@ function DetailsTab({ ticket }: { ticket: TicketDetail }) {
         'Contato',
         <>
           {ticket.contact.name}
-          <span className="mono-num block caption text-ink-faint">
-            {ticket.contact.phone ? formatPhone(ticket.contact.phone) : 'Sem telefone'}
-          </span>
+          <PhoneCopy phone={ticket.contact.phone} />
         </>,
       )}
       {row(
