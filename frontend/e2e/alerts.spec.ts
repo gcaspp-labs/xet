@@ -436,6 +436,57 @@ test('voltar a uma aba impede a notificação pendente na outra, com som único'
   await expect.poll(allBeeps).toBe(3)
 })
 
+test('fechar a aba que alertou não deixa a outra, atrasada, repetir o alerta', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await context.grantPermissions(['notifications'])
+  await context.addInitScript(() => {
+    localStorage.setItem('alerts.browser', 'on')
+    localStorage.setItem('alerts.sound', 'on')
+  })
+  await spyOnAlerts(page)
+  await trackSocket(page)
+  await signIn(page, agent, userPassword)
+  const other = await context.newPage()
+  await spyOnAlerts(other)
+  await trackSocket(other)
+  await openWhenLive(page, sector.id)
+  await openWhenLive(other, sector.id, '/chamados')
+  // O navegador só libera o som depois de uma interação com a página.
+  await other.locator('body').click({ position: { x: 1, y: 1 } })
+  await page.bringToFront()
+  await page.locator('body').click({ position: { x: 1, y: 1 } })
+  await setHidden(page, true)
+  await setHidden(other, true)
+
+  // A resposta da fila desta aba fica parada até a outra alertar e fechar.
+  let open!: () => void
+  const gate = new Promise<void>((resolve) => {
+    open = resolve
+  })
+  await other.route(`**/api/sectors/${sector.id}/tickets`, async (route) => {
+    await gate
+    await route.continue()
+  })
+  await receive(request, sector.id, 'Zeca Fechado')
+  await expect.poll(() => notified(page)).toEqual(['Zeca Fechado'])
+  await expect.poll(() => beeps(page)).toBe(1)
+  await page.close()
+  open()
+  await expect(other.getByText('Chamado recebido: Zeca Fechado')).toBeVisible()
+  await other.unroute(`**/api/sectors/${sector.id}/tickets`)
+
+  // O chamado seguinte prova que os alertas seguem ligados; o de Zeca, se repetisse, já estaria
+  // na lista e no som.
+  await receive(request, sector.id, 'Zilda Depois')
+  await expect.poll(() => notified(other)).toEqual(['Zilda Depois'])
+  await expect.poll(() => beeps(other)).toBe(1)
+})
+
 test('mudar as opções numa aba vale na outra, sem abrir o menu nela', async ({
   page,
   context,

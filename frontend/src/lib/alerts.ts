@@ -126,17 +126,18 @@ function reserve(ticketId: number) {
 
 // Só uma aba alerta cada chamado. A trava existe em HTTPS e localhost, os mesmos endereços em
 // que há notificação; sem ela, só o som pode repetir, se duas abas reservarem ao mesmo tempo.
-// A reserva é a própria trava do chamado, segurada pela aba que ganhou: o navegador garante que
-// só uma aba a tem. O localStorage não serve aqui, porque a escrita de uma aba chega às outras
-// com atraso, e as duas podiam ler o chamado como livre.
+// A aba que ganha segura a trava do chamado durante a reserva: o navegador garante que só uma
+// aba a tem, e a gravação no localStorage, que chega às outras com atraso, já chegou quando a
+// trava for solta. A gravação guarda a reserva se a aba que alertou fechar antes do fim.
 function claim(ticketId: number): Promise<boolean> {
   if (!('locks' in navigator)) {
     return Promise.resolve(reserve(ticketId))
   }
   return new Promise((resolve) => {
     void navigator.locks.request(`${claimsKey}.${ticketId}`, { ifAvailable: true }, (lock) => {
-      resolve(lock !== null)
-      return lock && new Promise((release) => setTimeout(release, claimDuration))
+      const won = lock !== null && reserve(ticketId)
+      resolve(won)
+      return won ? new Promise((release) => setTimeout(release, claimDuration)) : undefined
     })
   })
 }
