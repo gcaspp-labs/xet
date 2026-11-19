@@ -761,33 +761,34 @@ export function ConversationCard({
   const depth = useRef(0)
   const [dragging, setDragging] = useState(false)
   const hasFiles = (event: DragEvent) => event.dataTransfer.types.includes('Files')
-  const dropProps = canReply
-    ? {
-        onDragEnter: (event: DragEvent) => {
-          if (!hasFiles(event) || !attach.current) return
-          event.preventDefault()
-          depth.current += 1
-          setDragging(true)
-        },
-        onDragOver: (event: DragEvent) => {
-          if (!hasFiles(event)) return
-          event.preventDefault() // o navegador não abre o arquivo na aba
-          event.dataTransfer.dropEffect = attach.current ? 'copy' : 'none'
-        },
-        onDragLeave: () => {
-          depth.current = Math.max(0, depth.current - 1)
-          if (depth.current === 0) setDragging(false)
-        },
-        onDrop: (event: DragEvent) => {
-          if (!hasFiles(event)) return
-          event.preventDefault()
-          depth.current = 0
-          setDragging(false)
-          const dropped = event.dataTransfer.files[0] // vários: só o primeiro
-          if (dropped && attach.current) attach.current(dropped)
-        },
-      }
-    : {}
+  // O cartão sempre cancela o soltar, para o navegador não abrir o arquivo na aba. Destaque e
+  // anexo só valem com `canReply` e o campo aceitando (sem gravação nem áudio pronto).
+  const accepting = () => canReply && attach.current !== null
+  const dropProps = {
+    onDragEnter: (event: DragEvent) => {
+      if (!hasFiles(event) || !accepting()) return
+      event.preventDefault()
+      depth.current += 1
+      setDragging(true)
+    },
+    onDragOver: (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault() // o navegador não abre o arquivo na aba
+      event.dataTransfer.dropEffect = accepting() ? 'copy' : 'none'
+    },
+    onDragLeave: () => {
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setDragging(false)
+    },
+    onDrop: (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      depth.current = 0
+      setDragging(false)
+      const dropped = event.dataTransfer.files[0] // vários: só o primeiro
+      if (dropped && accepting()) attach.current?.(dropped)
+    },
+  }
 
   // Mostra sempre a mensagem mais recente.
   useEffect(() => {
@@ -1188,6 +1189,18 @@ function readOnlyNote(ticket: TicketDetail) {
   return `Encerrado em ${at}${by}.`
 }
 
+// Na conversa só de leitura, soltar um arquivo não faz nada, mas o navegador não pode abri-lo na aba.
+const ignoreFileDrop = {
+  onDragOver: (event: DragEvent) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'none'
+  },
+  onDrop: (event: DragEvent) => {
+    if (event.dataTransfer.types.includes('Files')) event.preventDefault()
+  },
+}
+
 // A conversa completa, só para leitura: sem campo de mensagem, áudio, anexo nem Reenviar, com os
 // avisos de sistema e de correção na ordem do tempo. A tela Chamados segue com a ConversationCard.
 function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
@@ -1206,6 +1219,7 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
       role="region"
       aria-label="Conversa"
       className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
+      {...ignoreFileDrop}
     >
       <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length > 0 || logs.length > 0 ? (

@@ -3,10 +3,19 @@ import {
   request as apiRequest,
   test,
   type APIRequestContext,
+  type JSHandle,
   type Locator,
   type Page,
 } from '@playwright/test'
-import { admin, seedSector, signIn, unique, userPassword, openQueued } from './fixtures'
+import {
+  admin,
+  seedClosedTicket,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+  openQueued,
+} from './fixtures'
 
 const limit = 16 * 1024 * 1024
 
@@ -209,7 +218,37 @@ test('arquivo acima de 16 MB, colado ou solto, mostra o aviso e não anexa', asy
   await expect(warning).toHaveCount(0)
 })
 
-test('sem poder responder, colar e soltar não fazem nada e não há destaque', async ({
+// Dispara o evento de arrastar no cartão e devolve se o navegador teve o padrão impedido (ou
+// seja, se ele não abriria o arquivo na aba).
+function drag(conversation: Locator, type: 'dragover' | 'drop', data: JSHandle) {
+  return conversation.evaluate(
+    (el, { type, data }) => {
+      const event = new DragEvent(type, {
+        dataTransfer: data as DataTransfer,
+        bubbles: true,
+        cancelable: true,
+      })
+      el.dispatchEvent(event)
+      return event.defaultPrevented
+    },
+    { type, data },
+  )
+}
+
+// Sem poder responder, soltar não anexa nem destaca, mas o navegador não abre o arquivo na aba.
+async function expectDropIgnored(page: Page, conversation: Locator) {
+  const file = await transfer(page, [{ name: 'balancete.pdf', type: 'application/pdf' }])
+  await conversation.dispatchEvent('dragenter', { dataTransfer: file })
+  await expect(
+    conversation.getByRole('status').filter({ hasText: 'Solte para anexar' }),
+  ).toHaveCount(0)
+  expect(await drag(conversation, 'dragover', file)).toBe(true)
+  expect(await drag(conversation, 'drop', file)).toBe(true)
+  await expect(conversation.getByText('balancete.pdf')).toHaveCount(0)
+  await expect(page.getByRole('textbox')).toHaveCount(0)
+}
+
+test('outro responsável: colar e soltar não anexam, não há destaque e o navegador não abre o arquivo', async ({
   page,
   browser,
   request,
@@ -224,23 +263,19 @@ test('sem poder responder, colar e soltar não fazem nada e não há destaque', 
   await other.goto(page.url())
   const conversation = other.getByRole('region', { name: 'Conversa', exact: true })
   await expect(conversation).toContainText(/Chamado com agent \d+\. Peça a transferência/)
-
-  const file = await transfer(other, [{ name: 'balancete.pdf', type: 'application/pdf' }])
-  await conversation.dispatchEvent('dragenter', { dataTransfer: file })
-  await expect(conversation.getByRole('status')).toHaveCount(0)
-  const prevented = await conversation.evaluate((el, data) => {
-    const event = new DragEvent('drop', {
-      dataTransfer: data as DataTransfer,
-      bubbles: true,
-      cancelable: true,
-    })
-    el.dispatchEvent(event)
-    return event.defaultPrevented
-  }, file)
-  expect(prevented).toBe(false)
-  await expect(conversation.getByText('balancete.pdf')).toHaveCount(0)
-  await expect(other.getByRole('textbox')).toHaveCount(0)
+  await expectDropIgnored(other, conversation)
   await context.close()
+})
+
+test('atendimento encerrado: soltar não anexa, não há destaque e o navegador não abre o arquivo', async ({
+  page,
+  baseURL,
+}) => {
+  const { ticketId, agent } = await seedClosedTicket(baseURL!)
+  await signIn(page, agent, userPassword)
+  await page.goto(`/atendimentos/${ticketId}`)
+  await expect(page.getByRole('status', { name: 'Só leitura' })).toBeVisible()
+  await expectDropIgnored(page, page.getByRole('region', { name: 'Conversa', exact: true }))
 })
 
 test('durante a gravação e com o áudio gravado, colar e soltar não fazem nada', async ({
