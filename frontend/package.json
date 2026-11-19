@@ -16,7 +16,7 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/ibm-plex-serif": "^5.3.0",
-    "@gcaspp-labs/glab-design-system": "github:gcaspp-labs/glab-design-system#3c32eca",
+    "@gcaspp-labs/glab-design-system": "github:gcaspp-labs/glab-design-system#a05e5eb",
     "@hookform/resolvers": "^6.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.105.0",

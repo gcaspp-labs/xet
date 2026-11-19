@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import { admin, signIn, unique } from './fixtures'
 
-const lightPaper = 'rgb(237, 239, 237)'
-const darkPaper = 'rgb(16, 21, 23)'
+const lightPaper = 'rgb(238, 238, 238)'
+const darkPaper = 'rgb(20, 20, 20)'
 
 async function chooseTheme(page: Page, label: string) {
   await page.getByRole('button', { name: 'Configurações' }).click()
