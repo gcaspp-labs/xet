@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import { Pagination } from '@/components/Pagination'
 import { SearchBox } from '@/components/SearchBox'
 import { SortableTableHead } from '@/components/SortableTableHead'
-import { PageContent, Topbar } from '@/components/Topbar'
+import { Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Autocomplete,
@@ -202,7 +202,7 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
   const locked = !filter.hasSector
 
   return (
-    <div className="flex flex-col gap-(--space-12)">
+    <div className="flex shrink-0 flex-col gap-(--space-12)">
       <div className="flex flex-wrap items-center justify-between gap-(--space-12)">
         <SearchBox
           value={filter.query}
@@ -384,15 +384,18 @@ export default function AtendimentosPage() {
   )
 
   return (
-    <>
+    // A página tem a altura da janela e não rola: só a lista rola, dentro do painel (regra 33).
+    <div className="flex h-[calc(100dvh-var(--header-height)-var(--realtime-note-height,0px))] flex-col overflow-clip [&>header]:shrink-0">
       <Topbar
         breadcrumb={sector?.name ?? (filter.isAdmin ? 'Todos os setores' : undefined)}
         title="Atendimentos"
       />
-      <PageContent>
+      {/* Se os filtros ocuparem quase toda a janela (celular, texto Maior), o painel mantém uma
+          altura mínima e a área abaixo do cabeçalho rola, nunca a página. */}
+      <div className="mx-auto flex min-h-0 w-full max-w-(--content-max) flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 md:px-[30px] md:py-[30px]">
         <Filters filter={filter} />
         {!filter.datesValid && (
-          <Alert variant="warning">
+          <Alert variant="warning" className="shrink-0">
             <CircleAlert strokeWidth={1.7} aria-hidden />
             <AlertDescription>
               Período invertido. O início precisa ser antes do fim.
@@ -400,15 +403,15 @@ export default function AtendimentosPage() {
           </Alert>
         )}
         {filter.datesValid && error && (
-          <Alert variant="warning">
+          <Alert variant="warning" className="shrink-0">
             <CircleAlert strokeWidth={1.7} aria-hidden />
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
-        <Card className="gap-0 py-0">
+        <Card className="min-h-64 flex-1 gap-0 py-0">
           {tickets && tickets.length > 0 ? (
-            <Table>
-              <TableHeader>
+            <Table containerClassName="min-h-0 flex-1 overflow-y-auto">
+              <TableHeader className="sticky top-0 z-10 in-data-[contrast=high]:bg-background">
                 <TableRow>
                   <SortableTableHead label="Protocolo" column="protocolo" list={list} />
                   <SortableTableHead label="Data" column="data" list={list} />
@@ -447,7 +450,7 @@ export default function AtendimentosPage() {
             />
           )}
         </Card>
-      </PageContent>
-    </>
+      </div>
+    </div>
   )
 }
