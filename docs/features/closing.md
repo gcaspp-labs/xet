@@ -22,6 +22,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 16. Módulos que já estavam no chamado podem continuar nele mesmo que tenham sido desativados depois; módulos acrescentados na correção precisam estar ativos no setor.
 17. A correção exige um motivo. Uma correção que não altera nenhum dado é recusada, sem registro.
 18. O sistema registra autor, data, motivo e as alterações (valores anteriores e novos). O chamado mostra o histórico de alterações nos detalhes, e a conversa mostra, na ordem do tempo, quem corrigiu e quando.
+19. Ao encerrar, se a última mensagem de saída do setor falhou ou ainda está sendo enviada, o formulário avisa sem impedir o encerramento. Mensagens recebidas não contam; o aviso vem antes do aviso de contato não cadastrado. Mensagens enviadas, entregues ou lidas não geram aviso. Cancelar chamado não mostra esse aviso.
 
 ## Campos do formulário
 

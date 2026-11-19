@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { toast } from 'sonner'
 import { FormDialog } from '@/components/FormDialog'
+import { LastMessageWarning } from '@/components/LastMessageWarning'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -81,6 +82,7 @@ export function SectorTransferSheet({
       error={error}
       onSubmit={submit}
     >
+      <LastMessageWarning ticketId={ticket.id} />
       <Field>
         <FieldLabel htmlFor="sector-transfer-target">Setor de destino</FieldLabel>
         <Select

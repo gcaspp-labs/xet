@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { toast } from 'sonner'
 import { FormDialog } from '@/components/FormDialog'
+import { LastMessageWarning } from '@/components/LastMessageWarning'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -79,6 +80,7 @@ export function TransferSheet({
       error={error}
       onSubmit={submit}
     >
+      <LastMessageWarning ticketId={ticket.id} />
       <Field>
         <FieldLabel htmlFor="transfer-target">Transferir para</FieldLabel>
         <Select items={items} value={target} onValueChange={(value) => setTarget(value)}>
