@@ -134,12 +134,14 @@ Só pode ser feito no servidor, com o número real conectado. Em cada caso, conf
 | Caso | Como provocar | O que precisa acontecer |
 | --- | --- | --- |
 | Queda de internet | Tirar o servidor da rede por alguns minutos, enviar mensagens do celular do cliente nesse intervalo e religar | Supervisor é avisado se a queda for detectada; ao voltar, a conexão retorna sem QR code e as mensagens do intervalo chegam |
-| Reinício do serviço | `docker compose -f deploy/compose.yml --env-file deploy/.env restart backend` | Número volta conectado sem QR code; mensagens `pending` viram `failed`, sem reenvio automático |
+| Reinício do serviço | `docker compose -f deploy/compose.yml --env-file deploy/.env restart backend` | Número volta conectado sem QR code; mensagens `pending` viram `failed`, sem reenvio automático. Após a correção da #266, a volta sem QR code foi confirmada por Laboratório em teste manual com número real (o restante deste caso não foi registrado) |
 | Reinício do servidor | Reiniciar a máquina | Contêineres sobem sozinhos; número volta conectado sem QR code |
 | Desconexão pelo celular | Remover o aparelho vinculado no celular | Setor fica como "Requer QR code"; supervisor é avisado; novo QR code reconecta |
 | Celular desligado | Desligar o celular por alguns minutos e enviar mensagens pelo painel | Conexão continua, porque o aparelho vinculado não depende do celular ligado |
 
-Há uma suspeita anotada no PR da T26, lida no código e não reproduzida: a conta é gravada sem o número do dispositivo (`ToNonAD`), e o reinício pode cair em `logged_out`, perdendo o telefone. O caso "Reinício do serviço" é quem confirma ou descarta. Testar isso primeiro.
+A suspeita anotada no PR da T26 (a conta gravada sem o número do dispositivo, `ToNonAD`, fazendo o reinício cair em `logged_out` e perder o telefone) foi **confirmada e corrigida** na #266 (PR #272, commit `df1a580`). O `session.changed` grava o `external_account_id` sem a parte do dispositivo, mas o armazenamento do whatsmeow guarda o aparelho com o JID completo; a busca era exata, não achava o aparelho e o setor caía em `logged_out`. Agora o adaptador acha o aparelho salvo pelo número. Com dois ou mais aparelhos do mesmo número, ele não escolhe nenhum: o setor fica deslogado (pede QR code) e o erro vai ao log. Laboratório confirmou a correção em teste manual com número real, depois da #266.
+
+Setores que já foram desvinculados por deploys anteriores precisam parear por QR code mais uma vez; depois disso, sobrevivem aos próximos deploys.
 
 ## Conferências manuais somadas das tasks anteriores
 
