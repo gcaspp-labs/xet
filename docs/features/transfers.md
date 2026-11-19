@@ -26,6 +26,10 @@ Passar o chamado para outra pessoa do setor, devolvê-lo à fila ou levá-lo a o
 20. No Dashboard, o tempo médio de atendimento da etapa transferida vai de quando foi assumida até o momento da transferência (ver [dashboard.md](dashboard.md)).
 21. O motivo fica registrado na auditoria da transferência.
 
+## Aviso de mensagem
+
+Ao transferir para um atendente ou outro setor, se a última mensagem de saída do setor falhou ou ainda está sendo enviada, a janela avisa sem impedir a transferência. Mensagens recebidas não contam; mensagens enviadas, entregues ou lidas não geram aviso. Devolver à fila não mostra esse aviso.
+
 ## Fora do escopo / limites conhecidos
 
 - Com a API oficial, a primeira mensagem do destino fora da janela de 24 horas precisará ser um modelo aprovado (ver `docs/architecture.md`).

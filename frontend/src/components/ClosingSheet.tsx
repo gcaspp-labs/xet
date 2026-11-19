@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { ClosingFields } from '@/components/ClosingFields'
 import { RegisterContactSheet } from '@/components/ContactSheet'
 import { FormDialog } from '@/components/FormDialog'
+import { LastMessageWarning } from '@/components/LastMessageWarning'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { FieldDescription } from '@/components/ui/field'
@@ -181,6 +182,7 @@ export function ClosingSheet({
         onSubmit={onSubmit}
         question={questions.question}
       >
+        <LastMessageWarning ticketId={ticket.id} />
         {!ticket.contact.registered && (
           <Alert variant="warning">
             <TriangleAlert strokeWidth={1.7} aria-hidden />
