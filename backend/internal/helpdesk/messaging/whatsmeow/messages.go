@@ -33,6 +33,14 @@ func (s *session) message(evt *events.Message) bool {
 	if reaction := evt.Message.GetReactionMessage(); reaction != nil && !evt.IsEdit {
 		return s.reaction(ctx, evt, reaction)
 	}
+	if pm := evt.Message.GetProtocolMessage(); pm != nil {
+		switch pm.GetType() {
+		case waE2E.ProtocolMessage_MESSAGE_EDIT:
+			return s.edit(ctx, evt, pm)
+		case waE2E.ProtocolMessage_REVOKE:
+			return s.revoke(ctx, evt, pm)
+		}
+	}
 	msg, ok := s.translate(ctx, evt)
 	if !ok {
 		return true
@@ -70,9 +78,86 @@ func (s *session) reaction(ctx context.Context, evt *events.Message, reaction *w
 	return s.adapter.emit(ev) == nil
 }
 
+// edit emits the new text or caption of a message, made by the contact or
+// from the phone of the sector. Whatsmeow delivers it as a protocol message
+// with the key of the target, unwrapped from the edited message. An edit
+// without text or caption (a reaction edit, a poll) is skipped.
+func (s *session) edit(ctx context.Context, evt *events.Message, pm *waE2E.ProtocolMessage) bool {
+	info := evt.Info
+	target := pm.GetKey().GetID()
+	body, ok := editedBody(pm.GetEditedMessage())
+	if target == "" || !ok || info.Chat == types.StatusBroadcastJID {
+		return true
+	}
+	ev := messaging.MessageEdited{
+		SectorID:                s.sectorID,
+		ExternalEventID:         info.ID,
+		TargetExternalMessageID: target,
+		Group:                   info.IsGroup,
+		FromSector:              info.IsFromMe,
+		Body:                    body,
+		At:                      info.Timestamp,
+	}
+	if ms := pm.GetTimestampMS(); ms > 0 {
+		ev.At = time.UnixMilli(ms)
+	}
+	if !info.IsGroup {
+		ev.ExternalContactID, ev.Phone = s.chatContact(ctx, info)
+	}
+	return s.adapter.emit(ev) == nil
+}
+
+// revoke emits a message deleted for everyone by the contact or from the
+// phone of the sector.
+func (s *session) revoke(ctx context.Context, evt *events.Message, pm *waE2E.ProtocolMessage) bool {
+	info := evt.Info
+	target := pm.GetKey().GetID()
+	if target == "" || info.Chat == types.StatusBroadcastJID {
+		return true
+	}
+	ev := messaging.MessageRevoked{
+		SectorID:                s.sectorID,
+		ExternalEventID:         info.ID,
+		TargetExternalMessageID: target,
+		Group:                   info.IsGroup,
+		FromSector:              info.IsFromMe,
+		At:                      info.Timestamp,
+	}
+	if !info.IsGroup {
+		ev.ExternalContactID, ev.Phone = s.chatContact(ctx, info)
+	}
+	return s.adapter.emit(ev) == nil
+}
+
+// editedBody is the text or caption of the new content of an edit.
+func editedBody(m *waE2E.Message) (string, bool) {
+	switch {
+	case m.GetConversation() != "":
+		return m.GetConversation(), true
+	case m.GetExtendedTextMessage() != nil:
+		return m.GetExtendedTextMessage().GetText(), true
+	case m.GetImageMessage() != nil:
+		return m.GetImageMessage().GetCaption(), true
+	case m.GetVideoMessage() != nil:
+		return m.GetVideoMessage().GetCaption(), true
+	case m.GetDocumentMessage() != nil:
+		return m.GetDocumentMessage().GetCaption(), true
+	}
+	return "", false
+}
+
+// chatContact is the contact of a chat, as the ID and the phone of Message.
+func (s *session) chatContact(ctx context.Context, info types.MessageInfo) (id, phone string) {
+	contact := s.contact(ctx, info)
+	if contact.Server == types.DefaultUserServer {
+		phone = contact.User
+	}
+	return contact.String(), phone
+}
+
 // translate converts a Whatsmeow message into the neutral type, downloading
-// its media. Edits and protocol messages (deletions, settings, key sharing)
-// are outside the pilot and are skipped; other unknown kinds become
+// its media. Edits and deletions have their own events; other protocol
+// messages (settings, key sharing) are skipped; other unknown kinds become
 // unsupported (reactions have their own event), so they still show up in the history.
 func (s *session) translate(ctx context.Context, evt *events.Message) (messaging.Message, bool) {
 	info := evt.Info

@@ -179,11 +179,62 @@ type ReactionReceived struct {
 	At              time.Time
 }
 
+// MessageEdited is a new content of a message already sent, edited by the
+// contact or from the phone of the sector (an echo of an edit made through the
+// system arrives the same way). It points at the target only by its provider
+// message ID, which every provider has; the edit is not a new message.
+type MessageEdited struct {
+	SectorID int64
+	// ExternalEventID is the provider ID of the edit itself. Optional: a
+	// provider that has none leaves it empty, and the edit is then matched by
+	// its time and content. Delivered again, the same ID changes nothing.
+	ExternalEventID string
+	// TargetExternalMessageID is the provider ID of the edited message. Required.
+	TargetExternalMessageID string
+	// ExternalContactID and Phone identify the contact of the chat, as in Message.
+	ExternalContactID string
+	Phone             string
+	// Group reports an edit in a group chat or broadcast list.
+	Group bool
+	// FromSector reports an edit made by the sector number (from the phone, or
+	// the echo of one made through the system) rather than by the contact.
+	FromSector bool
+	// Body is the new text, or the new caption of an attachment; the file
+	// does not change.
+	Body string
+	// At is when the edit was made, according to the provider.
+	At time.Time
+}
+
+// MessageRevoked is a message deleted for everyone by the contact or from the
+// phone of the sector. It points at the target only by its provider message
+// ID. The content already known is kept by the system.
+type MessageRevoked struct {
+	SectorID int64
+	// ExternalEventID is the provider ID of the deletion itself. Optional, as
+	// in MessageEdited.
+	ExternalEventID string
+	// TargetExternalMessageID is the provider ID of the deleted message. Required.
+	TargetExternalMessageID string
+	// ExternalContactID and Phone identify the contact of the chat, as in Message.
+	ExternalContactID string
+	Phone             string
+	// Group reports a deletion in a group chat or broadcast list.
+	Group bool
+	// FromSector reports a deletion made by the sector number rather than by
+	// the contact.
+	FromSector bool
+	// At is when the message was deleted, according to the provider.
+	At time.Time
+}
+
 func (e ConnectionChanged) Sector() int64  { return e.SectorID }
 func (e MessageReceived) Sector() int64    { return e.SectorID }
 func (e MessageSentOutside) Sector() int64 { return e.SectorID }
 func (e StatusUpdated) Sector() int64      { return e.SectorID }
 func (e ReactionReceived) Sector() int64   { return e.SectorID }
+func (e MessageEdited) Sector() int64      { return e.SectorID }
+func (e MessageRevoked) Sector() int64     { return e.SectorID }
 
 // EventHandler receives the events of every sector. A returned error tells
 // the provider the event was not processed, so it may be delivered again.
@@ -235,6 +286,22 @@ type Reaction struct {
 	Emoji string
 }
 
+// Capabilities tells what the provider supports on a message already sent.
+// A zero window means the provider does not support the action at all: the
+// system must report it as unavailable, never simulate a success. The windows
+// count from the original send and are the policy of the provider, not a
+// guarantee that every device of the contact applies the change.
+type Capabilities struct {
+	// EditWindow is how long after the send the text or caption may be edited.
+	EditWindow time.Duration
+	// RevokeWindow is how long after the send a message may be deleted for everyone.
+	RevokeWindow time.Duration
+	// ReceivesChanges reports that the provider delivers MessageEdited and
+	// MessageRevoked events. Without it, edits and deletions made outside the
+	// system never reach it.
+	ReceivesChanges bool
+}
+
 // Provider is the contract every messaging provider implements.
 type Provider interface {
 	// Connect starts the session of the sector. It returns once the session
@@ -256,6 +323,8 @@ type Provider interface {
 	SendReaction(ctx context.Context, r Reaction) error
 	// ResolveContact returns the provider contact ID of a phone with country code.
 	ResolveContact(ctx context.Context, sectorID int64, phone string) (string, error)
+	// Capabilities reports what the provider supports on a message already sent.
+	Capabilities() Capabilities
 }
 
 // QRPairing is implemented by providers linked by QR code (Whatsmeow). It is
