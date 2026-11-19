@@ -208,8 +208,10 @@ test('o "+" de Meus chamados abre Novo chamado, e o botão do topo saiu', async 
 test.describe('desktop 1440×900', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  // O cabeçalho cabe em uma linha: cerca de 72 px, e cerca de 84 px para o administrador, por
-  // causa do seletor Setor. Sem altura fixa: a medida é a do conteúdo.
+  // As ações do cabeçalho cabem em uma linha: cerca de 72 px sem chamado aberto, e cerca de 90 px
+  // com ele, por causa da linha do telefone do cliente abaixo do nome (#239); com o seletor Setor do
+  // administrador a altura é a mesma, porque o texto à esquerda é mais alto que o seletor. Sem
+  // altura fixa: a medida é a do conteúdo.
   const headerOf = (page: Page) =>
     page.getByRole('heading', { level: 1 }).locator('xpath=ancestor::header[1]')
 
@@ -217,12 +219,15 @@ test.describe('desktop 1440×900', () => {
     const { sector, agent } = await seedSector(baseURL!)
     const ticket = await seedTicket(baseURL!, sector.id, { email: agent })
     await signIn(page, agent, userPassword)
-    for (const path of ['/chamados', `/chamados/${ticket.id}`]) {
+    for (const [path, min, max] of [
+      ['/chamados', 68, 76],
+      [`/chamados/${ticket.id}`, 84, 94],
+    ] as const) {
       await page.goto(path)
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
       const height = (await headerOf(page).boundingBox())!.height
-      expect(height).toBeGreaterThanOrEqual(68)
-      expect(height).toBeLessThanOrEqual(76)
+      expect(height).toBeGreaterThanOrEqual(min)
+      expect(height).toBeLessThanOrEqual(max)
     }
   })
 
@@ -240,7 +245,7 @@ test.describe('desktop 1440×900', () => {
     await expect(page.getByRole('heading', { name: ticket.name })).toBeVisible()
     await expect(page.getByLabel('Setor')).toBeVisible()
     const height = (await headerOf(page).boundingBox())!.height
-    expect(height).toBeGreaterThanOrEqual(80)
-    expect(height).toBeLessThanOrEqual(88)
+    expect(height).toBeGreaterThanOrEqual(84)
+    expect(height).toBeLessThanOrEqual(94)
   })
 })
