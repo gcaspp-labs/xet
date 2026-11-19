@@ -68,7 +68,7 @@ export function QuoteBlock({
   const style = cn(
     'caption flex flex-col gap-0.5 rounded-(--radius-6) border-l-4 px-2 py-1.5 text-left',
     onPrimary
-      ? 'border-primary-foreground bg-primary-foreground/15 text-primary-foreground'
+      ? 'border-primary-foreground bg-primary-foreground/10 text-primary-foreground'
       : 'border-primary bg-muted text-ink-soft',
   )
 

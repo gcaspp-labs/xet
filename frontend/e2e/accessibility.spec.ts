@@ -366,7 +366,7 @@ test('alto contraste muda as cores nos temas claro e escuro e combina com o tama
   await signIn(page, admin.email, admin.password)
   const html = page.locator('html')
   const body = page.locator('body')
-  await expect(body).toHaveCSS('background-color', 'rgb(237, 239, 237)')
+  await expect(body).toHaveCSS('background-color', 'rgb(238, 238, 238)')
 
   await chooseInMenu(page, 'menuitemcheckbox', 'Alto contraste')
   await expect(html).toHaveAttribute('data-contrast', 'high')
@@ -394,7 +394,7 @@ test('alto contraste muda as cores nos temas claro e escuro e combina com o tama
   await page.getByRole('menuitemcheckbox', { name: 'Alto contraste' }).click()
   await page.keyboard.press('Escape')
   await expect(html).not.toHaveAttribute('data-contrast')
-  await expect(body).toHaveCSS('background-color', 'rgb(237, 239, 237)')
+  await expect(body).toHaveCSS('background-color', 'rgb(238, 238, 238)')
   await expect(body).toHaveCSS('font-size', '18.2px')
 })
 
