@@ -31,6 +31,10 @@ func (s *Service) HandleEvent(ctx context.Context, ev messaging.Event) error {
 		return s.HandleStatus(ctx, ev)
 	case messaging.ReactionReceived:
 		return s.HandleReaction(ctx, ev)
+	case messaging.MessageEdited:
+		return s.HandleMessageEdited(ctx, ev)
+	case messaging.MessageRevoked:
+		return s.HandleMessageRevoked(ctx, ev)
 	}
 	return nil
 }
@@ -99,6 +103,11 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 	var ticketID int64
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
+		// Before any other lock, in the order of the changes received for
+		// this message, so one that arrives meanwhile is never left unlinked.
+		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: sectorID, ExternalMessageID: msg.ExternalMessageID}); err != nil {
+			return fmt.Errorf("lock message: %w", err)
+		}
 		contact, link, err := findOrCreateContact(ctx, q, msg)
 		if err != nil {
 			return err
@@ -151,14 +160,21 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 			params.Direction = db.MessageDirectionOutbound
 			params.Status = db.NullMessageStatus{MessageStatus: db.MessageStatusSent, Valid: true}
 		}
-		_, err = q.CreateProviderMessage(ctx, params)
+		created, err := q.CreateProviderMessage(ctx, params)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errDuplicate
 		}
 		if err != nil {
 			return fmt.Errorf("create message: %w", err)
 		}
-		return nil
+		contactExternalID := contact.ExternalContactID
+		if link {
+			contactExternalID = &msg.ExternalContactID
+		}
+		return applyPendingChanges(ctx, q, sectorID, db.GetMessageForChangeRow{
+			ID: created.ID, TicketID: created.TicketID, Origin: created.Origin, Body: created.Body,
+			ContactExternalID: contactExternalID, ContactPhone: contact.Phone,
+		}, msg.ExternalMessageID)
 	})
 	if errors.Is(err, errDuplicate) {
 		return nil
