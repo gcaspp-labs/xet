@@ -316,6 +316,52 @@ export const json = async <T>(response: Response) => {
   return (await response.json()) as T
 }
 
+// Entra como administrador pela API e devolve o contexto de requisição, que o chamador encerra com
+// `dispose()`.
+export async function adminApi(baseURL: string) {
+  const api = await request.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
+  return api
+}
+
+// Acrescenta soluções a um assunto do setor, pela API como administrador.
+export async function addSolutions(
+  baseURL: string,
+  sectorId: number,
+  subject: string,
+  bodies: string[],
+) {
+  const api = await adminApi(baseURL)
+  const subjects = await json<{ id: number; name: string }[]>(
+    await api.get(`/api/sectors/${sectorId}/subjects`),
+  )
+  const id = subjects.find((item) => item.name === subject)!.id
+  for (const body of bodies) {
+    ok(await api.post(`/api/sectors/${sectorId}/subjects/${id}/solutions`, { data: { body } }))
+  }
+  await api.dispose()
+}
+
+// Setor com um módulo e os assuntos dados, cada um com as suas soluções, criados pela API como
+// administrador.
+export async function seedSubjects(
+  baseURL: string,
+  sectorId: number,
+  list: Record<string, string[]>,
+) {
+  const api = await adminApi(baseURL)
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sectorId}/modules`, { data: { name: 'Sistema' } }),
+  )
+  for (const name of Object.keys(list)) {
+    ok(await api.post(`/api/sectors/${sectorId}/subjects`, { data: { name, moduleId: module.id } }))
+  }
+  await api.dispose()
+  for (const [name, bodies] of Object.entries(list)) {
+    await addSolutions(baseURL, sectorId, name, bodies)
+  }
+}
+
 // Atendimento de um contato cadastrado, encerrado pelo atendente pela API, e
 // um segundo atendente do setor, que não encerrou.
 export async function seedClosedTicket(baseURL: string) {

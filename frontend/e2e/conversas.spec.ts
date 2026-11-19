@@ -12,41 +12,13 @@ import {
   login,
   seedDirectory,
   seedSector,
+  seedSubjects,
   signIn,
   test,
   unique,
   userPassword,
   chooseAction,
 } from './fixtures'
-
-// Módulo com dois assuntos e uma solução cada, criados pela API como administrador.
-async function seedSubjects(baseURL: string, sectorId: number) {
-  const api = await apiRequest.newContext({ baseURL })
-  expect(
-    (
-      await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
-    ).ok(),
-  ).toBeTruthy()
-  const module = await api.post(`/api/sectors/${sectorId}/modules`, { data: { name: 'Geral' } })
-  expect(module.ok()).toBeTruthy()
-  const { id: moduleId } = (await module.json()) as { id: number }
-  for (const [name, body] of [
-    ['Férias', 'Regra de férias do setor'],
-    ['Ponto', 'Regra do ponto eletrônico'],
-  ]) {
-    const subject = await api.post(`/api/sectors/${sectorId}/subjects`, {
-      data: { name, moduleId },
-    })
-    expect(subject.ok()).toBeTruthy()
-    const { id } = (await subject.json()) as { id: number }
-    expect(
-      (
-        await api.post(`/api/sectors/${sectorId}/subjects/${id}/solutions`, { data: { body } })
-      ).ok(),
-    ).toBeTruthy()
-  }
-  await api.dispose()
-}
 
 // Mensagem de texto de um contato, simulada pelo adaptador falso do backend.
 async function receiveText(
@@ -596,7 +568,10 @@ test('a busca de Assuntos é lembrada por chamado e a Fila abre ao trocar', asyn
   baseURL,
 }) => {
   const { sector, agent } = await seedSector(baseURL!)
-  await seedSubjects(baseURL!, sector.id)
+  await seedSubjects(baseURL!, sector.id, {
+    Férias: ['Regra de férias do setor'],
+    Ponto: ['Regra do ponto eletrônico'],
+  })
   for (const name of ['Cliente A', 'Cliente B']) {
     expect(
       (

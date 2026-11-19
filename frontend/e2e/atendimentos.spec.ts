@@ -7,6 +7,7 @@ import {
 } from '@playwright/test'
 import {
   admin,
+  adminApi,
   json,
   login,
   ok,
@@ -18,12 +19,6 @@ import {
 } from './fixtures'
 
 type Ticket = { id: number; protocol: string; contact: { name: string } }
-
-async function adminApi(baseURL: string) {
-  const api = await apiRequest.newContext({ baseURL })
-  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
-  return api
-}
 
 async function agentApi(baseURL: string, email: string) {
   const api = await apiRequest.newContext({ baseURL })
