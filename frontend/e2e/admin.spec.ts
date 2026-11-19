@@ -451,7 +451,7 @@ test('atendente não acessa a administração', async ({ page, baseURL }) => {
 
 for (const theme of [
   { scheme: 'light' as const, sidebar: 'rgb(255, 255, 255)' },
-  { scheme: 'dark' as const, sidebar: 'rgb(30, 30, 30)' },
+  { scheme: 'dark' as const, sidebar: 'rgb(24, 24, 27)' },
 ]) {
   test(`telas de administração usam o design system no tema ${theme.scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme.scheme })
