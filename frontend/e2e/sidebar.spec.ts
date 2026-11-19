@@ -178,10 +178,10 @@ test('administrador vê tudo, com Usuários só em Configurações, e o breadcru
     await expect(content.getByText(breadcrumb, { exact: true })).toBeVisible()
   }
 
-  // Usuários fica entre o tema e Sair, e o endereço não muda.
+  // Usuários fica entre o tema e Sair (com Alterar senha antes de Sair), e o endereço não muda.
   await page.getByRole('button', { name: 'Configurações' }).click()
   const items = page.getByRole('menu').getByRole('menuitem')
-  await expect(items).toHaveText(['Usuários', 'Sair'])
+  await expect(items).toHaveText(['Usuários', 'Alterar senha', 'Sair'])
   await items.first().click()
   await expect(page).toHaveURL(/\/admin\/usuarios$/)
   await expect(content.getByRole('heading', { name: 'Usuários' })).toBeVisible()
