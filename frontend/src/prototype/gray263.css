@@ -1,0 +1,41 @@
+/*
+ * PROTÓTIPO #263: uma versão (a proposta) contra a atual, trocadas por ?variant= (atual | B).
+ * Escala de cinza Tailwind zinc sobre os tokens, só nos temas claro e escuro.
+ * O alto contraste (data-contrast="high") não é tocado.
+ */
+:root[data-proto-gray='B']:not([data-contrast='high']) {
+  --ink: #18181b; /* zinc-900 */
+  --ink-soft: #52525b; /* zinc-600 */
+  --ink-faint: #62626a; /* entre zinc-500 e 600, para 4,5:1 sobre o fundo */
+  --paper: #e4e4e7; /* zinc-200: fundo da página */
+  --surface: #ffffff; /* cartões */
+  --surface-2: #f4f4f5; /* zinc-100: cabeçalho de tabela, muted */
+  --line: #d4d4d8; /* zinc-300 */
+  --line-soft: #e4e4e7; /* zinc-200 */
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-proto-gray='B']:not([data-contrast='high']):not([data-theme='light']) {
+    --ink: #f4f4f5; /* zinc-100 */
+    --ink-soft: #a1a1aa; /* zinc-400 */
+    --ink-faint: #8e8e97; /* entre zinc-400 e 500, para 4,5:1 sobre surface-2 */
+    --paper: #09090b; /* zinc-950: fundo da página */
+    --surface: #18181b; /* zinc-900: cartões */
+    --surface-2: #27272a; /* zinc-800 */
+    --line: #3f3f46; /* zinc-700 */
+    --line-soft: #27272a; /* zinc-800 */
+  }
+}
+:root[data-proto-gray='B'][data-theme='dark']:not([data-contrast='high']) {
+  --ink: #f4f4f5;
+  --ink-soft: #a1a1aa;
+  --ink-faint: #8e8e97;
+  --paper: #09090b;
+  --surface: #18181b;
+  --surface-2: #27272a;
+  --line: #3f3f46;
+  --line-soft: #27272a;
+}
+/* Cabeçalho de tabela com fundo surface-2 (na implementação: bg-muted no TableHeader). */
+:root[data-proto-gray='B']:not([data-contrast='high']) thead {
+  background: var(--surface-2);
+}

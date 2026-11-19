@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { Toaster } from '@/components/ui/sonner'
+import { PrototypeSwitcher263 } from '@/prototype/Switcher263'
 
 const queryClient = new QueryClient()
 
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <App />
         <Toaster />
+        <PrototypeSwitcher263 />
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,
