@@ -599,22 +599,6 @@ func TestEditingKeepsOrChangesTheNickname(t *testing.T) {
 	}
 }
 
-const ownPasswordPath = "/api/auth/me/password"
-
-func changeOwn(e *testEnv, token, current, next string) testapi.Response {
-	e.T.Helper()
-	return e.Do(http.MethodPut, ownPasswordPath, token, map[string]string{"current_password": current, "new_password": next})
-}
-
-func passwordHashOf(e *testEnv, userID int64) string {
-	e.T.Helper()
-	var hash string
-	if err := e.Pool.QueryRow(e.T.Context(), "select password_hash from users where id = $1", userID).Scan(&hash); err != nil {
-		e.T.Fatal(err)
-	}
-	return hash
-}
-
 func TestEveryRoleChangesTheirOwnPassword(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
@@ -774,5 +758,65 @@ func TestChangeOwnPasswordIsAllOrNothing(t *testing.T) {
 	}
 	if resp := e.Do(http.MethodGet, "/api/auth/me", other, nil); resp.Status != http.StatusOK {
 		t.Fatalf("other session after the failure: status %d, want 200", resp.Status)
+	}
+}
+
+// A login with the old password that reads the hash while the change is in
+// progress must not open a session once the change commits. The change is held
+// open at its last step (the audit insert waits on an advisory lock the test
+// holds), after the new hash and the ended sessions are written; the login
+// starts then, and the change commits only once the login is waiting on a lock.
+func TestLoginDuringChangeOwnPasswordDoesNotOpenASession(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	ana := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	current := e.Login("ana@exemplo.com", testPassword)
+
+	const gate = 259
+	if _, err := e.Pool.Exec(t.Context(), fmt.Sprintf(`
+		create function hold_password_changed() returns trigger language plpgsql as $$
+		begin
+			if new.action = 'user_password_changed' then perform pg_advisory_xact_lock(%d); end if;
+			return new;
+		end $$;
+		create trigger hold_password_changed before insert on audit_logs
+		for each row execute function hold_password_changed();`, gate)); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := e.Pool.Acquire(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(t.Context(), "select pg_advisory_lock($1)", gate); err != nil {
+		t.Fatal(err)
+	}
+
+	var change, login testapi.Response
+	var wg sync.WaitGroup
+	wg.Go(func() { change = changeOwn(e, current, testPassword, "Nova#Senha26") })
+	waitForLockWaits(e, "advisory", 1)
+	wg.Go(func() {
+		login = e.Do(http.MethodPost, "/api/auth/login", "", map[string]string{"email": "ana@exemplo.com", "password": testPassword})
+	})
+	waitForLockWaits(e, "", 1) // the login, on the user row
+	if _, err := conn.Exec(t.Context(), "select pg_advisory_unlock($1)", gate); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+
+	if change.Status != http.StatusNoContent {
+		t.Fatalf("change: status %d, body %v", change.Status, change.Body)
+	}
+	if login.Status != http.StatusUnauthorized {
+		t.Fatalf("login with the old password during the change: status %d, want 401", login.Status)
+	}
+	var sessions int
+	if err := e.Pool.QueryRow(t.Context(), "select count(*) from sessions where user_id = $1", ana.ID).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 1 {
+		t.Fatalf("sessions of the user = %d, want only the current one", sessions)
 	}
 }

@@ -113,6 +113,16 @@ func (s *Service) Login(ctx context.Context, email, password, ip string) (string
 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
+		// The password was checked outside this transaction: lock the user and
+		// make sure the hash is still the one checked, so a password change (or a
+		// deactivation) that commits meanwhile does not get a session afterwards.
+		locked, err := q.GetUserForUpdate(ctx, u.ID)
+		if err != nil {
+			return fmt.Errorf("lock user: %w", err)
+		}
+		if locked.PasswordHash != u.PasswordHash || !locked.Active {
+			return ErrInvalidCredentials
+		}
 		if err := ClearLoginAttempts(ctx, q, email); err != nil {
 			return err
 		}
