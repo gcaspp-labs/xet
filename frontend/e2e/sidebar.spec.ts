@@ -14,7 +14,7 @@ test('barra lateral acompanha o tema escolhido', async ({ page }) => {
   await page.getByRole('button', { name: 'Configurações' }).click()
   await page.getByRole('menuitemradio', { name: 'Escuro' }).click()
   await page.keyboard.press('Escape')
-  await expect(inner).toHaveCSS('background-color', 'rgb(30, 30, 30)')
+  await expect(inner).toHaveCSS('background-color', 'rgb(24, 24, 27)')
   await expect(brand).toHaveAttribute('src', /glab-simbolo-escuro/)
 })
 

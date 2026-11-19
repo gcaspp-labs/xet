@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
-import { admin, signIn, unique } from './fixtures'
+import { admin, seedSector, signIn, unique } from './fixtures'
 
-const lightPaper = 'rgb(238, 238, 238)'
-const darkPaper = 'rgb(20, 20, 20)'
+const lightPaper = 'rgb(228, 228, 231)'
+const darkPaper = 'rgb(9, 9, 11)'
 
 async function chooseTheme(page: Page, label: string) {
   await page.getByRole('button', { name: 'Configurações' }).click()
@@ -145,3 +145,76 @@ test('menu de configurações funciona na gaveta do celular', async ({ page }) =
   await page.getByRole('menuitem', { name: 'Sair' }).click()
   await expect(page).toHaveURL(/\/login$/)
 })
+
+// Camada de cinza do projeto (index.css): fundo da página, cartão e cabeçalho de tabela se distinguem.
+// O alto contraste fica como estava: página e cartão brancos (ou pretos) e cabeçalho sem fundo.
+const transparent = 'rgba(0, 0, 0, 0)'
+const grayLayers = [
+  {
+    mode: 'claro',
+    theme: 'light',
+    contrast: '',
+    paper: 'rgb(228, 228, 231)',
+    card: 'rgb(255, 255, 255)',
+    head: 'rgb(244, 244, 245)',
+  },
+  {
+    mode: 'escuro',
+    theme: 'dark',
+    contrast: '',
+    paper: 'rgb(9, 9, 11)',
+    card: 'rgb(24, 24, 27)',
+    head: 'rgb(39, 39, 42)',
+  },
+  {
+    mode: 'alto contraste claro',
+    theme: 'light',
+    contrast: 'high',
+    paper: 'rgb(255, 255, 255)',
+    card: 'rgb(255, 255, 255)',
+    head: transparent,
+  },
+  {
+    mode: 'alto contraste escuro',
+    theme: 'dark',
+    contrast: 'high',
+    paper: 'rgb(0, 0, 0)',
+    card: 'rgb(11, 11, 11)',
+    head: transparent,
+  },
+] as const
+
+for (const layer of grayLayers) {
+  test(`fundo, cartão e cabeçalho de tabela no tema ${layer.mode}`, async ({ page, baseURL }) => {
+    await seedSector(baseURL!)
+    await page.addInitScript(
+      ({ theme, contrast }) => {
+        localStorage.setItem('theme', theme)
+        if (contrast) {
+          localStorage.setItem('contrast', contrast)
+        }
+      },
+      { theme: layer.theme, contrast: layer.contrast },
+    )
+    await signIn(page, admin.email, admin.password)
+
+    // Dashboard e Atendimentos: fundo da página e cartão.
+    for (const screen of ['/dashboard', '/atendimentos']) {
+      await page.goto(screen)
+      await expect(page.locator('[data-slot="card"]').first()).toBeVisible()
+      await expect(page.locator('body')).toHaveCSS('background-color', layer.paper)
+      await expect(page.locator('[data-slot="card"]').first()).toHaveCSS(
+        'background-color',
+        layer.card,
+      )
+    }
+
+    // Uma tela com tabela sempre preenchida (o setor acima), para o cabeçalho.
+    await page.goto('/admin/setores')
+    await expect(page.locator('[data-slot="table-header"]').first()).toBeVisible()
+    await expect(page.locator('[data-slot="table-header"]').first()).toHaveCSS(
+      'background-color',
+      layer.head,
+    )
+  })
+}
