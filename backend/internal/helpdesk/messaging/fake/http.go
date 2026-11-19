@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -125,6 +126,62 @@ func (a *Adapter) Handler() http.Handler {
 		}
 		a.control(w, r, func(sectorID int64) error { return a.React(r.Context(), sectorID, ev) })
 	})
+	// Edit of a message by the contact or, with fromSector, from the phone of
+	// the sector. An optional externalEventId makes a redelivery or an echo
+	// change nothing; an optional at (RFC 3339) simulates a late event.
+	r.Post("/messaging/sectors/{sectorID}/edit", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			changeBody
+			Body string `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TargetExternalMessageID == "" || body.Phone == "" {
+			http.Error(w, "targetExternalMessageId and phone are required", http.StatusBadRequest)
+			return
+		}
+		ev := messaging.MessageEdited{
+			ExternalEventID: body.ExternalEventID, TargetExternalMessageID: body.TargetExternalMessageID,
+			ExternalContactID: body.Phone + "@s.whatsapp.net", Phone: body.Phone,
+			FromSector: body.FromSector, Body: body.Body, At: body.At,
+		}
+		a.control(w, r, func(sectorID int64) error { return a.Edit(r.Context(), sectorID, ev) })
+	})
+	// Deletion for everyone, with the same options as the edit.
+	r.Post("/messaging/sectors/{sectorID}/revoke", func(w http.ResponseWriter, r *http.Request) {
+		var body changeBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TargetExternalMessageID == "" || body.Phone == "" {
+			http.Error(w, "targetExternalMessageId and phone are required", http.StatusBadRequest)
+			return
+		}
+		ev := messaging.MessageRevoked{
+			ExternalEventID: body.ExternalEventID, TargetExternalMessageID: body.TargetExternalMessageID,
+			ExternalContactID: body.Phone + "@s.whatsapp.net", Phone: body.Phone,
+			FromSector: body.FromSector, At: body.At,
+		}
+		a.control(w, r, func(sectorID int64) error { return a.Revoke(r.Context(), sectorID, ev) })
+	})
+	// What the provider supports on a message already sent (windows in
+	// seconds; zero = unavailable). Without a body, back to WhatsApp's.
+	r.Post("/messaging/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		var body *struct {
+			EditWindowSeconds   int  `json:"editWindowSeconds"`
+			RevokeWindowSeconds int  `json:"revokeWindowSeconds"`
+			ReceivesChanges     bool `json:"receivesChanges"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		c := DefaultCapabilities
+		if body != nil {
+			c = messaging.Capabilities{
+				EditWindow:      time.Duration(body.EditWindowSeconds) * time.Second,
+				RevokeWindow:    time.Duration(body.RevokeWindowSeconds) * time.Second,
+				ReceivesChanges: body.ReceivesChanges,
+			}
+		}
+		a.SetCapabilities(c)
+		w.WriteHeader(http.StatusNoContent)
+	})
 	// Delivery progress of sent messages, as the contact's phone reports it.
 	r.Post("/messaging/sectors/{sectorID}/status", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -178,6 +235,15 @@ func (a *Adapter) Handler() http.Handler {
 		a.control(w, r, func(sectorID int64) error { return a.LogOut(r.Context(), sectorID) })
 	})
 	return r
+}
+
+// changeBody is what an edit and a deletion share.
+type changeBody struct {
+	ExternalEventID         string    `json:"externalEventId"`
+	TargetExternalMessageID string    `json:"targetExternalMessageId"`
+	Phone                   string    `json:"phone"`
+	FromSector              bool      `json:"fromSector"`
+	At                      time.Time `json:"at"`
 }
 
 func (a *Adapter) control(w http.ResponseWriter, r *http.Request, action func(sectorID int64) error) {

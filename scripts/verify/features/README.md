@@ -24,6 +24,7 @@ O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regr
 | Conexão            | [connection.md](connection.md)                 | `connection`         | `connection.md`, `notifications.md`            | `connection.spec.ts`                                            | tela de conexão, QR code, avisos de desconexão, adaptador de mensageria   |
 | Consultar chamados em Atendimentos | [consult-closed-tickets.md](consult-closed-tickets.md) | `consult-closed-tickets` | `queue.md`, `interface.md` | `atendimentos.spec.ts`, `ficha-atendimento.spec.ts` | histórico de chamados encerrados, busca, filtros, ordem, ficha só leitura |
 | Endereços finais | [final-routes.md](final-routes.md) | `final-routes` | `interface.md` | `rotas.spec.ts` | rotas, Não encontrado, redirecionamento de encerrados |
+| Edições e exclusões externas | [message-revisions.md](message-revisions.md) | `message-revisions` | `conversation.md`, `queue.md` | `reactions.spec.ts` | eventos de edição e exclusão do provedor, versões de mensagem, estado de exclusão |
 
 ## Como ler o estado de uma sub-feature
 

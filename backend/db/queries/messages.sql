@@ -113,7 +113,8 @@ select
     rs.emoji as sector_reaction_emoji, rs.reacted_at as sector_reaction_at,
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
     rs.via_phone as sector_reaction_via_phone,
-    m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body
+    m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body,
+    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
@@ -133,3 +134,103 @@ select m.ticket_id
 from messages m
 where m.media_id = @media_id
 limit 1;
+
+-- name: LockMessageExternalID :exec
+-- Serializes, until the transaction ends, recording a message from the
+-- provider and the changes (edit, deletion) that point at it, so a change
+-- that arrives with the original is never left unlinked. Taken before the
+-- ticket lock.
+select pg_advisory_xact_lock(hashtextextended('message:' || @sector_id::bigint || ':' || @external_message_id::text, 0));
+
+-- name: GetMessageForChange :one
+-- Message of the sector with the provider ID, with its contact, to apply a
+-- change received from the provider.
+select m.id, m.ticket_id, m.origin, m.body, m.edited_at, m.deleted_at,
+       c.external_contact_id as contact_external_id, c.phone as contact_phone
+from messages m
+join contacts c on c.id = m.contact_id
+where m.sector_id = @sector_id and m.external_message_id = @external_message_id;
+
+-- name: MessageChangeEventExists :one
+-- A change with the provider event ID was already recorded in the sector.
+select exists (
+    select 1 from message_changes where sector_id = @sector_id and external_event_id = @external_event_id
+);
+
+-- name: MessageChangeRecorded :one
+-- The same change, by kind, time and content, is already recorded for the
+-- message, or waiting for it when the message is unknown (message_id empty).
+select exists (
+    select 1 from message_changes
+    where sector_id = @sector_id and kind = @kind and occurred_at = @occurred_at
+      and body is not distinct from sqlc.narg(body)::text
+      and origin = @origin
+      and (message_id = sqlc.narg(message_id)::bigint
+           or (sqlc.narg(message_id)::bigint is null and message_id is null
+               and target_external_message_id = @target_external_message_id))
+);
+
+-- name: CreateMessageChange :one
+-- A change of a message, or one waiting for it (message_id empty). The same
+-- provider event recorded again returns no row.
+insert into message_changes (
+    sector_id, message_id, target_external_message_id, kind, origin, author_id,
+    external_contact_id, phone, body, deletion_scope, external_event_id, occurred_at
+)
+values (
+    @sector_id, @message_id, @target_external_message_id, @kind, @origin, @author_id,
+    @external_contact_id, @phone, @body, @deletion_scope, @external_event_id, @occurred_at
+)
+on conflict (sector_id, external_event_id) where external_event_id is not null do nothing
+returning id;
+
+-- name: CreateOriginalVersion :exec
+-- Keeps the content of the message as it was sent, before its first edit
+-- replaces it. Only once per message.
+insert into message_changes (sector_id, message_id, target_external_message_id, kind, origin, author_id, body, occurred_at)
+select m.sector_id, m.id, m.external_message_id, 'original', m.origin, m.author_id, m.body, m.sent_at
+from messages m
+where m.id = @message_id
+on conflict (message_id) where kind = 'original' do nothing;
+
+-- name: RefreshMessageCurrentVersion :exec
+-- The current content of an edited message is its newest recorded edit, by
+-- the time of the provider (then the order received): a late edit is kept as
+-- a version but never undoes a newer one, whatever text either has.
+update messages m
+set body = v.body, edited_at = v.occurred_at
+from (
+    select c.body, c.occurred_at from message_changes c
+    where c.message_id = @id and c.kind = 'edit'
+    order by c.occurred_at desc, c.id desc
+    limit 1
+) v
+where m.id = @id;
+
+-- name: MarkMessageDeleted :execrows
+-- Deletion is a state of its own, apart from the delivery status, and keeps
+-- the content and the file. The first deletion recorded holds.
+update messages
+set deleted_at = @deleted_at, deletion_scope = @deletion_scope, deletion_origin = @deletion_origin
+where id = @id and deleted_at is null;
+
+-- name: ListPendingMessageChanges :many
+-- Changes received before the message they point at, oldest first.
+select * from message_changes
+where sector_id = @sector_id and target_external_message_id = @target_external_message_id and message_id is null
+order by occurred_at, id;
+
+-- name: LinkMessageChange :exec
+-- Links a change that arrived before its message, once.
+update message_changes
+set message_id = @message_id
+where id = @id and message_id is null;
+
+-- name: ListMessageChanges :many
+-- Versions (original and edits) and deletions of the message, in the order
+-- they happened.
+select c.id, c.kind, c.origin, c.author_id, u.name as author_name, c.body, c.deletion_scope, c.occurred_at
+from message_changes c
+left join users u on u.id = c.author_id
+where c.message_id = @message_id
+order by c.occurred_at, c.id;

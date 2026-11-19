@@ -52,8 +52,10 @@ type Adapter struct {
 	refuseReaction map[int64]bool
 	// Sectors whose sends wait for Release, to keep a message pending.
 	held map[int64]chan struct{}
-	sent map[string]string
-	Sent []any
+	// What the provider supports on a message already sent; see SetCapabilities.
+	capabilities messaging.Capabilities
+	sent         map[string]string
+	Sent         []any
 }
 
 var (
@@ -72,6 +74,7 @@ func New(handler messaging.EventHandler) *Adapter {
 		sent:           map[string]string{},
 		refuseReaction: map[int64]bool{},
 		held:           map[int64]chan struct{}{},
+		capabilities:   DefaultCapabilities,
 	}
 }
 
@@ -214,6 +217,58 @@ func (a *Adapter) Receive(ctx context.Context, sectorID int64, msg messaging.Mes
 // SendOutside delivers a message sent from the phone of the sector.
 func (a *Adapter) SendOutside(ctx context.Context, sectorID int64, msg messaging.Message) error {
 	return a.handler(ctx, messaging.MessageSentOutside{SectorID: sectorID, Message: msg})
+}
+
+// DefaultCapabilities are those of WhatsApp: edit within 15 minutes, delete
+// for everyone within two days, and edits and deletions made outside the
+// system delivered as events.
+var DefaultCapabilities = messaging.Capabilities{
+	EditWindow: 15 * time.Minute, RevokeWindow: 48 * time.Hour, ReceivesChanges: true,
+}
+
+// SetCapabilities changes what the provider supports, to simulate a provider
+// without an action (a zero window) or that does not deliver changes.
+func (a *Adapter) SetCapabilities(c messaging.Capabilities) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.capabilities = c
+}
+
+// Capabilities reports what the provider supports on a message already sent.
+func (a *Adapter) Capabilities() messaging.Capabilities {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.capabilities
+}
+
+// Edit delivers an edit of the message with the given provider ID, made by
+// the contact or, with FromSector, from the phone of the sector (or the echo
+// of one made through the system). Calling it again with the same event
+// simulates a redelivery; an older At, a late event; calling it before the
+// original message is received, an edit that arrives first. A provider that
+// does not deliver changes (ReceivesChanges false) drops it.
+func (a *Adapter) Edit(ctx context.Context, sectorID int64, ev messaging.MessageEdited) error {
+	ev.SectorID = sectorID
+	if ev.At.IsZero() {
+		ev.At = time.Now()
+	}
+	if !a.Capabilities().ReceivesChanges {
+		return nil
+	}
+	return a.handler(ctx, ev)
+}
+
+// Revoke delivers a deletion for everyone of the message with the given
+// provider ID, with the same simulations as Edit.
+func (a *Adapter) Revoke(ctx context.Context, sectorID int64, ev messaging.MessageRevoked) error {
+	ev.SectorID = sectorID
+	if ev.At.IsZero() {
+		ev.At = time.Now()
+	}
+	if !a.Capabilities().ReceivesChanges {
+		return nil
+	}
+	return a.handler(ctx, ev)
 }
 
 // React delivers a reaction of a contact (or, with fromSectorPhone, one made

@@ -83,6 +83,23 @@ func (a *Adapter) Close() error {
 	return a.container.Close()
 }
 
+// editWindow is the time WhatsApp gives to edit a message: 15 minutes
+// (https://about.fb.com/news/2023/05/edit-whatsapp-messages/). Whatsmeow
+// itself declares 20 minutes (whatsmeow.EditWindow); the system follows the
+// provider (spec #290).
+const editWindow = 15 * time.Minute
+
+// revokeWindow is the time WhatsApp describes to delete a message for
+// everyone, two days (https://faq.whatsapp.com/1370476507114859/). It is the
+// policy of the provider, not a guarantee: the provider may still refuse.
+const revokeWindow = 48 * time.Hour
+
+// Capabilities reports the edit and deletion windows of WhatsApp, and that
+// edits and deletions made outside the system are delivered as events.
+func (a *Adapter) Capabilities() messaging.Capabilities {
+	return messaging.Capabilities{EditWindow: editWindow, RevokeWindow: revokeWindow, ReceivesChanges: true}
+}
+
 func (a *Adapter) emit(ev messaging.Event) error {
 	ctx, cancel := context.WithTimeout(context.Background(), eventTimeout)
 	defer cancel()

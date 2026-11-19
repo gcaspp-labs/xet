@@ -319,7 +319,7 @@ func (s *Service) deliver(ctx context.Context, provider messaging.Provider, msg 
 	externalID, err := s.send(ctx, provider, msg)
 	var updated db.Message
 	if err == nil {
-		updated, err = s.q.MarkMessageSent(ctx, db.MarkMessageSentParams{ID: msg.ID, ExternalMessageID: &externalID})
+		updated, err = s.markSent(ctx, msg, externalID)
 	} else {
 		slog.Warn("send message", "message_id", msg.ID, "error", err)
 		reason := failureReason(err)

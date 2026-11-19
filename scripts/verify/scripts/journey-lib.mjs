@@ -265,6 +265,26 @@ class Journey {
         })
         return externalMessageId
       },
+      // Edição e exclusão para todos de uma mensagem já entregue, pelo contato ou,
+      // com fromSector, pelo celular do setor. Repetir o mesmo externalEventId
+      // simula a reentrega; at (ISO) simula um evento atrasado.
+      edit: (customer, target, body, { externalEventId, fromSector = false, at } = {}) =>
+        call('edit', {
+          targetExternalMessageId: target,
+          phone: customer.phone,
+          body,
+          externalEventId,
+          fromSector,
+          at,
+        }),
+      revoke: (customer, target, { externalEventId, fromSector = false, at } = {}) =>
+        call('revoke', {
+          targetExternalMessageId: target,
+          phone: customer.phone,
+          externalEventId,
+          fromSector,
+          at,
+        }),
     }
   }
 

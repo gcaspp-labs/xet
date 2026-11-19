@@ -36,6 +36,9 @@ type messageResponse struct {
 	Media         *mediaResponse      `json:"media"`
 	Reactions     reactionsResponse   `json:"reactions"`
 	Quote         *quoteResponse      `json:"quote"`
+	// EditedAt is the time of the current version, when the message was edited.
+	EditedAt *time.Time        `json:"editedAt"`
+	Deletion *deletionResponse `json:"deletion"`
 }
 
 // quoteResponse is the message a reply cites; null when there is no quote.
@@ -71,10 +74,20 @@ type sectorReactionResponse struct {
 	ViaPhone bool       `json:"viaPhone"`
 }
 
+// deletionResponse is the deletion of a message, whose content is kept.
+type deletionResponse struct {
+	At     time.Time               `json:"at"`
+	Scope  db.MessageDeletionScope `json:"scope"`
+	Origin db.MessageOrigin        `json:"origin"`
+}
+
 func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
 	out := messageResponse{
 		ID: m.ID, TicketID: m.TicketID, Direction: m.Direction, Origin: m.Origin, Type: m.Type,
-		Body: m.Body, FailureReason: m.FailureReason, SentAt: m.SentAt,
+		Body: m.Body, FailureReason: m.FailureReason, SentAt: m.SentAt, EditedAt: m.EditedAt,
+	}
+	if m.DeletedAt != nil && m.DeletionScope.Valid && m.DeletionOrigin.Valid {
+		out.Deletion = &deletionResponse{At: *m.DeletedAt, Scope: m.DeletionScope.MessageDeletionScope, Origin: m.DeletionOrigin.MessageOrigin}
 	}
 	if m.Status.Valid {
 		out.Status = &m.Status.MessageStatus
