@@ -46,6 +46,7 @@ erDiagram
     users ||--o{ messages : "autor (envio pelo sistema)"
     media_files ||--o| messages : anexo
     messages ||--o{ message_reactions : "reação atual (uma por lado)"
+    messages |o--o{ message_changes : "versões e exclusão"
     messages |o--o{ messages : "citação (só do mesmo chamado)"
     users ||--o{ message_reactions : "autor (reação pelo sistema)"
     tickets ||--o{ audit_logs : ""
@@ -62,6 +63,8 @@ erDiagram
 | `closure_type` | `resolved`, `transferred`, `cancelled` | Encerrado normalmente, etapa encerrada por transferência entre setores ou cancelado sem lançar o atendimento |
 | `message_direction` | `inbound`, `outbound` | Recebida do cliente ou enviada pelo setor |
 | `message_origin` | `customer`, `agent`, `phone` | Enviada pelo cliente, por um atendente no sistema ou pelo celular fora do sistema |
+| `message_change_kind` | `original`, `edit`, `deletion` | Linha de `message_changes` |
+| `message_deletion_scope` | `everyone`, `local` | Alcance da exclusão |
 | `message_type` | `text`, `image`, `video`, `audio`, `document`, `unsupported`, `media_unavailable` | `unsupported` cobre figurinhas, localização e outros tipos fora do piloto (as reações recebidas deixaram de ser gravadas como mensagem: vão para `message_reactions`; as antigas, já gravadas como `unsupported`, ficam como estão); `media_unavailable` é o arquivo recebido acima do limite ou que não baixou |
 | `message_status` | `pending`, `sent`, `delivered`, `read`, `failed` | Situação de entrega das mensagens enviadas |
 | `reaction_side` | `customer`, `sector` | Lado da reação: do cliente ou do número do setor |
@@ -339,6 +342,10 @@ Chamados não são reabertos. O destino de uma transferência entre setores vê 
 | `quoted_message_id` | bigint → `messages` | Ligação com a mensagem citada, **só quando ela está no mesmo chamado**; vazio se o XET não a tem ou se ela é de outro chamado |
 | `quoted_type` | message_type | Tipo do trecho citado que veio do provedor; vazio quando o provedor não entrega o trecho |
 | `quoted_body` | text | Texto do trecho citado: o texto, a legenda (imagem e vídeo) ou o nome do arquivo (documento; a legenda, se não houver nome); vazio em áudio e quando o provedor não entrega |
+| `edited_at` | timestamptz | Horário da versão atual segundo o provedor; vazio quando a mensagem nunca foi editada por fora do sistema (#291) |
+| `deleted_at` | timestamptz | Horário da exclusão segundo o provedor; vazio quando a mensagem não foi excluída. É um estado à parte de `status` (a situação de entrega não muda) |
+| `deletion_scope` | message_deletion_scope | `everyone` ou `local`; preenchido junto com `deleted_at` |
+| `deletion_origin` | message_origin | Quem excluiu (cliente, celular do setor ou atendente); preenchido junto com `deleted_at` |
 
 Restrições:
 
@@ -347,6 +354,7 @@ Restrições:
 - `direction = 'inbound'` ⇔ `origin = 'customer'`.
 - `type in ('image', 'video', 'audio', 'document')` ⇒ `media_id` preenchido. `media_unavailable` não tem `media_id`; `body` guarda a legenda ou o nome do arquivo.
 - Ligação, tipo ou texto da citação ⇒ `quoted_external_message_id` preenchido (`messages_quote_external_id`); `quoted_body` ⇒ `quoted_type` (`messages_quote_body_type`).
+- `deleted_at`, `deletion_scope` e `deletion_origin` são preenchidos juntos ou ficam todos vazios (`messages_deletion_state`).
 - Chave estrangeira `(quoted_message_id, ticket_id)` → `messages (id, ticket_id)` (`messages_quote_same_ticket`, com o único `messages_id_ticket_id_key`): a ligação só aponta para mensagem do mesmo chamado, para a citação nunca expor o conteúdo de outro chamado.
 
 Índice: `(ticket_id, sent_at)` para exibir a conversa.
@@ -355,13 +363,40 @@ Mensagens enviadas pelo celular fora do sistema (`origin = 'phone'`) são gravad
 
 Mensagens enviadas pelo sistema são gravadas como `pending` (com `sent_at` no momento do registro) e passam a `sent` com o `external_message_id` quando o provedor aceita, ou a `failed` com `failure_reason`. As confirmações do provedor só avançam a situação (`sent` → `delivered` → `read`); uma falha informada pelo provedor só vale para mensagens `pending` ou `sent`, e uma entrega confirmada vale também sobre `failed`. O reenvio pelo responsável volta a mensagem de `failed` para `pending` com a mesma chave de idempotência (`client_request_id`).
 
-Mensagens não são editadas nem excluídas.
+Mensagens não são apagadas nem sobrescritas sem registro (#291, spec #290). Edições e exclusões para todos feitas pelo cliente ou pelo celular do setor são gravadas na própria mensagem, sem criar mensagem nem chamado, inclusive em chamado encerrado. `body` mostra a versão atual e `edited_at` o horário dela; a exclusão marca `deleted_at`, `deletion_scope` e `deletion_origin`, e o conteúdo, o arquivo e a situação de entrega continuam gravados. O histórico fica em `message_changes` (abaixo). A API de mensagens devolve `editedAt` e `deletion` (`at`, `scope`, `origin`), de forma aditiva; a ocultação do conteúdo excluído é da tela, não da API.
 
-Citação (resposta citada, #201). Escolha de armazenamento: colunas em `messages`, em vez de tabela própria, porque a citação é no máximo uma por mensagem, nasce com ela e nunca muda (mensagens não são editadas). A citação inteira é opcional, e o trecho também: o provedor pode entregar a mensagem sem citação, só com o identificador da citada, ou com identificador e trecho, e as três são gravadas normalmente. Regras de gravação (`helpdesk/inbound.go`), para a mensagem recebida e a enviada pelo celular do setor: com o chamado travado, a ligação procura a citada pelo identificador externo **no mesmo chamado**; se ela não está lá (de antes do XET, de outro chamado, mesmo do mesmo contato, ou ainda não chegou), fica sem ligação e com o trecho do provedor, se houver. O trecho é o que o provedor entrega, não uma cópia da mensagem ligada; a mídia da citação não é baixada nem guardada. Na resposta citada enviada pelo responsável (`helpdesk/send.go`, #202), com o chamado travado, a citada precisa ser do mesmo chamado, ter `external_message_id` (recebida, ou enviada com situação `sent`, `delivered` ou `read`) e não ser `unsupported`; a ligação é sempre gravada, e o trecho é tirado da mensagem citada pela mesma regra do trecho recebido (o texto como o cliente o viu, com o apelido, se for do setor; a legenda; o nome do documento; nada no áudio; a legenda ou o nome em `media_unavailable`). A API devolve a ligação, o tipo e o texto do trecho; sem trecho e com ligação, a tela usa a mensagem ligada, e sem os dois mostra "mensagem indisponível".
+Citação (resposta citada, #201). Escolha de armazenamento: colunas em `messages`, em vez de tabela própria, porque a citação é no máximo uma por mensagem, nasce com ela e nunca muda (a citação não é refeita quando a mensagem é editada). A citação inteira é opcional, e o trecho também: o provedor pode entregar a mensagem sem citação, só com o identificador da citada, ou com identificador e trecho, e as três são gravadas normalmente. Regras de gravação (`helpdesk/inbound.go`), para a mensagem recebida e a enviada pelo celular do setor: com o chamado travado, a ligação procura a citada pelo identificador externo **no mesmo chamado**; se ela não está lá (de antes do XET, de outro chamado, mesmo do mesmo contato, ou ainda não chegou), fica sem ligação e com o trecho do provedor, se houver. O trecho é o que o provedor entrega, não uma cópia da mensagem ligada; a mídia da citação não é baixada nem guardada. Na resposta citada enviada pelo responsável (`helpdesk/send.go`, #202), com o chamado travado, a citada precisa ser do mesmo chamado, ter `external_message_id` (recebida, ou enviada com situação `sent`, `delivered` ou `read`) e não ser `unsupported`; a ligação é sempre gravada, e o trecho é tirado da mensagem citada pela mesma regra do trecho recebido (o texto como o cliente o viu, com o apelido, se for do setor; a legenda; o nome do documento; nada no áudio; a legenda ou o nome em `media_unavailable`). A API devolve a ligação, o tipo e o texto do trecho; sem trecho e com ligação, a tela usa a mensagem ligada, e sem os dois mostra "mensagem indisponível".
+
+### `message_changes` — Histórico de alterações da mensagem
+
+Registro de alteração da mensagem (#291). **Só cresce:** nada é alterado nem excluído; a única atualização permitida é ligar `message_id` uma vez, quando a mensagem alvo chega. Não há linha em `audit_logs` para essas alterações, para não duplicar o registro.
+
+Cada linha é uma versão (a original ou uma edição) ou uma exclusão. A original só vira linha na **primeira edição**; mensagens antigas não são preenchidas.
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `sector_id` | bigint → `sectors` | Obrigatório; número pelo qual a alteração passou |
+| `message_id` | bigint → `messages` | Vazio enquanto a alteração espera a mensagem original (pendente); ligado quando ela é gravada |
+| `target_external_message_id` | text | Identificador externo da mensagem alvo; obrigatório quando `message_id` é vazio |
+| `kind` | message_change_kind | `original`, `edit` ou `deletion` |
+| `origin` | message_origin | Quem alterou: cliente, celular do setor ou atendente |
+| `author_id` | bigint → `users` | Só quando `origin = 'agent'` |
+| `external_contact_id`, `phone` | text | Contato informado pelo provedor, para conferir uma alteração pendente com o contato da mensagem |
+| `body` | text | Texto da versão; vazio na exclusão |
+| `deletion_scope` | message_deletion_scope | Obrigatório na exclusão e só nela |
+| `external_event_id` | text | Identificador da alteração no provedor, quando informado; vazio na original |
+| `occurred_at` | timestamptz | Obrigatório; horário da alteração segundo o provedor |
+| `created_at` | timestamptz | Quando o XET gravou |
+
+Restrições: único `(sector_id, external_event_id)` quando preenchido (reentrega e eco do mesmo evento não gravam de novo); uma só original por mensagem; `original` exige `message_id` e não tem `external_event_id`.
+
+Regras de gravação (`helpdesk`, `recordChange`): trava `(setor, identificador externo)`, depois o contato e o chamado, sempre nessa ordem. Evento já visto não grava nada. Mensagem ainda desconhecida: a alteração fica pendente e é ligada quando a original é gravada (recebida, enviada pelo celular ou enviada pelo XET); a reentrega do mesmo evento repara uma ligação que faltou. Mensagem conhecida: a primeira edição guarda a original; `body` só muda se a edição for a mais nova (horário, depois ordem de chegada); uma edição mais antiga vira versão no histórico sem mudar o texto, e texto igual a um anterior é versão nova, não eco. Exclusão de mensagem já excluída não grava nada (a primeira vale). Autor impossível (cliente editando mensagem do setor, celular editando mensagem do cliente, outro contato) é descartado. O aviso do chamado vai pelo WebSocket depois do commit; alteração pendente não avisa.
+
+Reverter a migração (`down`) remove as colunas e a tabela: as mensagens ficam, mas o histórico de versões e o estado de exclusão se perdem, e `body` fica com a última versão.
 
 ### `message_reactions` — Reação atual da mensagem
 
-Escolha de armazenamento (#197): uma tabela pequena, em vez de colunas em `messages`, porque a reação tem dados próprios (autor, origem, horário) e muda sem que a mensagem mude (mensagens não são editadas). Cada mensagem guarda no máximo **duas reações atuais**, uma por lado, sem histórico de trocas.
+Escolha de armazenamento (#197): uma tabela pequena, em vez de colunas em `messages`, porque a reação tem dados próprios (autor, origem, horário) e muda sem que a mensagem mude. Cada mensagem guarda no máximo **duas reações atuais**, uma por lado, sem histórico de trocas.
 
 | Coluna | Tipo | Regras |
 | --- | --- | --- |
