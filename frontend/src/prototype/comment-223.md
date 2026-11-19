@@ -2,9 +2,9 @@
 
 Branch: `prototype/223`.
 
-Proposta: tabelas recolhíveis, quantidades destacadas nos títulos, botão Assumir primário e cabeçalhos com mais contraste. Em “No período”, o TOTAL reúne as métricas por atendente; a linha “Do setor” reúne as duas métricas que não pertencem a uma pessoa. Os valores são fictícios.
+Proposta: tabelas recolhíveis, quantidades destacadas nos títulos, botão Assumir primário e cabeçalhos com mais contraste. Fila e Em atendimento têm altura fixa e paginação independente, com cinco chamados por página e os mais recentes primeiro. Em “No período”, o TOTAL reúne as métricas por atendente; a linha “Do setor” reúne as duas métricas que não pertencem a uma pessoa. Os valores são fictícios.
 
-Capturas: [claro](https://github.com/gcaspp-labs/xet/blob/prototype/223/frontend/src/prototype/prototype-captures/dashboard-new-light.png) · [escuro](https://github.com/gcaspp-labs/xet/blob/prototype/223/frontend/src/prototype/prototype-captures/dashboard-new-dark.png).
+Capturas: [claro](https://github.com/gcaspp-labs/xet/blob/prototype/223/frontend/src/prototype/prototype-captures/dashboard-paginacao-light.png) · [escuro](https://github.com/gcaspp-labs/xet/blob/prototype/223/frontend/src/prototype/prototype-captures/dashboard-paginacao-dark.png).
 
 Mapa dos números atuais:
 - Na fila → quantidade no título Fila.

@@ -28,8 +28,8 @@ const people = [
 ]
 // [em atendimento, iniciados, encerrados, transferidos, cancelados, tempo médio (min)]
 const perPerson: Record<number, number[]> = {
-  1: [2, 3, 9, 1, 0, 18],
-  2: [1, 1, 7, 2, 1, 24],
+  1: [3, 3, 9, 1, 0, 18],
+  2: [2, 1, 7, 2, 1, 24],
   3: [0, 2, 5, 0, 1, 12],
   4: [1, 0, 4, 1, 0, 31],
 }
@@ -101,7 +101,7 @@ function dashboard(query: URLSearchParams) {
     period: { from, to: today },
     sectorId: role() === 'admin' && !query.has('sectorId') ? null : 1,
     numbers: {
-      queued: num('queued', 3),
+      queued: num('queued', 7),
       inProgress: num('inProgress', sum(0)),
       received: num('received', 31),
       started: num('started', sum(1)),
@@ -128,6 +128,12 @@ const contacts = [
   'Ricardo Fictício',
   'Juliana Modelo',
   'Marcos Protótipo',
+  'Carla Fictícia',
+  'Luiz Modelo',
+  'Beatriz Exemplo',
+  'Paulo Amostra',
+  'Sofia Teste',
+  'Daniel Demo',
 ]
 function live(
   i: number,
@@ -157,12 +163,18 @@ function lists(query: URLSearchParams) {
     live(4, 'in_progress', people[0], 15),
     live(5, 'in_progress', people[1], 27),
     live(6, 'in_progress', people[3], 8),
+    live(7, 'in_progress', people[0], 6),
+    live(8, 'in_progress', people[1], 3),
   ].filter((t) => assigneeId === undefined || t.assignee?.id === assigneeId)
   return {
     queued: [
       live(0, 'queued', undefined, 12),
       live(1, 'queued', undefined, 4),
       live(2, 'queued', undefined, 1),
+      live(9, 'queued', undefined, 20),
+      live(10, 'queued', undefined, 18),
+      live(11, 'queued', undefined, 16),
+      live(12, 'queued', undefined, 14),
     ],
     inProgress,
   }
