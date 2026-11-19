@@ -171,10 +171,11 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		if link {
 			contactExternalID = &msg.ExternalContactID
 		}
-		return applyPendingChanges(ctx, q, sectorID, db.GetMessageForChangeRow{
+		_, err = linkPendingChanges(ctx, q, sectorID, &db.GetMessageForChangeRow{
 			ID: created.ID, TicketID: created.TicketID, Origin: created.Origin, Body: created.Body,
 			ContactExternalID: contactExternalID, ContactPhone: contact.Phone,
 		}, msg.ExternalMessageID)
+		return err
 	})
 	if errors.Is(err, errDuplicate) {
 		return nil

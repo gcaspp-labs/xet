@@ -1013,6 +1013,26 @@ func (q *Queries) MessageExists(ctx context.Context, arg MessageExistsParams) (b
 	return exists, err
 }
 
+const refreshMessageCurrentVersion = `-- name: RefreshMessageCurrentVersion :exec
+update messages m
+set body = v.body, edited_at = v.occurred_at
+from (
+    select c.body, c.occurred_at from message_changes c
+    where c.message_id = $1 and c.kind = 'edit'
+    order by c.occurred_at desc, c.id desc
+    limit 1
+) v
+where m.id = $1
+`
+
+// The current content of an edited message is its newest recorded edit, by
+// the time of the provider (then the order received): a late edit is kept as
+// a version but never undoes a newer one, whatever text either has.
+func (q *Queries) RefreshMessageCurrentVersion(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, refreshMessageCurrentVersion, id)
+	return err
+}
+
 const retryMessage = `-- name: RetryMessage :one
 update messages
 set status = 'pending', failure_reason = null
@@ -1052,26 +1072,4 @@ func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
 		&i.DeletionOrigin,
 	)
 	return i, err
-}
-
-const setMessageCurrentVersion = `-- name: SetMessageCurrentVersion :execrows
-update messages
-set body = $1, edited_at = $2
-where id = $3 and (edited_at is null or edited_at < $2)
-`
-
-type SetMessageCurrentVersionParams struct {
-	Body     *string
-	EditedAt *time.Time
-	ID       int64
-}
-
-// The edit becomes the current content only when it is newer than the current
-// one: a late edit is kept as a version but never undoes a newer one.
-func (q *Queries) SetMessageCurrentVersion(ctx context.Context, arg SetMessageCurrentVersionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setMessageCurrentVersion, arg.Body, arg.EditedAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }

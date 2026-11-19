@@ -57,15 +57,18 @@ func (s *Service) HandleMessageRevoked(ctx context.Context, ev messaging.Message
 // edit keeps the original and every version, and a deletion keeps the
 // content and the file.
 //
-// The same provider event delivered again, or echoed back, changes nothing;
-// without an event ID, the same kind, time and content neither, and an edit
-// to the content the message already shows is an echo. A late edit is kept
-// as a version but does not undo a newer one. A change that arrives before
-// its message waits, unlinked, and is applied when the message is recorded
-// (applyPendingChanges). A change whose author cannot have made it (the
-// contact on a message of the sector, the phone on one of the contact, or
-// another contact) is discarded. The panels of the sector are notified after
-// the commit, only when something was recorded on a known message.
+// The same provider event delivered again, or echoed back, changes nothing:
+// it is the same event ID or, without one, the same kind, origin, time and
+// content. Two different edits are two versions even when one goes back to
+// an earlier text. The current version is always the newest edit, so a late
+// one is kept but does not undo a newer one. A change that arrives before its
+// message waits, unlinked, and is applied when the message is recorded; any
+// change for a known message that still waits (left by a failure) is linked
+// first, so the redelivery of that very change repairs it. A change whose
+// author cannot have made it (the contact on a message of the sector, the
+// phone on one of the contact, or another contact) is discarded. The panels
+// of the sector are notified after the commit, only when something was
+// recorded on a known message.
 func (s *Service) recordChange(ctx context.Context, c externalChange) error {
 	if c.group {
 		return nil
@@ -84,18 +87,20 @@ func (s *Service) recordChange(ctx context.Context, c externalChange) error {
 		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: c.sectorID, ExternalMessageID: c.target}); err != nil {
 			return fmt.Errorf("lock message: %w", err)
 		}
+		seen := false
 		if c.eventID != "" {
-			seen, err := q.MessageChangeEventExists(ctx, db.MessageChangeEventExistsParams{SectorID: c.sectorID, ExternalEventID: &c.eventID})
+			var err error
+			seen, err = q.MessageChangeEventExists(ctx, db.MessageChangeEventExistsParams{SectorID: c.sectorID, ExternalEventID: &c.eventID})
 			if err != nil {
 				return fmt.Errorf("check message change: %w", err)
-			}
-			if seen {
-				return nil
 			}
 		}
 
 		msg, err := q.GetMessageForChange(ctx, db.GetMessageForChangeParams{SectorID: c.sectorID, ExternalMessageID: &c.target})
 		if errors.Is(err, pgx.ErrNoRows) {
+			if seen {
+				return nil
+			}
 			return savePendingChange(ctx, q, c)
 		}
 		if err != nil {
@@ -105,11 +110,15 @@ func (s *Service) recordChange(ctx context.Context, c externalChange) error {
 		if _, err := q.GetTicketForUpdate(ctx, msg.TicketID); err != nil {
 			return fmt.Errorf("get ticket: %w", err)
 		}
-		if !changeAllowed(msg.Origin, c.origin(), msg.ContactExternalID, msg.ContactPhone, c.contactID, c.phone) {
+		ticketID = msg.TicketID
+		if changed, err = linkPendingChanges(ctx, q, c.sectorID, &msg, c.target); err != nil {
+			return err
+		}
+		if seen || !changeAllowed(msg.Origin, c.origin(), msg.ContactExternalID, msg.ContactPhone, c.contactID, c.phone) {
 			return nil
 		}
-		ticketID = msg.TicketID
-		changed, err = applyChange(ctx, q, msg, c)
+		recorded, err := recordKnownChange(ctx, q, &msg, c)
+		changed = changed || recorded
 		return err
 	})
 	if err != nil {
@@ -152,20 +161,11 @@ func savePendingChange(ctx context.Context, q *db.Queries, c externalChange) err
 	return err
 }
 
-// applyChange records the change of a known message, with its ticket locked,
-// and reports whether anything was recorded.
-func applyChange(ctx context.Context, q *db.Queries, msg db.GetMessageForChangeRow, c externalChange) (bool, error) {
-	switch c.kind {
-	case db.MessageChangeKindEdit:
-		// The content the message already shows is an echo, or the same edit
-		// again: no new version.
-		if msg.Body != nil && *msg.Body == *c.body {
-			return false, nil
-		}
-	case db.MessageChangeKindDeletion:
-		if msg.DeletedAt != nil {
-			return false, nil
-		}
+// recordKnownChange records the change of a known message, with its ticket
+// locked, and reports whether anything was recorded.
+func recordKnownChange(ctx context.Context, q *db.Queries, msg *db.GetMessageForChangeRow, c externalChange) (bool, error) {
+	if !changeApplies(msg, c.kind) {
+		return false, nil
 	}
 	dup, err := changeRecorded(ctx, q, c, &msg.ID)
 	if err != nil || dup {
@@ -175,30 +175,38 @@ func applyChange(ctx context.Context, q *db.Queries, msg db.GetMessageForChangeR
 	if err != nil || !created {
 		return false, err
 	}
-	return true, effect(ctx, q, msg.ID, c.kind, c.origin(), c.body, c.at)
+	return true, applyMessageChange(ctx, q, msg, c.kind, c.origin(), c.at)
 }
 
-// effect applies a recorded change to the message: an edit newer than the
-// current version becomes the content, after the original is kept; a
+// changeApplies tells whether a new change, received now or waiting for the
+// message, still applies to it. Every edit is a version, even one with a text
+// the message had before; a message is deleted only once.
+func changeApplies(msg *db.GetMessageForChangeRow, kind db.MessageChangeKind) bool {
+	return kind != db.MessageChangeKindDeletion || msg.DeletedAt == nil
+}
+
+// applyMessageChange applies a change just recorded to the message: after
+// an edit, the original is kept and the newest edit becomes the content; a
 // deletion marks the message, keeping its content.
-func effect(ctx context.Context, q *db.Queries, messageID int64, kind db.MessageChangeKind, origin db.MessageOrigin, body *string, at time.Time) error {
+func applyMessageChange(ctx context.Context, q *db.Queries, msg *db.GetMessageForChangeRow, kind db.MessageChangeKind, origin db.MessageOrigin, at time.Time) error {
 	switch kind {
 	case db.MessageChangeKindEdit:
-		if err := q.CreateOriginalVersion(ctx, messageID); err != nil {
+		if err := q.CreateOriginalVersion(ctx, msg.ID); err != nil {
 			return fmt.Errorf("keep original version: %w", err)
 		}
-		if _, err := q.SetMessageCurrentVersion(ctx, db.SetMessageCurrentVersionParams{ID: messageID, Body: body, EditedAt: &at}); err != nil {
+		if err := q.RefreshMessageCurrentVersion(ctx, msg.ID); err != nil {
 			return fmt.Errorf("set message version: %w", err)
 		}
 	case db.MessageChangeKindDeletion:
 		_, err := q.MarkMessageDeleted(ctx, db.MarkMessageDeletedParams{
-			ID: messageID, DeletedAt: &at,
+			ID: msg.ID, DeletedAt: &at,
 			DeletionScope:  db.NullMessageDeletionScope{MessageDeletionScope: db.MessageDeletionScopeEveryone, Valid: true},
 			DeletionOrigin: db.NullMessageOrigin{MessageOrigin: origin, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("mark message deleted: %w", err)
 		}
+		msg.DeletedAt = &at
 	}
 	return nil
 }
@@ -235,36 +243,34 @@ func createChange(ctx context.Context, q *db.Queries, c externalChange, messageI
 	return true, nil
 }
 
-// applyPendingChanges links to a message just recorded the changes that
-// arrived before it, in the order they happened, and applies them. The
-// caller holds the lock of the provider ID (LockMessageExternalID) and of the
-// ticket. A pending change whose author could not have made it stays
-// unlinked, as if discarded.
-func applyPendingChanges(ctx context.Context, q *db.Queries, sectorID int64, msg db.GetMessageForChangeRow, externalID string) error {
+// linkPendingChanges links to a message the changes that arrived before it
+// was recorded, in the order they happened, applies them and reports whether
+// any was linked. The caller holds the lock of the provider ID
+// (LockMessageExternalID) and of the ticket. A pending change whose author
+// could not have made it, or that no longer applies, stays unlinked, as if
+// discarded.
+func linkPendingChanges(ctx context.Context, q *db.Queries, sectorID int64, msg *db.GetMessageForChangeRow, externalID string) (bool, error) {
 	pending, err := q.ListPendingMessageChanges(ctx, db.ListPendingMessageChangesParams{SectorID: sectorID, TargetExternalMessageID: &externalID})
 	if err != nil {
-		return fmt.Errorf("list pending message changes: %w", err)
+		return false, fmt.Errorf("list pending message changes: %w", err)
 	}
-	current := msg.Body
+	linked := false
 	for _, p := range pending {
 		if !changeAllowed(msg.Origin, p.Origin, msg.ContactExternalID, msg.ContactPhone, deref(p.ExternalContactID), deref(p.Phone)) {
 			continue
 		}
-		// An edit to the content the message already shows is an echo.
-		if p.Kind == db.MessageChangeKindEdit && current != nil && p.Body != nil && *current == *p.Body {
+		if !changeApplies(msg, p.Kind) {
 			continue
 		}
-		if p.Kind == db.MessageChangeKindEdit {
-			current = p.Body
-		}
 		if err := q.LinkMessageChange(ctx, db.LinkMessageChangeParams{ID: p.ID, MessageID: &msg.ID}); err != nil {
-			return fmt.Errorf("link message change: %w", err)
+			return false, fmt.Errorf("link message change: %w", err)
 		}
-		if err := effect(ctx, q, msg.ID, p.Kind, p.Origin, p.Body, p.OccurredAt); err != nil {
-			return err
+		if err := applyMessageChange(ctx, q, msg, p.Kind, p.Origin, p.OccurredAt); err != nil {
+			return false, err
 		}
+		linked = true
 	}
-	return nil
+	return linked, nil
 }
 
 func deref(s *string) string {
@@ -274,27 +280,42 @@ func deref(s *string) string {
 	return *s
 }
 
-// applySentPendingChanges applies to a message sent through the system, once
-// it has its provider ID, the changes made from the phone of the sector that
-// arrived before the send was recorded.
-func (s *Service) applySentPendingChanges(ctx context.Context, sectorID int64, externalID string) error {
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+// markSent records a message sent through the system as sent, with its
+// provider ID, and links to it, in the same transaction, the changes made from
+// the phone of the sector that arrived before: a failure records neither, and
+// the message stays pending, to fail on restart and be sent again with the
+// same key. It returns the message as recorded.
+func (s *Service) markSent(ctx context.Context, msg db.Message, externalID string) (db.Message, error) {
+	var updated db.Message
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: sectorID, ExternalMessageID: externalID}); err != nil {
+		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: msg.SectorID, ExternalMessageID: externalID}); err != nil {
 			return fmt.Errorf("lock message: %w", err)
 		}
 		// Almost always nothing waits: the ticket is not locked for nothing.
-		pending, err := q.ListPendingMessageChanges(ctx, db.ListPendingMessageChangesParams{SectorID: sectorID, TargetExternalMessageID: &externalID})
+		pending, err := q.ListPendingMessageChanges(ctx, db.ListPendingMessageChangesParams{SectorID: msg.SectorID, TargetExternalMessageID: &externalID})
+		if err != nil {
+			return fmt.Errorf("list pending message changes: %w", err)
+		}
+		if len(pending) > 0 {
+			if _, err := q.GetTicketForUpdate(ctx, msg.TicketID); err != nil {
+				return fmt.Errorf("get ticket: %w", err)
+			}
+		}
+		updated, err = q.MarkMessageSent(ctx, db.MarkMessageSentParams{ID: msg.ID, ExternalMessageID: &externalID})
 		if err != nil || len(pending) == 0 {
 			return err
 		}
-		msg, err := q.GetMessageForChange(ctx, db.GetMessageForChangeParams{SectorID: sectorID, ExternalMessageID: &externalID})
+		target, err := q.GetMessageForChange(ctx, db.GetMessageForChangeParams{SectorID: msg.SectorID, ExternalMessageID: &externalID})
 		if err != nil {
 			return fmt.Errorf("get sent message: %w", err)
 		}
-		if _, err := q.GetTicketForUpdate(ctx, msg.TicketID); err != nil {
-			return fmt.Errorf("get ticket: %w", err)
+		linked, err := linkPendingChanges(ctx, q, msg.SectorID, &target, externalID)
+		if err != nil || !linked {
+			return err
 		}
-		return applyPendingChanges(ctx, q, sectorID, msg, externalID)
+		updated, err = q.GetMessage(ctx, msg.ID)
+		return err
 	})
+	return updated, err
 }

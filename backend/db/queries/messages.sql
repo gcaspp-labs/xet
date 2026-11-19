@@ -193,12 +193,19 @@ from messages m
 where m.id = @message_id
 on conflict (message_id) where kind = 'original' do nothing;
 
--- name: SetMessageCurrentVersion :execrows
--- The edit becomes the current content only when it is newer than the current
--- one: a late edit is kept as a version but never undoes a newer one.
-update messages
-set body = @body, edited_at = @edited_at
-where id = @id and (edited_at is null or edited_at < @edited_at);
+-- name: RefreshMessageCurrentVersion :exec
+-- The current content of an edited message is its newest recorded edit, by
+-- the time of the provider (then the order received): a late edit is kept as
+-- a version but never undoes a newer one, whatever text either has.
+update messages m
+set body = v.body, edited_at = v.occurred_at
+from (
+    select c.body, c.occurred_at from message_changes c
+    where c.message_id = @id and c.kind = 'edit'
+    order by c.occurred_at desc, c.id desc
+    limit 1
+) v
+where m.id = @id;
 
 -- name: MarkMessageDeleted :execrows
 -- Deletion is a state of its own, apart from the delivery status, and keeps

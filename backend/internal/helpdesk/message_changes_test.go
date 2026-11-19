@@ -187,11 +187,9 @@ func TestRedeliveredAndEchoedChangesAreIdempotent(t *testing.T) {
 	if ev := c.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
 		t.Fatalf("event = %+v", ev)
 	}
-	// Reentrega do mesmo evento, mesmo com outro conteúdo ou horário.
+	// Reentrega ou eco do mesmo evento, mesmo com outro conteúdo ou horário.
 	c.editFromPhone(c.sector.ID, "EV-1", "OUT-1", "Bom dia!", at)
 	c.editFromPhone(c.sector.ID, "EV-1", "OUT-1", "outra coisa", at.Add(time.Hour))
-	// Eco: outro evento com o conteúdo que a mensagem já mostra.
-	c.editFromPhone(c.sector.ID, "EV-ECHO", "OUT-1", "Bom dia!", at.Add(time.Second))
 	// Sem identificador do evento, o mesmo horário e conteúdo duas vezes.
 	c.editFromPhone(c.sector.ID, "", "OUT-1", "Bom dia!!", at.Add(2*time.Second))
 	if ev := c.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
@@ -488,4 +486,165 @@ func versionsEqual(got, want []version) bool {
 		}
 	}
 	return true
+}
+
+// Voltar ao texto anterior é uma versão nova, não um eco: em qualquer ordem de
+// chegada, a mais nova fica como atual e todas ficam no histórico.
+func TestEditBackToAnEarlierTextIsAVersionInAnyOrder(t *testing.T) {
+	t.Parallel()
+	c := newReactionCase(t)
+	sent := c.messages(c.ticket.ID)[0].SentAt
+	t1, t2 := sent.Add(time.Minute), sent.Add(2*time.Minute)
+
+	// Oi → Olá em t1, Olá → Oi em t2; chega primeiro a de t2.
+	c.edit(c.sector.ID, "EV-T2", "IN-1", "Oi", t2)
+	c.edit(c.sector.ID, "EV-T1", "IN-1", "Olá", t1)
+
+	m := c.apiMessage(c.ticket.ID, c.token, "IN-1")
+	if bodyOf(t, m) != "Oi" || m["editedAt"] == nil {
+		t.Fatalf("message = %v, want the version of t2", m)
+	}
+	want := []version{
+		{Kind: "original", Origin: "customer", Body: "Oi", At: sent},
+		{Kind: "edit", Origin: "customer", Body: "Olá", At: t1},
+		{Kind: "edit", Origin: "customer", Body: "Oi", At: t2},
+	}
+	if got := c.changesOf(c.messageID(c.ticket.ID, "IN-1")); !versionsEqual(got, want) {
+		t.Fatalf("changes = %+v\nwant %+v", got, want)
+	}
+}
+
+// O mesmo quando a edição que volta ao texto original chega antes da
+// mensagem, e a anterior, depois dela.
+func TestPendingEditBackToTheOriginalTextIsApplied(t *testing.T) {
+	t.Parallel()
+	c := newReactionCase(t)
+	sent := time.Now().Truncate(time.Microsecond)
+	t1, t2 := sent.Add(time.Minute), sent.Add(2*time.Minute)
+
+	// A → B em t1, B → A em t2; chegam t2, a original e t1.
+	c.edit(c.sector.ID, "EV-T2", "IN-9", "A", t2)
+	msg := text("IN-9", changeContact, changePhone, "A")
+	msg.SentAt = sent
+	c.receive(c.sector.ID, msg)
+	c.edit(c.sector.ID, "EV-T1", "IN-9", "B", t1)
+
+	if m := c.apiMessage(c.ticket.ID, c.token, "IN-9"); bodyOf(t, m) != "A" {
+		t.Fatalf("body = %v, want the version of t2", m["body"])
+	}
+	want := []version{
+		{Kind: "original", Origin: "customer", Body: "A", At: sent},
+		{Kind: "edit", Origin: "customer", Body: "B", At: t1},
+		{Kind: "edit", Origin: "customer", Body: "A", At: t2},
+	}
+	if got := c.changesOf(c.messageID(c.ticket.ID, "IN-9")); !versionsEqual(got, want) {
+		t.Fatalf("changes = %+v\nwant %+v", got, want)
+	}
+}
+
+// failLinkingChanges makes the database refuse to link a pending change to
+// its message, until the returned function is called.
+func (c reactionCase) failLinkingChanges() (restore func()) {
+	c.T.Helper()
+	ctx := c.T.Context()
+	if _, err := c.Pool.Exec(ctx, `
+		create function fail_link() returns trigger language plpgsql as
+		$$ begin raise exception 'link refused'; end $$;
+		create trigger fail_link before update of message_id on message_changes
+		for each row execute function fail_link();`); err != nil {
+		c.T.Fatal(err)
+	}
+	return func() {
+		if _, err := c.Pool.Exec(ctx, "drop trigger fail_link on message_changes; drop function fail_link();"); err != nil {
+			c.T.Fatal(err)
+		}
+	}
+}
+
+func (c reactionCase) unlinkedChanges() int {
+	c.T.Helper()
+	var n int
+	if err := c.Pool.QueryRow(c.T.Context(), "select count(*) from message_changes where message_id is null").Scan(&n); err != nil {
+		c.T.Fatal(err)
+	}
+	return n
+}
+
+// O envio pelo XET e o vínculo das alterações que chegaram antes dele são
+// gravados juntos: uma falha no vínculo não deixa o envio confirmado com a
+// alteração solta, e o reenvio depois do reinício liga a alteração.
+func TestFailureLinkingPendingChangesDoesNotRecordTheSendAlone(t *testing.T) {
+	t.Parallel()
+	c := newReactionCase(t)
+	c.connectSector(c.sector.ID)
+	if r := c.assign(c.ticket.ID, c.token); r.Status != http.StatusOK {
+		t.Fatalf("assign = %d %s", r.Status, r.Body)
+	}
+	const request = "6a2b3c4d-5e6f-4789-8abc-0d1e2f3a4b5c"
+	target := "fake-msg-" + request
+	at := time.Now().Add(time.Minute).Truncate(time.Microsecond)
+	c.editFromPhone(c.sector.ID, "EV-F", target, "Ana Souza: corrigido", at)
+
+	restore := c.failLinkingChanges()
+	c.sendText(c.ticket.ID, c.token, request, "texto")
+	all := c.outbound(c.ticket.ID)
+	out := all[len(all)-1]
+	if out.Origin != "agent" || str(out.Status) == "sent" || out.ExternalMessageID != nil {
+		t.Fatalf("send recorded without its pending change: status %s, id %s", str(out.Status), str(out.ExternalMessageID))
+	}
+	restore()
+
+	// A reentrega da alteração não a perde: continua esperando a mensagem.
+	c.editFromPhone(c.sector.ID, "EV-F", target, "Ana Souza: corrigido", at)
+	if n := c.unlinkedChanges(); n != 1 {
+		t.Fatalf("unlinked = %d, want 1", n)
+	}
+
+	// Reinício e reenvio com a mesma chave: envio e vínculo gravados juntos.
+	restarted := startServer(t, c.Pool, nil)
+	if _, err := restarted.TicketService.FailPending(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	restarted.connectSector(c.sector.ID)
+	token := restarted.Login("ana@exemplo.com", testPassword)
+	if r := restarted.Do(http.MethodPost, fmt.Sprintf("/api/messages/%d/retry", out.ID), token, nil); r.Status != http.StatusOK || r.Body["status"] != "sent" {
+		t.Fatalf("retry = %d %v", r.Status, r.Body)
+	}
+	if m := restarted.apiMessage(c.ticket.ID, token, target); bodyOf(t, m) != "Ana Souza: corrigido" {
+		t.Fatalf("message = %v", m)
+	}
+	if n := c.unlinkedChanges(); n != 0 {
+		t.Fatalf("unlinked = %d, want 0", n)
+	}
+}
+
+// Uma alteração que ficou sem vínculo com a mensagem já gravada (por uma
+// falha de antes) é ligada pela reentrega do mesmo evento, sem depender de
+// outro evento.
+func TestRedeliveryLinksAChangeLeftUnlinked(t *testing.T) {
+	t.Parallel()
+	c := newReactionCase(t)
+	at := time.Now().Add(time.Minute).Truncate(time.Microsecond)
+	if _, err := c.Pool.Exec(t.Context(), `
+		insert into message_changes (sector_id, target_external_message_id, kind, origin, external_contact_id, phone, body, external_event_id, occurred_at)
+		values ($1, 'OUT-1', 'edit', 'phone', $2, $3, 'Bom dia!', 'EV-L', $4)`,
+		c.sector.ID, changeContact, changePhone, at); err != nil {
+		t.Fatal(err)
+	}
+	events := c.subscribe(c.token)
+
+	c.editFromPhone(c.sector.ID, "EV-L", "OUT-1", "Bom dia!", at)
+
+	if ev := c.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
+		t.Fatalf("event = %+v", ev)
+	}
+	if m := c.apiMessage(c.ticket.ID, c.token, "OUT-1"); bodyOf(t, m) != "Bom dia!" {
+		t.Fatalf("body = %v", m["body"])
+	}
+	if n := c.unlinkedChanges(); n != 0 {
+		t.Fatalf("unlinked = %d, want 0", n)
+	}
+	if got := c.changesOf(c.messageID(c.ticket.ID, "OUT-1")); len(got) != 2 {
+		t.Fatalf("changes = %+v", got)
+	}
 }
