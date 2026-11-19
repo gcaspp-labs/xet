@@ -36,14 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { Field, FieldLabel } from '@/components/ui/field'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { SectorPicker } from '@/prototype/SectorPicker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { useSectors } from '@/lib/admin'
@@ -236,26 +229,13 @@ export default function ConversasPage() {
         subtitle={ticket && <PhoneCopy phone={ticket.contact.phone} />}
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* PROTÓTIPO #222: versões do seletor de setor do admin, por ?variant= */}
             {user.role === 'admin' && sectors.length > 0 && (
-              <Field className="w-[200px]">
-                <FieldLabel htmlFor="conversas-sector">Setor</FieldLabel>
-                <Select
-                  items={sectorItems}
-                  value={sectorId?.toString() ?? null}
-                  onValueChange={(value) => value && setChosen(Number(value))}
-                >
-                  <SelectTrigger id="conversas-sector">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sectorItems.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <SectorPicker
+                items={sectorItems}
+                value={sectorId?.toString() ?? null}
+                onChange={(value) => setChosen(Number(value))}
+              />
             )}
             {ticket && (
               <TicketActions
