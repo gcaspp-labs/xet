@@ -44,6 +44,11 @@ function Contact({ ticket }: { ticket: LiveTicket }) {
   )
 }
 
+// PROTÓTIPO #223: a quantidade substitui o card "Agora"; entre parênteses, em negrito e na cor de destaque.
+function Count({ value }: { value: number }) {
+  return <span className="mono-num font-semibold text-accent-strong">({value})</span>
+}
+
 export function DashboardLists({
   sectorId,
   assigneeId,
@@ -78,9 +83,10 @@ export function DashboardLists({
       {data && (
         <div className="grid items-start gap-4 lg:grid-cols-2">
           <Card role="region" aria-labelledby="board-queue-title">
-            <CardHeader>
+            {/* PROTÓTIPO #223: cabeçalho em surface-2 para separar do corpo; número entre parênteses em destaque. */}
+            <CardHeader className="bg-muted">
               <CardTitle id="board-queue-title">
-                Fila <span className="mono-num caption text-ink-faint">{data.queued.length}</span>
+                Fila <Count value={data.queued.length} />
               </CardTitle>
             </CardHeader>
             {data.queued.length ? (
@@ -98,7 +104,6 @@ export function DashboardLists({
                       <TableCell className="w-0">
                         <Button
                           size="sm"
-                          variant="outline"
                           className="relative z-10"
                           disabled={assign.isPending}
                           aria-label={`Assumir chamado de ${ticket.contact.name}`}
@@ -132,10 +137,9 @@ export function DashboardLists({
             )}
           </Card>
           <Card role="region" aria-labelledby="board-progress-title">
-            <CardHeader>
+            <CardHeader className="bg-muted">
               <CardTitle id="board-progress-title">
-                Em atendimento{' '}
-                <span className="mono-num caption text-ink-faint">{data.inProgress.length}</span>
+                Em atendimento <Count value={data.inProgress.length} />
               </CardTitle>
             </CardHeader>
             {data.inProgress.length ? (

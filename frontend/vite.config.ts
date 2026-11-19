@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -15,6 +16,8 @@ export default defineConfig({
   server: {
     // Permite abrir o servidor de desenvolvimento pelo nome MagicDNS do Tailscale.
     allowedHosts: ['.ts.net'],
+    // PROTÓTIPO #223: node_modules é um link para o da pasta principal (fontes).
+    fs: { allow: ['.', fs.realpathSync('node_modules')] },
     proxy: {
       // ws repassa o WebSocket do painel; o Host original é mantido para a
       // verificação de origem do backend.
