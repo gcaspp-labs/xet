@@ -66,6 +66,13 @@ async function pageScrolls(page: Page) {
   )
 }
 
+// À vista de verdade: dentro da janela e abaixo do cabeçalho fixo, não escondido atrás dele.
+async function expectBelowHeader(page: Page, locator: Locator) {
+  const header = (await page.getByRole('banner').first().boundingBox())!
+  const box = (await locator.boundingBox())!
+  expect(box.y).toBeGreaterThanOrEqual(header.y + header.height - 1)
+}
+
 async function expectInViewport(page: Page, locator: Locator) {
   const box = await locator.boundingBox()
   const viewport = page.viewportSize()!
@@ -200,11 +207,48 @@ test.describe('celular 390×844', () => {
         page,
         page.getByRole('banner').first().getByRole('button', { name: 'Abrir menu' }),
       )
-      // Com os filtros altos, a área abaixo do cabeçalho rola; a página, nunca. A paginação é
-      // alcançável sem deslocar a página.
+      // Sem rolar nada para alcançar: a paginação e a busca já estão à vista.
+      await expectInViewport(page, page.getByRole('navigation', { name: 'Paginação' }))
+      await expectInViewport(page, page.getByRole('searchbox', { name: 'Buscar chamados' }))
+      expect(await pageScrolls(page)).toBe(false)
+    })
+  }
+
+  // Datas abre Início e Fim e deixa os filtros altos: a busca e a paginação continuam à vista, antes
+  // e depois de rolar a lista, sem rolar nenhum ancestral para passar.
+  for (const size of ['', 'large', 'larger']) {
+    test(`com Datas aberto, busca e paginação ficam à vista, com o texto ${size || 'padrão'}`, async ({
+      page,
+      baseURL,
+    }) => {
+      if (size) {
+        await page.addInitScript((value) => localStorage.setItem('text-size', value), size)
+      }
+      await prepare(page, baseURL!)
+      await page.goto('/atendimentos')
+      await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+      await page.getByRole('button', { name: 'Datas' }).click()
+      await expect(page.getByLabel('Início')).toBeVisible()
+      const rows = page.getByRole('table').locator('tbody').getByRole('row')
+      await expect(rows).toHaveCount(PAGE_SIZE)
+      const search = page.getByRole('searchbox', { name: 'Buscar chamados' })
       const pagination = page.getByRole('navigation', { name: 'Paginação' })
-      await pagination.scrollIntoViewIfNeeded()
+      const searchBefore = (await search.boundingBox())!
+      const paginationBefore = (await pagination.boundingBox())!
+      await expectInViewport(page, search)
+      await expectBelowHeader(page, search)
       await expectInViewport(page, pagination)
+      expect(await pageScrolls(page)).toBe(false)
+
+      const scroller = await scrollerOf(rows.first())
+      await scroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight }))
+      await expectInViewport(page, search)
+      await expectBelowHeader(page, search)
+      await expectInViewport(page, pagination)
+      await expectInViewport(page, page.getByRole('columnheader', { name: /Protocolo/ }))
+      // Rolar a lista não desloca a busca nem a paginação.
+      expect((await search.boundingBox())!.y).toBeCloseTo(searchBefore.y, 0)
+      expect((await pagination.boundingBox())!.y).toBeCloseTo(paginationBefore.y, 0)
       expect(await pageScrolls(page)).toBe(false)
     })
   }

@@ -37,7 +37,7 @@ Como as mensagens viram chamados na fila do setor e como alguém assume. Inclui 
 31. O detalhe do atendimento (`/atendimentos/:id`) é uma ficha só leitura, com a conversa completa e as abas Detalhes (com o histórico de alterações) e Histórico (do contato e do órgão). Não tem campo de mensagem, áudio nem arquivo, nem as ações de Assumir, Encerrar, Devolver, Transferir, Outro setor e Cancelar chamado, nem a lista "Chamados do setor".
 32. A única ação do detalhe é Corrigir, visível sem menu para quem pode corrigir (quem encerrou, o supervisor do setor ou o administrador) e nunca em chamado cancelado. A regra de quem corrige é a de [closing.md](closing.md).
 33. Na tela Chamados, a página fica fixa e só as listas e a conversa rolam, como no WhatsApp.
-34. A tela Atendimentos segue a regra 33: a página fica fixa, o cabeçalho, a busca e os filtros não rolam, e só a lista rola, dentro do painel, com a paginação sempre à vista no fim. A ficha `/atendimentos/:id` também não rola a página: a conversa e o painel Atendimento rolam cada um no seu bloco. Vale em todos os tamanhos de texto e no celular; se os filtros ocuparem quase toda a janela, a área abaixo do cabeçalho rola, nunca a página.
+34. A tela Atendimentos segue a regra 33: a página fica fixa, o cabeçalho, a busca e os filtros não rolam, e só a lista rola, dentro do painel, com a paginação sempre à vista no fim. A ficha `/atendimentos/:id` também não rola a página: a conversa e o painel Atendimento rolam cada um no seu bloco. Vale em todos os tamanhos de texto e no celular. Se os campos de filtro forem altos (celular, Datas aberto, texto Maior), só a área dos campos rola: a busca, o período, a lista e a paginação continuam à vista.
 
 ## Fora do escopo / limites conhecidos
 

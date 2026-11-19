@@ -202,8 +202,8 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
   const locked = !filter.hasSector
 
   return (
-    <div className="flex shrink-0 flex-col gap-(--space-12)">
-      <div className="flex flex-wrap items-center justify-between gap-(--space-12)">
+    <div className="flex max-h-[45%] min-h-0 shrink-0 flex-col gap-(--space-12)">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-(--space-12)">
         <SearchBox
           value={filter.query}
           onChange={filter.setQuery}
@@ -228,7 +228,9 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
           ))}
         </ToggleGroup>
       </div>
-      <div className="flex flex-wrap items-end gap-(--space-12)">
+      {/* Com os campos de filtro altos (celular, Datas aberto, texto Maior), só esta área rola: a
+          busca e o período, a lista e a paginação continuam à vista. */}
+      <div className="-m-1 flex min-h-0 flex-wrap items-end gap-(--space-12) overflow-y-auto p-1">
         {filter.period === 'custom' && (
           <>
             <Field className="w-full sm:w-[calc(160px*var(--text-scale))]">
@@ -390,9 +392,7 @@ export default function AtendimentosPage() {
         breadcrumb={sector?.name ?? (filter.isAdmin ? 'Todos os setores' : undefined)}
         title="Atendimentos"
       />
-      {/* Se os filtros ocuparem quase toda a janela (celular, texto Maior), o painel mantém uma
-          altura mínima e a área abaixo do cabeçalho rola, nunca a página. */}
-      <div className="mx-auto flex min-h-0 w-full max-w-(--content-max) flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 md:px-[30px] md:py-[30px]">
+      <div className="mx-auto flex min-h-0 w-full max-w-(--content-max) flex-1 flex-col gap-4 overflow-hidden px-4 py-4 md:px-[30px] md:py-[30px]">
         <Filters filter={filter} />
         {!filter.datesValid && (
           <Alert variant="warning" className="shrink-0">
@@ -408,7 +408,7 @@ export default function AtendimentosPage() {
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
-        <Card className="min-h-64 flex-1 gap-0 py-0">
+        <Card className="min-h-0 flex-1 gap-0 py-0">
           {tickets && tickets.length > 0 ? (
             <Table containerClassName="min-h-0 flex-1 overflow-y-auto">
               <TableHeader className="sticky top-0 z-10 in-data-[contrast=high]:bg-background">
