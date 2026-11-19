@@ -4,7 +4,7 @@ A equipe busca um contato e começa a conversa pelo número do próprio setor. I
 
 ## Regras
 
-1. Qualquer atendente busca um contato e inicia uma conversa pelo número do próprio setor. O administrador escolhe por qual setor iniciar, como no painel.
+1. Qualquer atendente busca um contato e inicia uma conversa pelo número do próprio setor. O administrador escolhe por qual setor iniciar, na janela de Novo chamado, aberta pelo "+" da coluna Meus chamados em Chamados.
 2. O contato precisa ter telefone.
 3. Ao enviar a primeira mensagem, cria-se um chamado atribuído a quem iniciou.
 4. Se já existir chamado aberto para o contato no mesmo setor, o sistema direciona para ele. Isso não autoriza outro atendente a responder: continua sendo necessária a transferência.
@@ -26,3 +26,4 @@ A equipe busca um contato e começa a conversa pelo número do próprio setor. I
 
 - 2026-11-11: regras migradas do `spec.md` (Iniciar conversas).
 - 2026-11-14: a janela passa a "Novo chamado", o aviso a "Chamado iniciado" e o registro de sistema a "Fulano abriu e assumiu o chamado" (regras 8 e 9), mostrado também nos chamados antigos; nada no banco muda. Decisão de Laboratório de 14/11/2026, ticket [#185](https://github.com/gcaspp-labs/xet/issues/185). A regra 8 dizia "Iniciar a conversa conta como assumir o chamado: fica registrado no histórico, e a conversa começa com «Fulano iniciou a conversa e assumiu o chamado»."
+- 2026-11-18: regra 1 alterada; spec [#159](https://github.com/gcaspp-labs/xet/issues/159), ticket #157. Dizia "O administrador escolhe por qual setor iniciar, como no painel.".

@@ -14,6 +14,8 @@ Regras que valem para todas as telas: acessibilidade, o comportamento das janela
 8. O título de uma coluna ordenável ordena a lista por ela, uma coluna por vez, com uma seta na direção. Clicar de novo inverte a direção; outra coluna começa crescente. A ordem não diferencia maiúsculas nem acentos, e mudar a ordem, a busca ou um filtro volta à página 1.
 9. A página e a ordem ficam no endereço da tela (`?pagina=`, `?ordem=`, `?direcao=desc`): recarregar, voltar de outra tela ou abrir o link devolve a mesma lista. Página além da última mostra a última, e o endereço é corrigido.
 10. Qualquer endereço que não existe (digitado errado, link quebrado ou antigo) mostra a mesma tela Não encontrado, dentro do menu lateral e com o botão Voltar, que volta à página anterior do navegador ou, sem página anterior, ao início. Quem está sem sessão vai ao login, e quem abre uma tela que o seu perfil não vê volta ao início, como antes.
+11. O menu lateral tem o Dashboard como item próprio, no alto, fora do grupo Helpdesk, só para supervisor e administrador. O grupo Helpdesk tem Atendimentos e Chamados (ver [queue.md](queue.md)).
+12. Ao entrar (e ao abrir `/`), o supervisor e o administrador vão ao Dashboard, e o atendente vai a Chamados. O atendente não tem Dashboard: o item não aparece e a API recusa.
 
 ## Fora do escopo / limites conhecidos
 
@@ -29,3 +31,4 @@ Regras que valem para todas as telas: acessibilidade, o comportamento das janela
 - 2026-11-11: regras migradas do `spec.md` (Acessibilidade; Janelas de formulário).
 - 2026-11-14: a janela "Nova conversa" passa a "Novo chamado" na regra 4, só texto (ticket [#185](https://github.com/gcaspp-labs/xet/issues/185)).
 - 2026-11-15: regra 3 alterada e regra 10 acrescentada (tela global Não encontrado); spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PR [#191](https://github.com/gcaspp-labs/xet/pull/191). A regra 3 dizia "Formulários e consultas que abrem por cima da tela aparecem em uma janela no centro. O painel fixo da conversa (Detalhes, Notas e Histórico) continua onde está.".
+- 2026-11-18: regras 11 e 12 acrescentadas (menu com o Dashboard fora do Helpdesk e tela inicial por perfil); spec [#159](https://github.com/gcaspp-labs/xet/issues/159), PR [#170](https://github.com/gcaspp-labs/xet/pull/170).
