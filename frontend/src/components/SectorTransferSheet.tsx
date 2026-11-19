@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { type TicketDetail, useSectorTransfer, useTransferSectors } from '@/lib/conversation'
+import { LastMessageWarning } from '@/prototype/LastMessageWarning'
 
 // Janela "Outro setor": o responsável escolhe o setor de destino e, se quiser,
 // escreve o motivo; sem formulário de encerramento e sem exigir o cadastro do
@@ -81,6 +82,7 @@ export function SectorTransferSheet({
       error={error}
       onSubmit={submit}
     >
+      <LastMessageWarning ticketId={ticket.id} />
       <Field>
         <FieldLabel htmlFor="sector-transfer-target">Setor de destino</FieldLabel>
         <Select

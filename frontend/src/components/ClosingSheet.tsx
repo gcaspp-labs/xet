@@ -16,6 +16,7 @@ import { useClosingQuestions } from '@/hooks/use-closing-questions'
 import { checkPeriod, closingShape, localInput } from '@/lib/closing'
 import { type TicketDetail, ticketKey, useCloseTicket, useClosingForm } from '@/lib/conversation'
 import { formatPhone } from '@/lib/format'
+import { LastMessageWarning } from '@/prototype/LastMessageWarning'
 
 const schema = z.object(closingShape).superRefine(checkPeriod)
 
@@ -181,6 +182,7 @@ export function ClosingSheet({
         onSubmit={onSubmit}
         question={questions.question}
       >
+        <LastMessageWarning ticketId={ticket.id} />
         {!ticket.contact.registered && (
           <Alert variant="warning">
             <TriangleAlert strokeWidth={1.7} aria-hidden />

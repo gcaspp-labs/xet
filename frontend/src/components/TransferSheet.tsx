@@ -12,6 +12,7 @@ import {
 import { type TicketDetail, useTransferTicket } from '@/lib/conversation'
 import { roleLabels } from '@/lib/format'
 import { useWorkload } from '@/lib/tickets'
+import { LastMessageWarning } from '@/prototype/LastMessageWarning'
 
 // Janela de transferência entre atendentes: o destino é uma pessoa ativa do
 // setor do chamado (spec.md, Transferências). O backend confere de novo.
@@ -79,6 +80,7 @@ export function TransferSheet({
       error={error}
       onSubmit={submit}
     >
+      <LastMessageWarning ticketId={ticket.id} />
       <Field>
         <FieldLabel htmlFor="transfer-target">Transferir para</FieldLabel>
         <Select items={items} value={target} onValueChange={(value) => setTarget(value)}>

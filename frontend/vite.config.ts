@@ -15,6 +15,8 @@ export default defineConfig({
   server: {
     // Permite abrir o servidor de desenvolvimento pelo nome MagicDNS do Tailscale.
     allowedHosts: ['.ts.net'],
+    // PROTÓTIPO #114: node_modules ligado por symlink a outra pasta (fontes).
+    ...(process.env.PROTO_FS_ALLOW ? { fs: { allow: ['..', process.env.PROTO_FS_ALLOW] } } : {}),
     proxy: {
       // ws repassa o WebSocket do painel; o Host original é mantido para a
       // verificação de origem do backend.

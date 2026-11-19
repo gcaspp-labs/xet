@@ -188,7 +188,13 @@ export default function ConversasPage() {
   const sector = sectors.find((item) => item.id === sectorId)
   const sectorItems = sectors.map((item) => ({ value: item.id.toString(), label: item.name }))
   const [query, setQuery] = useConversasSearch(ticketId ?? 0)
-  const [action, setAction] = useState('')
+  // PROTÓTIPO #114: ?janela= abre a janela direto, para as capturas.
+  const [action, setAction] = useState(
+    () =>
+      ({ encerrar: 'close', atendente: 'transfer', setor: 'sector' } as Record<string, string>)[
+        new URLSearchParams(window.location.search).get('janela') ?? ''
+      ] ?? '',
+  )
   const [closingKey, setClosingKey] = useState(0)
   const tickets: SectorTicket[] = visible.flatMap((sector, i) =>
     (results[i]?.data ?? []).map((item) => ({ ...item, sectorId: sector.id })),
