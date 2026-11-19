@@ -36,7 +36,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { Field, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -237,25 +236,23 @@ export default function ConversasPage() {
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {user.role === 'admin' && sectors.length > 0 && (
-              <Field className="w-[200px]">
-                <FieldLabel htmlFor="conversas-sector">Setor</FieldLabel>
-                <Select
-                  items={sectorItems}
-                  value={sectorId?.toString() ?? null}
-                  onValueChange={(value) => value && setChosen(Number(value))}
-                >
-                  <SelectTrigger id="conversas-sector">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sectorItems.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <Select
+                items={sectorItems}
+                value={sectorId?.toString() ?? null}
+                onValueChange={(value) => value && setChosen(Number(value))}
+              >
+                <SelectTrigger aria-label="Setor" className="w-[240px]">
+                  <span className="text-muted-foreground">Setor:</span>
+                  <SelectValue className="truncate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sectorItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {ticket && (
               <TicketActions

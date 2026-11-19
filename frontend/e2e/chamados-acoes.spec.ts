@@ -1,5 +1,14 @@
 import { expect, request as apiRequest, type Locator, type Page } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, test, unique, userPassword } from './fixtures'
+import {
+  admin,
+  clearSession,
+  seedDirectory,
+  seedSector,
+  signIn,
+  test,
+  unique,
+  userPassword,
+} from './fixtures'
 
 // Ações do cabeçalho de Chamados: a principal fica visível (Assumir na fila, Encerrar em
 // atendimento) e o resto vai no menu "Mais ações" (⋯), com Cancelar chamado em vermelho no fim,
@@ -248,4 +257,102 @@ test.describe('desktop 1440×900', () => {
     expect(height).toBeGreaterThanOrEqual(84)
     expect(height).toBeLessThanOrEqual(94)
   })
+})
+
+// Seletor de setor do administrador (#222): na mesma linha do Encerrar, com "Setor: <nome>" dentro
+// dele e sem rótulo acima. As medidas usam papéis, nomes acessíveis e posições.
+test.describe('seletor de setor do administrador', () => {
+  const centerY = async (locator: Locator) => {
+    const box = (await locator.boundingBox())!
+    return box.y + box.height / 2
+  }
+  const headerOf = (page: Page) =>
+    page.getByRole('heading', { level: 1 }).locator('xpath=ancestor::header[1]')
+
+  test.describe('desktop 1440×900', () => {
+    test.use({ viewport: { width: 1440, height: 900 } })
+
+    test('alinha com o Encerrar e mostra o setor dentro do seletor', async ({ page, baseURL }) => {
+      const { sector } = await seedSector(baseURL!)
+      const ticket = await seedTicket(baseURL!, sector.id, {
+        email: admin.email,
+        password: admin.password,
+      })
+      await signIn(page, admin.email, admin.password)
+      await page.goto(`/chamados/${ticket.id}`)
+      await expect(page.getByRole('heading', { name: ticket.name })).toBeVisible()
+
+      const picker = page.getByRole('combobox', { name: 'Setor' })
+      await expect(picker).toBeVisible()
+      // O administrador é compartilhado entre testes: escolhe o setor do teste para conferir o texto.
+      await picker.click()
+      await page.getByRole('option', { name: sector.name }).click()
+      await expect(picker).toContainText(`Setor:${sector.name}`)
+      // Sem rótulo "Setor" separado acima do seletor.
+      await expect(page.locator('label', { hasText: /^Setor$/ })).toHaveCount(0)
+
+      const close = page.getByRole('button', { name: 'Encerrar', exact: true })
+      await expect(close).toBeVisible()
+      expect(Math.abs((await centerY(picker)) - (await centerY(close)))).toBeLessThanOrEqual(1)
+      const height = (await headerOf(page).boundingBox())!.height
+      expect(height).toBeGreaterThanOrEqual(84)
+      expect(height).toBeLessThanOrEqual(94)
+    })
+
+    test('sem chamado aberto o seletor fica centralizado no cabeçalho', async ({
+      page,
+      baseURL,
+    }) => {
+      await seedSector(baseURL!)
+      await signIn(page, admin.email, admin.password)
+      const picker = page.getByRole('combobox', { name: 'Setor' })
+      await expect(picker).toBeVisible()
+      await expect(picker).toContainText('Setor: ')
+      const header = headerOf(page)
+      const box = (await header.boundingBox())!
+      expect(Math.abs((await centerY(picker)) - (box.y + box.height / 2))).toBeLessThanOrEqual(2)
+    })
+
+    test('atendente e supervisor não veem o seletor', async ({ page, baseURL }) => {
+      const { sector, agent, supervisor } = await seedSector(baseURL!)
+      const ticket = await seedTicket(baseURL!, sector.id, { email: agent })
+      for (const email of [agent, supervisor]) {
+        await clearSession(page)
+        await signIn(page, email, userPassword)
+        await page.goto(`/chamados/${ticket.id}`)
+        await expect(page.getByRole('heading', { name: ticket.name })).toBeVisible()
+        await expect(page.getByRole('combobox', { name: 'Setor' })).toHaveCount(0)
+      }
+    })
+  })
+
+  for (const [label, viewport, larger] of [
+    ['celular 390×844', { width: 390, height: 844 }, false],
+    ['texto maior em 1440×900', { width: 1440, height: 900 }, true],
+  ] as const) {
+    test(`sem sobreposição em ${label}`, async ({ page, baseURL }) => {
+      await page.setViewportSize(viewport)
+      if (larger) await page.addInitScript(() => localStorage.setItem('text-size', 'larger'))
+      const { sector } = await seedSector(baseURL!)
+      const ticket = await seedTicket(baseURL!, sector.id, {
+        email: admin.email,
+        password: admin.password,
+      })
+      await signIn(page, admin.email, admin.password)
+      await page.goto(`/chamados/${ticket.id}`)
+      await expect(page.getByRole('heading', { name: ticket.name })).toBeVisible()
+      const picker = (await page.getByRole('combobox', { name: 'Setor' }).boundingBox())!
+      const close = (await page
+        .getByRole('button', { name: 'Encerrar', exact: true })
+        .boundingBox())!
+      const apart =
+        picker.x + picker.width <= close.x ||
+        close.x + close.width <= picker.x ||
+        picker.y + picker.height <= close.y ||
+        close.y + close.height <= picker.y
+      expect(apart).toBe(true)
+      expect(picker.x).toBeGreaterThanOrEqual(0)
+      expect(picker.x + picker.width).toBeLessThanOrEqual(viewport.width)
+    })
+  }
 })
