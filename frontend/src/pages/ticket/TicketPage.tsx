@@ -20,6 +20,9 @@ import {
 } from 'lucide-react'
 import {
   type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
+  type MutableRefObject,
   type KeyboardEvent,
   type ReactNode,
   useEffect,
@@ -447,8 +450,11 @@ function Composer({
   ticketId,
   quoted,
   onCancelQuote,
+  attachRef,
 }: {
   ticketId: number
+  // A área da conversa entrega o arquivo solto; fica null quando o campo não aceita (áudio).
+  attachRef: MutableRefObject<((file: File) => void) | null>
   // A mensagem que a próxima resposta cita, escolhida no botão de responder.
   quoted: Message | null
   onCancelQuote: () => void
@@ -490,12 +496,8 @@ function Composer({
     setText(value)
   }
 
-  const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const chosen = event.target.files?.[0] ?? null
-    event.target.value = ''
-    if (!chosen) {
-      return
-    }
+  // A mesma regra para o botão de anexo, a colagem e o soltar.
+  const attachFile = (chosen: File) => {
     requestId.current = null
     if (chosen.size > maxFileSize) {
       setFileError('O arquivo passa de 16 MB. Escolha um arquivo menor.')
@@ -503,6 +505,25 @@ function Composer({
     }
     setFileError(null)
     setFile(chosen)
+  }
+
+  const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const chosen = event.target.files?.[0] ?? null
+    event.target.value = ''
+    if (chosen) attachFile(chosen)
+  }
+
+  // Com gravação em andamento ou pronta, colar e soltar não fazem nada.
+  const accepts = !recorder.recording && !voice
+  useEffect(() => {
+    attachRef.current = accepts ? attachFile : null
+  })
+
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = event.clipboardData.files[0]
+    if (!pasted) return // só texto: cola normalmente
+    event.preventDefault()
+    attachFile(pasted)
   }
 
   const changeVoice = (recording: Recording | null) => {
@@ -652,6 +673,7 @@ function Composer({
             value={text}
             onChange={(event) => changeText(event.target.value)}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
           />
           {!text.trim() && !file ? (
             <Button
@@ -678,6 +700,25 @@ function Composer({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// Destaque da área enquanto um arquivo é arrastado sobre ela.
+function DropOverlay() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none absolute inset-0 z-50 rounded-[inherit] bg-accent-soft p-2"
+    >
+      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-(--radius-8) border-2 border-dashed border-primary text-center">
+        <span className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Paperclip strokeWidth={1.7} className="size-6" aria-hidden />
+        </span>
+        <p className="title-drawer text-accent-strong">Solte para anexar</p>
+        <p className="caption text-ink-soft">Um arquivo por vez, até 16 MB.</p>
+      </div>
     </div>
   )
 }
@@ -715,6 +756,40 @@ export function ConversationCard({
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
   const quotedDraft = canReply && quoting !== null ? (byId.get(quoting) ?? null) : null
 
+  // Arrastar e soltar na área inteira da conversa.
+  const attach = useRef<((file: File) => void) | null>(null)
+  const depth = useRef(0)
+  const [dragging, setDragging] = useState(false)
+  const hasFiles = (event: DragEvent) => event.dataTransfer.types.includes('Files')
+  // O cartão sempre cancela o soltar, para o navegador não abrir o arquivo na aba. Destaque e
+  // anexo só valem com `canReply` e o campo aceitando (sem gravação nem áudio pronto).
+  const accepting = () => canReply && attach.current !== null
+  const dropProps = {
+    onDragEnter: (event: DragEvent) => {
+      if (!hasFiles(event) || !accepting()) return
+      event.preventDefault()
+      depth.current += 1
+      setDragging(true)
+    },
+    onDragOver: (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault() // o navegador não abre o arquivo na aba
+      event.dataTransfer.dropEffect = accepting() ? 'copy' : 'none'
+    },
+    onDragLeave: () => {
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setDragging(false)
+    },
+    onDrop: (event: DragEvent) => {
+      if (!hasFiles(event)) return
+      event.preventDefault()
+      depth.current = 0
+      setDragging(false)
+      const dropped = event.dataTransfer.files[0] // vários: só o primeiro
+      if (dropped && accepting()) attach.current?.(dropped)
+    },
+  }
+
   // Mostra sempre a mensagem mais recente.
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight })
@@ -735,8 +810,10 @@ export function ConversationCard({
     <Card
       role="region"
       aria-label="Conversa"
-      className={cn('h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]', className)}
+      className={cn('relative h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]', className)}
+      {...dropProps}
     >
+      {canReply && dragging && <DropOverlay />}
       {needsRegistration(ticket) && (
         <div className="border-b border-line-soft p-3">
           <Alert variant="warning">
@@ -801,6 +878,7 @@ export function ConversationCard({
       {canReply ? (
         <Composer
           ticketId={ticket.id}
+          attachRef={attach}
           quoted={quotedDraft}
           onCancelQuote={() => setQuoting(null)}
         />
@@ -1111,6 +1189,18 @@ function readOnlyNote(ticket: TicketDetail) {
   return `Encerrado em ${at}${by}.`
 }
 
+// Na conversa só de leitura, soltar um arquivo não faz nada, mas o navegador não pode abri-lo na aba.
+const ignoreFileDrop = {
+  onDragOver: (event: DragEvent) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'none'
+  },
+  onDrop: (event: DragEvent) => {
+    if (event.dataTransfer.types.includes('Files')) event.preventDefault()
+  },
+}
+
 // A conversa completa, só para leitura: sem campo de mensagem, áudio, anexo nem Reenviar, com os
 // avisos de sistema e de correção na ordem do tempo. A tela Chamados segue com a ConversationCard.
 function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
@@ -1129,6 +1219,7 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
       role="region"
       aria-label="Conversa"
       className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
+      {...ignoreFileDrop}
     >
       <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length > 0 || logs.length > 0 ? (
