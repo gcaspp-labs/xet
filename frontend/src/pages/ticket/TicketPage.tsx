@@ -1213,12 +1213,7 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
   }, [messages.length, logs.length])
 
   return (
-    <Card
-      role="region"
-      aria-label="Conversa"
-      className="h-[70dvh] lg:h-[calc(100dvh-150px-var(--header-height))]"
-      {...ignoreFileDrop}
-    >
+    <Card role="region" aria-label="Conversa" className="min-h-0" {...ignoreFileDrop}>
       <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length > 0 || logs.length > 0 ? (
           <ol className="flex flex-col gap-2">
@@ -1305,7 +1300,8 @@ export default function TicketPage() {
       : 'details'
 
   return (
-    <>
+    // A página tem a altura da janela e não rola: a conversa e a ficha rolam cada uma no seu painel.
+    <div className="flex h-[calc(100dvh-var(--header-height)-var(--realtime-note-height,0px))] flex-col overflow-clip [&>header]:shrink-0">
       <Topbar
         back={back}
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
@@ -1325,9 +1321,9 @@ export default function TicketPage() {
         <CorrectionSheet ticket={ticket} recorded={recordedModules} onOpenChange={setCorrecting} />
       )}
       {/* A tela de conversas usa a largura toda (design.md). */}
-      <div className="grid w-full items-start gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[minmax(0,1fr)]">
         <ReadOnlyConversation ticket={ticket} />
-        <Card role="region" aria-labelledby="ticket-info-title">
+        <Card role="region" aria-labelledby="ticket-info-title" className="min-h-0">
           <CardHeader>
             <CardTitle id="ticket-info-title">Atendimento</CardTitle>
           </CardHeader>
@@ -1340,15 +1336,15 @@ export default function TicketPage() {
               <TabsTrigger value="details">Detalhes</TabsTrigger>
               <TabsTrigger value="history">Histórico</TabsTrigger>
             </TabsList>
-            <TabsContent value="details">
+            <TabsContent value="details" className="min-h-0 overflow-y-auto">
               <DetailsTab ticket={ticket} />
             </TabsContent>
-            <TabsContent value="history">
+            <TabsContent value="history" className="min-h-0 overflow-y-auto">
               <HistoryTab ticket={ticket} />
             </TabsContent>
           </Tabs>
         </Card>
       </div>
-    </>
+    </div>
   )
 }
