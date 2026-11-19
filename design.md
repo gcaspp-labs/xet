@@ -6,7 +6,7 @@ Regra geral: o shadcn/ui fornece o comportamento e a acessibilidade dos componen
 
 ## Dependência
 
-- O design system entra como dependência npm do frontend, fixada por commit: `npm install github:gcaspp-labs/glab-design-system#3c32eca` (versão 1.0.0). Quando o repositório tiver tags, trocar o commit pela tag (`#v1.0.0`).
+- O design system entra como dependência npm do frontend, fixada por commit: `npm install github:gcaspp-labs/glab-design-system#a05e5eb` (versão 1.1.0). Quando o repositório tiver tags, trocar o commit pela tag (`#v1.0.0`).
 - Usamos somente `tokens/tokens.css`, os ícones e os logos. O `css/components.css` **não** é importado: os componentes vêm do shadcn, estilizados com os tokens.
 - Atualizar o design system é uma mudança deliberada: trocar a versão no `package.json`, conferir o CHANGELOG e revisar as telas.
 
