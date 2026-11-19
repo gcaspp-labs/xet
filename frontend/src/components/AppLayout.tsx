@@ -9,6 +9,7 @@ import {
   CircleAlert,
   ClipboardCheck,
   Contrast,
+  KeyRound,
   Landmark,
   LayoutDashboard,
   LogOut,
@@ -23,10 +24,13 @@ import {
   Volume2,
   type LucideIcon,
 } from 'lucide-react'
-import type { CSSProperties } from 'react'
+import { type CSSProperties, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { NotificationBell } from '@/components/NotificationBell'
 import { RealtimeNote } from '@/components/RealtimeNote'
+// PROTÓTIPO #259
+import { ChangePasswordDialog, protoState } from '@/prototype/ChangePasswordDialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   DropdownMenu,
@@ -202,8 +206,16 @@ function SettingsMenu({ role }: { role: Role }) {
   const logout = useLogout()
   const navigate = useNavigate()
   const { setOpenMobile } = useSidebar()
+  // PROTÓTIPO #259: ?estado= abre o diálogo direto; ?estado=menu abre só o menu.
+  const state = protoState()
+  const [changing, setChanging] = useState(!!state && state !== 'menu' && state !== 'sucesso')
+  useEffect(() => {
+    if (state === 'sucesso') toast.success('Senha alterada', { id: 'proto-259', duration: 60_000 })
+  }, [state])
   return (
-    <DropdownMenu>
+    <>
+    <ChangePasswordDialog open={changing} onOpenChange={setChanging} />
+    <DropdownMenu defaultOpen={state === 'menu'}>
       <DropdownMenuTrigger render={<SidebarMenuButton />}>
         <Settings strokeWidth={1.7} className="size-[15px]!" aria-hidden />
         <span>Configurações</span>
@@ -240,6 +252,10 @@ function SettingsMenu({ role }: { role: Role }) {
             Usuários
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onClick={() => setChanging(true)}>
+          <KeyRound strokeWidth={1.7} aria-hidden />
+          Alterar senha
+        </DropdownMenuItem>
         <DropdownMenuItem
           disabled={logout.isPending}
           onClick={() =>
@@ -253,6 +269,7 @@ function SettingsMenu({ role }: { role: Role }) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    </>
   )
 }
 
