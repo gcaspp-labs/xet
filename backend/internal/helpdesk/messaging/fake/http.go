@@ -36,6 +36,13 @@ func (a *Adapter) Handler() http.Handler {
 	r.Post("/messaging/sectors/{sectorID}/drop", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.Drop(r.Context(), sectorID) })
 	})
+	// The sends of the sector wait until release, keeping the message pending.
+	r.Post("/messaging/sectors/{sectorID}/hold", func(w http.ResponseWriter, r *http.Request) {
+		a.control(w, r, func(sectorID int64) error { a.Hold(sectorID); return nil })
+	})
+	r.Post("/messaging/sectors/{sectorID}/release", func(w http.ResponseWriter, r *http.Request) {
+		a.control(w, r, func(sectorID int64) error { a.Release(sectorID); return nil })
+	})
 	// Message from a contact, identified by the phone: a text or, with type
 	// and media (content in base64), an image, video, audio or document. An
 	// optional quote cites another message by its provider ID, with or

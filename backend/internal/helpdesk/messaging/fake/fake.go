@@ -50,8 +50,10 @@ type Adapter struct {
 	saved map[int64][]messaging.SavedContact
 	// Sectors whose next reaction the provider refuses.
 	refuseReaction map[int64]bool
-	sent           map[string]string
-	Sent           []any
+	// Sectors whose sends wait for Release, to keep a message pending.
+	held map[int64]chan struct{}
+	sent map[string]string
+	Sent []any
 }
 
 var (
@@ -69,6 +71,7 @@ func New(handler messaging.EventHandler) *Adapter {
 		saved:          map[int64][]messaging.SavedContact{},
 		sent:           map[string]string{},
 		refuseReaction: map[int64]bool{},
+		held:           map[int64]chan struct{}{},
 	}
 }
 
@@ -173,6 +176,26 @@ func (a *Adapter) Drop(ctx context.Context, sectorID int64) error {
 	})
 }
 
+// Hold makes the sends of the sector wait, so the message stays pending until
+// Release. Holding twice keeps the first wait.
+func (a *Adapter) Hold(sectorID int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.held[sectorID] == nil {
+		a.held[sectorID] = make(chan struct{})
+	}
+}
+
+// Release lets the waiting sends of the sector go on, and the next ones too.
+func (a *Adapter) Release(sectorID int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if ch := a.held[sectorID]; ch != nil {
+		close(ch)
+		delete(a.held, sectorID)
+	}
+}
+
 // LogOut simulates the phone unlinking the account.
 func (a *Adapter) LogOut(ctx context.Context, sectorID int64) error {
 	return a.set(ctx, sectorID, func(s *session) {
@@ -270,6 +293,12 @@ func (a *Adapter) SendMedia(_ context.Context, msg messaging.MediaMessage) (stri
 // send records the message once per idempotency key, like the real provider
 // reusing the message ID.
 func (a *Adapter) send(sectorID int64, key string, msg any) (string, error) {
+	a.mu.Lock()
+	held := a.held[sectorID]
+	a.mu.Unlock()
+	if held != nil {
+		<-held
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.session(sectorID).status != messaging.StatusConnected {
