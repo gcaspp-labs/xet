@@ -99,6 +99,12 @@ O pacote `internal/helpdesk/messaging` define a interface e os tipos neutros; ca
 - **Documentado:** mensagem de reação não pode ser usada como resposta contextual. Não afeta o XET, que não cita reação.
 - **A confirmar na migração** (não é proibição): nada além do já listado em "Citações recebidas"; para o envio, a documentação consultada só exige o identificador.
 
+**Edições e exclusões** (a documentação oficial da Cloud API não foi lida nesta consulta; a spec #290 não afirma suporte equivalente). Nada abaixo muda o que se constrói com o Whatsmeow: o contrato já aceita qualquer combinação de capacidades.
+
+- **Documentado no contrato:** editar e excluir para todos são capacidades do provedor, declaradas em `Capabilities` (`EditWindow`, `RevokeWindow`; zero = indisponível, e `ReceivesChanges` diz se os eventos chegam). Se a Cloud API não oferecer uma das operações, ou oferecer com outro prazo, o futuro adaptador declara isso e o domínio informa que a ação não está disponível: nunca simula sucesso nem grava a alteração sem a resposta do provedor.
+- **A confirmar na migração** (hipóteses; não é proibição): se a Cloud API permite editar uma mensagem enviada e por quanto tempo; se permite revogar para todos e por quanto tempo; e se entrega os eventos de edição e revogação feitos pelo cliente ou pelo celular do setor. Os prazos do Whatsmeow (15 minutos de edição e dois dias de exclusão, os do WhatsApp) não são copiados para outro provedor.
+- **Fora do provedor:** "excluir para mim" é ocultação só no XET, para todo o setor, e não depende de capacidade alguma. O WhatsApp não garante que uma mensagem excluída para todos suma de todos os aparelhos, e o XET não promete isso em nenhum dos dois casos.
+
 ## Regras críticas no banco
 
 As regras de concorrência, idempotência e auditoria estão no `AGENTS.md` (Idempotência, concorrência e consistência), e as restrições que as garantem, em [data-model.md](data-model.md).
