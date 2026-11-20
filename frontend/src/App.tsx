@@ -5,6 +5,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import AtendimentosPage from '@/pages/AtendimentosPage'
+import Prototype322 from '@/pages/Prototype322'
 import ConversasPage from '@/pages/ConversasPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
@@ -42,6 +43,14 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #322 — descartável, não vai para a main.
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/atendimentos' &&
+    new URLSearchParams(window.location.search).get('prototype') === '322'
+  ) {
+    return <Prototype322 />
+  }
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
