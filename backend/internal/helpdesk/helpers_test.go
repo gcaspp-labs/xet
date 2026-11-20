@@ -131,6 +131,25 @@ func (e *testEnv) waitAction(messageID int64, status string) {
 	e.T.Fatalf("no %s action on message %d: %+v", status, messageID, e.actions(messageID))
 }
 
+// waitTicketLockWaiters waits until n transactions wait for the lock of a ticket.
+func (e *testEnv) waitTicketLockWaiters(n int) {
+	e.T.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiting int
+		if err := e.Pool.QueryRow(e.T.Context(), `
+			select count(*) from pg_stat_activity
+			where wait_event_type = 'Lock' and query like '%from tickets%for update%' and datname = current_database()`).Scan(&waiting); err != nil {
+			e.T.Fatal(err)
+		}
+		if waiting >= n {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	e.T.Fatalf("fewer than %d transactions wait for a ticket", n)
+}
+
 // sentConversation is an assigned conversation with a text sent by Ana from
 // the panel, known to WhatsApp.
 type sentConversation struct {

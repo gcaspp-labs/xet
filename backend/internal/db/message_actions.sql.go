@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -47,9 +48,9 @@ func (q *Queries) AcceptUncertainMessageAction(ctx context.Context, arg AcceptUn
 }
 
 const createMessageAction = `-- name: CreateMessageAction :one
-insert into message_actions (client_request_id, message_id, ticket_id, sector_id, author_id, kind, body, status, finished_at)
+insert into message_actions (client_request_id, message_id, ticket_id, sector_id, author_id, kind, body, status, created_at, finished_at)
 values (
-    $1, $2, $3, $4, $5, $6, $7, $8,
+    $1, $2, $3, $4, $5, $6, $7, $8, $9,
     case when $8::message_action_status = 'pending' then null else now() end
 )
 on conflict (client_request_id) do nothing
@@ -65,12 +66,14 @@ type CreateMessageActionParams struct {
 	Kind            MessageActionKind
 	Body            *string
 	Status          MessageActionStatus
+	CreatedAt       time.Time
 }
 
 // An edit or a deletion asked in the panel, recorded before it goes to the
 // provider; a local deletion is recorded already accepted. A repeated request
 // (same client_request_id) returns no row; a second action while one is in
-// flight on the message breaks message_actions_in_flight_key.
+// flight on the message breaks message_actions_in_flight_key. created_at is
+// taken with the ticket locked, so it is the order in which actions go out.
 func (q *Queries) CreateMessageAction(ctx context.Context, arg CreateMessageActionParams) (MessageAction, error) {
 	row := q.db.QueryRow(ctx, createMessageAction,
 		arg.ClientRequestID,
@@ -81,6 +84,7 @@ func (q *Queries) CreateMessageAction(ctx context.Context, arg CreateMessageActi
 		arg.Kind,
 		arg.Body,
 		arg.Status,
+		arg.CreatedAt,
 	)
 	var i MessageAction
 	err := row.Scan(

@@ -704,6 +704,60 @@ func TestLateEchoDoesNotUndoANewerEdit(t *testing.T) {
 	}
 }
 
+// Uma edição nova pedida enquanto a anterior ainda grava a resposta do WhatsApp
+// espera a trava do chamado: ela vem depois da anterior, e o eco dela, quando
+// o resultado é incerto, a deixa como versão atual.
+func TestEditWaitingForThePreviousOneComesAfterIt(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+
+	e.WhatsApp.Hold(c.sector.ID)
+	first := make(chan response, 1)
+	go func() { first <- e.editMessage(c.sent, c.anaToken, requestE1, "Versão B") }()
+	e.waitAction(c.sent, "pending")
+
+	// O teste segura o chamado: a resposta da edição B espera por ele, e a
+	// edição C, que começa depois, espera atrás dela.
+	tx, err := e.Pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	if _, err := tx.Exec(t.Context(), "select id from tickets where id = $1 for update", c.ticket.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.WhatsApp.Release(c.sector.ID)
+	e.waitTicketLockWaiters(1)
+	e.WhatsApp.FailNextChange(c.sector.ID, context.DeadlineExceeded)
+	second := make(chan response, 1)
+	go func() { second <- e.editMessage(c.sent, c.anaToken, requestE2, "Versão C") }()
+	e.waitTicketLockWaiters(2)
+	time.Sleep(50 * time.Millisecond)
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if r := <-first; r.Status != http.StatusOK {
+		t.Fatalf("edit B: status %d, body %v", r.Status, r.Body)
+	}
+	if r := <-second; r.Status != http.StatusBadGateway {
+		t.Fatalf("edit C: status %d, body %v", r.Status, r.Body)
+	}
+	e.editFromPhone(c.sector.ID, "ECHO-C", "fake-msg-"+requestA, anaPrefix+"\nVersão C", time.Now().Add(time.Second))
+
+	if got := bodyOf(t, e.apiMessage(c.ticket.ID, c.anaToken, "fake-msg-"+requestA)); got != anaPrefix+"\nVersão C" {
+		t.Fatalf("current version after the echo of C = %q", got)
+	}
+	got := []string{}
+	for _, a := range e.actions(c.sent) {
+		got = append(got, a.Status)
+	}
+	if !reflect.DeepEqual(got, []string{"accepted", "accepted"}) {
+		t.Fatalf("actions = %v", got)
+	}
+}
+
 // Uma exclusão para todos incerta, depois "excluir para mim": quando o eco do
 // WhatsApp confirma a exclusão para todos, o alcance passa a "para todos",
 // porque o contato também não vê mais a mensagem.

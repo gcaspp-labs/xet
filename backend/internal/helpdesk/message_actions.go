@@ -155,7 +155,7 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 		}
 		action, err = q.CreateMessageAction(ctx, db.CreateMessageActionParams{
 			ClientRequestID: req.ClientRequestID, MessageID: target.ID, TicketID: target.TicketID, SectorID: target.SectorID,
-			AuthorID: actor.ID, Kind: req.Kind, Body: body, Status: status,
+			AuthorID: actor.ID, Kind: req.Kind, Body: body, Status: status, CreatedAt: actionTime(target, time.Now()),
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -166,7 +166,7 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 			return fmt.Errorf("create message action: %w", err)
 		}
 		if local {
-			return applyAction(ctx, q, action, nil, time.Now(), true)
+			return applyAction(ctx, q, action, nil, action.CreatedAt, true)
 		}
 		return nil
 	})
@@ -244,6 +244,18 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 		return db.Message{}, fmt.Errorf("get message action: %w", err)
 	}
 	return s.actionResult(ctx, current)
+}
+
+// actionTime is when an action is asked, taken with the ticket locked: after
+// the actions settled before it, with the same clock that applies an accepted
+// one, and after the current version, so the echo of an uncertain action,
+// applied at this time, never falls behind a version applied before it.
+func actionTime(m db.Message, now time.Time) time.Time {
+	now = now.Truncate(time.Microsecond)
+	if m.EditedAt != nil && !m.EditedAt.Before(now) {
+		return m.EditedAt.Add(time.Microsecond)
+	}
+	return now
 }
 
 // repeatedChange answers a repeated request with the result of the first one,

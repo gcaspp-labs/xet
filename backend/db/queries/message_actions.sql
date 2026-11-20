@@ -11,10 +11,11 @@ for update;
 -- An edit or a deletion asked in the panel, recorded before it goes to the
 -- provider; a local deletion is recorded already accepted. A repeated request
 -- (same client_request_id) returns no row; a second action while one is in
--- flight on the message breaks message_actions_in_flight_key.
-insert into message_actions (client_request_id, message_id, ticket_id, sector_id, author_id, kind, body, status, finished_at)
+-- flight on the message breaks message_actions_in_flight_key. created_at is
+-- taken with the ticket locked, so it is the order in which actions go out.
+insert into message_actions (client_request_id, message_id, ticket_id, sector_id, author_id, kind, body, status, created_at, finished_at)
 values (
-    @client_request_id, @message_id, @ticket_id, @sector_id, @author_id, @kind, @body, @status,
+    @client_request_id, @message_id, @ticket_id, @sector_id, @author_id, @kind, @body, @status, @created_at,
     case when @status::message_action_status = 'pending' then null else now() end
 )
 on conflict (client_request_id) do nothing
