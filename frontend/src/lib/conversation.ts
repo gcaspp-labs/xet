@@ -64,6 +64,15 @@ export type Message = {
   } | null
   reactions: MessageReactions
   quote: MessageQuote | null
+  // Horário da versão atual, quando a mensagem foi editada (no XET, pelo cliente ou pelo celular).
+  editedAt: string | null
+  // Exclusão da mensagem, com o conteúdo guardado: `scope` diz se foi para todos ou só no XET
+  // ("para mim"), e `origin` quem excluiu: 'agent' é o XET.
+  deletion: {
+    at: string
+    scope: 'everyone' | 'local'
+    origin: 'customer' | 'agent' | 'phone'
+  } | null
 }
 
 // A mensagem que uma resposta cita; `quote` é null quando não há citação. `messageId` liga à
@@ -278,6 +287,119 @@ export function canReactTo(message: Message) {
 // confere de novo.
 export function canQuoteMessage(message: Message) {
   return canReactTo(message) && message.type !== 'unsupported'
+}
+
+// Conteúdo ocultado pelo XET (excluída para todos ou para mim): em Chamados vira um aviso. A exclusão
+// feita pelo cliente ou pelo celular do setor mantém o conteúdo conhecido, com a etiqueta "Excluída".
+export function isHiddenByXet(message: Message) {
+  return message.deletion?.origin === 'agent'
+}
+
+// Prazos do WhatsApp para editar (15 minutos) e excluir para todos (dois dias) uma mensagem enviada.
+// A tela só os usa para oferecer ou explicar a ação; quem decide é o backend, com o relógio dele.
+const editWindowMs = 15 * 60 * 1000
+const revokeWindowMs = 48 * 60 * 60 * 1000
+
+const editableTypes: MessageType[] = ['text', 'image', 'video', 'document']
+
+export type MessageChanges = {
+  edit: boolean
+  deleteForEveryone: boolean
+  deleteForMe: boolean
+  // Por que falta uma ação, quando há ação possível de entender.
+  note: string | null
+}
+
+// O que o responsável pode fazer agora com a mensagem enviada pelo XET. `null` quando a mensagem não
+// admite nenhuma ação nem explicação: a do cliente, a do celular do setor e a já excluída.
+export function messageChanges(message: Message, now = Date.now()): MessageChanges | null {
+  if (message.direction !== 'outbound' || message.origin !== 'agent' || message.deletion) {
+    return null
+  }
+  if (message.status === null || message.status === 'pending') {
+    return {
+      edit: false,
+      deleteForEveryone: false,
+      deleteForMe: false,
+      note: 'Mensagem em envio. Edição e exclusão indisponíveis.',
+    }
+  }
+  if (message.status === 'failed') {
+    return {
+      edit: false,
+      deleteForEveryone: false,
+      deleteForMe: true,
+      note: 'Mensagem com falha só pode ser excluída para mim.',
+    }
+  }
+  const age = now - Date.parse(message.sentAt)
+  const editable = editableTypes.includes(message.type)
+  const edit = editable && age < editWindowMs
+  const deleteForEveryone = age < revokeWindowMs
+  let note: string | null = null
+  if (!editable) {
+    note = 'Áudio não pode ser editado.'
+  } else if (!edit) {
+    note = deleteForEveryone
+      ? 'Prazo de edição encerrado.'
+      : 'Prazos de edição e de exclusão para todos encerrados. Ainda é possível excluir para mim.'
+  } else if (!deleteForEveryone) {
+    note = 'Prazo para excluir para todos encerrado. Ainda é possível excluir para mim.'
+  }
+  return { edit, deleteForEveryone, deleteForMe: true, note }
+}
+
+// Identificador do botão do menu da mensagem, para devolver o foco a ele ao fechar a janela.
+export const messageMenuId = (messageId: number) => `message-actions-${messageId}`
+
+// O texto que a edição muda: o conteúdo sem o apelido ("*Ana:*") gravado no envio, que não se edita.
+export function editableText(message: Message) {
+  const body = message.body ?? ''
+  const prefix = body.match(/^\*([^*\n]+:)\*(?:\n|$)/)
+  return prefix ? body.slice(prefix[0].length) : body
+}
+
+// Edita o texto ou a legenda. O mesmo requestId numa nova tentativa devolve o resultado da primeira;
+// depois de uma recusa, é preciso um novo (o backend confere o responsável, o prazo e o estado).
+export function useEditMessage(ticketId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      messageId,
+      requestId,
+      body,
+    }: {
+      messageId: number
+      requestId: string
+      body: string
+    }) =>
+      api<{ id: number }>(`/messages/${messageId}/edit`, {
+        method: 'POST',
+        body: { clientRequestId: requestId, body },
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
+  })
+}
+
+// Exclui para todos (também no WhatsApp) ou para mim (oculta para o setor, só no XET).
+export function useDeleteMessage(ticketId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      messageId,
+      requestId,
+      scope,
+    }: {
+      messageId: number
+      requestId: string
+      scope: 'everyone' | 'local'
+    }) =>
+      api<{ id: number }>(`/messages/${messageId}/delete`, {
+        method: 'POST',
+        body: { clientRequestId: requestId, scope },
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
+  })
 }
 
 // Reagir pelo setor: o mesmo emoji de agora remove, outro troca (quem decide é o backend). A tela

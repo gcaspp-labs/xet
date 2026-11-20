@@ -1,7 +1,7 @@
 import { CornerUpLeft, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatDuration } from '@/lib/format'
-import type { Message, MessageQuote as Quote } from '@/lib/conversation'
+import { isHiddenByXet, type Message, type MessageQuote as Quote } from '@/lib/conversation'
 import type { MessageType } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 
@@ -59,11 +59,14 @@ export function QuoteBlock({
   quote,
   quoted,
   onPrimary,
+  hideDeleted = false,
 }: {
   quote: Quote
   quoted: Message | undefined
   // Balão do setor com fundo de destaque: a faixa troca para o tom do texto sobre ele.
   onPrimary: boolean
+  // Em Chamados, a mensagem citada que o XET excluiu mostra um aviso, não o conteúdo.
+  hideDeleted?: boolean
 }) {
   const style = cn(
     'caption flex flex-col gap-0.5 rounded-(--radius-6) border-l-4 px-2 py-1.5 text-left',
@@ -74,7 +77,8 @@ export function QuoteBlock({
 
   if (quoted) {
     const author = quotedAuthor(quoted)
-    const preview = quotedPreview(quoted)
+    const preview =
+      hideDeleted && isHiddenByXet(quoted) ? 'Mensagem excluída no XET' : quotedPreview(quoted)
     return (
       <button
         type="button"
