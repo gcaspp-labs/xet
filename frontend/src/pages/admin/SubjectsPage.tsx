@@ -606,7 +606,9 @@ export default function SubjectsPage() {
               </TableBody>
             </Table>
           ) : (
-            !isPending && (
+            // Sem setor a consulta fica desabilitada e isPending nunca cai: o
+            // estado vazio precisa aparecer também nesse caso.
+            (sectorId === undefined || !isPending) && (
               <Empty>
                 <EmptyMedia>
                   <Tags strokeWidth={1.7} aria-hidden />
