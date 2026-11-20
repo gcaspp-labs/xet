@@ -54,8 +54,31 @@ export function useSaveSector() {
   })
 }
 
-export function useUsers() {
-  return useQuery({ queryKey: usersKey, queryFn: () => api<AdminUser[]>('/users') })
+// Colunas que ordenam a lista de usuários na tela, ligadas às colunas que a API aceita.
+export type UserSort = 'name' | 'role' | 'sector' | 'status'
+
+export const userColumns: Record<string, UserSort> = {
+  usuario: 'name',
+  papel: 'role',
+  setor: 'sector',
+  situacao: 'status',
+}
+export const defaultUserColumn = 'usuario'
+
+// Página de 20 usuários, com a busca por nome, apelido ou e-mail no servidor (?q=,
+// como em Contatos), junto da página e da ordem.
+export function useUsers(query: string, request: PageRequest<UserSort>) {
+  return useQuery({
+    queryKey: [...usersKey, 'page', query.trim(), request.page, request.sort, request.direction],
+    queryFn: () => {
+      const search = new URLSearchParams(pageParams(request))
+      if (query.trim()) {
+        search.set('q', query.trim())
+      }
+      return api<Page<AdminUser>>(`/users?${search}`)
+    },
+    placeholderData: keepPreviousData,
+  })
 }
 
 export function useCreateUser() {
