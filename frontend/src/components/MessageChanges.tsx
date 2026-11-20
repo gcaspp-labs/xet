@@ -20,20 +20,14 @@ import {
 } from '@/lib/conversation'
 
 // Quem fez a alteração: o cliente, o celular do setor ou o XET (com o nome, quando se sabe).
-function whoChanged(change: MessageChange) {
+function by(change: MessageChange) {
   if (change.origin === 'customer') return 'pelo cliente'
   if (change.origin === 'phone') return 'pelo celular do setor'
   return change.author ? `pelo XET, por ${change.author.name}` : 'pelo XET'
 }
 
-function whoSent(change: MessageChange) {
-  if (change.origin === 'customer') return 'Enviada pelo cliente'
-  if (change.origin === 'phone') return 'Enviada pelo celular do setor'
-  return change.author ? `Enviada pelo XET, por ${change.author.name}` : 'Enviada pelo XET'
-}
-
 // O apelido gravado no envio vem em negrito, como no balão da conversa.
-function Content({ body }: { body: string }) {
+function MessageVersionContent({ body }: { body: string }) {
   const prefix = body.match(/^\*([^*\n]+:)\*(?:\n|$)/)
   return (
     <p className="whitespace-pre-wrap break-words">
@@ -108,7 +102,7 @@ export function MessageChangesDialog({
                       </span>
                     </div>
                     <p className="caption text-ink-soft">
-                      {formatDateTime(change.at)} · {whoChanged(change)}
+                      {formatDateTime(change.at)} · {by(change)}
                     </p>
                   </li>
                 ) : (
@@ -126,11 +120,11 @@ export function MessageChangesDialog({
                     <p className="caption text-ink-soft">
                       {formatDateTime(change.at)} ·{' '}
                       {change.kind === 'original'
-                        ? whoSent(change)
-                        : `Editada ${whoChanged(change)}`}
+                        ? `Enviada ${by(change)}`
+                        : `Editada ${by(change)}`}
                     </p>
                     {change.body ? (
-                      <Content body={change.body} />
+                      <MessageVersionContent body={change.body} />
                     ) : (
                       <p className="italic text-ink-soft">Sem texto</p>
                     )}
