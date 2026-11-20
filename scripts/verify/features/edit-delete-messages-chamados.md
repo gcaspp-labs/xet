@@ -4,19 +4,19 @@ O responsável do chamado aberto edita o texto ou a legenda de uma mensagem envi
 
 ## Sub-features
 
-- [jornada] O menu da mensagem enviada oferece Editar e Excluir.
+- [jornada] O menu da mensagem enviada oferece Responder, Editar e Excluir, nessa ordem.
 - [jornada] Editar usa a faixa "Editando" no compositor, com o texto sem o apelido; Cancelar não chama a API e devolve o rascunho que já existia.
 - [jornada] Salvar a edição troca o texto da mesma mensagem, com "Editada", nas duas sessões, sem recarregar e sem mensagem nova.
 - [jornada] A janela de exclusão mostra "Excluir para todos", "Excluir para mim" e "Cancelar"; Cancelar não exclui.
 - [jornada] Excluir para mim troca o conteúdo por "Mensagem excluída no XET" nas duas sessões e depois de recarregar.
 - [jornada] Edição e exclusão do cliente mostram o conteúdo conhecido com "Editada" e "Excluída".
-- [não coberto] Recusa e resultado incerto do WhatsApp na tela, prazo de 15 minutos e de exclusão para todos, mensagem enviando ou com falha, áudio, temas, teclado e foco, confirmação duplicada, prévia na lista e perda de responsável durante a edição (testes ponta a ponta em `frontend/e2e/message-edit-delete.spec.ts`).
+- [não coberto] Recusa e resultado incerto do WhatsApp na tela, prazo de 15 minutos e de exclusão para todos, mensagem enviando ou com falha, áudio, temas, teclado e foco, confirmação duplicada, prévia na lista (inclusive excluir para todos), citação em preparo que some quando a mensagem citada é excluída, supervisor já conectado, mensagem do celular sem menu e perda de responsável durante a edição (testes ponta a ponta em `frontend/e2e/message-edit-delete.spec.ts`).
 - [manual] Edição de texto e legenda e exclusão para todos chegando num celular real pelo Whatsmeow.
 
 ## How to get to it
 
 1. Uma mensagem do cliente chega, o atendente assume o chamado em `/chamados/<id>` e responde.
-2. Passando o mouse (ou com o foco) na mensagem enviada, o botão "Ações da mensagem" (⋯) abre o menu com Editar e Excluir.
+2. Passando o mouse (ou com o foco) na mensagem enviada, o botão "Ações da mensagem" (⋯) abre o menu com Responder, Editar e Excluir.
 
 ## Driving it
 

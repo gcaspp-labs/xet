@@ -39,11 +39,10 @@ await journey('edit-delete-messages-chamados', async (t) => {
     .getByRole('listitem', { name: 'Mensagem enviada' })
   await expect(secondSent).toHaveCount(2)
 
-  await t.step('O menu da mensagem oferece Editar e Excluir', async () => {
+  await t.step('O menu da mensagem oferece Responder, Editar e Excluir', async () => {
     await sent.first().hover()
     await menuOf(sent.first()).click()
-    await expect(page.getByRole('menuitem', { name: 'Editar', exact: true })).toBeVisible()
-    await expect(page.getByRole('menuitem', { name: 'Excluir', exact: true })).toBeVisible()
+    await expect(page.getByRole('menuitem')).toHaveText(['Responder', 'Editar', 'Excluir'])
     await t.shot(page, 'menu-da-mensagem')
     await page.keyboard.press('Escape')
   })
