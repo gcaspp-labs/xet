@@ -11,6 +11,7 @@ import {
   chooseAction,
   openQueued,
   login,
+  recordToasts,
 } from './fixtures'
 
 // Liga o número do setor pelo adaptador falso e cadastra um órgão e os módulos do setor.
@@ -505,6 +506,9 @@ test('o link do aviso não troca de chamado com a janela aberta', async ({
 }) => {
   // Tela baixa: a janela ocupa toda a altura e o rodapé fica no mesmo lugar do aviso.
   await page.setViewportSize({ width: 1280, height: 560 })
+  // O registro dos avisos diz que um aviso chegou a aparecer, mesmo que ele suma antes da conferência
+  // (os avisos duram 2,5 s e a máquina pode parar por mais que isso).
+  const toasts = await recordToasts(page)
   const { sector, agent } = await seedSector(baseURL!)
   await prepare(baseURL!, sector.id)
   const receive = async (name: string) => {
@@ -525,7 +529,16 @@ test('o link do aviso não troca de chamado com a janela aberta', async ({
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
   const firstUrl = page.url()
-  // O aviso de assumir o primeiro sai antes: o segundo fica sozinho, no lugar de sempre.
+  // O aviso de assumir o primeiro sai antes: o segundo fica sozinho, no lugar de sempre. Primeiro
+  // confirma que ele apareceu: esperar zero avisos logo depois do clique pode passar antes de o
+  // primeiro ser desenhado (a tela mostra Encerrar antes de o aviso entrar no DOM), e aí os dois
+  // avisos de "Chamado assumido" se sobrepõem e o localizador do aviso do sino fica ambíguo.
+  await expect
+    .poll(async () => (await toasts()).some((text) => text.includes('Chamado assumido')), {
+      message: 'o aviso de assumir o primeiro precisa ter aparecido',
+      timeout: 15_000,
+    })
+    .toBe(true)
   await expect(page.locator('[data-sonner-toast]')).toHaveCount(0)
   await receive(second)
 
@@ -536,7 +549,12 @@ test('o link do aviso não troca de chamado com a janela aberta', async ({
     .getByRole('dialog')
     .getByRole('button', { name: `Assumir chamado de ${second}` })
     .click()
-  const notice = page.locator('[data-sonner-toast]', { hasText: 'Chamado assumido' })
+  // O aviso do sino é o único de "Chamado assumido" com o link "Abrir chamado": o localizador aponta
+  // para ele mesmo que outro aviso igual ainda esteja na tela.
+  const notice = page.locator('[data-sonner-toast]', {
+    hasText: 'Chamado assumido',
+    has: page.locator('a', { hasText: 'Abrir chamado' }),
+  })
   const link = notice.getByRole('link', { name: 'Abrir chamado', exact: true })
   // Sem janela aberta, o link do aviso continua disponível.
   await expect(link).toBeVisible()
