@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router'
 import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
 import DashboardPage from '@/pages/DashboardPage'
+import Prototype318 from '@/pages/Prototype318'
 import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import AtendimentosPage from '@/pages/AtendimentosPage'
@@ -42,6 +43,14 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #318 — descartável, não vai para a main.
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/dashboard' &&
+    new URLSearchParams(window.location.search).get('prototype') === '318'
+  ) {
+    return <Prototype318 />
+  }
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
