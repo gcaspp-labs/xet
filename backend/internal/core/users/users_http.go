@@ -11,6 +11,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -59,8 +60,11 @@ func toAdminUserResponse(u db.User) adminUserResponse {
 	}
 }
 
+// listUsers returns a page of the users, with the search by name, nickname or
+// e-mail in ?q= and the page and order of every list.
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.service.ListUsers(r.Context())
+	users, total, page, err := h.service.SearchUsers(r.Context(), r.URL.Query().Get("q"),
+		paging.Parse(r, UserSortColumns, SortUserName, false))
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return
@@ -69,7 +73,7 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 	for i, u := range users {
 		out[i] = toAdminUserResponse(u)
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, paging.NewPage(out, total, page))
 }
 
 type createUserRequest struct {

@@ -9,6 +9,24 @@ import (
 	"context"
 )
 
+const countUsers = `-- name: CountUsers :one
+select count(*)
+from users u
+where ($1::text = ''
+       or immutable_unaccent(u.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(u.nickname) ilike immutable_unaccent($1)
+       or immutable_unaccent(u.email) ilike immutable_unaccent($1))
+`
+
+// Counts the users the search finds: the name, the nickname or the e-mail,
+// without accents or case. Keep the filter equal to SearchUsers.
+func (q *Queries) CountUsers(ctx context.Context, searchPattern string) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsers, searchPattern)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 insert into users (name, nickname, email, password_hash, role, sector_id)
 values ($1, $2, $3, $4, $5, $6)
@@ -134,31 +152,78 @@ func (q *Queries) GetUserNickname(ctx context.Context, id int64) (string, error)
 	return nickname, err
 }
 
-const listUsers = `-- name: ListUsers :many
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
-order by lower(name), id
+const searchUsers = `-- name: SearchUsers :many
+select u.id, u.name, u.email, u.password_hash, u.role, u.sector_id, u.active, u.created_at, u.updated_at, u.nickname
+from users u
+left join sectors s on s.id = u.sector_id
+where ($1::text = ''
+       or immutable_unaccent(u.name) ilike immutable_unaccent($1)
+       or immutable_unaccent(u.nickname) ilike immutable_unaccent($1)
+       or immutable_unaccent(u.email) ilike immutable_unaccent($1))
+order by
+  case when $2::text = 'role' and not $3::bool
+       then case u.role when 'admin' then 0 when 'agent' then 1 else 2 end end asc,
+  case when $2::text = 'role' and $3::bool
+       then case u.role when 'admin' then 0 when 'agent' then 1 else 2 end end desc,
+  case when $2::text = 'sector' and not $3::bool
+       then lower(immutable_unaccent(s.name)) end asc nulls last,
+  case when $2::text = 'sector' and $3::bool
+       then lower(immutable_unaccent(s.name)) end desc nulls last,
+  case when $2::text = 'status' and not $3::bool then not u.active end asc,
+  case when $2::text = 'status' and $3::bool then not u.active end desc,
+  case when $2::text <> 'status' and not $3::bool
+       then lower(immutable_unaccent(u.name)) end asc,
+  case when $2::text <> 'status' and $3::bool
+       then lower(immutable_unaccent(u.name)) end desc,
+  case when not $3::bool then u.id end asc,
+  case when $3::bool then u.id end desc
+limit $5 offset $4
 `
 
-func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsers)
+type SearchUsersParams struct {
+	SearchPattern string
+	SortColumn    string
+	Descending    bool
+	PageOffset    int32
+	PageSize      int32
+}
+
+type SearchUsersRow struct {
+	User User
+}
+
+// A page of the users, with the filter of CountUsers, sorted by the name (the
+// default), the role label (Administrador, Atendente, Supervisor), the sector
+// name (users without a sector last) or the status (active first ascending),
+// ignoring case and accents. The status sorts straight by the id, as asked in
+// the issue; the other columns break the tie by the name and then the id, in
+// the same direction.
+func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]SearchUsersRow, error) {
+	rows, err := q.db.Query(ctx, searchUsers,
+		arg.SearchPattern,
+		arg.SortColumn,
+		arg.Descending,
+		arg.PageOffset,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []SearchUsersRow
 	for rows.Next() {
-		var i User
+		var i SearchUsersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Email,
-			&i.PasswordHash,
-			&i.Role,
-			&i.SectorID,
-			&i.Active,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Nickname,
+			&i.User.ID,
+			&i.User.Name,
+			&i.User.Email,
+			&i.User.PasswordHash,
+			&i.User.Role,
+			&i.User.SectorID,
+			&i.User.Active,
+			&i.User.CreatedAt,
+			&i.User.UpdatedAt,
+			&i.User.Nickname,
 		); err != nil {
 			return nil, err
 		}

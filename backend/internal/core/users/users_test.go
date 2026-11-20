@@ -108,7 +108,7 @@ func TestAdminCreatesUsers(t *testing.T) {
 		}
 	}
 
-	list := e.DoList(http.MethodGet, "/api/users", token)
+	list := e.DoPageItems("/api/users", token)
 	if len(list) != 3 {
 		t.Fatalf("list: %v", list)
 	}
@@ -451,7 +451,7 @@ func TestNicknameDefaultsToFirstAndLastName(t *testing.T) {
 
 	// A lista da administração devolve o campo.
 	found := false
-	for _, u := range e.DoList(http.MethodGet, "/api/users", token) {
+	for _, u := range e.DoPageItems("/api/users", token) {
 		found = found || u["nickname"] == "Dani"
 	}
 	if !found {

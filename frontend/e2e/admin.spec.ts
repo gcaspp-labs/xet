@@ -52,6 +52,8 @@ test('administrador cadastra a Contabilidade e seus usuários', async ({ page, b
     await userDrawer.getByLabel('Senha inicial').fill(userPassword)
     await userDrawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
     await expect(userDrawer).toBeHidden()
+    // A lista vem em páginas: a busca acha o usuário em qualquer uma.
+    await page.getByRole('searchbox', { name: 'Buscar usuários' }).fill(person.email)
     const userRow = page.getByRole('row', { name: new RegExp(person.email) })
     await expect(userRow).toContainText(person.role)
     await expect(userRow).toContainText(sectorName)
@@ -206,7 +208,7 @@ test('administrador edita setor e desativa usuário', async ({ page, browser, ba
   await drawer.getByRole('button', { name: 'Salvar' }).click()
   await expect(page.getByRole('row', { name: new RegExp(`${sector.name} editado`) })).toBeVisible()
 
-  await page.goto('/admin/usuarios')
+  await page.goto(`/admin/usuarios?busca=${encodeURIComponent(agent)}`)
   const row = page.getByRole('row', { name: new RegExp(agent) })
   await row.getByRole('button', { name: /^Editar/ }).click()
   const userDrawer = page.getByRole('dialog', { name: 'Editar usuário' })
@@ -253,7 +255,7 @@ test('usuário com chamado em atendimento só é desativado ou trocado de setor 
   expect((await agentApi.post(`/api/tickets/${tickets[0].id}/assign`)).ok()).toBeTruthy()
 
   await signIn(page, admin.email, admin.password)
-  await page.goto('/admin/usuarios')
+  await page.goto(`/admin/usuarios?busca=${encodeURIComponent(agent)}`)
   const row = page.getByRole('row', { name: new RegExp(agent) })
   await row.getByRole('button', { name: /^Editar/ }).click()
   const drawer = page.getByRole('dialog', { name: 'Editar usuário' })
@@ -307,7 +309,7 @@ test('usuário com chamado em atendimento só é desativado ou trocado de setor 
 test('administrador redefine a senha de um usuário', async ({ page, browser, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, admin.email, admin.password)
-  await page.goto('/admin/usuarios')
+  await page.goto(`/admin/usuarios?busca=${encodeURIComponent(agent)}`)
   await page
     .getByRole('row', { name: new RegExp(agent) })
     .getByRole('button', { name: /^Editar/ })
@@ -331,7 +333,7 @@ test('administrador redefine a senha de um usuário', async ({ page, browser, ba
 test('o olho mostra e oculta a Senha inicial e a Nova senha', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
   await signIn(page, admin.email, admin.password)
-  await page.goto('/admin/usuarios')
+  await page.goto(`/admin/usuarios?busca=${encodeURIComponent(agent)}`)
 
   await page.getByRole('button', { name: 'Novo usuário' }).click()
   const create = page.getByRole('dialog', { name: 'Novo usuário' })
@@ -361,7 +363,7 @@ test('o olho mostra e oculta a Senha inicial e a Nova senha', async ({ page, bas
 
 test('administrador não desativa a própria conta', async ({ page }) => {
   await signIn(page, admin.email, admin.password)
-  await page.goto('/admin/usuarios')
+  await page.goto(`/admin/usuarios?busca=${encodeURIComponent(admin.email)}`)
   await page.getByRole('button', { name: `Editar ${admin.name}` }).click()
   const drawer = page.getByRole('dialog', { name: 'Editar usuário' })
   await expect(drawer.getByRole('switch', { name: 'Ativo' })).toBeDisabled()
@@ -497,6 +499,7 @@ test('apelido acompanha o nome no cadastro e não muda na edição', async ({ pa
   await drawer.getByLabel('Senha inicial').fill(userPassword)
   await drawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
   await expect(page.getByText('Usuário salvo')).toBeVisible()
+  await page.getByRole('searchbox', { name: 'Buscar usuários' }).fill(`ana.${id}@e2e.test`)
 
   // Na edição, mudar o nome não muda o apelido.
   await page.getByRole('button', { name: `Editar Ana Clara ${id}` }).click()
@@ -541,4 +544,122 @@ test('apelido repetido é recusado no formulário', async ({ page, baseURL }) =>
   await drawer.getByLabel('Apelido').fill(`Rui D ${id}`)
   await drawer.getByRole('button', { name: 'Cadastrar usuário' }).click()
   await expect(drawer).toHaveCount(0)
+})
+
+test('lista de usuários em páginas de 20, com busca e ordem no endereço', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector } = await seedSector(baseURL!)
+  const { id } = unique()
+  const api = await adminApi(baseURL!)
+  // 23 atendentes com o mesmo marcador; os três últimos, inativos.
+  const names = Array.from(
+    { length: 23 },
+    (_, i) => `Lista ${id} ${String(i + 1).padStart(2, '0')}`,
+  )
+  for (const [i, name] of names.entries()) {
+    const created = await api.post('/api/users', {
+      data: {
+        name,
+        email: `lista${i}.${id}@e2e.test`,
+        role: 'agent',
+        sectorId: sector.id,
+        password: userPassword,
+      },
+    })
+    expect(created.ok()).toBeTruthy()
+    if (i >= 20) {
+      const user = (await created.json()) as { id: number }
+      const updated = await api.put(`/api/users/${user.id}`, {
+        data: {
+          name,
+          email: `lista${i}.${id}@e2e.test`,
+          role: 'agent',
+          sectorId: sector.id,
+          active: false,
+        },
+      })
+      expect(updated.ok()).toBeTruthy()
+    }
+  }
+  await api.dispose()
+
+  await signIn(page, admin.email, admin.password)
+  await page.goto('/admin/usuarios')
+  const search = page.getByRole('searchbox', { name: 'Buscar usuários' })
+  const rows = page.getByRole('row').filter({ hasText: `Lista ${id}` })
+  const pagination = page.getByRole('navigation', { name: 'Paginação' })
+  await expect(search).toHaveAttribute('placeholder', 'Nome, apelido ou e-mail')
+
+  // A busca vai ao servidor antes de paginar: ordem inicial pelo nome, crescente.
+  await search.fill(`LISTA ${id}`)
+  await expect(page).toHaveURL(/busca=/)
+  await expect(rows).toHaveCount(20)
+  await expect(rows.first()).toContainText(names[0])
+  await expect(page.getByText('Página 1 de 2 · 23 usuários')).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Usuário' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+  await expect(pagination.getByRole('button', { name: 'Anterior' })).toBeDisabled()
+
+  // Próxima página: o endereço guarda a página e a busca.
+  await pagination.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/pagina=2/)
+  await expect(rows).toHaveCount(3)
+  await expect(rows.last()).toContainText(names[22])
+  await expect(rows.last()).toContainText('Inativo')
+  await expect(pagination.getByRole('button', { name: 'Próxima' })).toBeDisabled()
+
+  // Ordenar volta à página 1 e mantém a busca: Situação decrescente põe os inativos primeiro.
+  await page.getByRole('button', { name: 'Situação', exact: true }).click()
+  await expect(page).toHaveURL(/ordem=situacao/)
+  await expect(page).not.toHaveURL(/pagina=/)
+  await expect(search).toHaveValue(`LISTA ${id}`)
+  await expect(rows.first()).toContainText(names[0])
+  await page.getByRole('button', { name: 'Situação', exact: true }).click()
+  await expect(page).toHaveURL(/direcao=desc/)
+  await expect(rows.first()).toContainText(names[22])
+  await expect(rows.first()).toContainText('Inativo')
+  await expect(page.getByRole('columnheader', { name: 'Situação' })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  )
+
+  // O endereço reabre a mesma lista; página além da última vira a última.
+  await page.goto(
+    `/admin/usuarios?busca=${encodeURIComponent(`lista ${id}`)}&ordem=situacao&direcao=desc&pagina=9`,
+  )
+  await expect(page).toHaveURL(/pagina=2/)
+  await expect(rows).toHaveCount(3)
+  await expect(page.getByText('Página 2 de 2 · 23 usuários')).toBeVisible()
+
+  // Mudar a busca volta à página 1 e mantém a coluna e a direção; com tudo numa página, a faixa some.
+  await search.fill(`lista2.${id}@e2e`)
+  await expect(page).not.toHaveURL(/pagina=/)
+  await expect(page).toHaveURL(/ordem=situacao/)
+  await expect(page).toHaveURL(/direcao=desc/)
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(names[2])
+  await expect(pagination).toBeHidden()
+
+  // Editar continua a partir da lista paginada.
+  await page.getByRole('button', { name: `Editar ${names[2]}` }).click()
+  await expect(page.getByRole('dialog', { name: 'Editar usuário' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // Busca sem resultado.
+  await search.fill(`ninguém ${id}`)
+  await expect(page.getByText('Nenhum usuário encontrado.')).toBeVisible()
+  await expect(rows).toHaveCount(0)
+
+  // No celular, Papel e Setor viram legenda embaixo do nome, e Editar cabe na tela.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await search.fill(`lista2.${id}@e2e`)
+  await expect(rows.first()).toContainText(`Atendente · ${sector.name}`)
+  await expect(page.getByRole('columnheader', { name: 'Papel' })).toBeHidden()
+  await expect(page.getByRole('button', { name: `Editar ${names[2]}` })).toBeInViewport({
+    ratio: 1,
+  })
 })
