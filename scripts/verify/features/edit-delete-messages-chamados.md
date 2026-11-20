@@ -1,6 +1,6 @@
 # Editar e excluir mensagens em Chamados
 
-O responsável do chamado aberto edita o texto ou a legenda de uma mensagem enviada pelo XET, ou a exclui para todos ou só no XET ("para mim"), pelo menu da mensagem na tela Chamados (#293, spec #290). A conversa mostra "Editada" e "Excluída" nas alterações do cliente e do celular do setor, e um aviso no lugar do conteúdo que o XET ocultou. As versões em Atendimentos chegam na #294.
+O responsável do chamado aberto edita o texto ou a legenda de uma mensagem enviada pelo XET, ou a exclui para todos ou só no XET ("para mim"), pelo menu da mensagem na tela Chamados (#293, spec #290). A conversa mostra "Editada" e "Excluída" nas alterações do cliente e do celular do setor, e um aviso no lugar do conteúdo que o XET ocultou. As versões e a exclusão são consultáveis em Atendimentos (jornada `atendimentos-message-revisions`, #294).
 
 ## Sub-features
 

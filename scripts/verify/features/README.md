@@ -27,6 +27,7 @@ O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regr
 | Editar e excluir mensagem enviada | [edit-delete-sent-message.md](edit-delete-sent-message.md) | `edit-delete-sent-message` | `conversation.md`, `access.md`, `queue.md` | `conversation.spec.ts` | edição e exclusão pelo responsável, contrato de mensageria, ocultação local |
 | Edições e exclusões externas | [message-revisions.md](message-revisions.md) | `message-revisions` | `conversation.md`, `queue.md` | `reactions.spec.ts` | eventos de edição e exclusão do provedor, versões de mensagem, estado de exclusão |
 | Editar e excluir mensagens em Chamados | [edit-delete-messages-chamados.md](edit-delete-messages-chamados.md) | `edit-delete-messages-chamados` | `conversation.md`, `queue.md`, `interface.md` | `message-edit-delete.spec.ts` | menu da mensagem, compositor com "Editando", janela de exclusão, etiquetas e aviso de conteúdo ocultado |
+| Versões e exclusões em Atendimentos | [atendimentos-message-revisions.md](atendimentos-message-revisions.md) | `atendimentos-message-revisions` | `queue.md`, `conversation.md` | `atendimentos-message-changes.spec.ts` | ficha só leitura de encerrados, versões de mensagem, exclusão pelo XET e externa, conteúdo preservado |
 
 ## Como ler o estado de uma sub-feature
 

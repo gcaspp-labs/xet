@@ -1,6 +1,6 @@
 # Editar e excluir mensagem enviada pelo XET
 
-O responsável do chamado aberto edita o texto ou a legenda de uma mensagem enviada pelo XET, ou a exclui para todos ou só no XET ("para mim"), pela API (#292, spec #290). O menu, a janela e o compositor com "Editando" estão na #293 (jornada `edit-delete-messages-chamados`), e as versões em Atendimentos chegam na #294: esta jornada chama a API direto e prova o efeito na conversa e no banco.
+O responsável do chamado aberto edita o texto ou a legenda de uma mensagem enviada pelo XET, ou a exclui para todos ou só no XET ("para mim"), pela API (#292, spec #290). O menu, a janela e o compositor com "Editando" estão na #293 (jornada `edit-delete-messages-chamados`), e as versões em Atendimentos estão na jornada `atendimentos-message-revisions` (#294): esta jornada chama a API direto e prova o efeito na conversa e no banco.
 
 ## Sub-features
 
