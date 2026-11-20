@@ -841,6 +841,61 @@ test('contatos em páginas de 20, ordenados pela coluna, com página e ordem no 
   )
 })
 
+test('a ordem escolhida em contatos e em órgãos continua a mesma depois de recarregar', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const { id } = unique()
+  // Por nome, Ana vem antes de Bia; por órgão, decrescente, a Câmara vem antes da Autarquia.
+  await seedDirectory(
+    baseURL!,
+    [
+      { name: `Autarquia ${id}`, municipality: 'Itu' },
+      { name: `Câmara ${id}`, municipality: 'Águas de Lindóia' },
+    ],
+    [
+      { name: `Ana ${id}`, phone: `5531${id}`, organization: 0, sector: own.sector.id },
+      { name: `Bia ${id}`, phone: `5532${id}`, organization: 1, sector: own.sector.id },
+    ],
+  )
+  await signIn(page, own.supervisor, userPassword)
+  const rows = page.getByRole('row').filter({ hasText: id })
+
+  // Contatos por órgão, decrescente: a Bia (Câmara) primeiro, nos dois lados do recarregar.
+  await page.goto(`/contatos?busca=${id}`)
+  await expect(rows).toHaveText([new RegExp(`Ana ${id}`), new RegExp(`Bia ${id}`)])
+  await page.getByRole('button', { name: 'Órgão', exact: true }).click()
+  await expect(page).toHaveURL(/ordem=orgao/)
+  await expect(page.getByRole('columnheader', { name: 'Órgão' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+  await page.getByRole('button', { name: 'Órgão', exact: true }).click()
+  await expect(page).toHaveURL(/direcao=desc/)
+  await expect(rows).toHaveText([new RegExp(`Bia ${id}`), new RegExp(`Ana ${id}`)])
+  await page.reload()
+  await expect(page.getByRole('columnheader', { name: 'Órgão' })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  )
+  await expect(rows).toHaveText([new RegExp(`Bia ${id}`), new RegExp(`Ana ${id}`)])
+
+  // Órgãos por município, crescente: a Câmara (Águas de Lindóia) primeiro, também depois de
+  // recarregar.
+  await page.goto(`/orgaos?busca=${id}`)
+  await expect(rows).toHaveText([new RegExp(`Autarquia ${id}`), new RegExp(`Câmara ${id}`)])
+  await page.getByRole('button', { name: 'Município', exact: true }).click()
+  await expect(page).toHaveURL(/ordem=municipio/)
+  await expect(rows).toHaveText([new RegExp(`Câmara ${id}`), new RegExp(`Autarquia ${id}`)])
+  await page.reload()
+  await expect(page.getByRole('columnheader', { name: 'Município' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+  await expect(rows).toHaveText([new RegExp(`Câmara ${id}`), new RegExp(`Autarquia ${id}`)])
+})
+
 test('busca e ordem trocadas antes do próximo redesenho ficam as duas no endereço', async ({
   page,
   baseURL,

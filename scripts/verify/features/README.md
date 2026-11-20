@@ -29,6 +29,20 @@ O que a skill `verify-app` sabe percorrer, e como cada fluxo foi coberto. A regr
 | Editar e excluir mensagens em Chamados | [edit-delete-messages-chamados.md](edit-delete-messages-chamados.md) | `edit-delete-messages-chamados` | `conversation.md`, `queue.md`, `interface.md` | `message-edit-delete.spec.ts` | menu da mensagem, compositor com "Editando", janela de exclusão, etiquetas e aviso de conteúdo ocultado |
 | Versões e exclusões em Atendimentos | [atendimentos-message-revisions.md](atendimentos-message-revisions.md) | `atendimentos-message-revisions` | `queue.md`, `conversation.md` | `atendimentos-message-changes.spec.ts` | ficha só leitura de encerrados, versões de mensagem, exclusão pelo XET e externa, conteúdo preservado |
 
+## Mudanças de navegação
+
+Leia esta seção só quando o diff mexer em rotas, links, parâmetros da URL, `location.state` ou num botão de voltar. Antes de pedir revisão, ligue cada item que se aplica a um teste de `frontend/e2e/` ou a um passo de jornada. O que não se aplica, diga por quê. Não é preciso tirar print de toda rota.
+
+| Item | O que conferir | Testes que já cobrem |
+| --- | --- | --- |
+| Pontos de entrada | Cada caminho que leva à tela: menu, link, linha da lista, endereço digitado | `rotas.spec.ts` (Chamados, `/atendimentos/:id`, Não encontrado), `dashboard.spec.ts` (a linha inteira abre o chamado), `atendimentos.spec.ts` (clicar na linha abre a ficha) |
+| Mudança de query | `?pagina=`, `?ordem=`, `?direcao=`, `?busca=` e filtros vão para o endereço sem perder o resto da URL nem o `location.state` | `directory.spec.ts` (contatos e órgãos em páginas de 20), `atendimentos.spec.ts` (ordem e página no endereço), `dashboard.spec.ts` (filtros) |
+| Transições aninhadas | Lista ou histórico → chamado → outro histórico → outro chamado, e a volta passo a passo até a origem | `history-return.spec.ts` (Contatos → histórico do contato → chamado → histórico do órgão → outro chamado; "Voltar ao histórico" volta ao histórico do órgão e, depois de fechá-lo, ao histórico de origem: a cadeia corrigida na PR #176, `frontend/src/lib/history-return.ts`), `rotas.spec.ts` (aba Histórico da ficha aponta para `/atendimentos/:id`) |
+| Destino do Voltar | A seta da tela e o voltar do navegador levam aonde a pessoa estava, com a mesma página, ordem e busca | `rotas.spec.ts` (encerrado troca o histórico; sem acesso, a seta volta a Atendimentos; Não encontrado com Voltar), `atendimentos.spec.ts` (voltar mantém a busca), `directory.spec.ts` (voltar mantém página e ordem), `dashboard.spec.ts` (voltar depois de abrir pela linha) |
+| Recarregar | Recarregar ou reabrir o endereço mostra o mesmo estado | `atendimentos.spec.ts` (página e filtro sobrevivem ao recarregar), `directory.spec.ts` (a ordem escolhida em contatos e em órgãos continua a mesma depois de recarregar; a busca continua no campo; reabrir o endereço com o filtro de órgão restaura o filtro), `dashboard.spec.ts` (filtros sobrevivem ao recarregar) |
+
+`return.spec.ts` trata de **devolver o chamado à fila**, não do botão de voltar. Não conta como cobertura de navegação.
+
 ## Como ler o estado de uma sub-feature
 
 Cada arquivo lista as sub-features com uma destas marcas, e o `evidence.sh` copia as duas últimas para o resumo:

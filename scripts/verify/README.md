@@ -67,7 +67,7 @@ scripts/verify/scripts/drive.sh all
 
 Conduz uma jornada de cada vez, com um Chromium só e sem workers em paralelo, porque a máquina tem 15 GB e o swap costuma estar cheio. Cada jornada é um script Node em `journeys/`. Sessões de pessoas diferentes são contextos do mesmo navegador. Saída 1 quer dizer que alguma falhou.
 
-**Qual jornada rodar:** leia o diff, ache em [features/README.md](features/README.md) os fluxos que ele toca e rode esses. Sem ligação clara, ou mudança ampla, rode `all`.
+**Qual jornada rodar:** leia o diff, ache em [features/README.md](features/README.md) os fluxos que ele toca e rode esses. Sem ligação clara, ou mudança ampla, rode `all`. Se o diff mexer em navegação (rotas, links, parâmetros da URL ou voltar), use também [Mudanças de navegação](features/README.md#mudanças-de-navegação).
 
 **Mudança que nenhuma jornada cobre:** escreva uma jornada para ela. Se o fluxo for durável, crie `journeys/<nome>.mjs` e `features/<nome>.md`. Se for só para este PR, crie o arquivo em `.verify-app/runs/<execução>/` e passe o caminho ao `drive.sh`:
 
