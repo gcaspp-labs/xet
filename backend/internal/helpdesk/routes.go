@@ -89,6 +89,8 @@ func (h *Handler) Routes(r chi.Router) {
 	// Editar e excluir mensagem enviada pelo XET: só o responsável, com o chamado aberto.
 	r.Post("/messages/{messageID}/edit", h.editMessage)
 	r.Post("/messages/{messageID}/delete", h.deleteMessage)
+	// Versões e exclusão de uma mensagem, só leitura: quem vê o chamado (aberto ou encerrado).
+	r.Get("/messages/{messageID}/changes", h.listMessageChanges)
 	r.Get("/media/{mediaID}", h.getMedia)
 	// Histórico: chamados dos setores do usuário (todos, para o administrador).
 	r.Get("/contacts/{contactID}/tickets", h.contactHistory)
