@@ -122,15 +122,24 @@ const sectorName = (id: number | null) =>
   id === null ? '' : (sectors.find((sector) => sector.id === id)?.name ?? '')
 
 // Mesmo contrato dos Contatos: itens da página, total, página devolvida (a última,
-// se a pedida passou dela) e 20 por página.
+// se a pedida passou dela) e 20 por página. A busca (?q=) filtra por nome, apelido ou
+// e-mail antes de contar e paginar.
 function userPage(query: URLSearchParams) {
-  // Nomes que a API recebe do frontend (pageParams): page, sort, direction.
+  // Nomes que a API recebe do frontend (pageParams): page, sort, direction; e a busca, q.
   const sort = query.get('sort') ?? 'name'
   const direction = query.get('direction') === 'desc' ? 'desc' : 'asc'
+  const term = normalize(query.get('q') ?? '')
   const pageSize = 20
   const sign = direction === 'asc' ? 1 : -1
 
-  const sorted = [...users].sort((a, b) => {
+  const found =
+    term === ''
+      ? users
+      : users.filter((user) =>
+          [user.name, user.nickname, user.email].some((field) => normalize(field).includes(term)),
+        )
+
+  const sorted = [...found].sort((a, b) => {
     let by = 0
     if (sort === 'role') {
       by = roleRank[a.role] - roleRank[b.role]

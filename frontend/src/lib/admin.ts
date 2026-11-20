@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '@/lib/api'
 import type { Role, User } from '@/lib/auth'
 import { normalizeSearch } from '@/lib/format'
-import { type Page, type PageRequest, pageParams } from '@/lib/paging'
+import { type Page, type PageRequest, pageParams, useQueryState } from '@/lib/paging'
 
 export type Sector = {
   id: number
@@ -48,10 +48,28 @@ export const userColumns: Record<string, UserSort> = {
 }
 export const defaultUserColumn = 'usuario'
 
-export function useUsersPage(request: PageRequest<UserSort>) {
+// PROTÓTIPO #130: a busca fica no endereço (?busca=), no servidor como em Contatos, e
+// mudar o termo volta à página 1 sem empilhar histórico a cada tecla.
+export function useUserFilterInAddress() {
+  const { params, update } = useQueryState()
+  return {
+    query: params.get('busca') ?? '',
+    setQuery: (value: string) => update({ busca: value === '' ? null : value, pagina: null }, true),
+  }
+}
+
+// Busca por nome, apelido ou e-mail, em páginas de 20 feitas no servidor; o termo vai
+// como ?q= (o mesmo parâmetro de Contatos) junto da página e da ordem.
+export function useUsersPage(query: string, request: PageRequest<UserSort>) {
   return useQuery({
-    queryKey: [...usersKey, 'page', request.page, request.sort, request.direction],
-    queryFn: () => api<Page<AdminUser>>(`/users?${new URLSearchParams(pageParams(request))}`),
+    queryKey: [...usersKey, 'page', query.trim(), request.page, request.sort, request.direction],
+    queryFn: () => {
+      const params = new URLSearchParams(pageParams(request))
+      if (query.trim() !== '') {
+        params.set('q', query.trim())
+      }
+      return api<Page<AdminUser>>(`/users?${params}`)
+    },
     placeholderData: keepPreviousData,
   })
 }

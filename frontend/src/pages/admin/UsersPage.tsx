@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Users } from 'lucide-react'
-import { type ChangeEvent, useEffect, useState } from 'react'
+import { type ChangeEvent, useDeferredValue, useEffect, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -9,6 +9,7 @@ import { Pagination } from '@/components/Pagination'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { PasswordInput } from '@/components/PasswordInput'
 import { PageContent, Topbar } from '@/components/Topbar'
+import { SearchBox } from '@/components/SearchBox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -47,6 +48,7 @@ import {
   useSectors,
   useUpdateUser,
   userColumns,
+  useUserFilterInAddress,
   useUsersPage,
 } from '@/lib/admin'
 import { usePagedList } from '@/lib/paging'
@@ -346,10 +348,13 @@ function UserSheet({
 }
 
 // PROTÓTIPO #130: lista administrativa em páginas de 20, com a ordem nas colunas de
-// dados; página, coluna e direção ficam no endereço (?pagina=, ?ordem=, ?direcao=).
+// dados e a busca de Contatos; busca, página, coluna e direção ficam no endereço
+// (?busca=, ?pagina=, ?ordem=, ?direcao=).
 export default function UsersPage() {
+  const { query, setQuery } = useUserFilterInAddress()
+  const deferredQuery = useDeferredValue(query)
   const list = usePagedList(userColumns, defaultUserColumn)
-  const { data, isPending, isPlaceholderData } = useUsersPage(list.request)
+  const { data, isPending, isPlaceholderData } = useUsersPage(deferredQuery, list.request)
   const { data: sectors = [] } = useSectors()
   const users = data?.items ?? []
   const served = data && !isPlaceholderData ? data.page : undefined
@@ -387,6 +392,12 @@ export default function UsersPage() {
         }
       />
       <PageContent>
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          label="Buscar usuários"
+          placeholder="Nome, apelido ou e-mail"
+        />
         <Card className="gap-0 py-0">
           {users.length > 0 ? (
             <Table>
@@ -448,7 +459,11 @@ export default function UsersPage() {
                 <EmptyMedia>
                   <Users strokeWidth={1.7} aria-hidden />
                 </EmptyMedia>
-                <EmptyDescription>Nenhum usuário cadastrado.</EmptyDescription>
+                <EmptyDescription>
+                  {deferredQuery.trim()
+                    ? 'Nenhum usuário encontrado.'
+                    : 'Nenhum usuário cadastrado.'}
+                </EmptyDescription>
               </Empty>
             )
           )}

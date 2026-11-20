@@ -11,6 +11,9 @@ const steps = [
   ['04-ordem-setor', '?ordem=setor'],
   ['05-ordem-papel', '?ordem=papel'],
   ['06-vazio', '?vazio=1'],
+  ['08-busca', '?busca=prado'],
+  ['09-busca-pagina-ordem', '?busca=a&ordem=setor'],
+  ['10-busca-sem-resultado', '?busca=xyz'],
 ]
 const browser = await chromium.launch()
 for (const scheme of ['light', 'dark']) {
