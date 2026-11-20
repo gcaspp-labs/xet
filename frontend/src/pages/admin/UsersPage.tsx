@@ -423,7 +423,8 @@ export default function UsersPage() {
               <TableBody>
                 {users.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="whitespace-normal">
+                    {/* No celular, a coluna encolhe e quebra o texto, para Editar caber na tela. */}
+                    <TableCell className="w-full max-w-0 whitespace-normal [overflow-wrap:anywhere] sm:w-auto sm:max-w-none">
                       <p className="body-strong">{user.name}</p>
                       <p className="caption text-ink-faint">{user.email}</p>
                       <p className="caption text-ink-soft sm:hidden">

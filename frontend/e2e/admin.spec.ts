@@ -653,4 +653,13 @@ test('lista de usuários em páginas de 20, com busca e ordem no endereço', asy
   await search.fill(`ninguém ${id}`)
   await expect(page.getByText('Nenhum usuário encontrado.')).toBeVisible()
   await expect(rows).toHaveCount(0)
+
+  // No celular, Papel e Setor viram legenda embaixo do nome, e Editar cabe na tela.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await search.fill(`lista2.${id}@e2e`)
+  await expect(rows.first()).toContainText(`Atendente · ${sector.name}`)
+  await expect(page.getByRole('columnheader', { name: 'Papel' })).toBeHidden()
+  await expect(page.getByRole('button', { name: `Editar ${names[2]}` })).toBeInViewport({
+    ratio: 1,
+  })
 })
