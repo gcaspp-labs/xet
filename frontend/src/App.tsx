@@ -10,6 +10,7 @@ import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
 import UsersPage from '@/pages/admin/UsersPage'
+import Prototype309 from '@/pages/Prototype309'
 import ConnectionPage from '@/pages/connection/ConnectionPage'
 import ContactsPage from '@/pages/directory/ContactsPage'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
@@ -42,6 +43,12 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/chamados' &&
+    new URLSearchParams(window.location.search).get('prototype') === '309'
+  )
+    return <Prototype309 />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
