@@ -41,7 +41,7 @@ As regras de cada funcionalidade, como o sistema funciona hoje, ficam em `docs/f
 | Dashboard do atendimento | [dashboard.md](docs/features/dashboard.md) | Mostra a situação e o desempenho do atendimento, com filtros. É só leitura, para supervisores e administradores. |
 | Interface geral | [interface.md](docs/features/interface.md) | Regras que valem para todas as telas: acessibilidade e o comportamento das janelas de formulário. |
 
-Fora do piloto: etiquetas, importação por planilha, grupos, exibição de reações, figurinhas e localização. Edição e exclusão de mensagens deixaram de ser "fora do piloto" quanto ao **registro**: o que o cliente ou o celular do setor edita ou exclui para todos fica gravado na mensagem, com o histórico de versões, sem apagar nada (#290, #291). Continuam fora: exibir a etiqueta de editada/excluída na tela (#293) e editar ou excluir pelo XET (#292).
+Fora do piloto: etiquetas, importação por planilha, grupos, exibição de reações, figurinhas e localização. Edição e exclusão de mensagens estão no piloto (#290): o que o cliente ou o celular do setor edita ou exclui para todos fica gravado na mensagem, com as versões no histórico; o responsável edita o texto ou a legenda até 15 minutos do envio original, exclui para todos dentro da janela do provedor e exclui para mim sem esse prazo, mantidas as demais condições de elegibilidade; e Chamados e Atendimentos mostram as etiquetas, o aviso de mensagem excluída no XET e as versões. Excluir não apaga nada do armazenamento, e "para mim" oculta só no XET.
 
 ### Onde foram as seções antigas
 
