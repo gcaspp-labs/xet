@@ -403,6 +403,58 @@ func TestDeleteForEveryoneFollowsTheProvider(t *testing.T) {
 	}
 }
 
+// lastMessageOfList is the preview of the only ticket of the sector in the
+// list that feeds Meus chamados and the bell.
+func (c *sentConversation) lastMessageOfList(token string) map[string]any {
+	c.e.T.Helper()
+	list := c.e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", c.sector.ID), token)
+	if len(list) != 1 {
+		c.e.T.Fatalf("tickets = %v", list)
+	}
+	return list[0]["lastMessage"].(map[string]any)
+}
+
+// Excluir para todos pelo XET também esconde o conteúdo da prévia da lista
+// (Meus chamados e sino); o conteúdo continua guardado e a mensagem excluída
+// pelo celular do setor, que o XET conhece, mantém a prévia.
+func TestDeleteForEveryoneHidesThePreviewOfTheList(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+
+	if last := c.lastMessageOfList(c.biaToken); last["hidden"] != false || last["body"] != anaPrefix+"\nSegue o boleto de setembro" {
+		t.Fatalf("preview before the deletion = %v", last)
+	}
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE1, "everyone"); r.Status != http.StatusOK {
+		t.Fatalf("delete for everyone: status %d, body %v", r.Status, r.Body)
+	}
+	if last := c.lastMessageOfList(c.biaToken); last["hidden"] != true || last["body"] != nil {
+		t.Fatalf("preview after delete for everyone = %v", last)
+	}
+	// Quem pediu a exclusão vê o mesmo, e o conteúdo segue gravado para o histórico.
+	if last := c.lastMessageOfList(c.anaToken); last["hidden"] != true || last["body"] != nil {
+		t.Fatalf("preview for the assignee = %v", last)
+	}
+	if bodyOf(t, e.apiMessage(c.ticket.ID, c.biaToken, "fake-msg-"+requestA)) != anaPrefix+"\nSegue o boleto de setembro" {
+		t.Fatal("content of the deleted message was not kept")
+	}
+}
+
+// A exclusão feita pelo celular do setor não é do XET: o conteúdo é conhecido e
+// a prévia da lista o mantém.
+func TestDeletionFromThePhoneKeepsThePreviewOfTheList(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+
+	c.e.revoke(c.sector.ID, "PHONE-REVOKE", "fake-msg-"+requestA, true, time.Now().Add(time.Second))
+	if d := deletionOf(t, c.e.apiMessage(c.ticket.ID, c.anaToken, "fake-msg-"+requestA)); d["origin"] != "phone" {
+		t.Fatalf("deletion = %v", d)
+	}
+	if last := c.lastMessageOfList(c.biaToken); last["hidden"] != false || last["body"] != anaPrefix+"\nSegue o boleto de setembro" {
+		t.Fatalf("preview after the deletion from the phone = %v", last)
+	}
+}
+
 // "Para mim" não chama o WhatsApp, vale para todo o setor e esconde o conteúdo
 // da prévia da lista; o conteúdo continua guardado.
 func TestLocalDeletionHidesForTheSectorWithoutTheProvider(t *testing.T) {
@@ -429,12 +481,7 @@ func TestLocalDeletionHidesForTheSectorWithoutTheProvider(t *testing.T) {
 		t.Fatalf("message seen by the sector = %v", m)
 	}
 	// A prévia da lista de chamados não mostra o conteúdo escondido.
-	list := e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", c.sector.ID), c.biaToken)
-	if len(list) != 1 {
-		t.Fatalf("tickets = %v", list)
-	}
-	last := list[0]["lastMessage"].(map[string]any)
-	if last["hidden"] != true || last["body"] != nil {
+	if last := c.lastMessageOfList(c.biaToken); last["hidden"] != true || last["body"] != nil {
 		t.Fatalf("last message of the list = %v", last)
 	}
 	// Repetir a mesma exclusão devolve o mesmo resultado, sem nova ação.
@@ -777,6 +824,10 @@ func TestLateRevokeEchoWidensALocalDeletion(t *testing.T) {
 
 	if d := deletionOf(t, e.apiMessage(c.ticket.ID, c.anaToken, "fake-msg-"+requestA)); d["scope"] != "everyone" {
 		t.Fatalf("deletion after the late echo = %v", d)
+	}
+	// O que o XET escondeu continua escondido na prévia depois do eco.
+	if last := c.lastMessageOfList(c.biaToken); last["hidden"] != true || last["body"] != nil {
+		t.Fatalf("preview after the late echo = %v", last)
 	}
 	got := []string{}
 	for _, a := range e.actions(c.sent) {
