@@ -30,8 +30,9 @@ on conflict (sector_id, external_message_id) where external_message_id is not nu
 returning *;
 
 -- name: ListLastMessages :many
--- Last message of each ticket, for the ticket lists.
-select distinct on (ticket_id) ticket_id, type, body, origin, sent_at
+-- Last message of each ticket, for the ticket lists, with its deletion scope:
+-- the list never shows content hidden in the system ("para mim").
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_scope
 from messages
 where ticket_id = any(@ticket_ids::bigint[])
 order by ticket_id, sent_at desc, id desc;
@@ -73,9 +74,10 @@ returning *;
 
 -- name: RetryMessage :one
 -- Only a failed message goes back to pending, so a double click retries once.
+-- A deleted message is never sent again.
 update messages
 set status = 'pending', failure_reason = null
-where id = @id and status = 'failed'
+where id = @id and status = 'failed' and deleted_at is null
 returning *;
 
 -- name: FailPendingMessages :execrows

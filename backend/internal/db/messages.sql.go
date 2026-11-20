@@ -555,21 +555,23 @@ func (q *Queries) LinkMessageChange(ctx context.Context, arg LinkMessageChangePa
 }
 
 const listLastMessages = `-- name: ListLastMessages :many
-select distinct on (ticket_id) ticket_id, type, body, origin, sent_at
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_scope
 from messages
 where ticket_id = any($1::bigint[])
 order by ticket_id, sent_at desc, id desc
 `
 
 type ListLastMessagesRow struct {
-	TicketID int64
-	Type     MessageType
-	Body     *string
-	Origin   MessageOrigin
-	SentAt   time.Time
+	TicketID      int64
+	Type          MessageType
+	Body          *string
+	Origin        MessageOrigin
+	SentAt        time.Time
+	DeletionScope NullMessageDeletionScope
 }
 
-// Last message of each ticket, for the ticket lists.
+// Last message of each ticket, for the ticket lists, with its deletion scope:
+// the list never shows content hidden in the system ("para mim").
 func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]ListLastMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listLastMessages, ticketIds)
 	if err != nil {
@@ -585,6 +587,7 @@ func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]Li
 			&i.Body,
 			&i.Origin,
 			&i.SentAt,
+			&i.DeletionScope,
 		); err != nil {
 			return nil, err
 		}
@@ -1036,11 +1039,12 @@ func (q *Queries) RefreshMessageCurrentVersion(ctx context.Context, id int64) er
 const retryMessage = `-- name: RetryMessage :one
 update messages
 set status = 'pending', failure_reason = null
-where id = $1 and status = 'failed'
+where id = $1 and status = 'failed' and deleted_at is null
 returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
 `
 
 // Only a failed message goes back to pending, so a double click retries once.
+// A deleted message is never sent again.
 func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
 	row := q.db.QueryRow(ctx, retryMessage, id)
 	var i Message
