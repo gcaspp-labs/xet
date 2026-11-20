@@ -211,10 +211,13 @@ where m.id = @id;
 
 -- name: MarkMessageDeleted :execrows
 -- Deletion is a state of its own, apart from the delivery status, and keeps
--- the content and the file. The first deletion recorded holds.
+-- the content and the file. The first deletion recorded holds, except that a
+-- deletion for everyone widens one only in the system: the provider took a
+-- deletion for everyone (late, from an uncertain action), and the contact no
+-- longer sees the message either.
 update messages
 set deleted_at = @deleted_at, deletion_scope = @deletion_scope, deletion_origin = @deletion_origin
-where id = @id and deleted_at is null;
+where id = @id and (deleted_at is null or (deletion_scope = 'local' and @deletion_scope::message_deletion_scope = 'everyone'));
 
 -- name: ListPendingMessageChanges :many
 -- Changes received before the message they point at, oldest first.

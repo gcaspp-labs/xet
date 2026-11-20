@@ -704,6 +704,40 @@ func TestLateEchoDoesNotUndoANewerEdit(t *testing.T) {
 	}
 }
 
+// Uma exclusão para todos incerta, depois "excluir para mim": quando o eco do
+// WhatsApp confirma a exclusão para todos, o alcance passa a "para todos",
+// porque o contato também não vê mais a mensagem.
+func TestLateRevokeEchoWidensALocalDeletion(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+
+	e.WhatsApp.FailNextChange(c.sector.ID, context.DeadlineExceeded)
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE1, "everyone"); r.Status != http.StatusBadGateway {
+		t.Fatalf("uncertain revoke: status %d, body %v", r.Status, r.Body)
+	}
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE2, "local"); r.Status != http.StatusOK {
+		t.Fatalf("local deletion: status %d, body %v", r.Status, r.Body)
+	}
+	e.revoke(c.sector.ID, "ECHO-REVOKE", "fake-msg-"+requestA, true, time.Now().Add(time.Second))
+
+	if d := deletionOf(t, e.apiMessage(c.ticket.ID, c.anaToken, "fake-msg-"+requestA)); d["scope"] != "everyone" {
+		t.Fatalf("deletion after the late echo = %v", d)
+	}
+	got := []string{}
+	for _, a := range e.actions(c.sent) {
+		got = append(got, a.Kind+":"+a.Status)
+	}
+	if !reflect.DeepEqual(got, []string{"delete_everyone:accepted", "delete_local:accepted"}) {
+		t.Fatalf("actions = %v", got)
+	}
+	// O eco só confirma o que já foi pedido: uma segunda entrega não muda nada.
+	e.revoke(c.sector.ID, "ECHO-REVOKE", "fake-msg-"+requestA, true, time.Now().Add(2*time.Second))
+	if v := e.changesOf(c.sent); len(v) != 2 {
+		t.Fatalf("changes = %+v", v)
+	}
+}
+
 // Com uma edição ou exclusão para todos esperando o WhatsApp, a exclusão "para
 // mim" também espera: a mensagem nunca fica excluída e editada ao mesmo tempo.
 func TestLocalDeletionWaitsForTheChangeInFlight(t *testing.T) {

@@ -825,7 +825,7 @@ func (q *Queries) LockMessageExternalID(ctx context.Context, arg LockMessageExte
 const markMessageDeleted = `-- name: MarkMessageDeleted :execrows
 update messages
 set deleted_at = $1, deletion_scope = $2, deletion_origin = $3
-where id = $4 and deleted_at is null
+where id = $4 and (deleted_at is null or (deletion_scope = 'local' and $2::message_deletion_scope = 'everyone'))
 `
 
 type MarkMessageDeletedParams struct {
@@ -836,7 +836,10 @@ type MarkMessageDeletedParams struct {
 }
 
 // Deletion is a state of its own, apart from the delivery status, and keeps
-// the content and the file. The first deletion recorded holds.
+// the content and the file. The first deletion recorded holds, except that a
+// deletion for everyone widens one only in the system: the provider took a
+// deletion for everyone (late, from an uncertain action), and the contact no
+// longer sees the message either.
 func (q *Queries) MarkMessageDeleted(ctx context.Context, arg MarkMessageDeletedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markMessageDeleted,
 		arg.DeletedAt,
