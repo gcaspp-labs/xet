@@ -6,6 +6,7 @@ import {
   adminApi,
   clearSession,
   expectClosableDialog,
+  login,
   seedDirectory,
   seedSector,
   seedSubjects,
@@ -27,22 +28,22 @@ const json = async <T>(response: Response) => {
 // Nomes da lista de assuntos do setor, lida como administrador.
 async function subjectNames(baseURL: string, sectorId: number) {
   const api = await adminApi(baseURL)
-  const subjects = await json<{ name: string }[]>(
+  const page = await json<{ items: { name: string }[] }>(
     await api.get(`/api/sectors/${sectorId}/subjects`),
   )
   await api.dispose()
-  return subjects.map((subject) => subject.name)
+  return page.items.map((subject) => subject.name)
 }
 
 // Soluções da lista de cada assunto do setor, lidas como administrador.
 async function solutionBodies(baseURL: string, sectorId: number) {
   const api = await adminApi(baseURL)
-  const subjects = await json<{ name: string; solutions: { body: string }[] }[]>(
+  const page = await json<{ items: { name: string; solutions: { body: string }[] }[] }>(
     await api.get(`/api/sectors/${sectorId}/subjects`),
   )
   await api.dispose()
   return Object.fromEntries(
-    subjects.map((subject) => [subject.name, subject.solutions.map((solution) => solution.body)]),
+    page.items.map((subject) => [subject.name, subject.solutions.map((solution) => solution.body)]),
   )
 }
 
@@ -138,9 +139,11 @@ test('assuntos iguais mostram os módulos e reúnem soluções sem repetição',
 }) => {
   const { sector, agent, contacts } = await prepare(baseURL!, ['Senha'], 1)
   const api = await adminApi(baseURL!)
-  const original = await json<{ id: number; name: string }[]>(
-    await api.get(`/api/sectors/${sector.id}/subjects`),
-  )
+  const original = (
+    await json<{ items: { id: number; name: string }[] }>(
+      await api.get(`/api/sectors/${sector.id}/subjects`),
+    )
+  ).items
   const secondModule = await json<{ id: number }>(
     await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }),
   )
@@ -641,7 +644,7 @@ test('o supervisor cadastra, edita e exclui assuntos do setor, e o repetido é r
   await expect(page.getByRole('heading', { name: 'Assuntos' })).toBeVisible()
   await expect(page.getByText('Nenhum assunto cadastrado.')).toBeVisible()
   // O supervisor não escolhe o setor: vê só o próprio.
-  await expect(page.getByLabel('Setor')).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'Setor' })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Novo assunto' }).click()
   const sheet = page.getByRole('dialog', { name: 'Novo assunto' })
@@ -727,9 +730,8 @@ test('filtro Sem módulo encontra assuntos legados e combina com a busca', async
   const search = page.getByRole('searchbox', { name: 'Buscar assuntos' })
   await expect(table).toContainText('Classificado folha')
   await expect(table).toContainText('Legado folha')
-  await expect(
-    page.getByText('Há assuntos sem módulo que não aparecem no formulário.'),
-  ).toBeVisible()
+  // O aviso antigo sai da tela: o filtro "Sem módulo" cobre o caso.
+  await expect(page.getByText('Há assuntos sem módulo')).toHaveCount(0)
 
   await filter.click()
   await page.getByRole('option', { name: 'Sem módulo' }).click()
@@ -750,7 +752,8 @@ test('filtro Sem módulo encontra assuntos legados e combina com a busca', async
   await page.getByRole('option', { name: 'Folha', exact: true }).click()
   await expect(table).toContainText('Classificado folha')
   await expect(table).not.toContainText('Legado folha')
-  await page.getByRole('button', { name: 'Ver assuntos sem módulo' }).click()
+  await filter.click()
+  await page.getByRole('option', { name: 'Sem módulo' }).click()
   await expect(filter).toContainText('Sem módulo')
   await expect(table).toContainText('Legado patrimônio')
   await expect(table).not.toContainText('Classificado folha')
@@ -780,12 +783,12 @@ test('o administrador escolhe o setor na tela Assuntos', async ({ page, baseURL 
   await signIn(page, admin.email, admin.password)
   await page.goto('/assuntos')
   const table = page.locator('[data-slot=sidebar-inset]')
-  await page.getByLabel('Setor').click()
+  await page.getByRole('combobox', { name: 'Setor' }).click()
   await page.getByRole('option', { name: first.sector.name }).click()
   await expect(table).toContainText('Assunto do primeiro')
   await expect(table).not.toContainText('Assunto do segundo')
 
-  await page.getByLabel('Setor').click()
+  await page.getByRole('combobox', { name: 'Setor' }).click()
   await page.getByRole('option', { name: second.sector.name }).click()
   await expect(table).toContainText('Assunto do segundo')
   await expect(table).not.toContainText('Assunto do primeiro')
@@ -803,6 +806,17 @@ test('o administrador escolhe o setor na tela Assuntos', async ({ page, baseURL 
     'Outro do segundo',
   ])
   expect(await subjectNames(baseURL!, first.sector.id)).toEqual(['Assunto do primeiro'])
+})
+
+test('sem setores, a tela Assuntos pede um setor em vez de ficar carregando', async ({ page }) => {
+  // Sem setor a consulta de assuntos nem sai; o aviso depende só da lista de setores.
+  await page.route(/\/api\/sectors(\?.*)?$/, (route) => route.fulfill({ json: [] }))
+  await login(page, admin.email, admin.password)
+  await expect(page).not.toHaveURL(/\/login$/)
+  await page.goto('/assuntos')
+  await expect(page.getByText('Cadastre um setor para gerenciar assuntos.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Novo assunto' })).toHaveCount(0)
+  await expect(page.getByRole('searchbox', { name: 'Buscar assuntos' })).toHaveCount(0)
 })
 
 test('o atendente não abre a tela Assuntos', async ({ page, baseURL }) => {
@@ -1199,19 +1213,19 @@ test('o supervisor vê só o próprio setor, e o administrador troca de setor e 
   await expect
     .poll(() => tableRows(page))
     .toEqual(['# Assunto do primeiro', 'Solução do primeiro.'])
-  await expect(page.getByLabel('Setor')).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'Setor' })).toHaveCount(0)
   await page.getByRole('searchbox', { name: 'Buscar assuntos' }).fill('segundo')
   await expect(page.getByText('Nenhum assunto encontrado.')).toBeVisible()
 
   await clearSession(page)
   await signIn(page, admin.email, admin.password)
   await page.goto('/assuntos')
-  await page.getByLabel('Setor').click()
+  await page.getByRole('combobox', { name: 'Setor' }).click()
   await page.getByRole('option', { name: first.sector.name }).click()
   await expect
     .poll(() => tableRows(page))
     .toEqual(['# Assunto do primeiro', 'Solução do primeiro.'])
-  await page.getByLabel('Setor').click()
+  await page.getByRole('combobox', { name: 'Setor' }).click()
   await page.getByRole('option', { name: second.sector.name }).click()
   await expect(page.getByRole('table')).toContainText('Solução do segundo.')
   await expect.poll(() => tableRows(page)).toEqual(['# Assunto do segundo', 'Solução do segundo.'])

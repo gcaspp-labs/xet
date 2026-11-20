@@ -91,6 +91,75 @@ func (q *Queries) AddSubjectIfMissing(ctx context.Context, arg AddSubjectIfMissi
 	return items, nil
 }
 
+const countSubjectSolutions = `-- name: CountSubjectSolutions :many
+select subject_id, count(*)::bigint as total
+from subject_solutions
+where subject_id = any($1::bigint[])
+group by subject_id
+`
+
+type CountSubjectSolutionsRow struct {
+	SubjectID int64
+	Total     int64
+}
+
+// How many solutions each subject of the page has, whatever the search shows.
+func (q *Queries) CountSubjectSolutions(ctx context.Context, subjectIds []int64) ([]CountSubjectSolutionsRow, error) {
+	rows, err := q.db.Query(ctx, countSubjectSolutions, subjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountSubjectSolutionsRow
+	for rows.Next() {
+		var i CountSubjectSolutionsRow
+		if err := rows.Scan(&i.SubjectID, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countSubjects = `-- name: CountSubjects :one
+select count(*)
+from subjects s
+where s.sector_id = $1
+  and ($2::bigint = 0 or s.module_id = $2)
+  and (not $3::bool or s.module_id is null)
+  and ($4::text = ''
+       or immutable_unaccent(s.name) ilike immutable_unaccent($4)
+       or exists (select 1 from subject_solutions ss
+                  where ss.subject_id = s.id
+                    and immutable_unaccent(ss.body) ilike immutable_unaccent($4)))
+`
+
+type CountSubjectsParams struct {
+	SectorID      int64
+	ModuleID      int64
+	Unclassified  bool
+	SearchPattern string
+}
+
+// Counts the subjects of the sector the filter finds: the module (a zero module
+// with no unclassified means all) and the search, which matches the name of the
+// subject or the text of one of its solutions, without accents or case. Keep the
+// filter equal to SearchSubjects.
+func (q *Queries) CountSubjects(ctx context.Context, arg CountSubjectsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubjects,
+		arg.SectorID,
+		arg.ModuleID,
+		arg.Unclassified,
+		arg.SearchPattern,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createSolution = `-- name: CreateSolution :one
 insert into subject_solutions (subject_id, body)
 values ($1, $2)
@@ -265,6 +334,51 @@ func (q *Queries) GetSubjectForUpdate(ctx context.Context, arg GetSubjectForUpda
 	return i, err
 }
 
+const listPageSolutions = `-- name: ListPageSolutions :many
+select ss.id, ss.subject_id, ss.body, ss.created_at, ss.updated_at
+from subject_solutions ss
+join subjects s on s.id = ss.subject_id
+where ss.subject_id = any($1::bigint[])
+  and ($2::text = ''
+       or immutable_unaccent(s.name) ilike immutable_unaccent($2)
+       or immutable_unaccent(ss.body) ilike immutable_unaccent($2))
+order by ss.subject_id, lower(immutable_unaccent(ss.body)), ss.id
+`
+
+type ListPageSolutionsParams struct {
+	SubjectIds    []int64
+	SearchPattern string
+}
+
+// The solutions of the subjects of the page that the search shows: a subject
+// found by its name comes with all its solutions, and one found only by a
+// solution comes with the matching ones.
+func (q *Queries) ListPageSolutions(ctx context.Context, arg ListPageSolutionsParams) ([]SubjectSolution, error) {
+	rows, err := q.db.Query(ctx, listPageSolutions, arg.SubjectIds, arg.SearchPattern)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SubjectSolution
+	for rows.Next() {
+		var i SubjectSolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSectorSolutions = `-- name: ListSectorSolutions :many
 select ss.id, ss.subject_id, ss.body, ss.created_at, ss.updated_at from subject_solutions ss
 join subjects s on s.id = ss.subject_id
@@ -379,6 +493,84 @@ func (q *Queries) ListSubjects(ctx context.Context, sectorID int64) ([]Subject, 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ModuleID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchSubjects = `-- name: SearchSubjects :many
+select s.id, s.sector_id, s.name, s.created_at, s.updated_at, s.module_id, m.name as module_name
+from subjects s
+left join modules m on m.id = s.module_id
+where s.sector_id = $1
+  and ($2::bigint = 0 or s.module_id = $2)
+  and (not $3::bool or s.module_id is null)
+  and ($4::text = ''
+       or immutable_unaccent(s.name) ilike immutable_unaccent($4)
+       or exists (select 1 from subject_solutions ss
+                  where ss.subject_id = s.id
+                    and immutable_unaccent(ss.body) ilike immutable_unaccent($4)))
+order by
+  case when $5::text = 'module' and not $6::bool then lower(immutable_unaccent(m.name)) end asc nulls last,
+  case when $5::text = 'module' and $6::bool then lower(immutable_unaccent(m.name)) end desc nulls last,
+  case when $5::text = 'name' and not $6::bool then lower(immutable_unaccent(s.name)) end asc,
+  case when $5::text = 'name' and $6::bool then lower(immutable_unaccent(s.name)) end desc,
+  case when not $6::bool then s.id end asc,
+  case when $6::bool then s.id end desc
+limit $8 offset $7
+`
+
+type SearchSubjectsParams struct {
+	SectorID      int64
+	ModuleID      int64
+	Unclassified  bool
+	SearchPattern string
+	SortColumn    string
+	Descending    bool
+	PageOffset    int32
+	PageSize      int32
+}
+
+type SearchSubjectsRow struct {
+	Subject    Subject
+	ModuleName *string
+}
+
+// A page of the subjects of the sector, with the filter of CountSubjects, sorted
+// by the name (default) or the module name, subjects without a module last,
+// ignoring case and accents, with the id breaking ties in the same direction.
+func (q *Queries) SearchSubjects(ctx context.Context, arg SearchSubjectsParams) ([]SearchSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, searchSubjects,
+		arg.SectorID,
+		arg.ModuleID,
+		arg.Unclassified,
+		arg.SearchPattern,
+		arg.SortColumn,
+		arg.Descending,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchSubjectsRow
+	for rows.Next() {
+		var i SearchSubjectsRow
+		if err := rows.Scan(
+			&i.Subject.ID,
+			&i.Subject.SectorID,
+			&i.Subject.Name,
+			&i.Subject.CreatedAt,
+			&i.Subject.UpdatedAt,
+			&i.Subject.ModuleID,
+			&i.ModuleName,
 		); err != nil {
 			return nil, err
 		}

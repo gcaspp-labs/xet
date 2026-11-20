@@ -7,15 +7,19 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
 type subjectResponse struct {
-	ID        int64              `json:"id"`
-	SectorID  int64              `json:"sectorId"`
-	Name      string             `json:"name"`
-	ModuleID  *int64             `json:"moduleId"`
-	Solutions []solutionResponse `json:"solutions"`
+	ID       int64  `json:"id"`
+	SectorID int64  `json:"sectorId"`
+	Name     string `json:"name"`
+	ModuleID *int64 `json:"moduleId"`
+	// Solutions shown, which in a search by a solution are only the ones that
+	// match, and SolutionCount, the whole list of the subject.
+	Solutions     []solutionResponse `json:"solutions"`
+	SolutionCount int                `json:"solutionCount"`
 }
 
 type solutionResponse struct {
@@ -25,7 +29,7 @@ type solutionResponse struct {
 }
 
 func toSubjectResponse(s db.Subject, solutions []db.SubjectSolution) subjectResponse {
-	return subjectResponse{ID: s.ID, SectorID: s.SectorID, Name: s.Name, ModuleID: s.ModuleID, Solutions: toSolutionResponses(solutions)}
+	return subjectResponse{ID: s.ID, SectorID: s.SectorID, Name: s.Name, ModuleID: s.ModuleID, Solutions: toSolutionResponses(solutions), SolutionCount: len(solutions)}
 }
 
 func toSolutionResponse(s db.SubjectSolution) solutionResponse {
@@ -49,33 +53,51 @@ type solutionRequest struct {
 	Body string `json:"body" validate:"required"`
 }
 
+// subjectModuleFilter reads the module filter of the list: empty or "all" for
+// every module, "none" for the subjects without one and the id of a module of
+// the sector for the ones in it.
+func subjectModuleFilter(w http.ResponseWriter, r *http.Request) (filter SubjectFilter, ok bool) {
+	module := r.URL.Query().Get("moduleId")
+	switch module {
+	case "", "all":
+		return filter, true
+	case "none":
+		filter.Unclassified = true
+		return filter, true
+	}
+	moduleID, err := strconv.ParseInt(module, 10, 64)
+	if err != nil || moduleID <= 0 {
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha um módulo válido.")
+		return filter, false
+	}
+	filter.ModuleID = moduleID
+	return filter, true
+}
+
+// listSubjects returns a page of the subject list of the sector, with the search
+// in ?q=, the module filter in ?moduleId= and the page and order of every list.
 func (h *Handler) listSubjects(w http.ResponseWriter, r *http.Request) {
 	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
 	if !ok {
 		return
 	}
-	subjects, err := h.service.Subjects(r.Context(), sectorID)
+	filter, ok := subjectModuleFilter(w, r)
+	if !ok {
+		return
+	}
+	filter.Query = r.URL.Query().Get("q")
+	subjects, total, page, err := h.service.SearchSubjects(r.Context(), sectorID, filter,
+		paging.Parse(r, SubjectSortColumns, SortSubjectName, false))
 	if err != nil {
 		httpx.InternalError(h.logger, w, r, err)
 		return
 	}
-	filter := r.URL.Query().Get("moduleId")
-	var moduleID int64
-	if filter != "" && filter != "none" {
-		moduleID, err = strconv.ParseInt(filter, 10, 64)
-		if err != nil || moduleID <= 0 {
-			httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha um módulo válido.")
-			return
-		}
+	out := make([]subjectResponse, len(subjects))
+	for i, s := range subjects {
+		out[i] = subjectResponse{ID: s.ID, SectorID: s.SectorID, Name: s.Name, ModuleID: s.ModuleID,
+			Solutions: toSolutionResponses(s.Solutions), SolutionCount: s.SolutionCount}
 	}
-	out := make([]subjectResponse, 0, len(subjects))
-	for _, s := range subjects {
-		if filter == "none" && s.ModuleID != nil || moduleID > 0 && (s.ModuleID == nil || *s.ModuleID != moduleID) {
-			continue
-		}
-		out = append(out, toSubjectResponse(s.Subject, s.Solutions))
-	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, paging.NewPage(out, total, page))
 }
 
 func (h *Handler) createSubject(w http.ResponseWriter, r *http.Request) {

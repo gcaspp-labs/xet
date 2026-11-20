@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Role, User } from '@/lib/auth'
-import { normalizeSearch } from '@/lib/format'
+import { type Page, type PageRequest, pageParams } from '@/lib/paging'
 
 export type Sector = {
   id: number
@@ -109,17 +109,49 @@ export type Subject = {
   sectorId: number
   name: string
   moduleId: number | null
-  // Soluções do assunto, apagadas junto com ele.
+  // Soluções mostradas, que na busca por uma solução são só as que batem, e
+  // solutionCount, a lista inteira do assunto (a contagem e a exclusão usam ela).
   solutions: { id: number; subjectId: number; body: string }[]
+  solutionCount: number
 }
 
 const subjectsKey = (sectorId: number) => ['sectors', sectorId, 'subjects']
 
-export function useSubjects(sectorId: number | undefined) {
+// Colunas que ordenam a lista na tela, ligadas às colunas que a API aceita.
+export type SubjectSort = 'name' | 'module'
+
+export const subjectColumns: Record<string, SubjectSort> = { assunto: 'name', modulo: 'module' }
+export const defaultSubjectColumn = 'assunto'
+
+// Página de 20 assuntos do setor, com a busca e o filtro de módulo no servidor;
+// cada assunto vem com as soluções que a busca mostra.
+export function useSubjects(
+  sectorId: number | undefined,
+  filter: { query: string; module: string },
+  request: PageRequest<SubjectSort>,
+) {
   return useQuery({
-    queryKey: subjectsKey(sectorId ?? 0),
-    queryFn: () => api<Subject[]>(`/sectors/${sectorId}/subjects`),
+    queryKey: [
+      ...subjectsKey(sectorId ?? 0),
+      'page',
+      filter.query.trim(),
+      filter.module,
+      request.page,
+      request.sort,
+      request.direction,
+    ],
+    queryFn: () => {
+      const search = new URLSearchParams(pageParams(request))
+      if (filter.query.trim()) {
+        search.set('q', filter.query.trim())
+      }
+      if (filter.module !== 'all') {
+        search.set('moduleId', filter.module)
+      }
+      return api<Page<Subject>>(`/sectors/${sectorId}/subjects?${search}`)
+    },
     enabled: sectorId !== undefined,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -176,24 +208,5 @@ export function useDeleteSolution(sectorId: number) {
         method: 'DELETE',
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: subjectsKey(sectorId) }),
-  })
-}
-
-// Busca da tela Assuntos (spec.md, Assuntos e soluções), sem diferenciar acentos
-// nem maiúsculas: o assunto encontrado pelo nome vem com todas as soluções; o
-// encontrado por uma solução vem só com as soluções que batem.
-export function filterSubjects(subjects: Subject[], query: string) {
-  const typed = normalizeSearch(query.trim())
-  if (!typed) {
-    return subjects
-  }
-  return subjects.flatMap((subject) => {
-    if (normalizeSearch(subject.name).includes(typed)) {
-      return [subject]
-    }
-    const solutions = subject.solutions.filter((solution) =>
-      normalizeSearch(solution.body).includes(typed),
-    )
-    return solutions.length > 0 ? [{ ...subject, solutions }] : []
   })
 }

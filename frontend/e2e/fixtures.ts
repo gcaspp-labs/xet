@@ -324,6 +324,21 @@ export async function adminApi(baseURL: string) {
   return api
 }
 
+// Acha o assunto do setor pela busca da lista, percorrendo as páginas, porque ele pode estar
+// depois dos primeiros vinte itens.
+async function subjectId(api: APIRequestContext, sectorId: number, name: string) {
+  for (let page = 1; ; page++) {
+    const list = await json<{
+      items: { id: number; name: string }[]
+      total: number
+      pageSize: number
+    }>(await api.get(`/api/sectors/${sectorId}/subjects`, { params: { q: name, page } }))
+    const found = list.items.find((item) => item.name === name)
+    if (found) return found.id
+    if (page * list.pageSize >= list.total) throw new Error(`Assunto não encontrado: ${name}`)
+  }
+}
+
 // Acrescenta soluções a um assunto do setor, pela API como administrador.
 export async function addSolutions(
   baseURL: string,
@@ -332,10 +347,7 @@ export async function addSolutions(
   bodies: string[],
 ) {
   const api = await adminApi(baseURL)
-  const subjects = await json<{ id: number; name: string }[]>(
-    await api.get(`/api/sectors/${sectorId}/subjects`),
-  )
-  const id = subjects.find((item) => item.name === subject)!.id
+  const id = await subjectId(api, sectorId, subject)
   for (const body of bodies) {
     ok(await api.post(`/api/sectors/${sectorId}/subjects/${id}/solutions`, { data: { body } }))
   }

@@ -1,11 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Tags } from 'lucide-react'
-import { type FormEvent, Fragment, useState } from 'react'
+import { type FormEvent, Fragment, useDeferredValue, useEffect, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormDialog } from '@/components/FormDialog'
+import { Pagination } from '@/components/Pagination'
 import { SearchBox } from '@/components/SearchBox'
+import { SortableTableHead } from '@/components/SortableTableHead'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -29,9 +31,10 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  filterSubjects,
+  defaultSubjectColumn,
   type Solution,
   type Subject,
+  subjectColumns,
   useDeleteSolution,
   useDeleteSubject,
   useModules,
@@ -41,6 +44,7 @@ import {
   useSubjects,
 } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
+import { usePagedList, useQueryState } from '@/lib/paging'
 
 const schema = z.object({
   moduleId: z.string().min(1, 'Escolha o módulo.'),
@@ -203,7 +207,7 @@ function DeleteSubjectSheet({
       open={open}
       onOpenChange={changeOpen}
       title="Excluir assunto"
-      description={`O assunto "${subject.name}" sai da lista do setor.${solutionsWarning(subject.solutions.length)} A exclusão não pode ser desfeita, e os chamados que usaram esse texto continuam como estão.`}
+      description={`O assunto "${subject.name}" sai da lista do setor.${solutionsWarning(subject.solutionCount)} A exclusão não pode ser desfeita, e os chamados que usaram esse texto continuam como estão.`}
       submitLabel="Excluir assunto"
       pending={remove.isPending}
       error={remove.error?.message}
@@ -348,27 +352,39 @@ function DeleteSolutionSheet({
 export default function SubjectsPage() {
   const { data: user } = useCurrentUser()
   const { data: sectors = [] } = useSectors()
+  const { params, update } = useQueryState()
   // O supervisor vê só o próprio setor; o administrador escolhe entre todos.
   const [chosen, setChosen] = useState<number | null>(null)
   const sectorId = user?.sectorId ?? chosen ?? sectors[0]?.id
   const sector = sectors.find((s) => s.id === sectorId)
-  const { data: subjects, isPending } = useSubjects(sectorId)
+  // Busca, filtro, página e ordem ficam no endereço: reabrir o link devolve a mesma lista.
+  const query = params.get('busca') ?? ''
+  const moduleFilter = params.get('modulo') ?? 'all'
+  const deferredQuery = useDeferredValue(query)
+  const list = usePagedList(subjectColumns, defaultSubjectColumn)
+  const { data, isPending, isPlaceholderData } = useSubjects(
+    sectorId,
+    { query: deferredQuery, module: moduleFilter },
+    list.request,
+  )
   const { data: modules = [] } = useModules(sectorId)
-  const [moduleFilter, setModuleFilter] = useState('all')
-  const [query, setQuery] = useState('')
-  const shown =
-    subjects &&
-    filterSubjects(
-      subjects.filter(
-        (subject) =>
-          moduleFilter === 'all' ||
-          (moduleFilter === 'none'
-            ? subject.moduleId === null
-            : subject.moduleId === Number(moduleFilter)),
-      ),
-      query,
-    )
-  const unclassified = subjects?.some((subject) => subject.moduleId === null) ?? false
+  const subjects = data?.items ?? []
+  const filtered = deferredQuery.trim() !== '' || moduleFilter !== 'all'
+  const served = data && !isPlaceholderData ? data.page : undefined
+  const { correctPage } = list
+  // Página além da última: o servidor devolve a última, e o endereço acompanha.
+  useEffect(() => {
+    if (served !== undefined) {
+      correctPage(served)
+    }
+  }, [served, correctPage])
+  const moduleName = (id: number | null) => {
+    if (id === null) {
+      return 'Sem módulo'
+    }
+    const module = modules.find((item) => item.id === id)
+    return module ? `${module.name}${module.active ? '' : ' (desativado)'}` : ''
+  }
   const [editing, setEditing] = useState<Subject | null>(null)
   const [open, setOpen] = useState(false)
   const [deleting, setDeleting] = useState<Subject | null>(null)
@@ -434,7 +450,8 @@ export default function SubjectsPage() {
               onValueChange={(value) => {
                 if (value) {
                   setChosen(Number(value))
-                  setModuleFilter('all')
+                  // Outro setor recomeça: página 1, sem busca nem filtro.
+                  update({ pagina: null, busca: null, modulo: null })
                 }
               }}
             >
@@ -451,90 +468,75 @@ export default function SubjectsPage() {
             </Select>
           </Field>
         )}
-        {unclassified && (
-          <p>
-            Há assuntos sem módulo que não aparecem no formulário.{' '}
-            <Button variant="link" onClick={() => setModuleFilter('none')}>
-              Ver assuntos sem módulo
-            </Button>
-          </p>
+        {sectorId !== undefined && (
+          <div className="flex flex-wrap items-end gap-3">
+            <SearchBox
+              value={query}
+              onChange={(value) => update({ busca: value || null, pagina: null }, true)}
+              label="Buscar assuntos"
+              placeholder="Assunto ou solução"
+            />
+            <Field className="max-w-[260px]">
+              <FieldLabel htmlFor="subjects-module-filter">Filtrar por módulo</FieldLabel>
+              <Select
+                value={moduleFilter}
+                onValueChange={(value) =>
+                  update({ modulo: value === 'all' ? null : value, pagina: null })
+                }
+                items={[
+                  { value: 'all', label: 'Todos os módulos' },
+                  ...modules.map((module) => ({ value: String(module.id), label: module.name })),
+                  { value: 'none', label: 'Sem módulo' },
+                ]}
+              >
+                <SelectTrigger id="subjects-module-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os módulos</SelectItem>
+                  {modules.map((module) => (
+                    <SelectItem key={module.id} value={String(module.id)}>
+                      {module.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="none">Sem módulo</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
         )}
-        {subjects && subjects.length > 0 && (
-          <Field className="max-w-[260px]">
-            <FieldLabel htmlFor="subjects-module-filter">Filtrar por módulo</FieldLabel>
-            <Select
-              value={moduleFilter}
-              onValueChange={(value) => value && setModuleFilter(value)}
-              items={[
-                { value: 'all', label: 'Todos os módulos' },
-                ...modules.map((module) => ({ value: String(module.id), label: module.name })),
-                { value: 'none', label: 'Sem módulo' },
-              ]}
-            >
-              <SelectTrigger id="subjects-module-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os módulos</SelectItem>
-                {modules.map((module) => (
-                  <SelectItem key={module.id} value={String(module.id)}>
-                    {module.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value="none">Sem módulo</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        )}
-        {subjects && subjects.length > 0 && (
-          <SearchBox
-            value={query}
-            onChange={setQuery}
-            label="Buscar assuntos"
-            placeholder="Assunto ou solução"
-          />
-        )}
-        <Card>
-          {shown && shown.length > 0 ? (
+        <Card className="gap-0 py-0">
+          {subjects.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Assunto e soluções</TableHead>
-                  <TableHead className="hidden sm:table-cell">Módulo</TableHead>
+                  <SortableTableHead label="Assunto" column="assunto" list={list} />
+                  <SortableTableHead
+                    label="Módulo"
+                    column="modulo"
+                    list={list}
+                    className="hidden sm:table-cell"
+                  />
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {shown.map((subject) => (
+                {subjects.map((subject) => (
                   <Fragment key={subject.id}>
                     <TableRow data-subject={subject.name}>
                       <TableCell className="w-full max-w-0 whitespace-normal">
                         <div className="body-strong [overflow-wrap:anywhere]">{subject.name}</div>
                         <div className="caption text-ink-soft sm:hidden">
-                          {subject.moduleId === null
-                            ? 'Sem módulo'
-                            : modules.find((module) => module.id === subject.moduleId)?.name}
-                          {subject.moduleId !== null &&
-                            modules.find((module) => module.id === subject.moduleId)?.active ===
-                              false &&
-                            ' (desativado)'}
+                          {moduleName(subject.moduleId)}
                         </div>
                         <div className="caption text-ink-soft">
-                          {solutionCount(
-                            subjects!.find((item) => item.id === subject.id)!.solutions.length,
-                          )}
+                          {solutionCount(subject.solutionCount)}
                         </div>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
-                        {subject.moduleId === null
-                          ? 'Sem módulo'
-                          : modules.find((module) => module.id === subject.moduleId)?.name}
-                        {subject.moduleId !== null &&
-                          modules.find((module) => module.id === subject.moduleId)?.active ===
-                            false &&
-                          ' (desativado)'}
+                        {moduleName(subject.moduleId)}
                       </TableCell>
                       <TableCell className="whitespace-normal sm:whitespace-nowrap">
                         <div className="flex flex-wrap justify-end gap-1 sm:flex-nowrap">
@@ -558,9 +560,7 @@ export default function SubjectsPage() {
                             variant="ghost"
                             size="sm"
                             aria-label={`Excluir ${subject.name}`}
-                            onClick={() =>
-                              openDelete(subjects!.find((item) => item.id === subject.id)!)
-                            }
+                            onClick={() => openDelete(subject)}
                           >
                             Excluir
                           </Button>
@@ -606,6 +606,8 @@ export default function SubjectsPage() {
               </TableBody>
             </Table>
           ) : (
+            // Sem setor a consulta fica desabilitada e isPending nunca cai: o
+            // estado vazio precisa aparecer também nesse caso.
             (sectorId === undefined || !isPending) && (
               <Empty>
                 <EmptyMedia>
@@ -614,12 +616,21 @@ export default function SubjectsPage() {
                 <EmptyDescription>
                   {sectorId === undefined
                     ? 'Cadastre um setor para gerenciar assuntos.'
-                    : subjects && subjects.length > 0
+                    : filtered
                       ? 'Nenhum assunto encontrado.'
                       : 'Nenhum assunto cadastrado.'}
                 </EmptyDescription>
               </Empty>
             )
+          )}
+          {data && (
+            <Pagination
+              page={data.page}
+              pageSize={data.pageSize}
+              total={data.total}
+              noun={['assunto', 'assuntos']}
+              onPage={list.setPage}
+            />
           )}
         </Card>
       </PageContent>

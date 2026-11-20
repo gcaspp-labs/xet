@@ -131,7 +131,7 @@ func TestSupervisorManagesTheSolutionsOfASubject(t *testing.T) {
 	solution := id(resp.Body)
 	e.createSolution(sector, subject, c.supToken, "Orientado a acessar o portal.")
 
-	list := e.DoList(http.MethodGet, subjectsPath(sector), c.supToken)
+	list := e.DoPageItems(subjectsPath(sector), c.supToken)
 	asAny := make([]any, len(list))
 	for i, s := range list {
 		asAny[i] = s

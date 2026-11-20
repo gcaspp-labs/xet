@@ -89,3 +89,63 @@ returning *;
 -- name: DeleteSolution :exec
 delete from subject_solutions
 where id = @id;
+
+-- name: CountSubjects :one
+-- Counts the subjects of the sector the filter finds: the module (a zero module
+-- with no unclassified means all) and the search, which matches the name of the
+-- subject or the text of one of its solutions, without accents or case. Keep the
+-- filter equal to SearchSubjects.
+select count(*)
+from subjects s
+where s.sector_id = @sector_id
+  and (@module_id::bigint = 0 or s.module_id = @module_id)
+  and (not @unclassified::bool or s.module_id is null)
+  and (@search_pattern::text = ''
+       or immutable_unaccent(s.name) ilike immutable_unaccent(@search_pattern)
+       or exists (select 1 from subject_solutions ss
+                  where ss.subject_id = s.id
+                    and immutable_unaccent(ss.body) ilike immutable_unaccent(@search_pattern)));
+
+-- name: SearchSubjects :many
+-- A page of the subjects of the sector, with the filter of CountSubjects, sorted
+-- by the name (default) or the module name, subjects without a module last,
+-- ignoring case and accents, with the id breaking ties in the same direction.
+select sqlc.embed(s), m.name as module_name
+from subjects s
+left join modules m on m.id = s.module_id
+where s.sector_id = @sector_id
+  and (@module_id::bigint = 0 or s.module_id = @module_id)
+  and (not @unclassified::bool or s.module_id is null)
+  and (@search_pattern::text = ''
+       or immutable_unaccent(s.name) ilike immutable_unaccent(@search_pattern)
+       or exists (select 1 from subject_solutions ss
+                  where ss.subject_id = s.id
+                    and immutable_unaccent(ss.body) ilike immutable_unaccent(@search_pattern)))
+order by
+  case when @sort_column::text = 'module' and not @descending::bool then lower(immutable_unaccent(m.name)) end asc nulls last,
+  case when @sort_column::text = 'module' and @descending::bool then lower(immutable_unaccent(m.name)) end desc nulls last,
+  case when @sort_column::text = 'name' and not @descending::bool then lower(immutable_unaccent(s.name)) end asc,
+  case when @sort_column::text = 'name' and @descending::bool then lower(immutable_unaccent(s.name)) end desc,
+  case when not @descending::bool then s.id end asc,
+  case when @descending::bool then s.id end desc
+limit @page_size offset @page_offset;
+
+-- name: ListPageSolutions :many
+-- The solutions of the subjects of the page that the search shows: a subject
+-- found by its name comes with all its solutions, and one found only by a
+-- solution comes with the matching ones.
+select ss.*
+from subject_solutions ss
+join subjects s on s.id = ss.subject_id
+where ss.subject_id = any(@subject_ids::bigint[])
+  and (@search_pattern::text = ''
+       or immutable_unaccent(s.name) ilike immutable_unaccent(@search_pattern)
+       or immutable_unaccent(ss.body) ilike immutable_unaccent(@search_pattern))
+order by ss.subject_id, lower(immutable_unaccent(ss.body)), ss.id;
+
+-- name: CountSubjectSolutions :many
+-- How many solutions each subject of the page has, whatever the search shows.
+select subject_id, count(*)::bigint as total
+from subject_solutions
+where subject_id = any(@subject_ids::bigint[])
+group by subject_id;

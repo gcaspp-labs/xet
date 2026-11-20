@@ -33,7 +33,7 @@ func TestSubjectEditingWithInactiveModules(t *testing.T) {
 	if resp.Status != http.StatusUnprocessableEntity {
 		t.Fatalf("move to inactive: %d %v", resp.Status, resp.Body)
 	}
-	list := e.DoList(http.MethodGet, subjectsPath(c.sector.ID), c.supToken)
+	list := e.DoPageItems(subjectsPath(c.sector.ID), c.supToken)
 	if len(list) != 1 || list[0]["name"] != "Senha" || list[0]["moduleId"] != float64(current.ID) {
 		t.Fatalf("rejected edit changed subject: %v", list)
 	}
@@ -123,7 +123,7 @@ func TestAddingSubjectRejectsChosenModuleDeactivatedBeforeSave(t *testing.T) {
 			if resp.Status != http.StatusOK {
 				t.Fatalf("retry with active module: %d %v", resp.Status, resp.Body)
 			}
-			subjects := c.e.DoList(http.MethodGet, subjectsPath(c.sector.ID), c.supToken)
+			subjects := c.e.DoPageItems(subjectsPath(c.sector.ID), c.supToken)
 			if len(subjects) != 1 || subjects[0]["moduleId"] != float64(c.modules[1]) {
 				t.Fatalf("subject after retry: %v", subjects)
 			}
