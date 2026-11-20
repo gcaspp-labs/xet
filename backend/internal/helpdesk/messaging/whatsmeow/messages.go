@@ -530,26 +530,23 @@ func (a *Adapter) RevokeMessage(ctx context.Context, revoke messaging.MessageRev
 	})
 }
 
+// change sends the edit or the deletion like a message (send), only telling
+// the errors apart: see changeError.
 func (a *Adapter) change(ctx context.Context, sectorID int64, to, key string, build func(*whatsmeow.Client, types.JID) *waE2E.Message) (string, error) {
-	cli, err := a.client(sectorID)
-	if err != nil {
-		return "", err
-	}
-	chat, err := types.ParseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("%w: parse recipient %q: %w", messaging.ErrNotAccepted, to, err)
-	}
-	resp, err := cli.SendMessage(ctx, chat, build(cli, chat), whatsmeow.SendRequestExtra{ID: messageID(cli, key)})
+	id, err := a.send(ctx, sectorID, to, key, func(_ context.Context, cli *whatsmeow.Client, chat types.JID) (*waE2E.Message, error) {
+		return build(cli, chat), nil
+	})
 	if err != nil {
 		return "", changeError(err)
 	}
-	return resp.ID, nil
+	return id, nil
 }
 
 // changeError tells an unknown result (the request or the wait for the server
-// timed out: the change may have gone) from a refusal.
+// timed out: the change may have gone) from a refusal. A sector without
+// connection keeps its own error.
 func changeError(err error) error {
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
+	if errors.Is(err, messaging.ErrNotConnected) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
 		errors.Is(err, whatsmeow.ErrMessageTimedOut) || errors.Is(err, whatsmeow.ErrIQTimedOut) {
 		return fmt.Errorf("send change: %w", err)
 	}
