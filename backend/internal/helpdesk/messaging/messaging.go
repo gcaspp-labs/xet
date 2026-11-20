@@ -21,6 +21,9 @@ var (
 	// ErrNotAccepted means the provider refused what was sent or could not
 	// take it, whatever the reason the provider gives.
 	ErrNotAccepted = errors.New("provider did not accept the message")
+	// ErrUnsupported means the provider does not offer the action at all, as
+	// a provider without edits (Capabilities with a zero window).
+	ErrUnsupported = errors.New("provider does not support the action")
 )
 
 // ConnectionStatus mirrors the connection_status enum of sectors.
@@ -286,6 +289,38 @@ type Reaction struct {
 	Emoji string
 }
 
+// MessageEdit is the new text or caption of a message sent by the sector
+// number through the system. It points at the target only by its provider
+// message ID; the edit is not a new message and the file does not change.
+type MessageEdit struct {
+	SectorID int64
+	// To is the provider contact ID of the chat, as in TextMessage.
+	To string
+	// TargetExternalMessageID is the provider ID of the edited message.
+	TargetExternalMessageID string
+	// Type is the type of the edited message: text, or the attachment
+	// (image, video, document) whose caption changes. Audio has no caption.
+	Type MessageType
+	// Body is the whole new text or caption, as the contact sees it.
+	Body string
+	// IdempotencyKey makes a retry reuse the same provider event instead of
+	// editing twice, as in TextMessage.
+	IdempotencyKey string
+}
+
+// MessageRevoke is the deletion for everyone of a message sent by the sector
+// number through the system. It points at the target only by its provider
+// message ID.
+type MessageRevoke struct {
+	SectorID int64
+	// To is the provider contact ID of the chat, as in TextMessage.
+	To string
+	// TargetExternalMessageID is the provider ID of the deleted message.
+	TargetExternalMessageID string
+	// IdempotencyKey makes a retry reuse the same provider event, as in MessageEdit.
+	IdempotencyKey string
+}
+
 // Capabilities tells what the provider supports on a message already sent.
 // A zero window means the provider does not support the action at all: the
 // system must report it as unavailable, never simulate a success. The windows
@@ -321,6 +356,18 @@ type Provider interface {
 	// session and ErrNotAccepted for any refusal of the provider. Nothing may
 	// expect a delivery or read confirmation of a reaction.
 	SendReaction(ctx context.Context, r Reaction) error
+	// EditMessage replaces the text or caption of a message the sector number
+	// sent through the system, and RevokeMessage deletes it for everyone.
+	// Both return the provider ID of the change itself, which its echo
+	// carries as ExternalEventID. They return ErrNotConnected without a
+	// session, ErrUnsupported when the provider has no such action and
+	// ErrNotAccepted for any refusal of the provider, the end of its window
+	// included: the change was not made. Any other error means the result is
+	// unknown, as after a timeout, and nothing may take it as a success or
+	// a refusal. Accepted is not a guarantee that every device of the contact
+	// applies the change.
+	EditMessage(ctx context.Context, edit MessageEdit) (string, error)
+	RevokeMessage(ctx context.Context, revoke MessageRevoke) (string, error)
 	// ResolveContact returns the provider contact ID of a phone with country code.
 	ResolveContact(ctx context.Context, sectorID int64, phone string) (string, error)
 	// Capabilities reports what the provider supports on a message already sent.

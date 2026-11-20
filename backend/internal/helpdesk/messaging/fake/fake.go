@@ -50,6 +50,8 @@ type Adapter struct {
 	saved map[int64][]messaging.SavedContact
 	// Sectors whose next reaction the provider refuses.
 	refuseReaction map[int64]bool
+	// Sectors whose next edit or deletion for everyone fails with the error.
+	failChange map[int64]error
 	// Sectors whose sends wait for Release, to keep a message pending.
 	held map[int64]chan struct{}
 	// What the provider supports on a message already sent; see SetCapabilities.
@@ -73,6 +75,7 @@ func New(handler messaging.EventHandler) *Adapter {
 		saved:          map[int64][]messaging.SavedContact{},
 		sent:           map[string]string{},
 		refuseReaction: map[int64]bool{},
+		failChange:     map[int64]error{},
 		held:           map[int64]chan struct{}{},
 		capabilities:   DefaultCapabilities,
 	}
@@ -394,6 +397,55 @@ func (a *Adapter) FailNextReaction(sectorID int64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.refuseReaction[sectorID] = true
+}
+
+// EditMessage records the edit among the sent messages and returns the ID of
+// the edit event, derived from the idempotency key like a message ID: the
+// same key edits once. Without edits in the capabilities it is unsupported.
+func (a *Adapter) EditMessage(_ context.Context, edit messaging.MessageEdit) (string, error) {
+	return a.change(edit.SectorID, "fake-edit-", edit.IdempotencyKey, edit, func(c messaging.Capabilities) bool { return c.EditWindow > 0 })
+}
+
+// RevokeMessage records the deletion for everyone like EditMessage.
+func (a *Adapter) RevokeMessage(_ context.Context, revoke messaging.MessageRevoke) (string, error) {
+	return a.change(revoke.SectorID, "fake-revoke-", revoke.IdempotencyKey, revoke, func(c messaging.Capabilities) bool { return c.RevokeWindow > 0 })
+}
+
+func (a *Adapter) change(sectorID int64, prefix, key string, change any, supported func(messaging.Capabilities) bool) (string, error) {
+	a.mu.Lock()
+	held := a.held[sectorID]
+	a.mu.Unlock()
+	if held != nil {
+		<-held
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.session(sectorID).status != messaging.StatusConnected {
+		return "", messaging.ErrNotConnected
+	}
+	if !supported(a.capabilities) {
+		return "", messaging.ErrUnsupported
+	}
+	if err := a.failChange[sectorID]; err != nil {
+		delete(a.failChange, sectorID)
+		return "", err
+	}
+	id := prefix + key
+	if _, ok := a.sent[id]; ok && key != "" {
+		return id, nil
+	}
+	a.sent[id] = id
+	a.Sent = append(a.Sent, change)
+	return id, nil
+}
+
+// FailNextChange makes the next edit or deletion for everyone of the sector
+// fail with err: messaging.ErrNotAccepted for a refusal of the provider, or
+// any other error (such as context.DeadlineExceeded) for an unknown result.
+func (a *Adapter) FailNextChange(sectorID int64, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failChange[sectorID] = err
 }
 
 // SentMessages returns a copy of what was handed to the provider, in order.
