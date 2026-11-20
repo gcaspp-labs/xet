@@ -55,11 +55,11 @@ await journey('atendimentos-message-revisions', async (t) => {
         }),
         'excluir a mensagem do XET só para o setor',
       )
-      // O cliente edita e exclui a mensagem dele, fora do XET.
+      // O cliente edita a mensagem dele, fora do XET. A exclusão vem depois, no passo de duas
+      // sessões, com a ficha e as versões já abertas.
       await phone.edit(customer, external, 'Preciso do boleto de outubro', {
         externalEventId: `EDIT-${external}`,
       })
-      await phone.revoke(customer, external, { externalEventId: `REVOKE-${external}` })
 
       await t.apiOk(
         agent.post(`/api/tickets/${ticket.id}/close`, {
@@ -103,7 +103,7 @@ await journey('atendimentos-message-revisions', async (t) => {
     const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
     await expect(received).toContainText('Preciso do boleto de outubro')
     await expect(received).toContainText('Editada')
-    await expect(received).toContainText('Excluída')
+    await expect(received).not.toContainText('Excluída')
     await t.shot(agentPage, 'atendimento-com-conteudo-preservado')
   })
 
@@ -145,29 +145,70 @@ await journey('atendimentos-message-revisions', async (t) => {
     await expect(trigger).toBeFocused()
   })
 
-  await t.step('A alteração e a exclusão externas, com autor e alcance registrados', async () => {
-    const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
-    await conversation
-      .getByRole('listitem', { name: 'Mensagem recebida' })
-      .getByRole('button', { name: 'Ver versões e exclusão' })
-      .click()
-    const dialog = agentPage.getByRole('dialog', { name: 'Versões e exclusão da mensagem' })
-    await expect(dialog.getByTestId('message-version')).toHaveCount(2)
-    await expect(dialog.getByTestId('message-version').first()).toContainText(
-      'Preciso do boleto de setembro',
-    )
-    await expect(dialog.getByTestId('message-version').last()).toContainText(
-      'Preciso do boleto de outubro',
-    )
-    await expect(dialog.getByTestId('message-version').last()).toContainText('pelo cliente')
-    await expect(dialog.getByTestId('message-deletion')).toContainText(
-      'Para todos (também no WhatsApp)',
-    )
-    await expect(dialog.getByTestId('message-deletion')).toContainText('pelo cliente')
-    await t.shot(agentPage, 'exclusao-do-cliente')
-    await agentPage.keyboard.press('Escape')
-    await expect(dialog).toHaveCount(0)
-  })
+  await t.step(
+    'Duas sessões: a edição e a exclusão externas atualizam a ficha e as versões abertas, sem recarregar',
+    async () => {
+      const receivedItem = (page) => page.locator('li[aria-label="Mensagem recebida"]')
+
+      // Na primeira sessão, a janela de versões da mensagem do cliente fica aberta.
+      await receivedItem(agentPage)
+        .getByRole('button', { name: 'Ver versões', exact: true })
+        .click()
+      const dialog = agentPage.getByRole('dialog', { name: /Versões/ })
+      await expect(dialog.getByTestId('message-version')).toHaveCount(2)
+      await expect(dialog.getByTestId('message-version').last()).toContainText('Atual')
+
+      // A segunda sessão do mesmo atendente abre o mesmo atendimento e a mesma janela.
+      const otherPage = await t.signIn(agent, { viewport: { width: 1440, height: 900 } })
+      await otherPage.goto(`/atendimentos/${ticket.id}`)
+      await expect(otherPage.getByRole('status', { name: 'Só leitura' })).toBeVisible()
+      await receivedItem(otherPage)
+        .getByRole('button', { name: 'Ver versões', exact: true })
+        .click()
+      const otherDialog = otherPage.getByRole('dialog', { name: /Versões/ })
+      await expect(otherDialog.getByTestId('message-version')).toHaveCount(2)
+
+      // O cliente edita de novo: as duas janelas e as duas fichas mudam sem recarregar.
+      await t.phone(sector.id).edit(customer, data.external, 'Preciso do boleto de novembro', {
+        externalEventId: `EDIT2-${data.external}`,
+      })
+      for (const page of [agentPage, otherPage]) {
+        const layer = page.getByRole('dialog', { name: /Versões/ })
+        await expect(layer.getByTestId('message-version')).toHaveCount(3)
+        await expect(layer.getByTestId('message-version').last()).toContainText(
+          'Preciso do boleto de novembro',
+        )
+        await expect(layer.getByTestId('message-version').last()).toContainText('Atual')
+        await expect(layer.getByTestId('message-version').filter({ hasText: 'Atual' })).toHaveCount(
+          1,
+        )
+        await expect(receivedItem(page)).toContainText('Preciso do boleto de novembro')
+        await expect(receivedItem(page)).toContainText('Editada')
+      }
+      await t.shot(agentPage, 'edicao-externa-em-duas-sessoes')
+      await t.shot(otherPage, 'segunda-sessao-edicao-externa')
+
+      // A exclusão para todos, também de fora, chega às duas janelas e mantém o conteúdo.
+      await t.phone(sector.id).revoke(customer, data.external, {
+        externalEventId: `REVOKE-${data.external}`,
+      })
+      for (const page of [agentPage, otherPage]) {
+        const layer = page.getByRole('dialog', { name: /Versões/ })
+        await expect(layer.getByTestId('message-deletion')).toContainText(
+          'Para todos (também no WhatsApp)',
+        )
+        await expect(layer.getByTestId('message-deletion')).toContainText('pelo cliente')
+        await expect(receivedItem(page)).toContainText('Preciso do boleto de novembro')
+        await expect(receivedItem(page)).toContainText('Excluída')
+      }
+      await t.shot(agentPage, 'exclusao-externa-em-duas-sessoes')
+      await t.shot(otherPage, 'segunda-sessao-exclusao-externa')
+
+      await t.closeSession(otherPage)
+      await agentPage.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+    },
+  )
 
   await t.step('Recarregar mantém o conteúdo, as etiquetas e as versões', async () => {
     await agentPage.reload()
@@ -175,9 +216,9 @@ await journey('atendimentos-message-revisions', async (t) => {
     await expect(
       conversation.getByRole('listitem', { name: 'Mensagem enviada' }),
     ).toContainText('Segue o boleto de outubro')
-    await expect(
-      conversation.getByRole('listitem', { name: 'Mensagem recebida' }),
-    ).toContainText('Preciso do boleto de outubro')
+    const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
+    await expect(received).toContainText('Preciso do boleto de novembro')
+    await expect(received).toContainText('Excluída')
     await expect(
       conversation.getByRole('button', { name: 'Ver versões e exclusão' }),
     ).toHaveCount(2)
@@ -192,7 +233,7 @@ await journey('atendimentos-message-revisions', async (t) => {
     expect(messages).toHaveLength(2)
     expect(messages[0]).toMatchObject({
       external_message_id: data.external,
-      body: 'Preciso do boleto de outubro',
+      body: 'Preciso do boleto de novembro',
       edited: true,
       deletion_scope: 'everyone',
       deletion_origin: 'customer',
@@ -213,12 +254,20 @@ await journey('atendimentos-message-revisions', async (t) => {
          where message_id = ${message.id} order by occurred_at, id`,
       )
       t.observe(`Versões da mensagem ${message.id}`, JSON.stringify(changes))
-      const text = message.external_message_id === data.external ? 'Preciso do boleto' : 'Segue o boleto'
-      expect(changes.map((change) => `${change.kind}:${content(change.body)}`)).toEqual([
-        `original:${text} de setembro`,
-        `edit:${text} de outubro`,
-        'deletion:',
-      ])
+      const expected =
+        message.external_message_id === data.external
+          ? [
+              'original:Preciso do boleto de setembro',
+              'edit:Preciso do boleto de outubro',
+              'edit:Preciso do boleto de novembro',
+              'deletion:',
+            ]
+          : [
+              'original:Segue o boleto de setembro',
+              'edit:Segue o boleto de outubro',
+              'deletion:',
+            ]
+      expect(changes.map((change) => `${change.kind}:${content(change.body)}`)).toEqual(expected)
     }
     const [closed] = t.sql(`select status, closure_type from tickets where id = ${ticket.id}`)
     t.observe('Chamado', JSON.stringify(closed))

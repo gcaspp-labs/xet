@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   expect,
   type APIRequestContext,
+  type Browser,
   type Page,
   request as apiRequest,
   test,
@@ -33,10 +34,8 @@ async function phone(request: APIRequestContext, sectorId: number, action: strin
 
 const requestId = () => randomUUID()
 
-// Um atendimento encerrado com uma mensagem do XET editada e excluída só no XET e uma mensagem do
-// cliente editada e depois excluída por ele: as versões e o conteúdo preservado ficam consultáveis
-// em Atendimentos, só para leitura.
-async function seedClosedChanges(baseURL: string, request: APIRequestContext) {
+// Setor, contato, a mensagem recebida e o chamado assumido: a base de um atendimento.
+async function seedAssignedTicket(baseURL: string, request: APIRequestContext) {
   const { sector, agent } = await seedSector(baseURL)
   const { id, phone: number } = unique()
   const contactName = `Nina ${id}`
@@ -70,8 +69,36 @@ async function seedClosedChanges(baseURL: string, request: APIRequestContext) {
   const api = await apiAs(baseURL, agent)
   const [ticket] = await json<Ticket[]>(await api.get(`/api/sectors/${sector.id}/tickets`))
   ok(await api.post(`/api/tickets/${ticket.id}/assign`))
+  const close = () =>
+    api.post(`/api/tickets/${ticket.id}/close`, {
+      data: {
+        subject: 'Boleto',
+        resolution: 'Boleto enviado.',
+        moduleIds: [module.id],
+        organizationId: organization.id,
+      },
+    })
+  return {
+    ticketId: ticket.id,
+    agent,
+    sector,
+    contactName,
+    contactPhone: number,
+    externalMessageId,
+    api,
+    close,
+  }
+}
+
+// Um atendimento encerrado com uma mensagem do XET editada e excluída só no XET e uma mensagem do
+// cliente editada e depois excluída por ele: as versões e o conteúdo preservado ficam consultáveis
+// em Atendimentos, só para leitura.
+async function seedClosedChanges(baseURL: string, request: APIRequestContext) {
+  const { ticketId, agent, sector, contactName, contactPhone, externalMessageId, api, close } =
+    await seedAssignedTicket(baseURL, request)
+
   const sent = await json<SentMessage>(
-    await api.post(`/api/tickets/${ticket.id}/messages`, {
+    await api.post(`/api/tickets/${ticketId}/messages`, {
       data: { clientRequestId: requestId(), body: 'Segue o boleto de setembro' },
     }),
   )
@@ -90,26 +117,32 @@ async function seedClosedChanges(baseURL: string, request: APIRequestContext) {
   // O cliente edita e exclui a mensagem dele, fora do XET.
   await phone(request, sector.id, 'edit', {
     targetExternalMessageId: externalMessageId,
-    phone: number,
+    phone: contactPhone,
     body: 'Preciso do boleto de outubro',
   })
   await phone(request, sector.id, 'revoke', {
     targetExternalMessageId: externalMessageId,
-    phone: number,
+    phone: contactPhone,
   })
 
-  ok(
-    await api.post(`/api/tickets/${ticket.id}/close`, {
-      data: {
-        subject: 'Boleto',
-        resolution: 'Boleto enviado.',
-        moduleIds: [module.id],
-        organizationId: organization.id,
-      },
-    }),
-  )
+  ok(await close())
   await api.dispose()
-  return { ticketId: ticket.id, agent, sector, contactName }
+  return { ticketId, agent, sector, contactName }
+}
+
+// Um atendimento encerrado com a mensagem do cliente editada uma vez: a próxima alteração externa
+// chega com a ficha e a janela de versões já abertas.
+async function seedClosedForLiveChange(baseURL: string, request: APIRequestContext) {
+  const { ticketId, agent, sector, contactPhone, externalMessageId, api, close } =
+    await seedAssignedTicket(baseURL, request)
+  await phone(request, sector.id, 'edit', {
+    targetExternalMessageId: externalMessageId,
+    phone: contactPhone,
+    body: 'Preciso do boleto de outubro',
+  })
+  ok(await close())
+  await api.dispose()
+  return { ticketId, agent, sector, contactPhone, externalMessageId }
 }
 
 // A janela só de leitura das versões e da exclusão de uma mensagem.
@@ -248,6 +281,95 @@ test('o atendimento encerrado mostra versões e exclusões só para leitura, por
     await page.keyboard.press('Escape')
     await expect(layer).toHaveCount(0)
   }
+})
+
+// A ficha do atendimento encerrado aberta em outra sessão do mesmo setor, em outro navegador.
+async function openClosedInAnotherSession(browser: Browser, email: string, ticketId: number) {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, email, userPassword)
+  await page.goto(`/atendimentos/${ticketId}`)
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  await expect(conversation).toBeVisible()
+  return { context, page, conversation }
+}
+
+const receivedItem = (page: Page) => page.locator('li[aria-label="Mensagem recebida"]')
+
+test('a alteração externa chega sem recarregar à ficha e às versões abertas nas duas sessões', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { ticketId, agent, sector, contactPhone, externalMessageId } =
+    await seedClosedForLiveChange(baseURL!, request)
+  await signIn(page, agent, userPassword)
+  await page.goto(`/atendimentos/${ticketId}`)
+
+  // A primeira sessão abre a ficha e a janela de versões da mensagem do cliente.
+  let dialog = page.getByRole('dialog', { name: /Versões/ })
+  await receivedItem(page).getByRole('button', { name: 'Ver versões', exact: true }).click()
+  await expect(dialog.getByTestId('message-version')).toHaveCount(2)
+  await expect(dialog.getByTestId('message-version').last()).toContainText('Atual')
+
+  // A segunda sessão vê o mesmo e abre a mesma janela.
+  const other = await openClosedInAnotherSession(browser, agent, ticketId)
+  const otherDialog = other.page.getByRole('dialog', { name: /Versões/ })
+  await other.conversation
+    .getByRole('listitem', { name: 'Mensagem recebida' })
+    .getByRole('button', { name: 'Ver versões', exact: true })
+    .click()
+  await expect(otherDialog.getByTestId('message-version')).toHaveCount(2)
+
+  // Uma nova edição externa chega com as duas janelas abertas, sem recarregar.
+  await phone(request, sector.id, 'edit', {
+    targetExternalMessageId: externalMessageId,
+    phone: contactPhone,
+    body: 'Preciso do boleto de novembro',
+  })
+  for (const view of [page, other.page]) {
+    const layer = view.getByRole('dialog', { name: /Versões/ })
+    await expect(layer.getByTestId('message-version')).toHaveCount(3)
+    await expect(layer.getByTestId('message-version').last()).toContainText(
+      'Preciso do boleto de novembro',
+    )
+    await expect(layer.getByTestId('message-version').last()).toContainText('Atual')
+    await expect(layer.getByTestId('message-version').filter({ hasText: 'Atual' })).toHaveCount(1)
+    // O balão atrás da janela também muda, com a etiqueta da edição e o conteúdo preservado.
+    await expect(receivedItem(view)).toContainText('Preciso do boleto de novembro')
+    await expect(receivedItem(view)).toContainText('Editada')
+  }
+
+  // A exclusão externa para todos chega nas duas janelas e nas fichas, ainda sem recarregar.
+  await phone(request, sector.id, 'revoke', {
+    targetExternalMessageId: externalMessageId,
+    phone: contactPhone,
+  })
+  for (const view of [page, other.page]) {
+    const layer = view.getByRole('dialog', { name: /Versões/ })
+    await expect(layer.getByTestId('message-deletion')).toContainText(
+      'Para todos (também no WhatsApp)',
+    )
+    await expect(layer.getByTestId('message-deletion')).toContainText('pelo cliente')
+    // Em Atendimentos o conteúdo conhecido continua à vista, com a etiqueta.
+    await expect(receivedItem(view)).toContainText('Preciso do boleto de novembro')
+    await expect(receivedItem(view)).toContainText('Excluída')
+  }
+
+  // Fecha a janela da primeira sessão e recarrega: o mesmo estado, vindo do banco.
+  await page.keyboard.press('Escape')
+  await page.reload()
+  await expect(receivedItem(page)).toContainText('Preciso do boleto de novembro')
+  await expect(receivedItem(page)).toContainText('Excluída')
+  dialog = changesDialog(page)
+  await receivedItem(page).getByRole('button', { name: 'Ver versões e exclusão' }).click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByTestId('message-version')).toHaveCount(3)
+  await expect(dialog.getByTestId('message-deletion')).toContainText(
+    'Para todos (também no WhatsApp)',
+  )
+  await other.context.close()
 })
 
 test('quem não é do setor do atendimento não lê as versões nem o conteúdo preservado', async ({
