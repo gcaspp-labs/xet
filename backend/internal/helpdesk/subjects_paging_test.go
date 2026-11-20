@@ -69,15 +69,20 @@ func (e *testEnv) seedSubjectsPage(sectorID int64, moduleID *int64, n int) {
 	}
 }
 
-// numbered lists "Assunto <from>" to "Assunto <to>", up or down.
+// numberedSubjects lists "Assunto <from>" to "Assunto <to>", up or down.
 func numberedSubjects(from, to int) []string {
+	return numberedNames("Assunto", from, to)
+}
+
+// numberedNames lists "<prefix> <from>" to "<prefix> <to>", up or down.
+func numberedNames(prefix string, from, to int) []string {
 	step := 1
 	if to < from {
 		step = -1
 	}
 	var out []string
 	for n := from; n != to+step; n += step {
-		out = append(out, fmt.Sprintf("Assunto %02d", n))
+		out = append(out, fmt.Sprintf("%s %02d", prefix, n))
 	}
 	return out
 }
@@ -191,29 +196,61 @@ func TestSubjectListSorts(t *testing.T) {
 	}
 }
 
-// Em todas as colunas e direções, cada assunto aparece numa página só, mesmo
-// quando a coluna empata (todos sem módulo ou todos no mesmo módulo).
+// O id desempata na mesma direção, inclusive quando o empate atravessa páginas:
+// "Câmara" e "camara" têm a mesma chave na coluna Assunto, e no mesmo módulo
+// empatam também na coluna Módulo. São 24 assuntos, em duas páginas.
 func TestSubjectListTieBreakIsStable(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)
 	e, sector := c.e, c.sector.ID
-	if _, err := e.Pool.Exec(t.Context(), `
-		insert into subjects (sector_id, name)
-		select $1, case when n % 2 = 0 then 'CÂMARA ' else 'camara ' end || n
-		from generate_series(1, 30) n`, sector); err != nil {
-		t.Fatal(err)
+	insert := func(moduleID int64, name string) int64 {
+		t.Helper()
+		var id int64
+		if err := e.Pool.QueryRow(t.Context(),
+			`insert into subjects (sector_id, module_id, name) values ($1, $2, $3) returning id`,
+			sector, moduleID, name).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
 	}
-	for _, sort := range []string{"name", "module"} {
-		for _, direction := range []string{"asc", "desc"} {
-			seen := map[float64]bool{}
-			for page := 1; page <= 2; page++ {
-				for _, item := range e.DoPageItems(fmt.Sprintf("%s?sort=%s&direction=%s&page=%d", subjectsPath(sector), sort, direction, page), c.supToken) {
-					seen[item["id"].(float64)] = true
-				}
+	// Os ids crescem na ordem de inserção, um módulo por vez.
+	byModule := make([][]int64, 0, 12)
+	for n := 1; n <= 12; n++ {
+		module := e.subjectModuleNamed(sector, fmt.Sprintf("Módulo %02d", n))
+		byModule = append(byModule, []int64{insert(module, "Câmara"), insert(module, "camara")})
+	}
+	all := make([]int64, 0, 24)
+	for _, ids := range byModule {
+		all = append(all, ids...)
+	}
+	slices.Sort(all)
+	byNameDesc := slices.Clone(all)
+	slices.Reverse(byNameDesc)
+	// Ordem por módulo: os módulos na ordem do nome e, dentro de cada um, o id.
+	byModuleAsc, byModuleDesc := make([]int64, 0, 24), make([]int64, 0, 24)
+	for i, ids := range byModule {
+		byModuleAsc = append(byModuleAsc, ids...)
+		byModuleDesc = append(byModuleDesc, byModule[len(byModule)-1-i][1], byModule[len(byModule)-1-i][0])
+	}
+
+	for _, tc := range []struct {
+		query string
+		want  []int64
+	}{
+		{"?sort=name", all},
+		{"?sort=name&direction=desc", byNameDesc},
+		{"?sort=module", byModuleAsc},
+		{"?sort=module&direction=desc", byModuleDesc},
+	} {
+		var got []int64
+		for page := 1; page <= 2; page++ {
+			items := e.DoPageItems(fmt.Sprintf("%s%s&page=%d", subjectsPath(sector), tc.query, page), c.supToken)
+			for _, item := range items {
+				got = append(got, int64(item["id"].(float64)))
 			}
-			if len(seen) != 30 {
-				t.Errorf("%s %s: got %d distinct subjects in two pages, want 30", sort, direction, len(seen))
-			}
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("subjects%s: got ids %v, want %v", tc.query, got, tc.want)
 		}
 	}
 }
@@ -304,6 +341,67 @@ func TestSubjectListSearchAndModuleFilter(t *testing.T) {
 
 	if resp := e.Do(http.MethodGet, subjectsPath(sector)+"?moduleId=abc", c.supToken, nil); resp.Status != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid module filter: status %d", resp.Status)
+	}
+}
+
+// A busca combinada com o filtro de módulo atravessa páginas: o total é o do
+// filtro, e cada página traz só os itens dele, na ordem da coluna.
+func TestSubjectListSearchAndModuleFilterPages(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e, sector := c.e, c.sector.ID
+	iptu, iss := e.subjectModuleNamed(sector, "IPTU"), e.subjectModuleNamed(sector, "ISS")
+	insert := func(moduleID *int64, name string) {
+		t.Helper()
+		if _, err := e.Pool.Exec(t.Context(),
+			`insert into subjects (sector_id, module_id, name) values ($1, $2, $3)`, sector, moduleID, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 25 no módulo filtrado batem com a busca, 25 batem com a busca em outro
+	// módulo e 10 estão no módulo filtrado sem bater: só os primeiros contam.
+	for n := 1; n <= 25; n++ {
+		insert(&iptu, fmt.Sprintf("Férias %02d", n))
+		insert(&iss, fmt.Sprintf("Férias %02d", n))
+	}
+	for n := 1; n <= 10; n++ {
+		insert(&iptu, fmt.Sprintf("Outro assunto %02d", n))
+	}
+
+	query := fmt.Sprintf("%s?moduleId=%d&q=%s", subjectsPath(sector), iptu, url.QueryEscape("FERIAS"))
+	for _, tc := range []struct {
+		page int
+		want []string
+	}{
+		{1, numberedNames("Férias", 1, 20)},
+		{2, numberedNames("Férias", 21, 25)},
+	} {
+		items, resp := e.DoPage(fmt.Sprintf("%s&page=%d", query, tc.page), c.supToken)
+		if got := names(items); !slices.Equal(got, tc.want) {
+			t.Errorf("page %d: got %v, want %v", tc.page, got, tc.want)
+		}
+		if resp.Body["total"] != float64(25) || resp.Body["page"] != float64(tc.page) || resp.Body["pageSize"] != float64(20) {
+			t.Errorf("page %d: total %v, page %v, page size %v; want 25, %d, 20",
+				tc.page, resp.Body["total"], resp.Body["page"], resp.Body["pageSize"], tc.page)
+		}
+	}
+
+	// A busca por uma solução também atravessa páginas com o filtro: as soluções
+	// dos assuntos de fora não entram na conta.
+	if _, err := e.Pool.Exec(t.Context(), `
+		insert into subject_solutions (subject_id, body)
+		select s.id, 'Férias pelo portal.'
+		from subjects s
+		where s.sector_id = $1 and s.module_id = $2 and s.name like 'Férias%'`, sector, iptu); err != nil {
+		t.Fatal(err)
+	}
+	query = fmt.Sprintf("%s?moduleId=%d&q=%s", subjectsPath(sector), iptu, url.QueryEscape("PORTAL"))
+	items, resp := e.DoPage(query+"&page=2", c.supToken)
+	if got := names(items); !slices.Equal(got, numberedNames("Férias", 21, 25)) {
+		t.Errorf("search by solution on page 2: got %v", got)
+	}
+	if resp.Body["total"] != float64(25) || resp.Body["page"] != float64(2) {
+		t.Errorf("search by solution: total %v, page %v; want 25, 2", resp.Body["total"], resp.Body["page"])
 	}
 }
 
