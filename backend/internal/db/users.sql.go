@@ -171,8 +171,10 @@ order by
        then lower(immutable_unaccent(s.name)) end desc nulls last,
   case when $2::text = 'status' and not $3::bool then not u.active end asc,
   case when $2::text = 'status' and $3::bool then not u.active end desc,
-  case when not $3::bool then lower(immutable_unaccent(u.name)) end asc,
-  case when $3::bool then lower(immutable_unaccent(u.name)) end desc,
+  case when $2::text <> 'status' and not $3::bool
+       then lower(immutable_unaccent(u.name)) end asc,
+  case when $2::text <> 'status' and $3::bool
+       then lower(immutable_unaccent(u.name)) end desc,
   case when not $3::bool then u.id end asc,
   case when $3::bool then u.id end desc
 limit $5 offset $4
@@ -193,7 +195,9 @@ type SearchUsersRow struct {
 // A page of the users, with the filter of CountUsers, sorted by the name (the
 // default), the role label (Administrador, Atendente, Supervisor), the sector
 // name (users without a sector last) or the status (active first ascending),
-// ignoring case and accents, then by the name and the id in the same direction.
+// ignoring case and accents. The status sorts straight by the id, as asked in
+// the issue; the other columns break the tie by the name and then the id, in
+// the same direction.
 func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]SearchUsersRow, error) {
 	rows, err := q.db.Query(ctx, searchUsers,
 		arg.SearchPattern,

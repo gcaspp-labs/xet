@@ -8,80 +8,7 @@ import (
 	"testing"
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
-	"github.com/gcaspp-labs/xet/backend/internal/testapi"
 )
-
-// pagingEnv is a test database with an administrator named "Zuleica Admin",
-// last in the default order, and the administrator's token.
-func pagingEnv(t *testing.T) (*testEnv, db.User, string) {
-	t.Helper()
-	e := newTestEnv(t, nil)
-	admin := e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
-	e.rename(admin.ID, "Zuleica Admin")
-	return e, admin, e.Login("admin@exemplo.com", testPassword)
-}
-
-func (e *testEnv) rename(userID int64, name string) {
-	e.T.Helper()
-	if _, err := e.Pool.Exec(e.T.Context(), "update users set name = $2 where id = $1", userID, name); err != nil {
-		e.T.Fatal(err)
-	}
-}
-
-// seedUser inserts a user straight into the database, with a nickname and an
-// e-mail made from the sequence when they are empty.
-func (e *testEnv) seedUser(name, nickname, email string, role db.UserRole, sectorID *int64, active bool) int64 {
-	e.T.Helper()
-	var id int64
-	if err := e.Pool.QueryRow(e.T.Context(), `
-		insert into users (name, nickname, email, password_hash, role, sector_id, active)
-		values ($1, coalesce(nullif($2, ''), 'apelido-' || nextval('users_id_seq')),
-		        coalesce(nullif($3, ''), 'u' || nextval('users_id_seq') || '@exemplo.com'),
-		        'hash-de-teste', $4, $5, $6)
-		returning id`, name, nickname, email, role, sectorID, active).Scan(&id); err != nil {
-		e.T.Fatal(err)
-	}
-	return id
-}
-
-// seedNumberedUsers inserts n active agents of the sector named "<prefix> <nn>".
-func (e *testEnv) seedNumberedUsers(prefix string, sectorID int64, n int) {
-	e.T.Helper()
-	for i := 1; i <= n; i++ {
-		e.seedUser(fmt.Sprintf("%s %02d", prefix, i), "", "", db.UserRoleAgent, &sectorID, true)
-	}
-}
-
-func numbered(prefix string, from, to int) []string {
-	step := 1
-	if to < from {
-		step = -1
-	}
-	var out []string
-	for n := from; n != to+step; n += step {
-		out = append(out, fmt.Sprintf("%s %02d", prefix, n))
-	}
-	return out
-}
-
-func userPage(e *testEnv, token, query string) ([]map[string]any, testapi.Response) {
-	e.T.Helper()
-	return e.DoPage("/api/users"+query, token)
-}
-
-func userNames(e *testEnv, token, query string) []string {
-	e.T.Helper()
-	items, _ := userPage(e, token, query)
-	return field(items, "name")
-}
-
-func field(items []map[string]any, key string) []string {
-	out := make([]string, len(items))
-	for i, item := range items {
-		out[i], _ = item[key].(string)
-	}
-	return out
-}
 
 // A lista de usuários vem em páginas de 20, feitas no servidor (#130): a
 // resposta traz só os itens da página, o total e a página devolvida.
@@ -126,7 +53,8 @@ func TestUserListPages(t *testing.T) {
 // Cada coluna de dados ordena nas duas direções, ignorando maiúsculas e
 // acentos: Papel pelo rótulo, Setor pelo nome com quem não tem setor por
 // último, Situação com os ativos primeiro na crescente. Ativos e inativos
-// vêm na mesma lista; o desempate é o nome e depois o id.
+// vêm na mesma lista; Situação desempata direto pelo id, e as outras colunas
+// pelo nome e depois pelo id.
 func TestUserListSortColumns(t *testing.T) {
 	t.Parallel()
 	e, admin, token := pagingEnv(t)
@@ -151,9 +79,11 @@ func TestUserListSortColumns(t *testing.T) {
 		// Sem setor por último.
 		{"?sort=sector", []string{"Ana", "bia", "Élio", "Bruno", "Carla", "Diego Admin"}},
 		{"?sort=sector&direction=desc", []string{"Carla", "Bruno", "Élio", "bia", "Ana", "Diego Admin"}},
-		// Ativos primeiro na crescente; inativos primeiro na decrescente.
-		{"?sort=status", []string{"Ana", "bia", "Bruno", "Diego Admin", "Carla", "Élio"}},
-		{"?sort=status&direction=desc", []string{"Élio", "Carla", "Diego Admin", "Bruno", "bia", "Ana"}},
+		// Ativos primeiro na crescente; inativos primeiro na decrescente; os
+		// empates saem na ordem do id (Diego Admin, Ana, bia e Bruno foram
+		// criados nesta ordem).
+		{"?sort=status", []string{"Diego Admin", "Ana", "bia", "Bruno", "Carla", "Élio"}},
+		{"?sort=status&direction=desc", []string{"Élio", "Carla", "Bruno", "bia", "Ana", "Diego Admin"}},
 	} {
 		if got := userNames(e, token, tc.query); !slices.Equal(got, tc.want) {
 			t.Errorf("users%s: got %v, want %v", tc.query, got, tc.want)
@@ -303,5 +233,63 @@ func TestUserListIsAdminOnly(t *testing.T) {
 				t.Fatalf("list must not contain the password hash: %v", item)
 			}
 		}
+	}
+}
+
+// A Situação desempata pelo id, não pelo nome: os nomes entram na ordem
+// inversa ao id, e a ordem aprovada atravessa as páginas nas duas direções.
+func TestUserListStatusOrdersByID(t *testing.T) {
+	t.Parallel()
+	e, _, token := pagingEnv(t)
+	sector := e.Sector("Contabilidade")
+	email := func(prefix string, n int) string { return fmt.Sprintf("%s%02d@exemplo.com", prefix, n) }
+	// 25 ativos e 25 inativos, cada grupo inserido com o nome em ordem inversa
+	// ao id: o menor id fica com o maior nome.
+	for i := 25; i >= 1; i-- {
+		e.seedUser(fmt.Sprintf("Ativo %02d", i), "", email("ativo", i), db.UserRoleAgent, &sector.ID, true)
+	}
+	for i := 25; i >= 1; i-- {
+		e.seedUser(fmt.Sprintf("Inativo %02d", i), "", email("inativo", i), db.UserRoleAgent, &sector.ID, false)
+	}
+	var active, inactive []string
+	for i := 25; i >= 1; i-- {
+		active = append(active, email("ativo", i))
+		inactive = append(inactive, email("inativo", i))
+	}
+	// 51 usuários com o administrador: três páginas.
+	seeded := func(query string) []string {
+		var out []string
+		for page := 1; page <= 3; page++ {
+			items, resp := userPage(e, token, fmt.Sprintf("%s&page=%d", query, page))
+			if resp.Body["page"] != float64(page) {
+				t.Fatalf("users%s&page=%d: page %v, want %d", query, page, resp.Body["page"], page)
+			}
+			for _, got := range field(items, "email") {
+				if got != "admin@exemplo.com" {
+					out = append(out, got)
+				}
+			}
+		}
+		return out
+	}
+	want := func(groups ...[]string) []string {
+		var out []string
+		for _, group := range groups {
+			out = append(out, group...)
+		}
+		return out
+	}
+	reverse := func(in []string) []string {
+		out := slices.Clone(in)
+		slices.Reverse(out)
+		return out
+	}
+	// Ativos primeiro na crescente, pelo id; na decrescente, inativos primeiro
+	// e o id também desce.
+	if got := seeded("?sort=status"); !slices.Equal(got, want(active, inactive)) {
+		t.Errorf("status asc: got %v, want %v", got, want(active, inactive))
+	}
+	if got := seeded("?sort=status&direction=desc"); !slices.Equal(got, want(reverse(inactive), reverse(active))) {
+		t.Errorf("status desc: got %v, want %v", got, want(reverse(inactive), reverse(active)))
 	}
 }

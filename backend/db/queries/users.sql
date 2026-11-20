@@ -31,7 +31,9 @@ where (@search_pattern::text = ''
 -- A page of the users, with the filter of CountUsers, sorted by the name (the
 -- default), the role label (Administrador, Atendente, Supervisor), the sector
 -- name (users without a sector last) or the status (active first ascending),
--- ignoring case and accents, then by the name and the id in the same direction.
+-- ignoring case and accents. The status sorts straight by the id, as asked in
+-- the issue; the other columns break the tie by the name and then the id, in
+-- the same direction.
 select sqlc.embed(u)
 from users u
 left join sectors s on s.id = u.sector_id
@@ -50,8 +52,10 @@ order by
        then lower(immutable_unaccent(s.name)) end desc nulls last,
   case when @sort_column::text = 'status' and not @descending::bool then not u.active end asc,
   case when @sort_column::text = 'status' and @descending::bool then not u.active end desc,
-  case when not @descending::bool then lower(immutable_unaccent(u.name)) end asc,
-  case when @descending::bool then lower(immutable_unaccent(u.name)) end desc,
+  case when @sort_column::text <> 'status' and not @descending::bool
+       then lower(immutable_unaccent(u.name)) end asc,
+  case when @sort_column::text <> 'status' and @descending::bool
+       then lower(immutable_unaccent(u.name)) end desc,
   case when not @descending::bool then u.id end asc,
   case when @descending::bool then u.id end desc
 limit @page_size offset @page_offset;
