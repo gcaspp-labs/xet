@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Role, User } from '@/lib/auth'
 import { normalizeSearch } from '@/lib/format'
+import { type Page, type PageRequest, pageParams } from '@/lib/paging'
 
 export type Sector = {
   id: number
@@ -36,6 +37,24 @@ export type UserInput = {
 
 const sectorsKey = ['sectors']
 const usersKey = ['users']
+
+// PROTÓTIPO #130: colunas pelas quais a lista de usuários ordena, com o nome no endereço.
+export type UserSort = 'name' | 'role' | 'sector' | 'status'
+export const userColumns: Record<string, UserSort> = {
+  usuario: 'name',
+  papel: 'role',
+  setor: 'sector',
+  situacao: 'status',
+}
+export const defaultUserColumn = 'usuario'
+
+export function useUsersPage(request: PageRequest<UserSort>) {
+  return useQuery({
+    queryKey: [...usersKey, 'page', request.page, request.sort, request.direction],
+    queryFn: () => api<Page<AdminUser>>(`/users?${new URLSearchParams(pageParams(request))}`),
+    placeholderData: keepPreviousData,
+  })
+}
 const modulesKey = (sectorId: number) => ['sectors', sectorId, 'modules']
 
 // Setores visíveis ao usuário: todos para o administrador, o próprio para os demais.

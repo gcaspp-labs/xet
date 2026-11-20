@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Users } from 'lucide-react'
-import { type ChangeEvent, useState } from 'react'
+import { type ChangeEvent, useEffect, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { FormDialog } from '@/components/FormDialog'
+import { Pagination } from '@/components/Pagination'
+import { SortableTableHead } from '@/components/SortableTableHead'
 import { PasswordInput } from '@/components/PasswordInput'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Badge } from '@/components/ui/badge'
@@ -38,13 +40,16 @@ import {
 } from '@/components/ui/table'
 import {
   type AdminUser,
+  defaultUserColumn,
   type Sector,
   useCreateUser,
   useResetPassword,
   useSectors,
   useUpdateUser,
-  useUsers,
+  userColumns,
+  useUsersPage,
 } from '@/lib/admin'
+import { usePagedList } from '@/lib/paging'
 import { type Role, passwordSchema, useCurrentUser } from '@/lib/auth'
 import { roleLabels } from '@/lib/format'
 
@@ -340,14 +345,28 @@ function UserSheet({
   )
 }
 
+// PROTÓTIPO #130: lista administrativa em páginas de 20, com a ordem nas colunas de
+// dados; página, coluna e direção ficam no endereço (?pagina=, ?ordem=, ?direcao=).
 export default function UsersPage() {
-  const { data: users, isPending } = useUsers()
+  const list = usePagedList(userColumns, defaultUserColumn)
+  const { data, isPending, isPlaceholderData } = useUsersPage(list.request)
   const { data: sectors = [] } = useSectors()
+  const users = data?.items ?? []
+  const served = data && !isPlaceholderData ? data.page : undefined
+  const { correctPage } = list
+  // Página além da última: o servidor devolve a última, e o endereço acompanha.
+  useEffect(() => {
+    if (served !== undefined) {
+      correctPage(served)
+    }
+  }, [served, correctPage])
   const [editing, setEditing] = useState<AdminUser | null>(null)
   const [open, setOpen] = useState(false)
   // Nova chave a cada abertura: o formulário começa sempre limpo.
   const [sheetKey, setSheetKey] = useState(0)
   const sectorNames = new Map(sectors.map((s) => [s.id, s.name]))
+  const sectorLabel = (user: AdminUser) =>
+    user.sectorId === null ? 'Todos' : (sectorNames.get(user.sectorId) ?? '')
 
   const openSheet = (user: AdminUser | null) => {
     setEditing(user)
@@ -368,15 +387,25 @@ export default function UsersPage() {
         }
       />
       <PageContent>
-        <Card>
-          {users && users.length > 0 ? (
+        <Card className="gap-0 py-0">
+          {users.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead>Papel</TableHead>
-                  <TableHead>Setor</TableHead>
-                  <TableHead>Situação</TableHead>
+                  <SortableTableHead label="Usuário" column="usuario" list={list} />
+                  <SortableTableHead
+                    label="Papel"
+                    column="papel"
+                    list={list}
+                    className="hidden sm:table-cell"
+                  />
+                  <SortableTableHead
+                    label="Setor"
+                    column="setor"
+                    list={list}
+                    className="hidden sm:table-cell"
+                  />
+                  <SortableTableHead label="Situação" column="situacao" list={list} />
                   <TableHead className="w-0">
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -385,20 +414,21 @@ export default function UsersPage() {
               <TableBody>
                 {users.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell>
+                    <TableCell className="whitespace-normal">
                       <p className="body-strong">{user.name}</p>
                       <p className="caption text-ink-faint">{user.email}</p>
+                      <p className="caption text-ink-soft sm:hidden">
+                        {roleLabels[user.role]} · {sectorLabel(user)}
+                      </p>
                     </TableCell>
-                    <TableCell>{roleLabels[user.role]}</TableCell>
-                    <TableCell>
-                      {user.sectorId === null ? 'Todos' : sectorNames.get(user.sectorId)}
-                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">{roleLabels[user.role]}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{sectorLabel(user)}</TableCell>
                     <TableCell>
                       <Badge tone={user.active ? 'success' : 'neutral'}>
                         {user.active ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -421,6 +451,15 @@ export default function UsersPage() {
                 <EmptyDescription>Nenhum usuário cadastrado.</EmptyDescription>
               </Empty>
             )
+          )}
+          {data && (
+            <Pagination
+              page={data.page}
+              pageSize={data.pageSize}
+              total={data.total}
+              noun={['usuário', 'usuários']}
+              onPage={list.setPage}
+            />
           )}
         </Card>
       </PageContent>
