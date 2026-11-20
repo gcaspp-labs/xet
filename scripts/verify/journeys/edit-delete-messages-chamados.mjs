@@ -79,17 +79,16 @@ await journey('edit-delete-messages-chamados', async (t) => {
     await t.shot(page, 'mensagem-editada')
   })
 
-  await t.step('Falha do WhatsApp na exclusão: a janela fica e a mensagem continua', async () => {
+  await t.step('Excluir: a janela oferece as duas opções e Cancelar não exclui', async () => {
     await sent.nth(1).hover()
     await menuOf(sent.nth(1)).click()
     await page.getByRole('menuitem', { name: 'Excluir', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Excluir mensagem' })
+    await expect(dialog.getByRole('button', { name: 'Excluir para todos' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Excluir para mim' })).toBeVisible()
     await t.shot(page, 'janela-de-exclusao')
-    await phone.failNextChange('refused')
-    await dialog.getByRole('button', { name: 'Excluir para todos' }).click()
-    await expect(dialog.getByRole('alert')).toContainText('O WhatsApp não aceitou a alteração.')
-    await t.shot(page, 'falha-na-exclusao')
     await dialog.getByRole('button', { name: 'Cancelar' }).click()
+    await expect(dialog).toHaveCount(0)
     await expect(sent.nth(1)).toContainText('Mensagem enviada por engano')
   })
 

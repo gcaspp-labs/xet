@@ -7,10 +7,10 @@ O responsável do chamado aberto edita o texto ou a legenda de uma mensagem envi
 - [jornada] O menu da mensagem enviada oferece Editar e Excluir.
 - [jornada] Editar usa a faixa "Editando" no compositor, com o texto sem o apelido; Cancelar não chama a API e devolve o rascunho que já existia.
 - [jornada] Salvar a edição troca o texto da mesma mensagem, com "Editada", nas duas sessões, sem recarregar e sem mensagem nova.
-- [jornada] A janela de exclusão mostra "Excluir para todos", "Excluir para mim" e "Cancelar"; a recusa do WhatsApp mantém a janela, com aviso, e a mensagem como estava.
+- [jornada] A janela de exclusão mostra "Excluir para todos", "Excluir para mim" e "Cancelar"; Cancelar não exclui.
 - [jornada] Excluir para mim troca o conteúdo por "Mensagem excluída no XET" nas duas sessões e depois de recarregar.
 - [jornada] Edição e exclusão do cliente mostram o conteúdo conhecido com "Editada" e "Excluída".
-- [não coberto] Prazo de 15 minutos e de exclusão para todos, mensagem enviando ou com falha, áudio, temas, teclado e foco, confirmação duplicada, prévia na lista e perda de responsável durante a edição (testes ponta a ponta em `frontend/e2e/message-edit-delete.spec.ts`).
+- [não coberto] Recusa e resultado incerto do WhatsApp na tela, prazo de 15 minutos e de exclusão para todos, mensagem enviando ou com falha, áudio, temas, teclado e foco, confirmação duplicada, prévia na lista e perda de responsável durante a edição (testes ponta a ponta em `frontend/e2e/message-edit-delete.spec.ts`).
 - [manual] Edição de texto e legenda e exclusão para todos chegando num celular real pelo Whatsmeow.
 
 ## How to get to it
@@ -27,12 +27,13 @@ scripts/verify/scripts/drive.sh edit-delete-messages-chamados
 - Mensagem enviada: `getByRole('region', { name: 'Conversa', exact: true }).getByRole('listitem', { name: 'Mensagem enviada' })`; o menu é o botão "Ações da mensagem" dentro dela.
 - Edição: faixa `getByRole('group', { name: 'Editando mensagem' })`, campo "Editar mensagem" e botão "Salvar edição".
 - Exclusão: `getByRole('dialog', { name: 'Excluir mensagem' })`.
-- Recusa da próxima alteração: `t.phone(setor).failNextChange('refused' | 'uncertain')`; edição e exclusão do cliente: `t.phone(setor).edit(...)` e `.revoke(...)`.
+- Edição e exclusão do cliente: `t.phone(setor).edit(...)` e `.revoke(...)`.
 
 ## Gotchas
 
 - Achar a mensagem pela posição (`nth`), não pelo texto: o texto muda com a edição e some com a exclusão.
 - Com a janela de exclusão aberta, o resto da página sai da árvore de acessibilidade: confira a mensagem com `locator('li[id^="message-"]')`.
+- A recusa do WhatsApp volta como 502, e o kit conta toda resposta 5xx como falha da jornada: por isso a recusa fica nos testes ponta a ponta, e `failNextChange` não entra aqui.
 - Os prazos (15 minutos e dois dias) vêm do relógio do servidor; a jornada não os percorre.
 - O adaptador falso não prova o WhatsApp real: a edição de legenda e a revogação reais são `[manual]`.
 
@@ -40,4 +41,4 @@ scripts/verify/scripts/drive.sh edit-delete-messages-chamados
 
 - **Tela:** a primeira mensagem enviada com o texto novo e "Editada"; a segunda com o aviso "Mensagem excluída no XET"; a do cliente com o texto novo, "Editada" e "Excluída".
 - **`messages`:** a primeira enviada com `edited_at` preenchido e sem exclusão; a segunda com `deletion_scope = 'local'` e `deletion_origin = 'agent'`.
-- **`message_actions`:** a recusa não grava ação aceita; ficam `edit:accepted` e `delete_local:accepted` (e `delete_everyone:refused`).
+- **`message_actions`:** `edit:accepted` e `delete_local:accepted`.
