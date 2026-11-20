@@ -94,11 +94,6 @@ type MessageChange struct {
 // refusal or an unknown result changes nothing in the message. A local
 // deletion never goes to the provider and is applied at once.
 func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider, actor auth.User, messageID int64, req MessageChange) (db.Message, error) {
-	if a, err := s.q.GetMessageActionByClientRequestID(ctx, req.ClientRequestID); err == nil {
-		return s.repeatedChange(ctx, a, actor, messageID, req.Kind)
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return db.Message{}, fmt.Errorf("get message action by request: %w", err)
-	}
 	ref, err := s.q.GetMessage(ctx, messageID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.Message{}, ErrMessageNotFound
@@ -106,8 +101,15 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 	if err != nil {
 		return db.Message{}, fmt.Errorf("get message: %w", err)
 	}
+	// Access is checked now, also for a repeated request: whoever lost the
+	// sector does not read the message through an old one.
 	if _, err := s.accessible(ctx, actor, ref.TicketID); err != nil {
 		return db.Message{}, err
+	}
+	if a, err := s.q.GetMessageActionByClientRequestID(ctx, req.ClientRequestID); err == nil {
+		return s.repeatedChange(ctx, a, actor, messageID, req.Kind)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return db.Message{}, fmt.Errorf("get message action by request: %w", err)
 	}
 	capabilities := provider.Capabilities()
 
@@ -128,6 +130,16 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 		}
 		if err := changeable(target, req.Kind, capabilities, time.Now()); err != nil {
 			return err
+		}
+		// Every action of the message is decided with the ticket locked, the
+		// same lock the answer of the provider takes, so a local deletion too
+		// waits for the one in flight.
+		inFlight, err := q.MessageActionInFlight(ctx, target.ID)
+		if err != nil {
+			return fmt.Errorf("check message action in flight: %w", err)
+		}
+		if inFlight {
+			return ErrChangeInProgress
 		}
 		var body *string
 		if req.Kind == db.MessageActionKindEdit {
@@ -154,7 +166,7 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 			return fmt.Errorf("create message action: %w", err)
 		}
 		if local {
-			return applyAction(ctx, q, action, nil, time.Now())
+			return applyAction(ctx, q, action, nil, time.Now(), true)
 		}
 		return nil
 	})
@@ -174,10 +186,13 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 		return s.actionResult(ctx, action)
 	}
 
-	// The request may be gone by now: what the provider answers is recorded anyway.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sendTimeout)
-	defer cancel()
-	eventID, sendErr := s.sendChange(ctx, provider, target, action)
+	// The request may be gone by now: what the provider answers is recorded
+	// anyway, with a context of its own, so a send that used up its time
+	// still records the unknown result.
+	ctx = context.WithoutCancel(ctx)
+	sendCtx, cancel := context.WithTimeout(ctx, s.changeTimeout)
+	eventID, sendErr := s.sendChange(sendCtx, provider, target, action)
+	cancel()
 	status, reason := db.MessageActionStatusAccepted, (*string)(nil)
 	if sendErr != nil {
 		slog.Warn("send message change", "message_id", target.ID, "action_id", action.ID, "error", sendErr)
@@ -213,7 +228,7 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 		// What the provider just took is applied even if the ticket was closed
 		// or transferred meanwhile: it is what the contact has now.
 		applied = true
-		return applyAction(ctx, q, finished, finished.ExternalEventID, time.Now())
+		return applyAction(ctx, q, finished, finished.ExternalEventID, time.Now(), true)
 	})
 	if err != nil {
 		// The provider answered but the result could not be recorded: the
@@ -344,11 +359,13 @@ func nicknamePrefix(body string) string {
 }
 
 // applyAction applies an action of the panel the provider took (or a local
-// deletion), with the ticket locked: an edit keeps the original and becomes
-// the current version, always the newest one, as a reaction of the panel
-// does; a deletion marks the message, keeping its content and file. Both are
-// recorded as changes made by the agent, and audited.
-func applyAction(ctx context.Context, q *db.Queries, a db.MessageAction, eventID *string, at time.Time) error {
+// deletion), with the ticket locked: an edit keeps the original and, when
+// newest, becomes the current version, as a reaction of the panel does; a
+// late one (the echo of an action whose result was unknown) is kept at the
+// time it was asked, so it never undoes a newer version. A deletion marks
+// the message, keeping its content and file. Both are recorded as changes
+// made by the agent, and audited.
+func applyAction(ctx context.Context, q *db.Queries, a db.MessageAction, eventID *string, at time.Time, newest bool) error {
 	m, err := q.GetMessage(ctx, a.MessageID)
 	if err != nil {
 		return fmt.Errorf("get message: %w", err)
@@ -365,7 +382,7 @@ func applyAction(ctx context.Context, q *db.Queries, a db.MessageAction, eventID
 		if err := q.CreateOriginalVersion(ctx, m.ID); err != nil {
 			return fmt.Errorf("keep original version: %w", err)
 		}
-		if m.EditedAt != nil && !m.EditedAt.Before(at) {
+		if newest && m.EditedAt != nil && !m.EditedAt.Before(at) {
 			at = m.EditedAt.Add(time.Microsecond)
 		}
 		change.Kind, change.Body, change.OccurredAt = db.MessageChangeKindEdit, a.Body, at
@@ -433,7 +450,9 @@ func acceptEchoedAction(ctx context.Context, q *db.Queries, messageID int64, c e
 	if err != nil {
 		return false, fmt.Errorf("accept echoed message action: %w", err)
 	}
-	return true, applyAction(ctx, q, accepted, accepted.ExternalEventID, time.Now())
+	// The echo may come after newer actions were taken: the change counts
+	// from when it was asked, the order in which the actions went out.
+	return true, applyAction(ctx, q, accepted, accepted.ExternalEventID, accepted.CreatedAt, false)
 }
 
 // sendChange hands the edit or the deletion for everyone to the provider and

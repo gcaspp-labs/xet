@@ -402,21 +402,27 @@ func (a *Adapter) FailNextReaction(sectorID int64) {
 // EditMessage records the edit among the sent messages and returns the ID of
 // the edit event, derived from the idempotency key like a message ID: the
 // same key edits once. Without edits in the capabilities it is unsupported.
-func (a *Adapter) EditMessage(_ context.Context, edit messaging.MessageEdit) (string, error) {
-	return a.change(edit.SectorID, "fake-edit-", edit.IdempotencyKey, edit, func(c messaging.Capabilities) bool { return c.EditWindow > 0 })
+func (a *Adapter) EditMessage(ctx context.Context, edit messaging.MessageEdit) (string, error) {
+	return a.change(ctx, edit.SectorID, "fake-edit-", edit.IdempotencyKey, edit, func(c messaging.Capabilities) bool { return c.EditWindow > 0 })
 }
 
 // RevokeMessage records the deletion for everyone like EditMessage.
-func (a *Adapter) RevokeMessage(_ context.Context, revoke messaging.MessageRevoke) (string, error) {
-	return a.change(revoke.SectorID, "fake-revoke-", revoke.IdempotencyKey, revoke, func(c messaging.Capabilities) bool { return c.RevokeWindow > 0 })
+func (a *Adapter) RevokeMessage(ctx context.Context, revoke messaging.MessageRevoke) (string, error) {
+	return a.change(ctx, revoke.SectorID, "fake-revoke-", revoke.IdempotencyKey, revoke, func(c messaging.Capabilities) bool { return c.RevokeWindow > 0 })
 }
 
-func (a *Adapter) change(sectorID int64, prefix, key string, change any, supported func(messaging.Capabilities) bool) (string, error) {
+// change waits while the sector is held, like a send, and gives up when the
+// time of the request runs out, as WhatsApp does: the result is unknown.
+func (a *Adapter) change(ctx context.Context, sectorID int64, prefix, key string, change any, supported func(messaging.Capabilities) bool) (string, error) {
 	a.mu.Lock()
 	held := a.held[sectorID]
 	a.mu.Unlock()
 	if held != nil {
-		<-held
+		select {
+		case <-held:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()

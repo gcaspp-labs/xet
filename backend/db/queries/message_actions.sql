@@ -20,6 +20,13 @@ values (
 on conflict (client_request_id) do nothing
 returning *;
 
+-- name: MessageActionInFlight :one
+-- Whether the message has an action waiting for the provider. Asked with the
+-- ticket locked, as every action of the message is decided and settled.
+select exists (
+    select 1 from message_actions where message_id = @message_id and status = 'pending'
+);
+
 -- name: FinishMessageAction :one
 -- The answer of the provider to an action in flight. An action already
 -- finished (by the echo of the provider, or marked uncertain on restart and

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
@@ -670,3 +671,126 @@ func TestChangeRacesWithClosingAndTransfer(t *testing.T) {
 	}
 }
 
+// Uma edição fica incerta, a seguinte é aceita, e só então chega o eco da
+// primeira: ela entra no histórico na ordem em que foi pedida, sem desfazer a
+// versão mais nova.
+func TestLateEchoDoesNotUndoANewerEdit(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+
+	e.WhatsApp.FailNextChange(c.sector.ID, context.DeadlineExceeded)
+	if r := e.editMessage(c.sent, c.anaToken, requestE1, "Versão A"); r.Status != http.StatusBadGateway {
+		t.Fatalf("uncertain edit: status %d, body %v", r.Status, r.Body)
+	}
+	if r := e.editMessage(c.sent, c.anaToken, requestE2, "Versão B"); r.Status != http.StatusOK {
+		t.Fatalf("second edit: status %d, body %v", r.Status, r.Body)
+	}
+	e.editFromPhone(c.sector.ID, "ECHO-A", "fake-msg-"+requestA, anaPrefix+"\nVersão A", time.Now().Add(time.Second))
+
+	if got := bodyOf(t, e.apiMessage(c.ticket.ID, c.anaToken, "fake-msg-"+requestA)); got != anaPrefix+"\nVersão B" {
+		t.Fatalf("current version after the late echo = %q", got)
+	}
+	got := []string{}
+	for _, a := range e.actions(c.sent) {
+		got = append(got, a.Status)
+	}
+	if !reflect.DeepEqual(got, []string{"accepted", "accepted"}) {
+		t.Fatalf("actions = %v", got)
+	}
+	v := e.changesOf(c.sent)
+	if len(v) != 3 || v[1].Kind != "edit" || v[2].Kind != "edit" || !v[1].At.Before(v[2].At) {
+		t.Fatalf("versions = %+v", v)
+	}
+}
+
+// Com uma edição ou exclusão para todos esperando o WhatsApp, a exclusão "para
+// mim" também espera: a mensagem nunca fica excluída e editada ao mesmo tempo.
+func TestLocalDeletionWaitsForTheChangeInFlight(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+
+	e.WhatsApp.Hold(c.sector.ID)
+	edit := make(chan response, 1)
+	go func() { edit <- e.editMessage(c.sent, c.anaToken, requestE1, "Editada") }()
+	e.waitAction(c.sent, "pending")
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE2, "local"); r.Status != http.StatusConflict ||
+		r.Body["error"] != "Esta mensagem já tem uma alteração em andamento. Aguarde a resposta do WhatsApp." {
+		t.Fatalf("local deletion during an edit: status %d, body %v", r.Status, r.Body)
+	}
+	e.WhatsApp.Release(c.sector.ID)
+	if r := <-edit; r.Status != http.StatusOK || r.Body["deletion"] != nil {
+		t.Fatalf("edit: status %d, body %v", r.Status, r.Body)
+	}
+
+	e.WhatsApp.Hold(c.sector.ID)
+	revoke := make(chan response, 1)
+	go func() { revoke <- e.deleteMessage(c.sent, c.anaToken, requestE3, "everyone") }()
+	e.waitAction(c.sent, "pending")
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE4, "local"); r.Status != http.StatusConflict {
+		t.Fatalf("local deletion during a revoke: status %d, body %v", r.Status, r.Body)
+	}
+	e.WhatsApp.Release(c.sector.ID)
+	r := <-revoke
+	if r.Status != http.StatusOK || r.Body["deletion"].(map[string]any)["scope"] != "everyone" {
+		t.Fatalf("revoke: status %d, body %v", r.Status, r.Body)
+	}
+	got := []string{}
+	for _, a := range e.actions(c.sent) {
+		got = append(got, a.Kind+":"+a.Status)
+	}
+	if !reflect.DeepEqual(got, []string{"edit:accepted", "delete_everyone:accepted"}) {
+		t.Fatalf("actions = %v", got)
+	}
+}
+
+// O WhatsApp não responde a tempo: a alteração fica incerta, gravada, e não
+// prende a mensagem.
+func TestTimeoutLeavesTheChangeUncertain(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+	helpdesk.SetChangeTimeout(e.TicketService, 200*time.Millisecond)
+
+	e.WhatsApp.Hold(c.sector.ID)
+	r := e.editMessage(c.sent, c.anaToken, requestE1, "Sem resposta")
+	e.WhatsApp.Release(c.sector.ID)
+	if r.Status != http.StatusBadGateway || r.Body["error"] != "Não foi possível confirmar a alteração com o WhatsApp. Confira a conversa antes de tentar de novo." {
+		t.Fatalf("timed out edit: status %d, body %v", r.Status, r.Body)
+	}
+	if got := e.actions(c.sent); len(got) != 1 || got[0].Status != "uncertain" {
+		t.Fatalf("actions = %+v", got)
+	}
+	if bodyOf(t, e.apiMessage(c.ticket.ID, c.anaToken, "fake-msg-"+requestA)) != anaPrefix+"\nSegue o boleto de setembro" {
+		t.Fatal("timed out edit applied")
+	}
+	if r := e.editMessage(c.sent, c.anaToken, requestE2, "Depois"); r.Status != http.StatusOK {
+		t.Fatalf("edit after the timeout: status %d, body %v", r.Status, r.Body)
+	}
+}
+
+// Quem saiu do setor não lê a mensagem repetindo um pedido antigo.
+func TestRepeatedRequestChecksTheSectorAgain(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+
+	if r := e.editMessage(c.sent, c.anaToken, requestE1, "Antes da mudança"); r.Status != http.StatusOK {
+		t.Fatalf("edit: status %d, body %v", r.Status, r.Body)
+	}
+	if r := e.transfer(c.ticket.ID, e.userID("bia@exemplo.com"), c.anaToken); r.Status != http.StatusOK {
+		t.Fatalf("transfer: status %d, body %v", r.Status, r.Body)
+	}
+	other := e.Sector("Fiscal")
+	if r := e.Do(http.MethodPut, fmt.Sprintf("/api/users/%d", c.ana.ID), c.adminToken, map[string]any{
+		"name": "ana@exemplo.com", "nickname": "ana@exemplo.com", "email": "ana@exemplo.com",
+		"role": "agent", "sectorId": other.ID, "active": true,
+	}); r.Status != http.StatusOK {
+		t.Fatalf("move to another sector: status %d, body %v", r.Status, r.Body)
+	}
+	token := e.Login("ana@exemplo.com", testPassword)
+	if r := e.editMessage(c.sent, token, requestE1, "Antes da mudança"); r.Status != http.StatusForbidden || r.Body["body"] != nil {
+		t.Fatalf("repeated request from another sector: status %d, body %v", r.Status, r.Body)
+	}
+}

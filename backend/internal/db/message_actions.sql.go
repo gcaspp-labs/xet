@@ -254,6 +254,21 @@ func (q *Queries) GetOriginalMessageBody(ctx context.Context, id int64) (string,
 	return body, err
 }
 
+const messageActionInFlight = `-- name: MessageActionInFlight :one
+select exists (
+    select 1 from message_actions where message_id = $1 and status = 'pending'
+)
+`
+
+// Whether the message has an action waiting for the provider. Asked with the
+// ticket locked, as every action of the message is decided and settled.
+func (q *Queries) MessageActionInFlight(ctx context.Context, messageID int64) (bool, error) {
+	row := q.db.QueryRow(ctx, messageActionInFlight, messageID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const uncertainPendingMessageActions = `-- name: UncertainPendingMessageActions :execrows
 update message_actions
 set status = 'uncertain', failure_reason = $1, finished_at = now()

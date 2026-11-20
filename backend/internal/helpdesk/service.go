@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,10 +30,13 @@ type Service struct {
 	// reported it; background tracks that work.
 	provider   messaging.Provider
 	background sync.WaitGroup
+
+	// changeTimeout bounds an edit or deletion handed to the provider.
+	changeTimeout time.Duration
 }
 
 func NewService(pool *pgxpool.Pool, files storage.Storage, hub *realtime.Hub) *Service {
-	return &Service{pool: pool, q: db.New(pool), storage: files, hub: hub}
+	return &Service{pool: pool, q: db.New(pool), storage: files, hub: hub, changeTimeout: sendTimeout}
 }
 
 func recordTicket(ctx context.Context, q *db.Queries, ticketID int64, action string, actorID int64, changes audit.Changes) error {
