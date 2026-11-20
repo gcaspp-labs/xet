@@ -34,6 +34,7 @@ import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { DeleteMessageDialog, MessageMenu } from '@/components/MessageActions'
+import { MessageChangesDialog } from '@/components/MessageChanges'
 import { MessageEditor } from '@/components/MessageEditor'
 import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
@@ -59,9 +60,11 @@ import {
   type TicketDetail,
   canQuoteMessage,
   canReactTo,
+  changesLabel,
   insertEmojiAtCursor,
   isHiddenByXet,
   messageChanges,
+  messageChangesId,
   maxFileSize,
   newRequestId,
   useAssignments,
@@ -321,6 +324,7 @@ function MessageBubble({
   onReply,
   onEdit,
   onDelete,
+  onShowChanges,
   hideDeleted = false,
   quoted,
   modern = false,
@@ -336,6 +340,8 @@ function MessageBubble({
   // Só o responsável edita e exclui, e só a mensagem enviada pelo XET; sem isto, não há menu.
   onEdit?: () => void
   onDelete?: () => void
+  // Em Atendimentos, abre só para leitura as versões conhecidas e a exclusão da mensagem.
+  onShowChanges?: () => void
   // Em Chamados, o conteúdo excluído pelo XET (para todos ou para mim) vira um aviso.
   hideDeleted?: boolean
   // A mensagem do XET que esta cita, quando está na conversa.
@@ -418,6 +424,18 @@ function MessageBubble({
             )
           )}
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {onShowChanges && (
+              <Button
+                id={messageChangesId(message.id)}
+                variant="ghost"
+                size="sm"
+                className="h-auto px-1 py-0 caption"
+                onClick={onShowChanges}
+              >
+                <History strokeWidth={1.7} aria-hidden />
+                {changesLabel(message)}
+              </Button>
+            )}
             <span
               className={cn(
                 'mono-num caption',
@@ -1319,6 +1337,9 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
   const { data: logs = [] } = useAssignments(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
+  // A mensagem cujas versões e exclusão estão à vista: a janela fica montada só aberta.
+  const [changesId, setChangesId] = useState<number | null>(null)
+  const changed = changesId === null ? undefined : byId.get(changesId)
 
   // Abre no fim: o desfecho e as correções ficam à vista.
   useEffect(() => {
@@ -1326,45 +1347,60 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
   }, [messages.length, logs.length])
 
   return (
-    <Card role="region" aria-label="Conversa" className="min-h-0" {...ignoreFileDrop}>
-      <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
-        {messages.length > 0 || logs.length > 0 ? (
-          <ol className="flex flex-col gap-2">
-            {timeline(messages, logs).map((item) =>
-              item.kind === 'message' ? (
-                <MessageBubble
-                  key={`message-${item.message.id}`}
-                  message={item.message}
-                  quoted={quotedOf(item.message, byId)}
-                  canRetry={false}
-                  retrying={false}
-                  onRetry={() => {}}
-                />
-              ) : (
-                <AssignmentEntry key={`log-${item.log.id}`} log={item.log} />
-              ),
-            )}
-          </ol>
-        ) : (
-          <Empty>
-            <EmptyMedia>
-              <MessagesSquare strokeWidth={1.7} aria-hidden />
-            </EmptyMedia>
-            <EmptyDescription>Nenhuma mensagem.</EmptyDescription>
-          </Empty>
-        )}
-      </div>
-      <div
-        role="status"
-        aria-label="Só leitura"
-        className="caption flex items-center gap-2 border-t border-line-soft bg-muted px-4 py-3 text-ink-soft"
-      >
-        <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-        <span>
-          <span className="font-medium text-foreground">Só leitura.</span> {readOnlyNote(ticket)}
-        </span>
-      </div>
-    </Card>
+    <>
+      <Card role="region" aria-label="Conversa" className="min-h-0" {...ignoreFileDrop}>
+        <div ref={list} className="flex-1 overflow-y-auto px-4 py-4">
+          {messages.length > 0 || logs.length > 0 ? (
+            <ol className="flex flex-col gap-2">
+              {timeline(messages, logs).map((item) =>
+                item.kind === 'message' ? (
+                  <MessageBubble
+                    key={`message-${item.message.id}`}
+                    message={item.message}
+                    quoted={quotedOf(item.message, byId)}
+                    canRetry={false}
+                    retrying={false}
+                    onRetry={() => {}}
+                    onShowChanges={
+                      item.message.editedAt || item.message.deletion
+                        ? () => setChangesId(item.message.id)
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <AssignmentEntry key={`log-${item.log.id}`} log={item.log} />
+                ),
+              )}
+            </ol>
+          ) : (
+            <Empty>
+              <EmptyMedia>
+                <MessagesSquare strokeWidth={1.7} aria-hidden />
+              </EmptyMedia>
+              <EmptyDescription>Nenhuma mensagem.</EmptyDescription>
+            </Empty>
+          )}
+        </div>
+        <div
+          role="status"
+          aria-label="Só leitura"
+          className="caption flex items-center gap-2 border-t border-line-soft bg-muted px-4 py-3 text-ink-soft"
+        >
+          <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+          <span>
+            <span className="font-medium text-foreground">Só leitura.</span> {readOnlyNote(ticket)}
+          </span>
+        </div>
+      </Card>
+      {changed && (
+        <MessageChangesDialog
+          key={changed.id}
+          message={changed}
+          ticketId={ticket.id}
+          onClose={() => setChangesId(null)}
+        />
+      )}
+    </>
   )
 }
 

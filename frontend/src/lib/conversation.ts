@@ -177,6 +177,27 @@ export function useMessages(ticketId: number) {
   })
 }
 
+// Uma versão da mensagem (a original ou uma edição, com o conteúdo) ou a exclusão dela (com o
+// alcance), na ordem em que aconteceram. Só existe o que o provedor entregou: uma mensagem nunca
+// alterada vem sem nenhuma.
+export type MessageChange = {
+  id: number
+  kind: 'original' | 'edit' | 'deletion'
+  origin: 'customer' | 'agent' | 'phone'
+  author: { id: number; name: string } | null
+  body: string | null
+  scope: 'everyone' | 'local' | null
+  at: string
+}
+
+export function useMessageChanges(ticketId: number, messageId: number) {
+  return useQuery({
+    // Sob a chave das mensagens do chamado: o aviso de alteração em tempo real também a recarrega.
+    queryKey: [...messagesKey(ticketId), messageId, 'changes'],
+    queryFn: () => api<MessageChange[]>(`/messages/${messageId}/changes`),
+  })
+}
+
 export function useAssignments(ticketId: number) {
   return useQuery({
     queryKey: assignmentsKey(ticketId),
@@ -293,6 +314,18 @@ export function canQuoteMessage(message: Message) {
 // feita pelo cliente ou pelo celular do setor mantém o conteúdo conhecido, com a etiqueta "Excluída".
 export function isHiddenByXet(message: Message) {
   return message.deletion?.origin === 'agent'
+}
+
+// O id do botão que abre as versões e a exclusão em Atendimentos: o foco volta para ele ao fechar.
+export const messageChangesId = (messageId: number) => `message-changes-${messageId}`
+
+// Em Atendimentos, o botão da mensagem alterada: diz o que há para ver, sem oferecer ação alguma.
+export function changesLabel(message: Message) {
+  return message.editedAt && message.deletion
+    ? 'Ver versões e exclusão'
+    : message.deletion
+      ? 'Ver exclusão'
+      : 'Ver versões'
 }
 
 // Prazos do WhatsApp para editar (15 minutos) e excluir para todos (dois dias) uma mensagem enviada.
