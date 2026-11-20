@@ -1,6 +1,7 @@
 package fake
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -221,6 +222,26 @@ func (a *Adapter) Handler() http.Handler {
 	r.Post("/messaging/sectors/{sectorID}/fail-next-reaction", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error {
 			a.FailNextReaction(sectorID)
+			return nil
+		})
+	})
+	// The next edit or deletion for everyone of the sector fails: refused by
+	// the provider ("refused", the default) or without a known result
+	// ("uncertain", as after a timeout).
+	r.Post("/messaging/sectors/{sectorID}/fail-next-change", func(w http.ResponseWriter, r *http.Request) {
+		var body *struct {
+			Result string `json:"result"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		fail := messaging.ErrNotAccepted
+		if body != nil && body.Result == "uncertain" {
+			fail = context.DeadlineExceeded
+		}
+		a.control(w, r, func(sectorID int64) error {
+			a.FailNextChange(sectorID, fail)
 			return nil
 		})
 	})

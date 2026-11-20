@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -484,6 +485,72 @@ func (a *Adapter) SendReaction(ctx context.Context, r messaging.Reaction) error 
 		return fmt.Errorf("%w: send reaction: %w", messaging.ErrNotAccepted, err)
 	}
 	return nil
+}
+
+// EditMessage sends the new text or caption of a message of the sector as an
+// edit of it (BuildEdit), never as a new message. The edit has its own message
+// ID, derived from the idempotency key like a send, so a retry repeats the same
+// edit and its echo is recognized by it. A caption goes in a message of the
+// same kind as the attachment, without the file, as WhatsApp delivers edited
+// captions. A refusal comes back as the neutral error; a timeout, as an
+// unknown result.
+func (a *Adapter) EditMessage(ctx context.Context, edit messaging.MessageEdit) (string, error) {
+	content, err := editContent(edit.Type, edit.Body)
+	if err != nil {
+		return "", err
+	}
+	return a.change(ctx, edit.SectorID, edit.To, edit.IdempotencyKey, func(cli *whatsmeow.Client, chat types.JID) *waE2E.Message {
+		return cli.BuildEdit(chat, edit.TargetExternalMessageID, content)
+	})
+}
+
+// editContent is the new content of an edit; the reverse of editedBody.
+func editContent(t messaging.MessageType, text string) (*waE2E.Message, error) {
+	body := proto.String(text)
+	switch t {
+	case messaging.TypeText:
+		return &waE2E.Message{Conversation: body}, nil
+	case messaging.TypeImage:
+		return &waE2E.Message{ImageMessage: &waE2E.ImageMessage{Caption: body}}, nil
+	case messaging.TypeVideo:
+		return &waE2E.Message{VideoMessage: &waE2E.VideoMessage{Caption: body}}, nil
+	case messaging.TypeDocument:
+		return &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{Caption: body}}, nil
+	default:
+		return nil, fmt.Errorf("%w: edit of a %s message", messaging.ErrUnsupported, t)
+	}
+}
+
+// RevokeMessage deletes for everyone a message of the sector (BuildRevoke),
+// with the same idempotency and errors as EditMessage.
+func (a *Adapter) RevokeMessage(ctx context.Context, revoke messaging.MessageRevoke) (string, error) {
+	return a.change(ctx, revoke.SectorID, revoke.To, revoke.IdempotencyKey, func(cli *whatsmeow.Client, chat types.JID) *waE2E.Message {
+		// An empty sender is the sector number itself.
+		return cli.BuildRevoke(chat, types.EmptyJID, revoke.TargetExternalMessageID)
+	})
+}
+
+// change sends the edit or the deletion like a message (send), only telling
+// the errors apart: see changeError.
+func (a *Adapter) change(ctx context.Context, sectorID int64, to, key string, build func(*whatsmeow.Client, types.JID) *waE2E.Message) (string, error) {
+	id, err := a.send(ctx, sectorID, to, key, func(_ context.Context, cli *whatsmeow.Client, chat types.JID) (*waE2E.Message, error) {
+		return build(cli, chat), nil
+	})
+	if err != nil {
+		return "", changeError(err)
+	}
+	return id, nil
+}
+
+// changeError tells an unknown result (the request or the wait for the server
+// timed out: the change may have gone) from a refusal. A sector without
+// connection keeps its own error.
+func changeError(err error) error {
+	if errors.Is(err, messaging.ErrNotConnected) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
+		errors.Is(err, whatsmeow.ErrMessageTimedOut) || errors.Is(err, whatsmeow.ErrIQTimedOut) {
+		return fmt.Errorf("send change: %w", err)
+	}
+	return fmt.Errorf("%w: send change: %w", messaging.ErrNotAccepted, err)
 }
 
 func (a *Adapter) send(ctx context.Context, sectorID int64, to, key string, build func(context.Context, *whatsmeow.Client, types.JID) (*waE2E.Message, error)) (string, error) {

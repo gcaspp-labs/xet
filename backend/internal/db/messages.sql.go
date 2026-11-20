@@ -555,21 +555,23 @@ func (q *Queries) LinkMessageChange(ctx context.Context, arg LinkMessageChangePa
 }
 
 const listLastMessages = `-- name: ListLastMessages :many
-select distinct on (ticket_id) ticket_id, type, body, origin, sent_at
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_scope
 from messages
 where ticket_id = any($1::bigint[])
 order by ticket_id, sent_at desc, id desc
 `
 
 type ListLastMessagesRow struct {
-	TicketID int64
-	Type     MessageType
-	Body     *string
-	Origin   MessageOrigin
-	SentAt   time.Time
+	TicketID      int64
+	Type          MessageType
+	Body          *string
+	Origin        MessageOrigin
+	SentAt        time.Time
+	DeletionScope NullMessageDeletionScope
 }
 
-// Last message of each ticket, for the ticket lists.
+// Last message of each ticket, for the ticket lists, with its deletion scope:
+// the list never shows content hidden in the system ("para mim").
 func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]ListLastMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listLastMessages, ticketIds)
 	if err != nil {
@@ -585,6 +587,7 @@ func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]Li
 			&i.Body,
 			&i.Origin,
 			&i.SentAt,
+			&i.DeletionScope,
 		); err != nil {
 			return nil, err
 		}
@@ -822,7 +825,7 @@ func (q *Queries) LockMessageExternalID(ctx context.Context, arg LockMessageExte
 const markMessageDeleted = `-- name: MarkMessageDeleted :execrows
 update messages
 set deleted_at = $1, deletion_scope = $2, deletion_origin = $3
-where id = $4 and deleted_at is null
+where id = $4 and (deleted_at is null or (deletion_scope = 'local' and $2::message_deletion_scope = 'everyone'))
 `
 
 type MarkMessageDeletedParams struct {
@@ -833,7 +836,10 @@ type MarkMessageDeletedParams struct {
 }
 
 // Deletion is a state of its own, apart from the delivery status, and keeps
-// the content and the file. The first deletion recorded holds.
+// the content and the file. The first deletion recorded holds, except that a
+// deletion for everyone widens one only in the system: the provider took a
+// deletion for everyone (late, from an uncertain action), and the contact no
+// longer sees the message either.
 func (q *Queries) MarkMessageDeleted(ctx context.Context, arg MarkMessageDeletedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markMessageDeleted,
 		arg.DeletedAt,
@@ -1036,11 +1042,12 @@ func (q *Queries) RefreshMessageCurrentVersion(ctx context.Context, id int64) er
 const retryMessage = `-- name: RetryMessage :one
 update messages
 set status = 'pending', failure_reason = null
-where id = $1 and status = 'failed'
+where id = $1 and status = 'failed' and deleted_at is null
 returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
 `
 
 // Only a failed message goes back to pending, so a double click retries once.
+// A deleted message is never sent again.
 func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
 	row := q.db.QueryRow(ctx, retryMessage, id)
 	var i Message

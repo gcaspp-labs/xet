@@ -86,6 +86,9 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/messages/{messageID}/retry", h.retryMessage)
 	// Reação do setor: só o responsável, com o chamado aberto. O mesmo emoji remove.
 	r.Put("/messages/{messageID}/reaction", h.reactToMessage)
+	// Editar e excluir mensagem enviada pelo XET: só o responsável, com o chamado aberto.
+	r.Post("/messages/{messageID}/edit", h.editMessage)
+	r.Post("/messages/{messageID}/delete", h.deleteMessage)
 	r.Get("/media/{mediaID}", h.getMedia)
 	// Histórico: chamados dos setores do usuário (todos, para o administrador).
 	r.Get("/contacts/{contactID}/tickets", h.contactHistory)

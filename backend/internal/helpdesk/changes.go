@@ -117,6 +117,15 @@ func (s *Service) recordChange(ctx context.Context, c externalChange) error {
 		if seen || !changeAllowed(msg.Origin, c.origin(), msg.ContactExternalID, msg.ContactPhone, c.contactID, c.phone) {
 			return nil
 		}
+		// The echo of an edit or deletion asked in the panel settles that
+		// action instead of becoming a change made from the phone.
+		if c.fromSector && msg.Origin == db.MessageOriginAgent {
+			echoed, err := acceptEchoedAction(ctx, q, msg.ID, c)
+			if err != nil || echoed {
+				changed = changed || echoed
+				return err
+			}
+		}
 		recorded, err := recordKnownChange(ctx, q, &msg, c)
 		changed = changed || recorded
 		return err

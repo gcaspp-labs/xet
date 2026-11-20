@@ -93,6 +93,14 @@ func run() error {
 	if failed > 0 {
 		logger.Warn("pending messages marked as failed", "count", failed)
 	}
+	// Edits and deletions left waiting for the provider: their result is unknown.
+	uncertain, err := tickets.UncertainPending(ctx)
+	if err != nil {
+		return err
+	}
+	if uncertain > 0 {
+		logger.Warn("pending message changes marked as uncertain", "count", uncertain)
+	}
 	opts := server.Options{SecureCookie: cfg.CookieSecure, TrustProxy: cfg.TrustProxy}
 	switch cfg.MessagingProvider {
 	case "fake":

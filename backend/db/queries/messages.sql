@@ -30,8 +30,9 @@ on conflict (sector_id, external_message_id) where external_message_id is not nu
 returning *;
 
 -- name: ListLastMessages :many
--- Last message of each ticket, for the ticket lists.
-select distinct on (ticket_id) ticket_id, type, body, origin, sent_at
+-- Last message of each ticket, for the ticket lists, with its deletion scope:
+-- the list never shows content hidden in the system ("para mim").
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_scope
 from messages
 where ticket_id = any(@ticket_ids::bigint[])
 order by ticket_id, sent_at desc, id desc;
@@ -73,9 +74,10 @@ returning *;
 
 -- name: RetryMessage :one
 -- Only a failed message goes back to pending, so a double click retries once.
+-- A deleted message is never sent again.
 update messages
 set status = 'pending', failure_reason = null
-where id = @id and status = 'failed'
+where id = @id and status = 'failed' and deleted_at is null
 returning *;
 
 -- name: FailPendingMessages :execrows
@@ -209,10 +211,13 @@ where m.id = @id;
 
 -- name: MarkMessageDeleted :execrows
 -- Deletion is a state of its own, apart from the delivery status, and keeps
--- the content and the file. The first deletion recorded holds.
+-- the content and the file. The first deletion recorded holds, except that a
+-- deletion for everyone widens one only in the system: the provider took a
+-- deletion for everyone (late, from an uncertain action), and the contact no
+-- longer sees the message either.
 update messages
 set deleted_at = @deleted_at, deletion_scope = @deletion_scope, deletion_origin = @deletion_origin
-where id = @id and deleted_at is null;
+where id = @id and (deleted_at is null or (deletion_scope = 'local' and @deletion_scope::message_deletion_scope = 'everyone'));
 
 -- name: ListPendingMessageChanges :many
 -- Changes received before the message they point at, oldest first.

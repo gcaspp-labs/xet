@@ -137,6 +137,131 @@ func AllConnectionStatusValues() []ConnectionStatus {
 	}
 }
 
+type MessageActionKind string
+
+const (
+	MessageActionKindEdit           MessageActionKind = "edit"
+	MessageActionKindDeleteEveryone MessageActionKind = "delete_everyone"
+	MessageActionKindDeleteLocal    MessageActionKind = "delete_local"
+)
+
+func (e *MessageActionKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageActionKind(s)
+	case string:
+		*e = MessageActionKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageActionKind: %T", src)
+	}
+	return nil
+}
+
+type NullMessageActionKind struct {
+	MessageActionKind MessageActionKind
+	Valid             bool // Valid is true if MessageActionKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageActionKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageActionKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageActionKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageActionKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageActionKind), nil
+}
+
+func (e MessageActionKind) Valid() bool {
+	switch e {
+	case MessageActionKindEdit,
+		MessageActionKindDeleteEveryone,
+		MessageActionKindDeleteLocal:
+		return true
+	}
+	return false
+}
+
+func AllMessageActionKindValues() []MessageActionKind {
+	return []MessageActionKind{
+		MessageActionKindEdit,
+		MessageActionKindDeleteEveryone,
+		MessageActionKindDeleteLocal,
+	}
+}
+
+type MessageActionStatus string
+
+const (
+	MessageActionStatusPending   MessageActionStatus = "pending"
+	MessageActionStatusAccepted  MessageActionStatus = "accepted"
+	MessageActionStatusRefused   MessageActionStatus = "refused"
+	MessageActionStatusUncertain MessageActionStatus = "uncertain"
+)
+
+func (e *MessageActionStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageActionStatus(s)
+	case string:
+		*e = MessageActionStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageActionStatus: %T", src)
+	}
+	return nil
+}
+
+type NullMessageActionStatus struct {
+	MessageActionStatus MessageActionStatus
+	Valid               bool // Valid is true if MessageActionStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageActionStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageActionStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageActionStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageActionStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageActionStatus), nil
+}
+
+func (e MessageActionStatus) Valid() bool {
+	switch e {
+	case MessageActionStatusPending,
+		MessageActionStatusAccepted,
+		MessageActionStatusRefused,
+		MessageActionStatusUncertain:
+		return true
+	}
+	return false
+}
+
+func AllMessageActionStatusValues() []MessageActionStatus {
+	return []MessageActionStatus{
+		MessageActionStatusPending,
+		MessageActionStatusAccepted,
+		MessageActionStatusRefused,
+		MessageActionStatusUncertain,
+	}
+}
+
 type MessageChangeKind string
 
 const (
@@ -774,6 +899,22 @@ type Message struct {
 	DeletedAt               *time.Time
 	DeletionScope           NullMessageDeletionScope
 	DeletionOrigin          NullMessageOrigin
+}
+
+type MessageAction struct {
+	ID              int64
+	ClientRequestID pgtype.UUID
+	MessageID       int64
+	TicketID        int64
+	SectorID        int64
+	AuthorID        int64
+	Kind            MessageActionKind
+	Body            *string
+	Status          MessageActionStatus
+	FailureReason   *string
+	ExternalEventID *string
+	CreatedAt       time.Time
+	FinishedAt      *time.Time
 }
 
 type MessageChange struct {

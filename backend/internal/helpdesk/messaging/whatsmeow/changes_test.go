@@ -73,6 +73,23 @@ func TestEditsAndDeletionsBecomeNeutralEvents(t *testing.T) {
 			},
 		},
 		{
+			// The echo of an edit sent by the system, as the domain recognizes it.
+			name: "document caption edited by the system, echoed",
+			evt:  incoming("EV-6", true, at, edit(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{Caption: proto.String("*Ana:*\nnova legenda")}})),
+			want: messaging.MessageEdited{
+				SectorID: 7, ExternalEventID: "EV-6", TargetExternalMessageID: "ORIG-1",
+				ExternalContactID: contactChat.String(), Phone: "5511988887777", FromSector: true, Body: "*Ana:*\nnova legenda", At: edited,
+			},
+		},
+		{
+			name: "deleted for everyone by the system, echoed",
+			evt:  incoming("EV-7", true, at, cli.BuildRevoke(contactChat, types.EmptyJID, "ORIG-2")),
+			want: messaging.MessageRevoked{
+				SectorID: 7, ExternalEventID: "EV-7", TargetExternalMessageID: "ORIG-2",
+				ExternalContactID: contactChat.String(), Phone: "5511988887777", FromSector: true, At: at,
+			},
+		},
+		{
 			name: "deleted for everyone by the contact",
 			evt:  incoming("EV-3", false, at, revoke),
 			want: messaging.MessageRevoked{

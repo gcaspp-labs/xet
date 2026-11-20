@@ -418,6 +418,36 @@ Regras de gravação (`helpdesk/reactions.go`): o chamado da mensagem é travado
 
 Reação do setor pelo painel (`helpdesk/react.go`, #198): só o responsável, com o chamado aberto, reage a mensagem recebida ou enviada com identificador no WhatsApp (`sent`, `delivered` ou `read`). Com o chamado travado, decide: o emoji que o lado `sector` já mostra, de quem for, vira remoção; outro emoji substitui. Envia ao provedor fora da transação e, só se ele aceitar, trava o chamado de novo e grava o lado `sector` com `author_id` do atendente (`via_phone` falso), ou a remoção. O horário gravado é o do servidor, ou 1 µs depois do horário já gravado do lado, se este estiver à frente (relógio do celular adiantado), para a ação do painel ser sempre a alteração mais nova. Recusa do provedor não grava nada. Como o emoji atual remove, dois pedidos iguais seguidos (um duplo clique) põem e tiram a reação, e os dois vão ao WhatsApp; pedidos iguais simultâneos terminam com a reação posta ou removida, conforme a ordem, sem linha duplicada.
 
+### `message_actions` — Edição e exclusão pedidas no XET
+
+Escolha de armazenamento (#292): uma tabela própria, porque a ação do responsável vai ao provedor fora da transação e precisa ficar gravada **antes** da chamada, com a chave de idempotência da tela, para que repetir o pedido, reiniciar o serviço ou receber o eco do provedor não repita a ação nem registre sucesso sem resposta. O resultado aceito (a nova versão ou a exclusão) vai para `message_changes`, como as alterações feitas fora do XET, com `origin = 'agent'` e o autor.
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `client_request_id` | uuid | Obrigatório, único; gerado pela tela a cada confirmação. Repetir devolve o resultado da primeira |
+| `message_id` | bigint → `messages` | Obrigatório |
+| `ticket_id` | bigint → `tickets` | Obrigatório |
+| `sector_id` | bigint → `sectors` | Obrigatório |
+| `author_id` | bigint → `users` | Obrigatório; o responsável que confirmou |
+| `kind` | message_action_kind | `edit`, `delete_everyone` ou `delete_local` ("para mim") |
+| `body` | text | Só na edição, e obrigatório nela: o texto ou a legenda novos como vão ao cliente, com o apelido gravado no envio |
+| `status` | message_action_status | `pending` (esperando o provedor), `accepted`, `refused` ou `uncertain` (resultado desconhecido: tempo esgotado ou serviço reiniciado) |
+| `failure_reason` | text | Motivo mostrado ao responsável em `refused` e `uncertain` |
+| `external_event_id` | text | Identificador da alteração no provedor, quando aceita |
+| `created_at`, `finished_at` | timestamptz | `finished_at` vazio só em `pending` |
+
+Restrições: `kind = 'edit'` ⇔ `body` preenchido (`message_actions_edit_body`); `status = 'pending'` ⇔ `finished_at` vazio (`message_actions_finished`); `delete_local` nasce `accepted` e sem `external_event_id` (`message_actions_local`); no máximo uma ação `pending` por mensagem (`message_actions_in_flight_key`): a segunda confirmação é recusada enquanto a primeira espera o provedor.
+
+Regras de gravação (`helpdesk/message_actions.go`):
+
+- **Decisão:** com o chamado travado (`for update`), aberto e com o usuário como responsável (supervisor e administrador também precisam ser), sobre a mensagem como está agora e pelo relógio do servidor. Só mensagem `origin = 'agent'`, não excluída; `pending` não aceita ação; `failed` só aceita `delete_local`; a edição vale para texto e legenda (`text`, `image`, `video`, `document`, nunca `audio`). Os prazos são os do provedor (`Capabilities`: edição em 15 minutos, exclusão para todos em dois dias no WhatsApp), contados do `sent_at` original, sem recomeçar a cada edição; prazo zero é ação indisponível. Recusas da decisão não gravam nada.
+- **Edição:** o texto novo recebe o apelido da versão original (a primeira linha `*Apelido:*`), não o apelido atual. A ação é gravada `pending`, a transação confirma e só então vai ao provedor, com o `client_request_id` como chave de idempotência. Com a resposta, trava o identificador externo (`LockMessageExternalID`) e o chamado de novo: aceita, grava a versão original (uma vez), a edição em `message_changes` e a versão atual em `messages` (`body`, `edited_at`, sempre depois da versão gravada), com auditoria `message_edited`; recusa ou resultado incerto só fecham a ação, sem mudar a mensagem. O aceite é gravado mesmo que o chamado tenha sido encerrado ou transferido durante a chamada, porque é o que o cliente já tem.
+- **Exclusão para todos:** igual à edição, marcando `deleted_at`, `deletion_scope = 'everyone'` e `deletion_origin = 'agent'`, com auditoria `message_deleted`. O conteúdo, o arquivo e a situação de entrega (`status`) não mudam.
+- **Para mim (`delete_local`):** não vai ao provedor. Na mesma transação da decisão, grava a ação aceita, a exclusão em `message_changes` e a marca em `messages` com `deletion_scope = 'local'`, e a auditoria. Vale para todo o setor; a prévia da lista de chamados (`lastMessage`) não traz o conteúdo (`hidden`).
+- **Eco:** uma alteração recebida do provedor pelo número do setor, sobre mensagem `origin = 'agent'`, com o mesmo tipo e conteúdo de uma ação `pending` ou `uncertain` da mensagem, é a prova de que ela foi aplicada: a ação passa a `accepted` e a alteração é gravada uma vez, com o atendente como autor. O eco que chega depois do aceite traz o mesmo `external_event_id` e não grava nada.
+- **Reinício:** ao iniciar, antes de aceitar requisições, as ações `pending` da execução anterior passam a `uncertain` com o motivo do reinício: o provedor pode ou não as ter aplicado.
+- Mensagem excluída não volta a `pending` pelo "Reenviar" (`RetryMessage` exige `deleted_at` vazio).
+
 ### `media_files` — Arquivo
 
 | Coluna | Tipo | Regras |
@@ -471,6 +501,8 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `organization_created`, `organization_updated` | Administração de órgãos |
 | `contact_links_updated` | Cadastro ou edição muda setores ou módulos do contato, na entidade `contact`: `changes` só com o que mudou entre `sector_ids` e `module_ids` (listas ordenadas) |
 | `contact_sector_linked` | Contato entra no setor sozinho ou pela importação, na entidade `contact`: `changes` com `sector_id` de vazio para o setor; `actor_id` vazio em mensagem recebida ou enviada pelo celular, e quem agiu em Novo chamado, na transferência e na importação. Vínculo já existente não gera registro |
+| `message_edited` | Edição de mensagem enviada pelo XET, aceita pelo provedor, na entidade `message`: `changes` com `body` (versão atual anterior e nova) |
+| `message_deleted` | Exclusão de mensagem enviada pelo XET, na entidade `message`: `changes` com `deletion_scope` (`everyone` ou `local`) |
 | `contacts_imported` | Importação de contatos, na entidade `sector`: `changes` com as quantidades de contatos criados (`created`) e já existentes (`existing`), de vazio para o número |
 
 Conexão do número: `sector_connected` é gravado quando o setor passa a `connected` vindo de outro estado ou com outra conta vinculada; `sector_disconnected`, quando sai de `connected`. Os estados intermediários (`connecting`) e as reconexões automáticas que não passam por `connected` não geram auditoria. Os dois registros são ações do sistema (`actor_id` vazio), exceto ao desvincular pela tela de conexão, quando `sector_disconnected` guarda o autor, mesmo que a conexão já estivesse caída; repetir não gera novo registro. Guardam em `changes` o estado da conexão, a conta vinculada, o telefone e o motivo da recusa. Número recusado por já estar em outro setor não chega a `connected` e por isso não gera `sector_connected`.

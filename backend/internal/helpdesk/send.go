@@ -282,6 +282,11 @@ func (s *Service) Retry(ctx context.Context, provider messaging.Provider, actor 
 	if current.Origin != db.MessageOriginAgent {
 		return db.Message{}, ErrNotFailed
 	}
+	// A deleted message is never sent again; the query checks it once more
+	// with the ticket locked.
+	if current.DeletedAt != nil {
+		return db.Message{}, NotChangeableError{Reason: retryDeleted}
+	}
 
 	var msg db.Message
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {

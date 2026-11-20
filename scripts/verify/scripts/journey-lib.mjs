@@ -277,6 +277,9 @@ class Journey {
           fromSector,
           at,
         }),
+      // A próxima edição ou exclusão para todos do setor falha: recusada pelo WhatsApp
+      // ('refused') ou sem resultado conhecido ('uncertain', como um tempo esgotado).
+      failNextChange: (result = 'refused') => call('fail-next-change', { result }),
       revoke: (customer, target, { externalEventId, fromSector = false, at } = {}) =>
         call('revoke', {
           targetExternalMessageId: target,
