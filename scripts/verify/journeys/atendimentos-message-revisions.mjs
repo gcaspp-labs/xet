@@ -204,7 +204,9 @@ await journey('atendimentos-message-revisions', async (t) => {
       deletion_origin: 'agent',
     })
 
-    // Cada mensagem tem as versões na ordem em que aconteceram, com a exclusão no fim.
+    // Cada mensagem tem as versões na ordem em que aconteceram, com a exclusão no fim. O apelido
+    // gravado no envio ("*Atendente1 ...:*") faz parte do conteúdo guardado, e a tela o separa.
+    const content = (body) => (body ?? '').replace(/^\*[^*\n]+:\*\n/, '')
     for (const message of messages) {
       const changes = t.sql(
         `select kind, origin, body from message_changes
@@ -212,7 +214,7 @@ await journey('atendimentos-message-revisions', async (t) => {
       )
       t.observe(`Versões da mensagem ${message.id}`, JSON.stringify(changes))
       const text = message.external_message_id === data.external ? 'Preciso do boleto' : 'Segue o boleto'
-      expect(changes.map((change) => `${change.kind}:${change.body ?? ''}`)).toEqual([
+      expect(changes.map((change) => `${change.kind}:${content(change.body)}`)).toEqual([
         `original:${text} de setembro`,
         `edit:${text} de outubro`,
         'deletion:',
