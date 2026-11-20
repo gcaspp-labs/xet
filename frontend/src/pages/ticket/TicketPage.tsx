@@ -59,6 +59,7 @@ import {
   type TicketDetail,
   canQuoteMessage,
   canReactTo,
+  insertEmojiAtCursor,
   isHiddenByXet,
   messageChanges,
   maxFileSize,
@@ -348,6 +349,9 @@ function MessageBubble({
   const prefix =
     outbound && message.origin === 'agent' ? message.body?.match(/^\*([^*\n]+:)\*(?:\n|$)/) : null
   const hidden = hideDeleted && isHiddenByXet(message)
+  // A mensagem enviada pelo XET tem o menu (⋯), com Responder dentro; as demais, o botão de responder.
+  const hasMenu =
+    !!onEdit && !!onDelete && !hidden && !message.deletion && message.origin === 'agent'
   const mutedTone = modern && outbound ? 'text-primary-foreground' : 'text-ink-soft'
 
   return (
@@ -465,9 +469,15 @@ function MessageBubble({
         {onReact && !hidden && canReactTo(message) && (
           <ReactButton current={message.reactions.sector?.emoji} onReact={onReact} />
         )}
-        {onReply && !hidden && canQuoteMessage(message) && <ReplyButton onReply={onReply} />}
-        {onEdit && onDelete && !hidden && !message.deletion && message.origin === 'agent' && (
-          <MessageMenu message={message} onEdit={onEdit} onDelete={onDelete} />
+        {hasMenu ? (
+          <MessageMenu
+            message={message}
+            onReply={onReply && canQuoteMessage(message) ? onReply : undefined}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ) : (
+          onReply && !hidden && canQuoteMessage(message) && <ReplyButton onReply={onReply} />
         )}
       </div>
       {!hidden && <ReactionChips reactions={message.reactions} outbound={outbound} />}
@@ -519,17 +529,8 @@ function Composer({
     if (quotedId !== undefined) messageInput.current?.focus()
   }, [quotedId])
 
-  const insertEmoji = (emoji: string) => {
-    const input = messageInput.current
-    if (!input) return
-    const start = input.selectionStart
-    const end = input.selectionEnd
-    changeText(text.slice(0, start) + emoji + text.slice(end))
-    requestAnimationFrame(() => {
-      input.focus()
-      input.setSelectionRange(start + emoji.length, start + emoji.length)
-    })
-  }
+  const insertEmoji = (emoji: string) =>
+    insertEmojiAtCursor(messageInput.current, text, emoji, changeText)
 
   const changeText = (value: string) => {
     requestId.current = null
@@ -825,6 +826,9 @@ export function ConversationCard({
   if (!canReply && quoting !== null) setQuoting(null)
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
   const quotedDraft = canReply && quoting !== null ? (byId.get(quoting) ?? null) : null
+  // A mensagem citada que o XET passou a ocultar (excluída para todos ou para mim, aqui ou em outra
+  // sessão) sai da citação em preparo, para o conteúdo não ficar no compositor; o texto digitado fica.
+  if (quotedDraft && isHiddenByXet(quotedDraft)) setQuoting(null)
   // A edição e a janela de exclusão são deste chamado, e só do responsável. Trocar de chamado, perder
   // o direito de responder ou a mensagem sair do alcance (excluída por outra via) as encerra; o que
   // vale é a confirmação do servidor.
@@ -984,7 +988,7 @@ export function ConversationCard({
         <Composer
           ticketId={ticket.id}
           attachRef={attach}
-          quoted={quotedDraft}
+          quoted={quotedDraft && !isHiddenByXet(quotedDraft) ? quotedDraft : null}
           onCancelQuote={() => setQuoting(null)}
           editing={editing}
           beginEditRef={beginEdit}

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { CircleAlert, EllipsisVertical, PencilLine, Trash2 } from 'lucide-react'
+import { CircleAlert, CornerUpLeft, EllipsisVertical, PencilLine, Trash2 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,33 +32,40 @@ import { cn } from '@/lib/utils'
 // Os itens do menu, calculados quando ele abre: o prazo é conferido com o relógio de agora.
 function MenuItems({
   message,
+  onReply,
   onEdit,
   onDelete,
 }: {
   message: Message
+  onReply?: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
   const changes = messageChanges(message)
-  if (!changes) return null
-  const actions = changes.edit || changes.deleteForEveryone || changes.deleteForMe
+  const actions = changes && (changes.edit || changes.deleteForEveryone || changes.deleteForMe)
   return (
     <>
-      {changes.edit && (
+      {onReply && (
+        <DropdownMenuItem onClick={onReply}>
+          <CornerUpLeft strokeWidth={1.7} aria-hidden />
+          Responder
+        </DropdownMenuItem>
+      )}
+      {changes?.edit && (
         <DropdownMenuItem onClick={onEdit}>
           <PencilLine strokeWidth={1.7} aria-hidden />
           Editar
         </DropdownMenuItem>
       )}
-      {(changes.deleteForEveryone || changes.deleteForMe) && (
+      {changes && (changes.deleteForEveryone || changes.deleteForMe) && (
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
           <Trash2 strokeWidth={1.7} aria-hidden />
           Excluir
         </DropdownMenuItem>
       )}
-      {changes.note && (
+      {changes?.note && (
         <>
-          {actions && <DropdownMenuSeparator />}
+          {(actions || onReply) && <DropdownMenuSeparator />}
           <DropdownMenuGroup>
             <DropdownMenuLabel className="max-w-64 whitespace-normal normal-case">
               {changes.note}
@@ -70,14 +77,17 @@ function MenuItems({
   )
 }
 
-// Menu (⋯) ao lado do balão da mensagem enviada pelo XET, com Editar e Excluir quando o prazo e o
-// estado deixam, ou o motivo de não deixar. Só o responsável vê, e só nas mensagens do XET.
+// Menu (⋯) ao lado do balão da mensagem enviada pelo XET, com Responder (quando a mensagem pode ser
+// citada), Editar e Excluir quando o prazo e o estado deixam, ou o motivo de não deixar. Só o
+// responsável vê, e só nas mensagens do XET.
 export function MessageMenu({
   message,
+  onReply,
   onEdit,
   onDelete,
 }: {
   message: Message
+  onReply?: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -101,7 +111,7 @@ export function MessageMenu({
         <EllipsisVertical strokeWidth={1.7} aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-44">
-        <MenuItems message={message} onEdit={onEdit} onDelete={onDelete} />
+        <MenuItems message={message} onReply={onReply} onEdit={onEdit} onDelete={onDelete} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

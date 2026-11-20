@@ -682,3 +682,22 @@ export function useSectorTransfer(ticketId: number, sectorId: number) {
       ]),
   })
 }
+
+// Coloca o emoji onde está o cursor do campo (trocando a seleção) e devolve o cursor para logo depois
+// dele; `change` grava o novo texto. Usada pelo compositor e pela edição, para os dois se comportarem
+// igual.
+export function insertEmojiAtCursor(
+  field: HTMLTextAreaElement | null,
+  text: string,
+  emoji: string,
+  change: (value: string) => void,
+) {
+  if (!field) return
+  const start = field.selectionStart
+  const end = field.selectionEnd
+  change(text.slice(0, start) + emoji + text.slice(end))
+  requestAnimationFrame(() => {
+    field.focus()
+    field.setSelectionRange(start + emoji.length, start + emoji.length)
+  })
+}

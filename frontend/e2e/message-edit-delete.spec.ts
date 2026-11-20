@@ -92,7 +92,7 @@ async function openMenu(bubble: Locator) {
   await bubble.getByRole('button', { name: 'Ações da mensagem' }).click()
 }
 
-async function chooseInMenu(bubble: Locator, item: 'Editar' | 'Excluir') {
+async function chooseInMenu(bubble: Locator, item: 'Responder' | 'Editar' | 'Excluir') {
   await openMenu(bubble)
   await bubble.page().getByRole('menuitem', { name: item, exact: true }).click()
 }
@@ -144,12 +144,11 @@ test('responsável edita o texto enviado: a mesma mensagem muda nas duas sessõe
   const other = await secondSession(browser, agent, page.url())
   await expect(other.conversation).toContainText('Segue o boleto de setembro')
 
-  // O menu da mensagem oferece Editar e Excluir, e o botão Responder continua ao lado.
+  // O menu da mensagem oferece Responder, Editar e Excluir, nessa ordem; não há botão Responder solto.
   await openMenu(bubble)
-  await expect(page.getByRole('menuitem', { name: 'Editar', exact: true })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: 'Excluir', exact: true })).toBeVisible()
+  await expect(page.getByRole('menuitem')).toHaveText(['Responder', 'Editar', 'Excluir'])
   await page.keyboard.press('Escape')
-  await expect(bubble.getByRole('button', { name: 'Responder', exact: true })).toBeVisible()
+  await expect(bubble.getByRole('button', { name: 'Responder', exact: true })).toHaveCount(0)
 
   // A faixa identifica a mensagem; o campo traz só o texto, sem o apelido.
   await chooseInMenu(bubble, 'Editar')
@@ -640,6 +639,8 @@ test('teclado e foco: menu, edição e janela de exclusão funcionam sem o mouse
   await trigger.focus()
   await expect(trigger).toBeFocused()
   await page.keyboard.press('Enter')
+  await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toBeFocused()
+  await page.keyboard.press('ArrowDown')
   await expect(page.getByRole('menuitem', { name: 'Editar', exact: true })).toBeFocused()
   await page.keyboard.press('Enter')
   const field = page.getByRole('textbox', { name: 'Editar mensagem' })
@@ -650,6 +651,7 @@ test('teclado e foco: menu, edição e janela de exclusão funcionam sem o mouse
   await trigger.focus()
   await page.keyboard.press('Enter')
   await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
   await expect(page.getByRole('menuitem', { name: 'Excluir', exact: true })).toBeFocused()
   await page.keyboard.press('Enter')
   const dialog = page.getByRole('dialog', { name: 'Excluir mensagem' })
@@ -659,6 +661,158 @@ test('teclado e foco: menu, edição e janela de exclusão funcionam sem o mouse
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(trigger).toBeFocused()
+
+  // Responder pelo menu, só com o teclado: a citação entra em preparo e o foco vai para o campo.
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('group', { name: /^Respondendo a / })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem', exact: true })).toBeFocused()
+})
+
+test('responder pelo menu: excluir a mensagem citada, nesta ou em outra sessão, tira a citação e mantém o texto digitado', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { agent } = await seedCustomer(request, baseURL!, 'Rita Resposta')
+  const conversation = await openAssigned(page, agent, 'Rita Resposta')
+  const composer = page.getByRole('textbox', { name: 'Mensagem', exact: true })
+  const draft = page.getByRole('group', { name: /^Respondendo a / })
+  const first = await sendText(page, conversation, 'Primeira para citar')
+  const second = await sendText(page, conversation, 'Segunda para citar')
+
+  // Responder pelo menu prepara a citação com o conteúdo e leva o foco ao campo.
+  await chooseInMenu(first.bubble, 'Responder')
+  await expect(draft).toContainText('Primeira para citar')
+  await expect(composer).toBeFocused()
+  await composer.fill('Rascunho desta sessão')
+
+  // Excluir para mim a mensagem citada: a citação sai, com o conteúdo, e o texto digitado fica.
+  await chooseInMenu(first.bubble, 'Excluir')
+  await page
+    .getByRole('dialog', { name: 'Excluir mensagem' })
+    .getByRole('button', { name: 'Excluir para mim' })
+    .click()
+  await expect(first.bubble).toContainText('Mensagem excluída no XET')
+  await expect(draft).toHaveCount(0)
+  await expect(page.getByText('Primeira para citar')).toHaveCount(0)
+  await expect(composer).toHaveValue('Rascunho desta sessão')
+
+  // Outra sessão do mesmo responsável cita a segunda; a exclusão para todos feita aqui chega lá.
+  const other = await secondSession(browser, agent, page.url())
+  const otherDraft = other.page.getByRole('group', { name: /^Respondendo a / })
+  const otherComposer = other.page.getByRole('textbox', { name: 'Mensagem', exact: true })
+  await chooseInMenu(sentIn(other.conversation).nth(1), 'Responder')
+  await expect(otherDraft).toContainText('Segunda para citar')
+  await otherComposer.fill('Rascunho da outra sessão')
+
+  await chooseInMenu(second.bubble, 'Excluir')
+  await page
+    .getByRole('dialog', { name: 'Excluir mensagem' })
+    .getByRole('button', { name: 'Excluir para todos' })
+    .click()
+  await expect(second.bubble).toContainText('Mensagem excluída no XET')
+  await expect(otherDraft).toHaveCount(0)
+  await expect(other.page.getByText('Segunda para citar')).toHaveCount(0)
+  await expect(otherComposer).toHaveValue('Rascunho da outra sessão')
+
+  // O envio seguinte sai sem citação, com o texto que ficou.
+  const sending = other.page.waitForRequest(
+    (req) => req.url().endsWith('/messages') && req.method() === 'POST',
+  )
+  await otherComposer.press('Enter')
+  expect(
+    ((await sending).postDataJSON() as { quotedMessageId?: number }).quotedMessageId,
+  ).toBeUndefined()
+  await other.context.close()
+})
+
+test('excluir para todos esconde o conteúdo também na prévia de Meus chamados', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { agent } = await seedCustomer(request, baseURL!, 'Pri Prévia')
+  const conversation = await openAssigned(page, agent, 'Pri Prévia')
+  const { bubble } = await sendText(page, conversation, 'Conteúdo da prévia')
+  const preview = page
+    .getByRole('navigation', { name: 'Meus chamados' })
+    .getByRole('link', { name: /Pri Prévia/ })
+  await expect(preview).toContainText('Conteúdo da prévia')
+
+  await chooseInMenu(bubble, 'Excluir')
+  await page
+    .getByRole('dialog', { name: 'Excluir mensagem' })
+    .getByRole('button', { name: 'Excluir para todos' })
+    .click()
+  await expect(bubble).toContainText('Mensagem excluída no XET')
+  await expect(preview).toContainText('Mensagem excluída no XET')
+  await expect(preview).not.toContainText('Conteúdo da prévia')
+  await page.reload()
+  await expect(preview).toContainText('Mensagem excluída no XET')
+  await expect(preview).not.toContainText('Conteúdo da prévia')
+})
+
+test('supervisor já conectado vê a edição e a exclusão sem recarregar e sem menu', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { agent, supervisor } = await seedCustomer(request, baseURL!, 'Sônia Supervisão')
+  const conversation = await openAssigned(page, agent, 'Sônia Supervisão')
+  const { bubble } = await sendText(page, conversation, 'Mensagem vista pelo supervisor')
+
+  // O supervisor abre o chamado antes de qualquer alteração e fica conectado.
+  const watcher = await secondSession(browser, supervisor, page.url())
+  const watched = sentIn(watcher.conversation)
+  await expect(watched).toContainText('Mensagem vista pelo supervisor')
+
+  await chooseInMenu(bubble, 'Editar')
+  const field = page.getByRole('textbox', { name: 'Editar mensagem' })
+  await field.fill('Mensagem corrigida')
+  await field.press('Enter')
+  await expect(watched).toContainText('Mensagem corrigida')
+  await expect(watched).toContainText('Editada')
+  await watched.hover()
+  await expect(watched.getByRole('button', { name: 'Ações da mensagem' })).toHaveCount(0)
+  await expect(watched.getByRole('button', { name: 'Responder' })).toHaveCount(0)
+
+  await chooseInMenu(bubble, 'Excluir')
+  await page
+    .getByRole('dialog', { name: 'Excluir mensagem' })
+    .getByRole('button', { name: 'Excluir para mim' })
+    .click()
+  await expect(watched).toContainText('Mensagem excluída no XET')
+  await expect(watcher.conversation).not.toContainText('Mensagem corrigida')
+  await watcher.context.close()
+})
+
+test('mensagem originada no celular do setor não tem menu', async ({ page, request, baseURL }) => {
+  const { agent } = await seedCustomer(request, baseURL!, 'Cássio Celular')
+  const conversation = await openAssigned(page, agent, 'Cássio Celular')
+  await sendText(page, conversation, 'Enviada pelo XET')
+
+  // O adaptador falso não tem como enviar pelo celular do setor: a resposta real da API passa a trazer
+  // a mensagem como enviada fora do sistema, que é o que o backend entrega nesse caso.
+  await page.route(/\/api\/tickets\/\d+\/messages$/, async (route) => {
+    const response = await route.fetch()
+    const messages = (await response.json()) as ApiMessage[]
+    await route.fulfill({
+      response,
+      json: messages.map((m) =>
+        m.origin === 'agent' ? { ...m, origin: 'phone', author: null } : m,
+      ),
+    })
+  })
+  await page.reload()
+  const outside = sentIn(conversation)
+  await expect(outside).toContainText('Enviada fora do sistema')
+  await outside.hover()
+  await expect(outside.getByRole('button', { name: 'Ações da mensagem' })).toHaveCount(0)
+  await expect(outside.getByRole('button', { name: 'Excluir' })).toHaveCount(0)
 })
 
 // Cor do texto e do fundo mais próximo que o pinta, para medir o contraste do elemento.

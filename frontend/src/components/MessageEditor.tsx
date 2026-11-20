@@ -5,7 +5,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ApiError } from '@/lib/api'
-import { editableText, type Message, newRequestId, useEditMessage } from '@/lib/conversation'
+import {
+  editableText,
+  insertEmojiAtCursor,
+  type Message,
+  newRequestId,
+  useEditMessage,
+} from '@/lib/conversation'
 
 // O trecho da mensagem que identifica qual está sendo editada.
 function preview(message: Message) {
@@ -78,17 +84,7 @@ export function MessageEditor({
     }
   }
 
-  const insertEmoji = (emoji: string) => {
-    const field = input.current
-    if (!field) return
-    const start = field.selectionStart
-    const end = field.selectionEnd
-    changeText(text.slice(0, start) + emoji + text.slice(end))
-    requestAnimationFrame(() => {
-      field.focus()
-      field.setSelectionRange(start + emoji.length, start + emoji.length)
-    })
-  }
+  const insertEmoji = (emoji: string) => insertEmojiAtCursor(input.current, text, emoji, changeText)
 
   return (
     <>
