@@ -15,6 +15,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -240,13 +241,52 @@ func (in UserInput) normalize() (UserInput, error) {
 	return in, nil
 }
 
-// ListUsers returns every user, ordered by name.
-func (s *Service) ListUsers(ctx context.Context) ([]db.User, error) {
-	users, err := s.q.ListUsers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list users: %w", err)
+// Columns the user list sorts by: the name (the default), the role, the sector
+// and the status.
+const (
+	SortUserName   = "name"
+	SortUserRole   = "role"
+	SortUserSector = "sector"
+	SortUserStatus = "status"
+)
+
+// UserSortColumns are the columns the user list accepts in ?sort=.
+var UserSortColumns = []string{SortUserName, SortUserRole, SortUserSector, SortUserStatus}
+
+// searchPattern turns a query into an ILIKE pattern for the user list. An empty
+// query lists everything.
+func searchPattern(query string) string {
+	if query = strings.TrimSpace(query); query == "" {
+		return ""
 	}
-	return users, nil
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query) + "%"
+}
+
+// SearchUsers finds a page of the users whose name, nickname or e-mail match
+// the query, without accents or case. It returns the total the search finds and
+// the page actually returned: the last one when the request goes past it.
+func (s *Service) SearchUsers(ctx context.Context, query string, page paging.Request) ([]db.User, int64, paging.Request, error) {
+	pattern := searchPattern(query)
+	total, err := s.q.CountUsers(ctx, pattern)
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("count users: %w", err)
+	}
+	page = page.Clamp(total)
+	rows, err := s.q.SearchUsers(ctx, db.SearchUsersParams{
+		SearchPattern: pattern,
+		SortColumn:    page.Sort,
+		Descending:    page.Descending,
+		PageOffset:    page.Offset(),
+		PageSize:      paging.PageSize,
+	})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("search users: %w", err)
+	}
+	out := make([]db.User, len(rows))
+	for i, row := range rows {
+		out[i] = row.User
+	}
+	return out, total, page, nil
 }
 
 // CreateUser registers an active user with the initial password typed by the
