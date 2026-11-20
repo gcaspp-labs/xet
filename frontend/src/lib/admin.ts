@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Role, User } from '@/lib/auth'
 import { normalizeSearch } from '@/lib/format'
+import { type Page, type PageRequest, pageParams } from '@/lib/paging'
 
 export type Sector = {
   id: number
@@ -114,6 +115,38 @@ export type Subject = {
 }
 
 const subjectsKey = (sectorId: number) => ['sectors', sectorId, 'subjects']
+
+// PROTÓTIPO #129: as sugestões do encerramento seguem pedindo a lista inteira do setor;
+// a tela de administração usa a mesma rota em páginas de 20.
+export type SubjectSort = 'name' | 'module'
+export const subjectColumns: Record<string, SubjectSort> = { assunto: 'name', modulo: 'module' }
+export const defaultSubjectColumn = 'assunto'
+
+export function useSubjectsPage(
+  sectorId: number | undefined,
+  filter: { query: string; module: string },
+  request: PageRequest<SubjectSort>,
+) {
+  return useQuery({
+    queryKey: [
+      ...subjectsKey(sectorId ?? 0),
+      'page',
+      filter.query.trim(),
+      filter.module,
+      request.page,
+      request.sort,
+      request.direction,
+    ],
+    queryFn: () => {
+      const search = new URLSearchParams(pageParams(request))
+      if (filter.query.trim()) search.set('busca', filter.query.trim())
+      if (filter.module !== 'all') search.set('modulo', filter.module)
+      return api<Page<Subject>>(`/sectors/${sectorId}/subjects?${search}`)
+    },
+    enabled: sectorId !== undefined,
+    placeholderData: keepPreviousData,
+  })
+}
 
 export function useSubjects(sectorId: number | undefined) {
   return useQuery({
