@@ -20,7 +20,7 @@ func (e *testEnv) changesStatus(messageID int64, token string) int {
 }
 
 // A mensagem editada pelo XET, depois pelo celular, e por fim excluída: o histórico devolve a
-// original, cada versão e a exclusão, na ordem em que aconteceram, com origem, autor e alcance.
+// original, cada versão e a exclusão, na ordem em que aconteceram, com origem, quem fez e alcance.
 func TestMessageChangesListEveryVersionAndTheDeletionInOrder(t *testing.T) {
 	t.Parallel()
 	c := newSentConversation(t)
