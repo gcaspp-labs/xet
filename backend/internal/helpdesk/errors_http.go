@@ -22,6 +22,8 @@ func urlTicketID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 // ticketError answers the errors shared by the conversation routes.
 func (h *Handler) ticketError(w http.ResponseWriter, r *http.Request, err error) {
 	var notSent ReactionNotSentError
+	var notChangeable NotChangeableError
+	var notApplied ChangeNotAppliedError
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Chamado não encontrado.")
@@ -49,6 +51,14 @@ func (h *Handler) ticketError(w http.ResponseWriter, r *http.Request, err error)
 		httpx.WriteError(w, http.StatusConflict, "Não é possível reagir a esta mensagem.")
 	case errors.As(err, &notSent):
 		httpx.WriteError(w, http.StatusBadGateway, notSent.Reason)
+	case errors.As(err, &notChangeable):
+		httpx.WriteError(w, http.StatusConflict, notChangeable.Reason)
+	case errors.As(err, &notApplied):
+		httpx.WriteError(w, http.StatusBadGateway, notApplied.Reason)
+	case errors.Is(err, ErrChangeInProgress):
+		httpx.WriteError(w, http.StatusConflict, "Esta mensagem já tem uma alteração em andamento. Aguarde a resposta do WhatsApp.")
+	case errors.Is(err, ErrEmptyEdit):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escreva a mensagem.")
 	default:
 		httpx.InternalError(h.logger, w, r, err)
 	}
