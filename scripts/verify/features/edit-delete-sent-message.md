@@ -1,6 +1,6 @@
 # Editar e excluir mensagem enviada pelo XET
 
-O responsável do chamado aberto edita o texto ou a legenda de uma mensagem enviada pelo XET, ou a exclui para todos ou só no XET ("para mim"), pela API (#292, spec #290). O menu, a janela e o compositor com "Editando" chegam na #293, e as versões em Atendimentos na #294: por ora a jornada chama a API como a tela vai chamar e prova o efeito na conversa e no banco.
+O responsável do chamado aberto edita o texto ou a legenda de uma mensagem enviada pelo XET, ou a exclui para todos ou só no XET ("para mim"), pela API (#292, spec #290). O menu, a janela e o compositor com "Editando" estão na #293 (jornada `edit-delete-messages-chamados`), e as versões em Atendimentos chegam na #294: esta jornada chama a API direto e prova o efeito na conversa e no banco.
 
 ## Sub-features
 
@@ -27,7 +27,7 @@ scripts/verify/scripts/drive.sh edit-delete-sent-message
 
 ## Gotchas
 
-- Ainda não há etiqueta nem aviso na tela: a mensagem excluída continua com o texto na conversa até a #293.
+- A jornada chama a API, sem passar pela tela: o aviso no lugar do conteúdo ocultado e as etiquetas são provados em `edit-delete-messages-chamados`.
 - O adaptador falso não prova o WhatsApp real: a edição de legenda e a revogação reais são `[manual]`.
 
 ## Estado final observável

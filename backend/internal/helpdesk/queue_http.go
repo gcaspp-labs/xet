@@ -15,8 +15,9 @@ type lastMessageResponse struct {
 	Body   *string          `json:"body"`
 	Origin db.MessageOrigin `json:"origin"`
 	SentAt time.Time        `json:"sentAt"`
-	// Hidden reports a message deleted only in the system ("para mim"): the
-	// list shows a notice, and the content is not sent.
+	// Hidden reports a message deleted through the XET ("para mim" or "para
+	// todos"): the list shows a notice, and the content is not sent. One deleted
+	// by the customer or from the sector's phone keeps its known content.
 	Hidden bool `json:"hidden"`
 }
 
@@ -51,7 +52,7 @@ func toTicketSummaryResponse(t Summary) ticketSummaryResponse {
 	}
 	if m := t.LastMessage; m != nil {
 		out.LastMessage = &lastMessageResponse{Type: m.Type, Body: m.Body, Origin: m.Origin, SentAt: m.SentAt}
-		if m.DeletionScope.Valid && m.DeletionScope.MessageDeletionScope == db.MessageDeletionScopeLocal {
+		if m.DeletionOrigin.Valid && m.DeletionOrigin.MessageOrigin == db.MessageOriginAgent {
 			out.LastMessage.Body, out.LastMessage.Hidden = nil, true
 		}
 	}

@@ -45,8 +45,15 @@ const bubbleOf = (scope: Locator, text: string) =>
     .getByRole('listitem', { name: /^Mensagem (enviada|recebida)$/ })
     .filter({ has: scope.page().locator('p', { hasText: text }) })
 
+// Na mensagem do XET o Responder fica no menu (⋯); nas demais, é o botão ao lado do balão.
 async function pressReply(message: Locator) {
   await message.hover()
+  const menu = message.getByRole('button', { name: 'Ações da mensagem' })
+  if ((await menu.count()) > 0) {
+    await menu.click()
+    await message.page().getByRole('menuitem', { name: 'Responder', exact: true }).click()
+    return
+  }
   await message.getByRole('button', { name: 'Responder', exact: true }).click()
 }
 

@@ -555,23 +555,24 @@ func (q *Queries) LinkMessageChange(ctx context.Context, arg LinkMessageChangePa
 }
 
 const listLastMessages = `-- name: ListLastMessages :many
-select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_scope
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_origin
 from messages
 where ticket_id = any($1::bigint[])
 order by ticket_id, sent_at desc, id desc
 `
 
 type ListLastMessagesRow struct {
-	TicketID      int64
-	Type          MessageType
-	Body          *string
-	Origin        MessageOrigin
-	SentAt        time.Time
-	DeletionScope NullMessageDeletionScope
+	TicketID       int64
+	Type           MessageType
+	Body           *string
+	Origin         MessageOrigin
+	SentAt         time.Time
+	DeletionOrigin NullMessageOrigin
 }
 
-// Last message of each ticket, for the ticket lists, with its deletion scope:
-// the list never shows content hidden in the system ("para mim").
+// Last message of each ticket, for the ticket lists, with who deleted it: the
+// list never shows content hidden by the system (deleted through the XET, for
+// me or for everyone).
 func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]ListLastMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listLastMessages, ticketIds)
 	if err != nil {
@@ -587,7 +588,7 @@ func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]Li
 			&i.Body,
 			&i.Origin,
 			&i.SentAt,
-			&i.DeletionScope,
+			&i.DeletionOrigin,
 		); err != nil {
 			return nil, err
 		}

@@ -33,6 +33,8 @@ import {
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { EmojiPicker } from '@/components/EmojiPicker'
+import { DeleteMessageDialog, MessageMenu } from '@/components/MessageActions'
+import { MessageEditor } from '@/components/MessageEditor'
 import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
@@ -57,6 +59,9 @@ import {
   type TicketDetail,
   canQuoteMessage,
   canReactTo,
+  insertEmojiAtCursor,
+  isHiddenByXet,
+  messageChanges,
   maxFileSize,
   newRequestId,
   useAssignments,
@@ -314,6 +319,9 @@ function MessageBubble({
   retrying,
   onReact,
   onReply,
+  onEdit,
+  onDelete,
+  hideDeleted = false,
   quoted,
   modern = false,
 }: {
@@ -325,6 +333,11 @@ function MessageBubble({
   onReact?: (emoji: string) => void
   // Só o responsável responde citando; sem isto, a mensagem mostra a citação mas não oferece responder.
   onReply?: () => void
+  // Só o responsável edita e exclui, e só a mensagem enviada pelo XET; sem isto, não há menu.
+  onEdit?: () => void
+  onDelete?: () => void
+  // Em Chamados, o conteúdo excluído pelo XET (para todos ou para mim) vira um aviso.
+  hideDeleted?: boolean
   // A mensagem do XET que esta cita, quando está na conversa.
   quoted?: Message
   modern?: boolean
@@ -335,6 +348,11 @@ function MessageBubble({
     message.origin === 'phone' ? 'Enviada fora do sistema' : outbound ? message.author?.name : null
   const prefix =
     outbound && message.origin === 'agent' ? message.body?.match(/^\*([^*\n]+:)\*(?:\n|$)/) : null
+  const hidden = hideDeleted && isHiddenByXet(message)
+  // A mensagem enviada pelo XET tem o menu (⋯), com Responder dentro; as demais, o botão de responder.
+  const hasMenu =
+    !!onEdit && !!onDelete && !hidden && !message.deletion && message.origin === 'agent'
+  const mutedTone = modern && outbound ? 'text-primary-foreground' : 'text-ink-soft'
 
   return (
     <li
@@ -369,14 +387,20 @@ function MessageBubble({
               {author}
             </p>
           )}
-          {message.quote && (
-            <QuoteBlock quote={message.quote} quoted={quoted} onPrimary={modern && outbound} />
+          {hidden && <p className={cn('italic', mutedTone)}>Mensagem excluída no XET</p>}
+          {!hidden && message.quote && (
+            <QuoteBlock
+              quote={message.quote}
+              quoted={quoted}
+              onPrimary={modern && outbound}
+              hideDeleted={hideDeleted}
+            />
           )}
-          <MessageMedia message={message} />
-          {message.type === 'media_unavailable' && (
+          {!hidden && <MessageMedia message={message} />}
+          {!hidden && message.type === 'media_unavailable' && (
             <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
           )}
-          {message.type === 'unsupported' ? (
+          {hidden ? null : message.type === 'unsupported' ? (
             <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
           ) : (
             message.body && (
@@ -406,6 +430,12 @@ function MessageBubble({
             >
               {formatMessageTime(message.sentAt)}
             </span>
+            {message.editedAt && !hidden && (
+              <span className={cn('caption font-medium', mutedTone)}>· Editada</span>
+            )}
+            {message.deletion && !hidden && (
+              <span className={cn('caption font-medium', mutedTone)}>· Excluída</span>
+            )}
             {status &&
               (modern && outbound ? (
                 <span className="caption font-medium text-primary-foreground">
@@ -415,7 +445,7 @@ function MessageBubble({
                 <Badge tone={status.tone}>{status.label}</Badge>
               ))}
           </div>
-          {message.status === 'failed' && (
+          {message.status === 'failed' && !message.deletion && (
             <div className="flex flex-wrap items-center justify-end gap-2">
               {message.failureReason && (
                 <span
@@ -436,12 +466,21 @@ function MessageBubble({
             </div>
           )}
         </div>
-        {onReact && canReactTo(message) && (
+        {onReact && !hidden && canReactTo(message) && (
           <ReactButton current={message.reactions.sector?.emoji} onReact={onReact} />
         )}
-        {onReply && canQuoteMessage(message) && <ReplyButton onReply={onReply} />}
+        {hasMenu ? (
+          <MessageMenu
+            message={message}
+            onReply={onReply && canQuoteMessage(message) ? onReply : undefined}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ) : (
+          onReply && !hidden && canQuoteMessage(message) && <ReplyButton onReply={onReply} />
+        )}
       </div>
-      <ReactionChips reactions={message.reactions} outbound={outbound} />
+      {!hidden && <ReactionChips reactions={message.reactions} outbound={outbound} />}
     </li>
   )
 }
@@ -451,8 +490,19 @@ function Composer({
   quoted,
   onCancelQuote,
   attachRef,
+  editing,
+  beginEditRef,
+  onStartEditing,
+  onStopEditing,
 }: {
   ticketId: number
+  // A mensagem que o responsável está editando: o campo de edição toma o lugar do compositor, que
+  // guarda o rascunho (texto, arquivo, áudio e citação) até a edição terminar.
+  editing: Message | null
+  // O menu da mensagem pede a edição por aqui, para o compositor guardar o rascunho antes.
+  beginEditRef: MutableRefObject<((messageId: number) => void) | null>
+  onStartEditing: (messageId: number) => void
+  onStopEditing: () => void
   // A área da conversa entrega o arquivo solto; fica null quando o campo não aceita (áudio).
   attachRef: MutableRefObject<((file: File) => void) | null>
   // A mensagem que a próxima resposta cita, escolhida no botão de responder.
@@ -479,17 +529,8 @@ function Composer({
     if (quotedId !== undefined) messageInput.current?.focus()
   }, [quotedId])
 
-  const insertEmoji = (emoji: string) => {
-    const input = messageInput.current
-    if (!input) return
-    const start = input.selectionStart
-    const end = input.selectionEnd
-    changeText(text.slice(0, start) + emoji + text.slice(end))
-    requestAnimationFrame(() => {
-      input.focus()
-      input.setSelectionRange(start + emoji.length, start + emoji.length)
-    })
-  }
+  const insertEmoji = (emoji: string) =>
+    insertEmojiAtCursor(messageInput.current, text, emoji, changeText)
 
   const changeText = (value: string) => {
     requestId.current = null
@@ -514,7 +555,7 @@ function Composer({
   }
 
   // Com gravação em andamento ou pronta, colar e soltar não fazem nada.
-  const accepts = !recorder.recording && !voice
+  const accepts = !editing && !recorder.recording && !voice
   useEffect(() => {
     attachRef.current = accepts ? attachFile : null
   })
@@ -543,6 +584,27 @@ function Composer({
     }
     changeVoice(recording)
   }
+
+  // O foco volta ao campo de mensagem quando a edição termina.
+  const editingId = editing?.id
+  const wasEditing = useRef(false)
+  useEffect(() => {
+    if (editingId !== undefined) {
+      wasEditing.current = true
+    } else if (wasEditing.current) {
+      wasEditing.current = false
+      messageInput.current?.focus()
+    }
+  }, [editingId])
+
+  // Entrar em edição com uma gravação em andamento a conclui, para o áudio ficar guardado como
+  // rascunho em vez de se perder.
+  useEffect(() => {
+    beginEditRef.current = (messageId) => {
+      if (recorder.recording) void finishRecording()
+      onStartEditing(messageId)
+    }
+  })
 
   const submit = () => {
     const body = text.trim()
@@ -581,14 +643,23 @@ function Composer({
 
   return (
     <div className="flex flex-col gap-2 border-t border-line-soft p-3">
-      {error && (
+      {error && !editing && (
         <Alert variant="warning">
           <CircleAlert strokeWidth={1.7} aria-hidden />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {quoted && <DraftQuote message={quoted} onCancel={onCancelQuote} />}
-      {file && !voice && (
+      {editing ? (
+        <MessageEditor
+          key={editing.id}
+          message={editing}
+          ticketId={ticketId}
+          hasDraft={!!(text.trim() || file || voice || recorder.recording || quoted)}
+          onDone={onStopEditing}
+        />
+      ) : null}
+      {!editing && quoted && <DraftQuote message={quoted} onCancel={onCancelQuote} />}
+      {!editing && file && !voice && (
         <div className="flex items-center gap-2 self-start rounded-(--radius-7) border border-line-soft bg-card px-2.5 py-1.5">
           <Paperclip strokeWidth={1.7} className="size-[15px]" aria-hidden />
           <span className="max-w-[240px] truncate">{file.name}</span>
@@ -606,7 +677,7 @@ function Composer({
           </Button>
         </div>
       )}
-      {recorder.recording ? (
+      {editing ? null : recorder.recording ? (
         <div role="status" aria-label="Gravação de áudio" className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-danger" aria-hidden />
           <span className="flex-1">
@@ -755,6 +826,29 @@ export function ConversationCard({
   if (!canReply && quoting !== null) setQuoting(null)
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages])
   const quotedDraft = canReply && quoting !== null ? (byId.get(quoting) ?? null) : null
+  // A mensagem citada que o XET passou a ocultar (excluída para todos ou para mim, aqui ou em outra
+  // sessão) sai da citação em preparo, para o conteúdo não ficar no compositor; o texto digitado fica.
+  if (quotedDraft && isHiddenByXet(quotedDraft)) setQuoting(null)
+  // A edição e a janela de exclusão são deste chamado, e só do responsável. Trocar de chamado, perder
+  // o direito de responder ou a mensagem sair do alcance (excluída por outra via) as encerra; o que
+  // vale é a confirmação do servidor.
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const beginEdit = useRef<((messageId: number) => void) | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [changingTicketId, setChangingTicketId] = useState(ticket.id)
+  if (changingTicketId !== ticket.id) {
+    setChangingTicketId(ticket.id)
+    setEditingId(null)
+    setDeletingId(null)
+  }
+  const changeable = (id: number | null) => {
+    const message = id === null || !canReply ? undefined : byId.get(id)
+    return message && messageChanges(message) ? message : null
+  }
+  const editing = changeable(editingId)
+  const deleting = changeable(deletingId)
+  if (editingId !== null && !editing && messages.length > 0) setEditingId(null)
+  if (deletingId !== null && !deleting && messages.length > 0) setDeletingId(null)
 
   // Arrastar e soltar na área inteira da conversa.
   const attach = useRef<((file: File) => void) | null>(null)
@@ -852,6 +946,13 @@ export function ConversationCard({
                       : undefined
                   }
                   onReply={canReply ? () => setQuoting(item.message.id) : undefined}
+                  onEdit={
+                    canReply
+                      ? () => (beginEdit.current ?? setEditingId)(item.message.id)
+                      : undefined
+                  }
+                  onDelete={canReply ? () => setDeletingId(item.message.id) : undefined}
+                  hideDeleted
                 />
               ) : (
                 <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
@@ -875,12 +976,24 @@ export function ConversationCard({
           </Alert>
         </div>
       )}
+      {deleting && (
+        <DeleteMessageDialog
+          key={deleting.id}
+          message={deleting}
+          ticketId={ticket.id}
+          onClose={() => setDeletingId(null)}
+        />
+      )}
       {canReply ? (
         <Composer
           ticketId={ticket.id}
           attachRef={attach}
-          quoted={quotedDraft}
+          quoted={quotedDraft && !isHiddenByXet(quotedDraft) ? quotedDraft : null}
           onCancelQuote={() => setQuoting(null)}
+          editing={editing}
+          beginEditRef={beginEdit}
+          onStartEditing={setEditingId}
+          onStopEditing={() => setEditingId(null)}
         />
       ) : (
         notice && (

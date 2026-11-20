@@ -20,6 +20,8 @@ export type TicketSummary = {
     body: string | null
     origin: 'customer' | 'agent' | 'phone'
     sentAt: string
+    // Mensagem excluída só no XET ("para mim"): a lista mostra um aviso, e o conteúdo não vem.
+    hidden?: boolean
   } | null
 }
 
@@ -79,6 +81,9 @@ export function lastMessagePreview(ticket: TicketSummary) {
   const message = ticket.lastMessage
   if (!message) {
     return 'Sem mensagens'
+  }
+  if (message.hidden) {
+    return 'Mensagem excluída no XET'
   }
   const body =
     message.origin === 'agent'

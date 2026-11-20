@@ -1,6 +1,6 @@
 # Edições e exclusões feitas fora do XET
 
-O cliente, ou o celular do setor, edita ou apaga para todos uma mensagem que o XET já tem. O XET guarda a versão original e cada versão, marca a exclusão sem apagar o conteúdo e não cria mensagem nem chamado novos (#291, spec #290). As etiquetas "Editada" e "Excluída", o menu e o histórico de versões em Atendimentos chegam nas tarefas seguintes (#293 e #294).
+O cliente, ou o celular do setor, edita ou apaga para todos uma mensagem que o XET já tem. O XET guarda a versão original e cada versão, marca a exclusão sem apagar o conteúdo e não cria mensagem nem chamado novos (#291, spec #290). As etiquetas "Editada" e "Excluída" e o menu estão na #293 (jornada `edit-delete-messages-chamados`); o histórico de versões em Atendimentos chega na #294.
 
 ## Sub-features
 
@@ -28,7 +28,7 @@ scripts/verify/scripts/drive.sh message-revisions
 
 ## Gotchas
 
-- Ainda não há etiqueta na tela: a jornada prova o conteúdo mostrado e o estado no banco, não "Editada" ou "Excluída".
+- Esta jornada prova o conteúdo mostrado e o estado no banco; as etiquetas "Editada" e "Excluída" são provadas em `edit-delete-messages-chamados`.
 - `at` antigo (`2000-01-01`) simula o evento atrasado: fica como versão, antes até da original, e não vira o texto atual.
 - O adaptador falso não prova o WhatsApp real: a tradução do Whatsmeow tem teste próprio, mas a entrega real é `[manual]`.
 
