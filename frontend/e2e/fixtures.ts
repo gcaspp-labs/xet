@@ -332,10 +332,10 @@ export async function addSolutions(
   bodies: string[],
 ) {
   const api = await adminApi(baseURL)
-  const subjects = await json<{ id: number; name: string }[]>(
+  const page = await json<{ items: { id: number; name: string }[] }>(
     await api.get(`/api/sectors/${sectorId}/subjects`),
   )
-  const id = subjects.find((item) => item.name === subject)!.id
+  const id = page.items.find((item) => item.name === subject)!.id
   for (const body of bodies) {
     ok(await api.post(`/api/sectors/${sectorId}/subjects/${id}/solutions`, { data: { body } }))
   }

@@ -55,7 +55,7 @@ func TestCorrectionRequiresAnActiveSelectedModule(t *testing.T) {
 	if len(modules) != 3 {
 		t.Fatalf("corrected ticket modules: %v", modules)
 	}
-	subjects := c.e.DoList(http.MethodGet, subjectsPath(c.sector.ID), c.supToken)
+	subjects := c.e.subjectItems(subjectsPath(c.sector.ID), c.supToken)
 	if len(subjects) != 1 || subjects[0]["name"] != "Outro assunto" || subjects[0]["moduleId"] != float64(module.ID) {
 		t.Fatalf("subject added to replacement module: %v", subjects)
 	}
@@ -90,7 +90,7 @@ func TestClosingRequiresReplacementForDeactivatedModules(t *testing.T) {
 		t.Fatalf("save with replacement: %d %v", resp.Status, resp.Body)
 	}
 	modules := c.e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/modules", c.ticket.ID), c.anaToken)
-	subjects := c.e.DoList(http.MethodGet, subjectsPath(c.sector.ID), c.supToken)
+	subjects := c.e.subjectItems(subjectsPath(c.sector.ID), c.supToken)
 	if len(modules) != 1 || modules[0]["id"] != float64(module.ID) || len(subjects) != 1 || subjects[0]["moduleId"] != float64(module.ID) {
 		t.Fatalf("replacement module and subject: %v %v", modules, subjects)
 	}
@@ -119,7 +119,7 @@ func TestClosingAddsSubjectToChosenModule(t *testing.T) {
 	if resp.Status != http.StatusOK {
 		t.Fatalf("close: %d %v", resp.Status, resp.Body)
 	}
-	list := c.e.DoList(http.MethodGet, subjectsPath(c.sector.ID), c.supToken)
+	list := c.e.subjectItems(subjectsPath(c.sector.ID), c.supToken)
 	if len(list) != 1 || list[0]["moduleId"] != float64(c.modules[0]) {
 		t.Fatalf("subjects: %v", list)
 	}
@@ -137,7 +137,7 @@ func TestClosingFormOmitsUnclassifiedSubjects(t *testing.T) {
 	if created.Status != http.StatusCreated {
 		t.Fatalf("create: %d %v", created.Status, created.Body)
 	}
-	filtered := e.DoList(http.MethodGet, subjectsPath(c.sector.ID)+"?moduleId=none", c.supToken)
+	filtered := e.subjectItems(subjectsPath(c.sector.ID)+"?moduleId=none", c.supToken)
 	if len(filtered) != 1 || filtered[0]["name"] != "Antigo" {
 		t.Fatalf("unclassified filter: %v", filtered)
 	}

@@ -27,22 +27,22 @@ const json = async <T>(response: Response) => {
 // Nomes da lista de assuntos do setor, lida como administrador.
 async function subjectNames(baseURL: string, sectorId: number) {
   const api = await adminApi(baseURL)
-  const subjects = await json<{ name: string }[]>(
+  const page = await json<{ items: { name: string }[] }>(
     await api.get(`/api/sectors/${sectorId}/subjects`),
   )
   await api.dispose()
-  return subjects.map((subject) => subject.name)
+  return page.items.map((subject) => subject.name)
 }
 
 // Soluções da lista de cada assunto do setor, lidas como administrador.
 async function solutionBodies(baseURL: string, sectorId: number) {
   const api = await adminApi(baseURL)
-  const subjects = await json<{ name: string; solutions: { body: string }[] }[]>(
+  const page = await json<{ items: { name: string; solutions: { body: string }[] }[] }>(
     await api.get(`/api/sectors/${sectorId}/subjects`),
   )
   await api.dispose()
   return Object.fromEntries(
-    subjects.map((subject) => [subject.name, subject.solutions.map((solution) => solution.body)]),
+    page.items.map((subject) => [subject.name, subject.solutions.map((solution) => solution.body)]),
   )
 }
 
@@ -138,9 +138,11 @@ test('assuntos iguais mostram os módulos e reúnem soluções sem repetição',
 }) => {
   const { sector, agent, contacts } = await prepare(baseURL!, ['Senha'], 1)
   const api = await adminApi(baseURL!)
-  const original = await json<{ id: number; name: string }[]>(
-    await api.get(`/api/sectors/${sector.id}/subjects`),
-  )
+  const original = (
+    await json<{ items: { id: number; name: string }[] }>(
+      await api.get(`/api/sectors/${sector.id}/subjects`),
+    )
+  ).items
   const secondModule = await json<{ id: number }>(
     await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Patrimônio' } }),
   )
@@ -727,9 +729,8 @@ test('filtro Sem módulo encontra assuntos legados e combina com a busca', async
   const search = page.getByRole('searchbox', { name: 'Buscar assuntos' })
   await expect(table).toContainText('Classificado folha')
   await expect(table).toContainText('Legado folha')
-  await expect(
-    page.getByText('Há assuntos sem módulo que não aparecem no formulário.'),
-  ).toBeVisible()
+  // O aviso antigo sai da tela: o filtro "Sem módulo" cobre o caso.
+  await expect(page.getByText('Há assuntos sem módulo')).toHaveCount(0)
 
   await filter.click()
   await page.getByRole('option', { name: 'Sem módulo' }).click()
@@ -750,7 +751,8 @@ test('filtro Sem módulo encontra assuntos legados e combina com a busca', async
   await page.getByRole('option', { name: 'Folha', exact: true }).click()
   await expect(table).toContainText('Classificado folha')
   await expect(table).not.toContainText('Legado folha')
-  await page.getByRole('button', { name: 'Ver assuntos sem módulo' }).click()
+  await filter.click()
+  await page.getByRole('option', { name: 'Sem módulo' }).click()
   await expect(filter).toContainText('Sem módulo')
   await expect(table).toContainText('Legado patrimônio')
   await expect(table).not.toContainText('Classificado folha')

@@ -167,3 +167,11 @@ func newSentConversation(t *testing.T) sentConversation {
 	}
 	return sentConversation{conversation: c, sent: int64(resp.Body["id"].(float64))}
 }
+
+// subjectItems reads the items of a page of the subject list of the sector, at
+// the full path so the caller can also send the search and the filter.
+func (e *testEnv) subjectItems(path, token string) []map[string]any {
+	e.T.Helper()
+	items, _ := e.DoPage(path, token)
+	return items
+}

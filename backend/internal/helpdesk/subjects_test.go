@@ -101,7 +101,7 @@ func TestSupervisorManagesTheSubjectList(t *testing.T) {
 	e := c.e
 	sector := c.sector.ID
 
-	if got := e.DoList(http.MethodGet, subjectsPath(sector), c.supToken); len(got) != 0 {
+	if got := e.subjectItems(subjectsPath(sector), c.supToken); len(got) != 0 {
 		t.Fatalf("the list starts empty: %v", got)
 	}
 
@@ -111,7 +111,7 @@ func TestSupervisorManagesTheSubjectList(t *testing.T) {
 	}
 	folha := id(resp.Body)
 	e.createSubject(sector, c.supToken, "Contracheque")
-	if got := names(e.DoList(http.MethodGet, subjectsPath(sector), c.supToken)); !slices.Equal(got, []string{"Contracheque", "Folha de pagamento"}) {
+	if got := names(e.subjectItems(subjectsPath(sector), c.supToken)); !slices.Equal(got, []string{"Contracheque", "Folha de pagamento"}) {
 		t.Fatalf("list = %v", got)
 	}
 
@@ -131,7 +131,7 @@ func TestSupervisorManagesTheSubjectList(t *testing.T) {
 	if resp := e.Do(http.MethodDelete, subjectPath(sector, folha), c.supToken, nil); resp.Status != http.StatusNoContent {
 		t.Fatalf("delete: status %d, body %v", resp.Status, resp.Body)
 	}
-	if got := names(e.DoList(http.MethodGet, subjectsPath(sector), c.supToken)); !slices.Equal(got, []string{"Contracheque"}) {
+	if got := names(e.subjectItems(subjectsPath(sector), c.supToken)); !slices.Equal(got, []string{"Contracheque"}) {
 		t.Fatalf("list after delete = %v", got)
 	}
 	if resp := e.Do(http.MethodDelete, subjectPath(sector, folha), c.supToken, nil); resp.Status != http.StatusNotFound {
@@ -203,7 +203,7 @@ func TestSubjectListPermissionsBySector(t *testing.T) {
 	wantSubjects(t, e.subjectNames(sector), "Contracheque")
 
 	// O administrador gerencia todos os setores.
-	if got := names(e.DoList(http.MethodGet, subjectsPath(sector), c.adminToken)); !slices.Equal(got, []string{"Contracheque"}) {
+	if got := names(e.subjectItems(subjectsPath(sector), c.adminToken)); !slices.Equal(got, []string{"Contracheque"}) {
 		t.Fatalf("admin list = %v", got)
 	}
 	inRH := e.createSubject(rh.ID, c.adminToken, "Licitação")

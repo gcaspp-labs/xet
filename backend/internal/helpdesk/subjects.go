@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/audit"
+	"github.com/gcaspp-labs/xet/backend/internal/core/paging"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
@@ -21,14 +22,18 @@ const (
 	maxSolutionLength = 10000
 )
 
-// Subject is a subject of the list of the sector with its solutions.
+// Subject is a subject of the list of the sector with its solutions. Solutions
+// holds the solutions shown, which in a search by a solution are only the ones
+// that match, and SolutionCount how many the subject has.
 type Subject struct {
 	db.Subject
-	ModuleName string
-	Solutions  []db.SubjectSolution
+	ModuleName    string
+	Solutions     []db.SubjectSolution
+	SolutionCount int
 }
 
-// Subjects returns the subject list of the sector, each with its solutions.
+// Subjects returns the whole subject list of the sector, each with all its
+// solutions, for the closing form.
 func (s *Service) Subjects(ctx context.Context, sectorID int64) ([]Subject, error) {
 	subjects, err := s.q.ListSubjects(ctx, sectorID)
 	if err != nil {
@@ -52,12 +57,105 @@ func (s *Service) Subjects(ctx context.Context, sectorID int64) ([]Subject, erro
 	}
 	out := make([]Subject, len(subjects))
 	for i, sub := range subjects {
-		out[i] = Subject{Subject: sub, Solutions: bySubject[sub.ID]}
+		out[i] = Subject{Subject: sub, Solutions: bySubject[sub.ID], SolutionCount: len(bySubject[sub.ID])}
 		if sub.ModuleID != nil {
 			out[i].ModuleName = moduleNames[*sub.ModuleID]
 		}
 	}
 	return out, nil
+}
+
+// Columns the subject list sorts by: the name (the default) and the module name.
+const (
+	SortSubjectName   = "name"
+	SortSubjectModule = "module"
+)
+
+// SubjectSortColumns are the columns the subject list accepts in ?sort=.
+var SubjectSortColumns = []string{SortSubjectName, SortSubjectModule}
+
+// SubjectFilter narrows the subject list of the sector. Query matches the name
+// of the subject or the text of one of its solutions, without accents or case;
+// ModuleID is a module of the sector, and Unclassified the subjects without one.
+// A zero module without Unclassified means all.
+type SubjectFilter struct {
+	Query        string
+	ModuleID     int64
+	Unclassified bool
+}
+
+// searchPattern turns a query into an ILIKE pattern for the subject list. An
+// empty query lists everything.
+func searchPattern(query string) string {
+	if query = strings.TrimSpace(query); query == "" {
+		return ""
+	}
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query) + "%"
+}
+
+// SearchSubjects finds a page of the subjects of the sector, each with the
+// solutions the filter shows: a subject found by its name comes with all its
+// solutions, and one found only by a solution comes with the matching ones. It
+// returns the total the filter finds and the page actually returned: the last
+// one when the request goes past it.
+func (s *Service) SearchSubjects(ctx context.Context, sectorID int64, filter SubjectFilter, page paging.Request) ([]Subject, int64, paging.Request, error) {
+	params := db.CountSubjectsParams{
+		SectorID:      sectorID,
+		ModuleID:      filter.ModuleID,
+		Unclassified:  filter.Unclassified,
+		SearchPattern: searchPattern(filter.Query),
+	}
+	total, err := s.q.CountSubjects(ctx, params)
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("count subjects: %w", err)
+	}
+	page = page.Clamp(total)
+	rows, err := s.q.SearchSubjects(ctx, db.SearchSubjectsParams{
+		SectorID:      params.SectorID,
+		ModuleID:      params.ModuleID,
+		Unclassified:  params.Unclassified,
+		SearchPattern: params.SearchPattern,
+		SortColumn:    page.Sort,
+		Descending:    page.Descending,
+		PageOffset:    page.Offset(),
+		PageSize:      paging.PageSize,
+	})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("search subjects: %w", err)
+	}
+	out := make([]Subject, len(rows))
+	ids := make([]int64, len(rows))
+	for i, row := range rows {
+		out[i] = Subject{Subject: row.Subject}
+		if row.ModuleName != nil {
+			out[i].ModuleName = *row.ModuleName
+		}
+		ids[i] = row.Subject.ID
+	}
+	if len(ids) == 0 {
+		return out, total, page, nil
+	}
+	solutions, err := s.q.ListPageSolutions(ctx, db.ListPageSolutionsParams{SubjectIds: ids, SearchPattern: params.SearchPattern})
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("list page solutions: %w", err)
+	}
+	counts, err := s.q.CountSubjectSolutions(ctx, ids)
+	if err != nil {
+		return nil, 0, page, fmt.Errorf("count subject solutions: %w", err)
+	}
+	bySubject := map[int64][]db.SubjectSolution{}
+	for _, sol := range solutions {
+		bySubject[sol.SubjectID] = append(bySubject[sol.SubjectID], sol)
+	}
+	countBySubject := make(map[int64]int, len(counts))
+	for _, c := range counts {
+		countBySubject[c.SubjectID] = int(c.Total)
+	}
+	for i := range out {
+		out[i].Solutions = bySubject[out[i].ID]
+		out[i].SolutionCount = countBySubject[out[i].ID]
+	}
+	return out, total, page, nil
 }
 
 // Solutions returns the solution list of a subject.
