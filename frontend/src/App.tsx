@@ -13,6 +13,7 @@ import UsersPage from '@/pages/admin/UsersPage'
 import ConnectionPage from '@/pages/connection/ConnectionPage'
 import ContactsPage from '@/pages/directory/ContactsPage'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
+import Prototype325 from '@/pages/Prototype325'
 import TicketPage from '@/pages/ticket/TicketPage'
 
 // Rotas que exigem sessão; sem sessão, vai para o login.
@@ -42,6 +43,12 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/chamados' &&
+    new URLSearchParams(window.location.search).get('prototype') === '325'
+  )
+    return <Prototype325 />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
