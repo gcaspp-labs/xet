@@ -66,7 +66,7 @@ erDiagram
 | `message_origin` | `customer`, `agent`, `phone` | Enviada pelo cliente, por um atendente no sistema ou pelo celular fora do sistema |
 | `message_change_kind` | `original`, `edit`, `deletion` | Linha de `message_changes` |
 | `message_deletion_scope` | `everyone`, `local` | Alcance da exclusão |
-| `message_type` | `text`, `image`, `video`, `audio`, `document`, `unsupported`, `media_unavailable` | `unsupported` cobre figurinhas, localização e outros tipos fora do piloto (as reações recebidas deixaram de ser gravadas como mensagem: vão para `message_reactions`; as antigas, já gravadas como `unsupported`, ficam como estão); `media_unavailable` é o arquivo recebido acima do limite ou que não baixou |
+| `message_type` | `text`, `image`, `video`, `audio`, `document`, `contact`, `unsupported`, `media_unavailable` | `contact` é o cartão de contato do WhatsApp, com os cartões em `messages.contact_cards` (#323; os contatos recebidos antes, gravados como `unsupported`, ficam como estão, sem conversão); `unsupported` cobre figurinhas, localização e outros tipos fora do piloto (as reações recebidas deixaram de ser gravadas como mensagem: vão para `message_reactions`; as antigas, já gravadas como `unsupported`, ficam como estão); `media_unavailable` é o arquivo recebido acima do limite ou que não baixou |
 | `message_status` | `pending`, `sent`, `delivered`, `read`, `failed` | Situação de entrega das mensagens enviadas |
 | `reaction_side` | `customer`, `sector` | Lado da reação: do cliente ou do número do setor |
 
@@ -353,12 +353,14 @@ Chamados não são reabertos. O destino de uma transferência entre setores vê 
 | `deleted_at` | timestamptz | Horário da exclusão segundo o provedor; vazio quando a mensagem não foi excluída. É um estado à parte de `status` (a situação de entrega não muda) |
 | `deletion_scope` | message_deletion_scope | `everyone` ou `local`; preenchido junto com `deleted_at` |
 | `deletion_origin` | message_origin | Quem excluiu (cliente, celular do setor ou atendente); preenchido junto com `deleted_at` |
+| `contact_cards` | jsonb | Cartões da mensagem `contact`, em ordem: lista não vazia de `{"name", "organization", "phones": [{"phone", "wa_id"}]}`; vazio (`null`) nos demais tipos |
 
 Restrições:
 
 - Único em `(sector_id, external_message_id)` quando preenchido: garante idempotência em reconexões e reentregas.
 - Único em `client_request_id` quando preenchido: garante idempotência no envio pelo sistema.
 - `direction = 'inbound'` ⇔ `origin = 'customer'`.
+- `type = 'contact'` ⇔ `contact_cards` preenchido, e preenchido é sempre uma lista com ao menos um cartão (`messages_contact_cards`).
 - `type in ('image', 'video', 'audio', 'document')` ⇒ `media_id` preenchido. `media_unavailable` não tem `media_id`; `body` guarda a legenda ou o nome do arquivo.
 - Ligação, tipo ou texto da citação ⇒ `quoted_external_message_id` preenchido (`messages_quote_external_id`); `quoted_body` ⇒ `quoted_type` (`messages_quote_body_type`).
 - `deleted_at`, `deletion_scope` e `deletion_origin` são preenchidos juntos ou ficam todos vazios (`messages_deletion_state`).
@@ -375,6 +377,10 @@ Mensagens não são apagadas nem sobrescritas sem registro (#291, spec #290). Ed
 A imutabilidade da mensagem foi revista pela spec #290: o texto e a legenda podem ser revistos, pelo WhatsApp e pelo XET, e o que cai é a regra antiga de que a mensagem nunca é editada ou excluída. Nada é apagado nem sobrescrito sem registro: cada versão anterior fica em `message_changes`, o conteúdo excluído continua gravado em `body` e em `media_id`, e `status` segue a situação de entrega sem representar a exclusão.
 
 Citação (resposta citada, #201). Escolha de armazenamento: colunas em `messages`, em vez de tabela própria, porque a citação é no máximo uma por mensagem, nasce com ela e nunca muda (a citação não é refeita quando a mensagem é editada). A citação inteira é opcional, e o trecho também: o provedor pode entregar a mensagem sem citação, só com o identificador da citada, ou com identificador e trecho, e as três são gravadas normalmente. Regras de gravação (`helpdesk/inbound.go`), para a mensagem recebida e a enviada pelo celular do setor: com o chamado travado, a ligação procura a citada pelo identificador externo **no mesmo chamado**; se ela não está lá (de antes do XET, de outro chamado, mesmo do mesmo contato, ou ainda não chegou), fica sem ligação e com o trecho do provedor, se houver. O trecho é o que o provedor entrega, não uma cópia da mensagem ligada; a mídia da citação não é baixada nem guardada. Na resposta citada enviada pelo responsável (`helpdesk/send.go`, #202), com o chamado travado, a citada precisa ser do mesmo chamado, ter `external_message_id` (recebida, ou enviada com situação `sent`, `delivered` ou `read`) e não ser `unsupported`; a ligação é sempre gravada, e o trecho é tirado da mensagem citada pela mesma regra do trecho recebido (o texto como o cliente o viu, com o apelido, se for do setor; a legenda; o nome do documento; nada no áudio; a legenda ou o nome em `media_unavailable`). A API devolve a ligação, o tipo e o texto do trecho; sem trecho e com ligação, a tela usa a mensagem ligada, e sem os dois mostra "mensagem indisponível". Editar ou excluir a mensagem citada não reescreve o trecho retroativamente: o `quoted_body` das respostas que a citaram e o da própria resposta ficam como foram gravados, porque a citação é o que o cliente viu quando a resposta saiu.
+
+Cartões de contato (#323, spec #312). Escolha de armazenamento: uma coluna `jsonb` em `messages`, em vez de tabela própria, porque os cartões nascem com a mensagem e nunca mudam, como a citação: são o que o cliente enviou (ou o que o setor enviou), sem ligação com `contacts`, e o cartão não muda se o cadastro mudar. A mensagem pode trazer vários cartões, em ordem, e cada cartão vários telefones; uma tabela pediria duas (cartões e telefones) só para ler tudo junto com a mensagem, sem nenhuma consulta pelos campos de dentro. Cada cartão tem `name` (obrigatório, não vazio), `organization` (o órgão, opcional; no enviado, com o município) e `phones` (lista, pode ser vazia), e cada telefone tem `phone` (só dígitos) e `wa_id` (o identificador do WhatsApp, quando o provedor informa). A conferência da forma de cada cartão é do código (`helpdesk`); o banco garante que a mensagem `contact` tenha a lista e que só ela a tenha. `body` fica vazio na mensagem `contact`. A recepção segue as regras de sempre (chamado, idempotência por `external_message_id`, aviso pelo WebSocket); a API de mensagens devolve `contactCards` e a última mensagem das listas (`lastMessage`) traz o nome do primeiro cartão (`contactName`), de forma aditiva.
+
+Reverter a migração (`down`) só é possível sem mensagens `contact`: apagá-las perderia mensagens. O valor `contact` fica no tipo `message_type`, porque o Postgres não remove valor de enum.
 
 ### `message_changes` — Histórico de alterações da mensagem
 
