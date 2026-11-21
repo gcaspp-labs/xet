@@ -402,6 +402,16 @@ test('o fluxo inteiro funciona pelo teclado, com nomes acessíveis', async ({
   const card = dialog(page).getByRole('group', { name: new RegExp(`^Contato: ${name},`) })
   await expect(card).toBeVisible()
 
+  // A prévia recebe o foco e mostra o indicador de foco do design: outline sólido de 2px,
+  // afastado 2px (design.md, Marca e layout).
+  const preview = dialog(page).locator('[data-slot="contact-preview"]')
+  await expect(preview).toBeFocused()
+  const focusRing = await preview.evaluate((el) => {
+    const style = getComputedStyle(el)
+    return { style: style.outlineStyle, width: style.outlineWidth, offset: style.outlineOffset }
+  })
+  expect(focusRing).toEqual({ style: 'solid', width: '2px', offset: '2px' })
+
   // Tab percorre o rodapé até "Enviar", e Enter envia.
   await tabTo(page, dialog(page).getByRole('button', { name: 'Voltar' }))
   await page.keyboard.press('Tab')

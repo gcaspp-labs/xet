@@ -235,7 +235,7 @@ export function SendContactDialog({
           ref={preview}
           tabIndex={-1}
           data-slot="contact-preview"
-          className="flex flex-col gap-3 outline-none"
+          className="flex flex-col gap-3"
         >
           <ContactPreview contact={contact} />
         </div>
