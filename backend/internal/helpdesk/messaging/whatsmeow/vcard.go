@@ -85,13 +85,14 @@ type vcardProperty struct {
 
 // parseVCard splits a vCard into its properties, with the names and the
 // parameter keys in upper case and the group (item1.TEL) dropped. Folded
-// lines are joined. Without BEGIN:VCARD it is not a vCard.
+// lines are joined. Without BEGIN:VCARD, or not closed by END:VCARD (cut
+// short, or closed by another END), it is not a vCard.
 func parseVCard(text string) ([]vcardProperty, bool) {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\n ", "")
 	text = strings.ReplaceAll(text, "\n\t", "")
 	var props []vcardProperty
-	begun := false
+	begun, ended := false, false
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimRight(line, "\r")
 		head, value, found := strings.Cut(line, ":")
@@ -111,6 +112,7 @@ func parseVCard(text string) ([]vcardProperty, bool) {
 			continue
 		}
 		if name == "END" {
+			ended = strings.EqualFold(strings.TrimSpace(value), "VCARD")
 			break
 		}
 		p := vcardProperty{name: name, value: value, params: map[string]string{}}
@@ -120,7 +122,7 @@ func parseVCard(text string) ([]vcardProperty, bool) {
 		}
 		props = append(props, p)
 	}
-	return props, begun
+	return props, begun && ended
 }
 
 // splitEscaped splits a structured value (N, ORG) at the separators not

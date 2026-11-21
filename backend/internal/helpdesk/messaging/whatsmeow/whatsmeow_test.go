@@ -252,6 +252,22 @@ func TestContactsBecomeNeutralCards(t *testing.T) {
 			want: messaging.MessageReceived{SectorID: 7, Message: with("CT-4", messaging.TypeUnsupported)},
 		},
 		{
+			name: "vCard cut short, without END:VCARD",
+			evt: incoming("CT-6", false, at, &waE2E.Message{ContactMessage: &waE2E.ContactMessage{
+				DisplayName: proto.String("João"),
+				Vcard:       proto.String("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:João\r\nTEL:5511977776666"),
+			}}),
+			want: messaging.MessageReceived{SectorID: 7, Message: with("CT-6", messaging.TypeUnsupported)},
+		},
+		{
+			name: "vCard closed by another END",
+			evt: incoming("CT-7", false, at, &waE2E.Message{ContactMessage: &waE2E.ContactMessage{
+				DisplayName: proto.String("João"),
+				Vcard:       proto.String("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:João\r\nTEL:5511977776666\r\nEND:OUTRO"),
+			}}),
+			want: messaging.MessageReceived{SectorID: 7, Message: with("CT-7", messaging.TypeUnsupported)},
+		},
+		{
 			name: "vCard without name nor phone",
 			evt:  incoming("CT-5", false, at, &waE2E.Message{ContactMessage: &waE2E.ContactMessage{Vcard: vcard("ORG:Prefeitura")}}),
 			want: messaging.MessageReceived{SectorID: 7, Message: with("CT-5", messaging.TypeUnsupported)},
