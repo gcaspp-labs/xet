@@ -108,7 +108,7 @@ func (q *Queries) ListClosedTicketSubjects(ctx context.Context, arg ListClosedTi
 
 const listClosedTicketsPage = `-- name: ListClosedTicketsPage :many
 select
-    t.id, t.protocol, t.closure_type, t.closed_at, t.subject,
+    t.id, t.protocol, t.closure_type, t.channel, t.closed_at, t.subject,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     o.name as organization_name, m.name as municipality_name,
     t.sector_id, s.name as sector_name,
@@ -180,6 +180,7 @@ type ListClosedTicketsPageRow struct {
 	ID                    int64
 	Protocol              string
 	ClosureType           NullClosureType
+	Channel               TicketChannel
 	ClosedAt              *time.Time
 	Subject               *string
 	ContactID             int64
@@ -222,6 +223,7 @@ func (q *Queries) ListClosedTicketsPage(ctx context.Context, arg ListClosedTicke
 			&i.ID,
 			&i.Protocol,
 			&i.ClosureType,
+			&i.Channel,
 			&i.ClosedAt,
 			&i.Subject,
 			&i.ContactID,

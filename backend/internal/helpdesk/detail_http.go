@@ -26,6 +26,7 @@ type ticketDetailResponse struct {
 	Assignee     *httpx.Ref              `json:"assignee"`
 	ClosedBy     *httpx.Ref              `json:"closedBy"`
 	ClosureType  *db.ClosureType         `json:"closureType"`
+	Channel      db.TicketChannel        `json:"channel"`
 	Previous     *previousTicketResponse `json:"previous"`
 	Next         *nextTicketResponse     `json:"next"`
 }
@@ -62,7 +63,7 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := ticketDetailResponse{
-		ID: t.ID, Protocol: t.Protocol, Status: t.Status,
+		ID: t.ID, Protocol: t.Protocol, Status: t.Status, Channel: t.Channel,
 		Sector:    httpx.Ref{ID: t.SectorID, Name: t.SectorName},
 		ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt,
 		StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt,

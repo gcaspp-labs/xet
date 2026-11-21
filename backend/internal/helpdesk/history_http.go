@@ -11,25 +11,26 @@ import (
 )
 
 type historyResponse struct {
-	ID               int64           `json:"id"`
-	Protocol         string          `json:"protocol"`
-	Status           db.TicketStatus `json:"status"`
-	ClosureType      *db.ClosureType `json:"closureType"`
-	SectorName       string          `json:"sectorName"`
-	ArrivedAt        time.Time       `json:"arrivedAt"`
-	ClosedAt         *time.Time      `json:"closedAt"`
-	Subject          *string         `json:"subject"`
-	ContactName      string          `json:"contactName"`
-	OrganizationName *string         `json:"organizationName"`
-	MunicipalityName *string         `json:"municipalityName"`
-	AssigneeName     *string         `json:"assigneeName"`
+	ID               int64            `json:"id"`
+	Protocol         string           `json:"protocol"`
+	Status           db.TicketStatus  `json:"status"`
+	ClosureType      *db.ClosureType  `json:"closureType"`
+	Channel          db.TicketChannel `json:"channel"`
+	SectorName       string           `json:"sectorName"`
+	ArrivedAt        time.Time        `json:"arrivedAt"`
+	ClosedAt         *time.Time       `json:"closedAt"`
+	Subject          *string          `json:"subject"`
+	ContactName      string           `json:"contactName"`
+	OrganizationName *string          `json:"organizationName"`
+	MunicipalityName *string          `json:"municipalityName"`
+	AssigneeName     *string          `json:"assigneeName"`
 }
 
 func writeHistory(w http.ResponseWriter, rows []HistoryEntry, total int64, page paging.Request) {
 	out := make([]historyResponse, len(rows))
 	for i, t := range rows {
 		out[i] = historyResponse{
-			ID: t.ID, Protocol: t.Protocol, Status: t.Status, SectorName: t.SectorName,
+			ID: t.ID, Protocol: t.Protocol, Status: t.Status, Channel: t.Channel, SectorName: t.SectorName,
 			ArrivedAt: t.ArrivedAt, ClosedAt: t.ClosedAt, Subject: t.Subject,
 			ContactName: t.ContactName, OrganizationName: t.OrganizationName, MunicipalityName: t.MunicipalityName, AssigneeName: t.AssigneeName,
 		}

@@ -471,3 +471,95 @@ func TestMessageChangesKeepMessagesUpAndDown(t *testing.T) {
 		t.Fatalf("up again: %v", err)
 	}
 }
+
+// O canal (#316) chega com o padrão WhatsApp nos chamados existentes, sem
+// mudar mais nada neles; o registro por telefone só existe encerrado, e a
+// volta recusa apagar registros por telefone.
+func TestTicketChannelKeepsExistingTicketsAsWhatsApp(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 31); err != nil {
+		t.Fatalf("up to 31: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into organizations (name, municipality_id) select 'Prefeitura', min(id) from municipalities;
+		insert into contacts (name, phone, registered, organization_id) select 'Maria', '5511988887777', true, id from organizations;
+		insert into contacts (name, registered) values ('João', false);
+		insert into users (name, nickname, email, password_hash, role, sector_id) values ('Ana', 'Ana', 'ana@exemplo.com', 'x', 'agent', 1);
+		insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at, subject, resolution)
+		select '2026-000001', 1, 1, id, 'closed', 1, 1, 'resolved', now(), now(), now() - interval '1 hour', now() - interval '1 hour', 'Contracheque', 'Segunda via' from organizations;
+		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000002', 1, 2, 'queued', now(), now());`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	const snapshot = `select string_agg(row_to_json(t)::text, '|' order by id) from (
+		select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id,
+		    arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution,
+		    created_at, updated_at, transfer_reason from tickets) t`
+	var before, after string
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 32); err != nil {
+		t.Fatalf("up to 32: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("tickets changed:\nbefore %s\nafter  %s", before, after)
+	}
+	var whatsapp, withRequest int
+	if err := db.QueryRowContext(ctx, `select count(*) filter (where channel = 'whatsapp'), count(client_request_id) from tickets`).Scan(&whatsapp, &withRequest); err != nil {
+		t.Fatal(err)
+	}
+	if whatsapp != 2 || withRequest != 0 {
+		t.Fatalf("whatsapp = %d, with request id = %d", whatsapp, withRequest)
+	}
+
+	// O registro por telefone só existe encerrado normalmente, e a chave é única.
+	for name, stmt := range map[string]string{
+		"open phone ticket": `insert into tickets (protocol, sector_id, contact_id, status, channel, arrived_at, started_at)
+			values ('2026-000003', 1, 1, 'queued', 'phone', now(), now())`,
+		"cancelled phone ticket": `insert into tickets (protocol, sector_id, contact_id, status, channel, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at)
+			values ('2026-000003', 1, 1, 'closed', 'phone', 1, 1, 'cancelled', now(), now(), now(), now())`,
+	} {
+		if _, err := db.ExecContext(ctx, stmt); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+	const phone = `insert into tickets (protocol, sector_id, contact_id, organization_id, status, channel, client_request_id, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at, subject, resolution)
+		select $1, 1, 1, id, 'closed', 'phone', '6f1b6d3e-1d0a-4f5b-9c1e-0a1b2c3d4e5f', 1, 1, 'resolved', now(), now(), now(), now(), 'Senha', 'Orientado' from organizations`
+
+	// Sem registro por telefone, a volta desfaz tudo; com um, é recusada.
+	if _, err := p.DownTo(ctx, 31); err != nil {
+		t.Fatalf("down to 31: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("tickets changed by down:\nbefore %s\nafter  %s", before, after)
+	}
+	if _, err := p.UpTo(ctx, 32); err != nil {
+		t.Fatalf("up again: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, phone, "2026-000003"); err != nil {
+		t.Fatalf("phone ticket: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, phone, "2026-000004"); err == nil {
+		t.Fatal("repeated client_request_id: accepted")
+	}
+	if _, err := p.DownTo(ctx, 31); err == nil {
+		t.Fatal("down with a phone ticket: accepted")
+	}
+}
