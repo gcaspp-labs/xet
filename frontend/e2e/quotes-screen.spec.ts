@@ -550,6 +550,26 @@ async function seedContact(baseURL: string, sectorId: number, name: string, phon
   return contact.id
 }
 
+// O que o adaptador falso do WhatsApp recebeu para o setor, pela rota de teste do próprio adaptador.
+type SentToProvider = {
+  id: string
+  kind: string
+  type?: string
+  to?: string
+  body?: string
+  card?: { name: string; organization?: string; phones?: string[] }
+  quote?: { externalMessageId: string; type?: string; text?: string }
+}
+
+const sentToProvider = async (request: APIRequestContext, sectorId: number) =>
+  json<SentToProvider[]>(await request.get(`/api/test/messaging/sectors/${sectorId}/sent`))
+
+// Os cartões que o adaptador falso recebeu, pelo nome do contato.
+const cardsSentToProvider = async (request: APIRequestContext, sectorId: number, name: string) =>
+  (await sentToProvider(request, sectorId)).filter(
+    (item) => item.kind === 'contact' && item.card?.name === name,
+  )
+
 test('Responder num cartão mostra "👤 Nome" na citação em preparo e na resposta, e o cliente citando um cartão também', async ({
   page,
   request,
@@ -619,7 +639,7 @@ test('o cartão enviado pela janela vai como resposta citada, a citação sai do
   request,
   baseURL,
 }) => {
-  const { agent, sector, receive } = await seedCustomer(request, baseURL!, 'Clara Cita')
+  const { agent, sector, receive, externalId } = await seedCustomer(request, baseURL!, 'Clara Cita')
   await receive('1', { body: first })
   const { id } = unique()
   const name = `Rita ${id}`
@@ -646,6 +666,16 @@ test('o cartão enviado pela janela vai como resposta citada, a citação sai do
     text: first,
   })
 
+  // O adaptador falso recebe o cartão com a citação: o que a tela guarda não basta.
+  await expect
+    .poll(async () => (await cardsSentToProvider(request, sector.id, name)).length)
+    .toBe(1)
+  expect((await cardsSentToProvider(request, sector.id, name))[0].quote).toMatchObject({
+    externalMessageId: externalId('1'),
+    type: 'text',
+    text: first,
+  })
+
   // Com o número desconectado, o cartão fica com falha e mantém a citação; o falso recebe a mesma
   // citação de novo no Reenviar, sem duplicar a mensagem.
   const other = `Bruno ${id}`
@@ -657,6 +687,8 @@ test('o cartão enviado pela janela vai como resposta citada, a citação sai do
   await expect(failed).toContainText('Falhou')
   await expect(draft).toHaveCount(0)
   await expect(failed.getByRole('button', { name: `Citação de Cliente: ${first}` })).toBeVisible()
+  // Desconectado, o cartão com falha não chegou ao provedor.
+  expect(await cardsSentToProvider(request, sector.id, other)).toHaveLength(0)
 
   await connectSector(baseURL!, sector.id)
   await failed.getByRole('button', { name: 'Reenviar' }).click()
@@ -665,6 +697,83 @@ test('o cartão enviado pela janela vai como resposta citada, a citação sai do
   expect(sent).toHaveLength(2)
   expect(sent[1].quote?.messageId).toBe(target)
   await expect(page.getByRole('group', { name: new RegExp(`^Contato: ${other},`) })).toHaveCount(1)
+
+  // O Reenviar chegou ao falso uma vez só, com a mesma citação.
+  const resent = await cardsSentToProvider(request, sector.id, other)
+  expect(resent).toHaveLength(1)
+  expect(resent[0].quote).toMatchObject({
+    externalMessageId: externalId('1'),
+    type: 'text',
+    text: first,
+  })
+})
+
+test('Responder pelo menu de um cartão enviado mostra "👤 Nome", e o cliente também cita esse cartão', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { agent, sector, receive } = await seedCustomer(request, baseURL!, 'Clara Cita')
+  await receive('1', { body: first })
+  const { id } = unique()
+  const name = `Rita ${id}`
+  await seedContact(baseURL!, sector.id, name, unique().phone)
+
+  const conversation = await openAssigned(page, agent, 'Clara Cita')
+  const ticketId = currentTicketId(page)
+  const input = page.getByRole('textbox', { name: 'Mensagem' })
+  const draft = page.getByRole('group', { name: /^Respondendo a agent \d+$/ })
+
+  // O cartão sai pela janela do anexo, como nas outras jornadas.
+  await sendContact(page, name)
+  const card = cardBubble(conversation, 'Mensagem enviada', name)
+  await expect(card).toContainText('Enviada')
+  await expect
+    .poll(async () => (await cardsSentToProvider(request, sector.id, name)).length)
+    .toBe(1)
+  const atProvider = (await cardsSentToProvider(request, sector.id, name))[0]
+
+  // No cartão enviado o Responder fica no menu (⋯), não ao lado do balão. O cartão ocupa a largura
+  // da conversa e, numa janela estreita, o menu fica sob a coluna da lista: o teclado o alcança,
+  // como um leitor de tela faria.
+  await card.hover()
+  await expect(card.getByRole('button', { name: 'Responder', exact: true })).toHaveCount(0)
+  await card.getByRole('button', { name: 'Ações da mensagem' }).focus()
+  await page.keyboard.press('Enter')
+  const replyItem = page.getByRole('menuitem', { name: 'Responder', exact: true })
+  await expect(replyItem).toBeVisible()
+  await replyItem.focus()
+  await page.keyboard.press('Enter')
+  await expect(draft).toContainText(`👤 ${name}`)
+  await expect(input).toBeFocused()
+
+  // A resposta citada mostra o nome do cartão, como as demais mensagens citadas.
+  await input.fill('Falo com ela')
+  await input.press('Enter')
+  const reply = bubbleOf(conversation, 'Falo com ela')
+  await expect(reply).toContainText('Enviada')
+  await expect(draft).toHaveCount(0)
+  const citation = { name: new RegExp(`^Citação de agent \\d+: 👤 ${name}$`) }
+  await expect(reply.getByRole('button', citation)).toBeVisible()
+  const sentCard = (await listMessages(page, ticketId)).find(
+    (message) => message.type === 'contact',
+  )
+  expect(
+    (await listMessages(page, ticketId)).find((m) => m.body?.includes('Falo com ela'))?.quote,
+  ).toEqual({
+    messageId: sentCard?.id,
+    type: 'contact',
+    text: name,
+  })
+
+  // O cliente cita o cartão que o setor mandou, pelo identificador que chegou ao provedor.
+  await receive('2', {
+    body: 'Falo com ela também',
+    quote: { externalMessageId: atProvider.id, snippet: { type: 'contact', text: name } },
+  })
+  const fromClient = bubbleOf(conversation, 'Falo com ela também')
+  await expect(fromClient.getByRole('button', citation)).toBeVisible()
+  await expect(fromClient.getByRole('button', citation)).toContainText(name)
 })
 
 test('cartão enviando ou com falha não oferece reação nem Responder', async ({
