@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { TelefoneTag } from '@/components/TicketChannel'
+import { PhoneTag } from '@/components/TicketChannel'
 import { type HistoryEntry, useContactHistory, useOrganizationHistory } from '@/lib/conversation'
 import { formatDateTime, organizationLabel, ticketStatusLabel } from '@/lib/format'
 import { historyReturnState } from '@/lib/history-return'
@@ -71,7 +71,7 @@ export function TicketHistoryList({
               </Badge>
             </div>
             <p className="caption flex items-center gap-1.5 text-ink-faint">
-              {entry.channel === 'phone' && <TelefoneTag />}
+              {entry.channel === 'phone' && <PhoneTag />}
               <span className="truncate">
                 {entry.sectorName}
                 {entry.organizationName &&

@@ -36,7 +36,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
-import { TelefoneTag } from '@/components/TicketChannel'
+import { PhoneTag } from '@/components/TicketChannel'
 import {
   type ChannelChoice,
   type ClosedTicket,
@@ -334,7 +334,7 @@ function SituationCell({ ticket }: { ticket: ClosedTicket }) {
   return (
     <span className="flex flex-col items-start gap-(--space-4)">
       <Badge tone={type === 'cancelled' ? 'danger' : 'neutral'}>{closureTypeLabels[type]}</Badge>
-      {ticket.channel === 'phone' && <TelefoneTag />}
+      {ticket.channel === 'phone' && <PhoneTag />}
       {ticket.transferredTo && (
         <span className="caption text-ink-faint">para {ticket.transferredTo.name}</span>
       )}

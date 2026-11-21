@@ -327,13 +327,13 @@ test('a ficha do registro por telefone não tem conversa, e a correção salva c
 
   // O histórico do contato e o do órgão mostram o registro com a marca Telefone.
   await page.getByRole('tab', { name: 'Histórico' }).click()
-  const contato = page.getByRole('list', { name: 'Chamados do contato' })
-  await expect(contato).toContainText(h.phone.protocol)
-  await expect(contato).toContainText(h.whatsapp.protocol)
-  await expect(contato.getByText('Telefone', { exact: true })).toHaveCount(1)
-  const orgao = page.getByRole('list', { name: 'Chamados do órgão' })
-  await expect(orgao).toContainText(h.phone.protocol)
-  await expect(orgao.getByText('Telefone', { exact: true })).toHaveCount(1)
+  const contactHistory = page.getByRole('list', { name: 'Chamados do contato' })
+  await expect(contactHistory).toContainText(h.phone.protocol)
+  await expect(contactHistory).toContainText(h.whatsapp.protocol)
+  await expect(contactHistory.getByText('Telefone', { exact: true })).toHaveCount(1)
+  const organizationHistory = page.getByRole('list', { name: 'Chamados do órgão' })
+  await expect(organizationHistory).toContainText(h.phone.protocol)
+  await expect(organizationHistory.getByText('Telefone', { exact: true })).toHaveCount(1)
 })
 
 test('abre com todos os chamados encerrados, do mais recente ao mais antigo, sem situação aberta nem Novo chamado', async ({

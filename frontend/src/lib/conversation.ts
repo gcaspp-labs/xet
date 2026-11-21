@@ -4,15 +4,13 @@ import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
-import { closedTicketsKey } from '@/lib/closed-tickets'
+import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
 import { type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
 export const maxFileSize = 16 * 1024 * 1024
 
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
-
-export type TicketChannel = 'whatsapp' | 'phone'
 
 export type TicketDetail = {
   id: number

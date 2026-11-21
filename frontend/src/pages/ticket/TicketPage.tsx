@@ -41,7 +41,7 @@ import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
-import { TelefoneTag } from '@/components/TicketChannel'
+import { PhoneTag } from '@/components/TicketChannel'
 import type { HistoryReturnState } from '@/lib/history-return'
 import { PhoneCopy } from '@/components/PhoneCopy'
 import { Topbar } from '@/components/Topbar'
@@ -1122,7 +1122,7 @@ function DetailsTab({ ticket }: { ticket: TicketDetail }) {
       {(ticket.previous || ticket.next) && <TransferChain ticket={ticket} />}
       {row('Protocolo', <span className="mono-num">{ticket.protocol}</span>)}
       {row('Situação', <Badge tone={status.tone}>{status.label}</Badge>)}
-      {row('Canal', ticket.channel === 'phone' ? <TelefoneTag /> : 'WhatsApp')}
+      {row('Canal', ticket.channel === 'phone' ? <PhoneTag /> : 'WhatsApp')}
       {row('Setor', ticket.sector.name)}
       {row(
         'Contato',
