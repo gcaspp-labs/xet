@@ -368,7 +368,7 @@ function PeriodTable({
             <TableHead className="text-ink">Atendente</TableHead>
             {allSectors && <TableHead className="text-ink">Setor</TableHead>}
             {assigneeColumns.map((column) => (
-              <TableHead key={column.key} className="text-right text-ink">
+              <TableHead key={column.key} className="whitespace-normal text-right text-ink">
                 {column.label}
               </TableHead>
             ))}
