@@ -45,6 +45,26 @@ type ClosingForm struct {
 	StartedAt        time.Time
 }
 
+// closingFormData loads what every closing form shows before it is filled: the
+// active modules of the sector, the modules of the contact among them and the
+// subjects of the sector with their solutions. Who may open the form and which
+// organization is suggested stay with each flow.
+func (s *Service) closingFormData(ctx context.Context, sectorID, contactID int64, startedAt time.Time) (ClosingForm, error) {
+	modules, err := s.q.ListActiveModules(ctx, sectorID)
+	if err != nil {
+		return ClosingForm{}, fmt.Errorf("list active modules: %w", err)
+	}
+	contactModules, err := s.q.ListContactActiveModuleIDs(ctx, db.ListContactActiveModuleIDsParams{ContactID: contactID, SectorID: sectorID})
+	if err != nil {
+		return ClosingForm{}, fmt.Errorf("list contact modules: %w", err)
+	}
+	subjects, err := s.Subjects(ctx, sectorID)
+	if err != nil {
+		return ClosingForm{}, err
+	}
+	return ClosingForm{Modules: modules, Subjects: subjects, ContactModuleIDs: contactModules, StartedAt: startedAt}, nil
+}
+
 // ClosingForm returns the defaults of the closing form. The organization is
 // the one of the ticket or, when it has none yet, the main organization of
 // the contact (spec.md, Formulário de encerramento).
@@ -53,19 +73,10 @@ func (s *Service) ClosingForm(ctx context.Context, actor auth.User, ticketID int
 	if err != nil {
 		return ClosingForm{}, err
 	}
-	modules, err := s.q.ListActiveModules(ctx, t.SectorID)
-	if err != nil {
-		return ClosingForm{}, fmt.Errorf("list active modules: %w", err)
-	}
-	contactModules, err := s.q.ListContactActiveModuleIDs(ctx, db.ListContactActiveModuleIDsParams{ContactID: t.ContactID, SectorID: t.SectorID})
-	if err != nil {
-		return ClosingForm{}, fmt.Errorf("list contact modules: %w", err)
-	}
-	subjects, err := s.Subjects(ctx, t.SectorID)
+	form, err := s.closingFormData(ctx, t.SectorID, t.ContactID, t.StartedAt)
 	if err != nil {
 		return ClosingForm{}, err
 	}
-	form := ClosingForm{Modules: modules, Subjects: subjects, ContactModuleIDs: contactModules, StartedAt: t.StartedAt}
 	orgID := t.OrganizationID
 	if orgID == nil {
 		c, err := s.q.GetContactWithOrganization(ctx, t.ContactID)

@@ -150,6 +150,26 @@ func (e *testEnv) waitTicketLockWaiters(n int) {
 	e.T.Fatalf("fewer than %d transactions wait for a ticket", n)
 }
 
+// phoneFormFor asks for what the phone registration window starts with.
+func (e *testEnv) phoneFormFor(sectorID, contactID int64, token string) response {
+	e.T.Helper()
+	return e.Do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/phone-tickets/form?contactId=%d", sectorID, contactID), token, nil)
+}
+
+// contactWithModule creates a contact registered in the sector with one of its
+// modules.
+func (e *testEnv) contactWithModule(token, name, phone string, orgID, sectorID, moduleID int64) int64 {
+	e.T.Helper()
+	resp := e.Do(http.MethodPost, "/api/contacts", token, map[string]any{
+		"name": name, "phone": phone, "organizationId": orgID,
+		"sectorIds": []int64{sectorID}, "moduleIds": []int64{moduleID},
+	})
+	if resp.Status != http.StatusCreated {
+		e.T.Fatalf("create contact %s: status %d, body %v", name, resp.Status, resp.Body)
+	}
+	return id(resp.Body)
+}
+
 // sentConversation is an assigned conversation with a text sent by Ana from
 // the panel, known to WhatsApp.
 type sentConversation struct {

@@ -53,19 +53,10 @@ func (s *Service) PhoneForm(ctx context.Context, actor auth.User, sectorID, cont
 	} else if err != nil {
 		return ClosingForm{}, fmt.Errorf("get contact: %w", err)
 	}
-	modules, err := s.q.ListActiveModules(ctx, sectorID)
-	if err != nil {
-		return ClosingForm{}, fmt.Errorf("list active modules: %w", err)
-	}
-	contactModules, err := s.q.ListContactActiveModuleIDs(ctx, db.ListContactActiveModuleIDsParams{ContactID: contactID, SectorID: sectorID})
-	if err != nil {
-		return ClosingForm{}, fmt.Errorf("list contact modules: %w", err)
-	}
-	subjects, err := s.Subjects(ctx, sectorID)
+	form, err := s.closingFormData(ctx, sectorID, contactID, time.Now())
 	if err != nil {
 		return ClosingForm{}, err
 	}
-	form := ClosingForm{Modules: modules, Subjects: subjects, ContactModuleIDs: contactModules, StartedAt: time.Now()}
 	if contact.Contact.OrganizationID != nil {
 		org, err := s.q.GetOrganization(ctx, *contact.Contact.OrganizationID)
 		if err != nil {
