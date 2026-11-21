@@ -385,3 +385,16 @@ for (const theme of ['light', 'dark'] as const) {
     })
   }
 }
+
+test('a janela de registro por telefone tem bloqueio', async ({ page, baseURL }) => {
+  const { agent } = await seedSector(baseURL!)
+  await signIn(page, agent, userPassword)
+  await page.goto('/atendimentos')
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await page.getByRole('button', { name: 'Registrar atendimento por telefone' }).click()
+  await expectLockedDialog(
+    page,
+    page.getByRole('dialog', { name: 'Registrar atendimento por telefone' }),
+    { field: 'Buscar contato' },
+  )
+})

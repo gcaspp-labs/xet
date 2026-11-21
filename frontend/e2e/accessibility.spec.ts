@@ -342,6 +342,50 @@ test('todo texto das telas densas acompanha o tamanho escolhido', async ({ brows
   await context.close()
 })
 
+test('o texto da janela de registro por telefone acompanha o tamanho escolhido', async ({
+  browser,
+  baseURL,
+}) => {
+  test.slow()
+  const { supervisor } = await seedSector(baseURL!)
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, supervisor, userPassword)
+
+  const open = async () => {
+    await page.goto('/atendimentos')
+    await page.getByRole('button', { name: 'Registrar atendimento por telefone' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Registrar atendimento por telefone' })
+    await expect(dialog.getByLabel('Buscar contato')).toBeVisible()
+  }
+
+  await open()
+  const standard = await textSizes(page)
+  await page.goto('/chamados')
+  await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
+  await chooseInMenu(page, 'menuitemradio', 'Maior')
+  await open()
+  const larger = await textSizes(page)
+
+  // O mesmo texto pode aparecer em mais de um lugar: compara cada ocorrência, na ordem da tela.
+  const occurrences = (items: { text: string; size: number }[]) => {
+    const seen = new Map<string, number>()
+    return new Map(
+      items.map((item) => {
+        const count = (seen.get(item.text) ?? 0) + 1
+        seen.set(item.text, count)
+        return [`${item.text}#${count}`, item.size]
+      }),
+    )
+  }
+  const before = occurrences(standard)
+  const compared = [...occurrences(larger)].filter(([key]) => before.has(key))
+  expect(compared.length).toBeGreaterThan(5)
+  const unscaled = compared.filter(([key, size]) => Math.abs(size / before.get(key)! - 1.3) > 0.01)
+  expect(unscaled).toEqual([])
+  await context.close()
+})
+
 test('tamanho e contraste são aplicados antes de o aplicativo carregar', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await page.goto('/login')
@@ -514,6 +558,14 @@ for (const theme of ['light', 'dark'] as const) {
     expect(
       await contrastOf(page, '[role="dialog"] [data-slot="button"].bg-primary'),
     ).toBeGreaterThanOrEqual(7)
+
+    // Janela do registro por telefone, em Atendimentos.
+    await sheet.getByRole('button', { name: 'Cancelar', exact: true }).click()
+    await page.goto('/atendimentos')
+    await page.getByRole('button', { name: 'Registrar atendimento por telefone' }).click()
+    const phone = page.getByRole('dialog', { name: 'Registrar atendimento por telefone' })
+    await expect(phone.getByLabel('Buscar contato')).toBeVisible()
+    await expectContrast(page, 'janela de registro por telefone')
     await context.close()
   })
 
