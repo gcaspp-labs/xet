@@ -1,4 +1,5 @@
 import { CircleAlert } from 'lucide-react'
+import { ContactCards } from '@/components/ContactCards'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -138,6 +139,18 @@ export function MessageChangesDialog({
               )}
             </ol>
           )}
+          {/* O cartão de contato não tem texto: o conteúdo preservado aparece com o cartão. */}
+          {message.type === 'contact' &&
+            message.contactCards &&
+            message.contactCards.length > 0 && (
+              <div data-testid="message-preserved-contact" className="flex flex-col gap-1">
+                <p className="caption text-ink-soft">Conteúdo da mensagem</p>
+                <ContactCards
+                  cards={message.contactCards}
+                  outbound={message.direction === 'outbound'}
+                />
+              </div>
+            )}
           {message.deletion && deletionScope && (
             <p data-testid="deleted-content" className="caption text-ink-soft">
               {deletionScope === 'local'

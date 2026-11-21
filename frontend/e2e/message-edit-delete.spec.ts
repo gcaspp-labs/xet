@@ -7,7 +7,18 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test'
-import { admin, json, openQueued, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  adminApi,
+  json,
+  ok,
+  openQueued,
+  seedContact,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 // As capacidades do WhatsApp falso (prazos) valem para o processo todo: os testes deste arquivo, que
 // as mudam, rodam um de cada vez.
@@ -813,6 +824,205 @@ test('mensagem originada no celular do setor não tem menu', async ({ page, requ
   await outside.hover()
   await expect(outside.getByRole('button', { name: 'Ações da mensagem' })).toHaveCount(0)
   await expect(outside.getByRole('button', { name: 'Excluir' })).toHaveCount(0)
+})
+
+// O balão que tem um cartão de contato enviado, pelo nome do contato no nome acessível do cartão.
+const sentCard = (page: Page, name: string) =>
+  page
+    .getByRole('region', { name: 'Conversa', exact: true })
+    .getByRole('listitem', { name: 'Mensagem enviada' })
+    .filter({ has: page.getByRole('group', { name: new RegExp(`^Contato: ${name},`) }) })
+
+// Envia um cartão do cadastro pela API, como a janela "Enviar contato".
+async function sendCard(page: Page, ticketId: number, contactId: number) {
+  const response = await page.request.post(`/api/tickets/${ticketId}/messages/contact`, {
+    data: { clientRequestId: crypto.randomUUID(), contactId },
+  })
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as { id: number; status: string }
+}
+
+test('cartão de contato: o menu diz que não pode ser editado, excluir para todos avisa e Atendimentos guarda o cartão', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone: sender } = unique()
+  // O contato do chamado precisa estar cadastrado para o encerramento; o cartão vem de outro contato.
+  await seedContact(baseURL!, sector.id, `Clara ${id}`, sender)
+  const carla = await seedContact(baseURL!, sector.id, `Carla ${id}`, `551197${id.slice(-6)}`)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-328-${id}`,
+    phone: sender,
+    contactName: `Clara ${id}`,
+    body: 'Preciso do contracheque',
+  })
+  const conversation = await openAssigned(page, agent, `Clara ${id}`)
+  const ticketId = ticketIdOf(page)
+  const sent = await sendCard(page, ticketId, carla.id)
+  expect(sent.status).toBe('sent')
+  await page.reload()
+
+  // O menu não oferece Editar e explica por quê; a exclusão continua lá.
+  const card = page.getByRole('group', { name: new RegExp(`^Contato: Carla ${id},`) })
+  const bubble = sentIn(conversation).filter({ has: card })
+  await expect(bubble).toContainText('Enviada')
+  await openMenu(bubble)
+  await expect(page.getByRole('menuitem')).toHaveText(['Responder', 'Excluir'])
+  await expect(page.getByRole('menu')).toContainText('Contato não pode ser editado.')
+  await page.getByRole('menuitem', { name: 'Excluir', exact: true }).click()
+
+  // "Excluir para todos" pede a exclusão no WhatsApp e o balão vira o aviso.
+  const dialog = page.getByRole('dialog', { name: 'Excluir mensagem' })
+  await expect(dialog.getByRole('button', { name: 'Excluir para todos' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Excluir para todos' }).click()
+  await expect(sentIn(conversation).first()).toContainText('Mensagem excluída no XET')
+  await expect(
+    sentIn(conversation)
+      .first()
+      .getByRole('group', { name: /^Contato:/ }),
+  ).toHaveCount(0)
+
+  // Em Atendimentos, o cartão continua guardado, com a etiqueta e a janela de exclusão.
+  const admins = await adminApi(baseURL!)
+  const module = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }),
+  )
+  await admins.dispose()
+  ok(
+    await page.request.post(`/api/tickets/${ticketId}/close`, {
+      data: {
+        subject: 'Contracheque',
+        resolution: 'Orientei o contato.',
+        moduleIds: [module.id],
+        organizationId: carla.organizationId,
+      },
+    }),
+  )
+  await page.goto(`/atendimentos/${ticketId}`)
+  const atendimentoCard = page.getByRole('group', { name: new RegExp(`^Contato: Carla ${id},`) })
+  await expect(atendimentoCard).toBeVisible()
+  const closed = page
+    .getByRole('listitem', { name: 'Mensagem enviada' })
+    .filter({ has: atendimentoCard })
+  await expect(closed).toContainText('Excluída')
+  await closed.getByRole('button', { name: 'Ver exclusão' }).click()
+  const changes = page.getByRole('dialog', { name: 'Mensagem excluída' })
+  await expect(changes).toContainText('Para todos (também no WhatsApp)')
+  await expect(changes.getByTestId('message-preserved-contact')).toContainText(`Carla ${id}`)
+  await expect(
+    changes.getByRole('group', { name: new RegExp(`^Contato: Carla ${id},`) }),
+  ).toBeVisible()
+  await expect(
+    changes.getByRole('button', { name: /Editar|Excluir|Reenviar|Restaurar/ }),
+  ).toHaveCount(0)
+})
+
+test('cartão de contato recebido que o cliente excluiu aparece na janela de exclusão como recebido', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone: sender } = unique()
+  // O contato do chamado precisa estar cadastrado para o encerramento.
+  const nina = await seedContact(baseURL!, sector.id, `Nina ${id}`, sender)
+  const cardPhone = `551196${id.slice(-6)}`
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-328-IN-${id}`,
+    phone: sender,
+    contactName: `Nina ${id}`,
+    body: 'Segue o contato do meu filho',
+  })
+  // O cliente compartilha um cartão e depois o apaga: o cartão continua guardado.
+  const cardMessageId = `E2E-328-CARD-${id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: cardMessageId,
+    phone: sender,
+    contactName: `Nina ${id}`,
+    type: 'contact',
+    contactCards: [
+      {
+        name: `Diego ${id}`,
+        organization: 'Prefeitura Teste',
+        phones: [{ phone: cardPhone }],
+      },
+    ],
+  })
+  await openAssigned(page, agent, `Nina ${id}`)
+  const ticketId = ticketIdOf(page)
+  await phone(request, sector.id, 'revoke', {
+    targetExternalMessageId: cardMessageId,
+    phone: sender,
+  })
+
+  const admins = await adminApi(baseURL!)
+  const module = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }),
+  )
+  await admins.dispose()
+  ok(
+    await page.request.post(`/api/tickets/${ticketId}/close`, {
+      data: {
+        subject: 'Contracheque',
+        resolution: 'Orientei o contato.',
+        moduleIds: [module.id],
+        organizationId: nina.organizationId,
+      },
+    }),
+  )
+
+  // Em Atendimentos, o cartão recebido excluído abre a janela com o conteúdo preservado do jeito
+  // recebido: sem o formato do enviado e com o botão de copiar telefone.
+  await page.goto(`/atendimentos/${ticketId}`)
+  const received = page
+    .getByRole('listitem', { name: 'Mensagem recebida' })
+    .filter({ has: page.getByRole('group', { name: new RegExp(`^Contato: Diego ${id},`) }) })
+  await expect(received).toContainText('Excluída')
+  await received.getByRole('button', { name: 'Ver exclusão' }).click()
+  const changes = page.getByRole('dialog', { name: 'Mensagem excluída' })
+  await expect(changes).toContainText('Para todos (também no WhatsApp)')
+  const preserved = changes.getByTestId('message-preserved-contact')
+  await expect(preserved).toContainText(`Diego ${id}`)
+  await expect(
+    preserved.getByRole('group', { name: new RegExp(`^Contato: Diego ${id},`) }),
+  ).toBeVisible()
+  await expect(preserved.getByRole('button', { name: /^Copiar telefone / })).toBeVisible()
+})
+
+test('cartão de contato com falha só aceita excluir para mim', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedCustomer(request, baseURL!, 'Nina Cartão')
+  const { id } = unique()
+  const bruno = await seedContact(baseURL!, sector.id, `Bruno ${id}`, `551188${id.slice(-6)}`)
+  const conversation = await openAssigned(page, agent, 'Nina Cartão')
+  const ticketId = ticketIdOf(page)
+
+  // Número desconectado: o cartão fica com falha, como as outras mensagens.
+  await phone(request, sector.id, 'drop')
+  const sent = await sendCard(page, ticketId, bruno.id)
+  expect(sent.status).toBe('failed')
+  await page.reload()
+  const bubble = sentCard(page, `Bruno ${id}`)
+  await expect(bubble).toContainText('Falhou')
+  await openMenu(bubble)
+  await expect(page.getByRole('menuitem', { name: 'Editar', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('menu')).toContainText(
+    'Mensagem com falha só pode ser excluída para mim.',
+  )
+  await page.getByRole('menuitem', { name: 'Excluir', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Excluir mensagem' })
+  await expect(dialog.getByRole('button', { name: 'Excluir para todos' })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Excluir para mim' }).click()
+  await expect(sentIn(conversation).first()).toContainText('Mensagem excluída no XET')
 })
 
 // Cor do texto e do fundo mais próximo que o pinta, para medir o contraste do elemento.
