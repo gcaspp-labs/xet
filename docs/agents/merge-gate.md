@@ -17,7 +17,7 @@ Testes ponta a ponta
 
 ## Áreas sensíveis
 
-Um PR que toca qualquer um destes caminhos nunca entra sem a pessoa. Uma expressão regular por linha, comparada com o caminho de cada arquivo do diff a partir da raiz:
+Um PR que toca qualquer um destes caminhos nunca entra sem a pessoa, a não ser com o modo comando ligado (veja abaixo). Uma expressão regular por linha, comparada com o caminho de cada arquivo do diff a partir da raiz:
 
 ```sensitive-paths
 ^backend/db/migrations/
@@ -59,7 +59,7 @@ risk:low
 risk:medium
 ```
 
-Os riscos que entram sem a pessoa **só enquanto o modo comando estiver ligado**, um rótulo por linha. O modo comando é uma janela com fim que a pessoa entrega ao Chief (ex.: até 06:00); passou do horário, desliga sozinho, e a trava não aceita janela com mais de 24h. Todas as outras checagens continuam valendo: CI verde, parecer `approve` no último commit, nenhuma área sensível, nenhum teste removido, um único ticket. Liga e desliga na raiz do repo com o `command-mode.sh` da skill `merge-gate` (`on 06:00`, `status`, `off`), só quando a pessoa pedir. Quando o modo comando é o que libera o merge, a trava imprime uma linha `COMMAND MODE:`, que vai no comentário do PR.
+Os riscos que entram sem a pessoa **só enquanto o modo comando estiver ligado**, um rótulo por linha. O modo comando é uma janela com fim que a pessoa entrega ao Chief (ex.: até 06:00); passou do horário, desliga sozinho, e a trava não aceita janela com mais de 24h. Com a janela aberta, as áreas sensíveis também deixam de barrar, em qualquer risco. As outras checagens continuam valendo: CI verde, parecer `approve` no último commit, nenhum teste removido, um único ticket. Fora da janela, nada muda. Liga e desliga na raiz do repo com o `command-mode.sh` da skill `merge-gate` (`on 06:00`, `status`, `off`), só quando a pessoa pedir. Quando o modo comando é o que libera o merge, a trava imprime uma linha `COMMAND MODE:` para o risco e outra com as áreas sensíveis liberadas; todas vão no comentário do PR.
 
 ```command-mode-risk
 risk:high
