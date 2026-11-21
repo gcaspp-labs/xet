@@ -382,7 +382,15 @@ function MessageBubble({
         outbound ? 'items-end self-end' : 'items-start self-start',
       )}
     >
-      <div className={cn('flex items-center gap-1', outbound && 'flex-row-reverse')}>
+      {/* O balão com as ações pode passar dos 78% (o cartão de contato tem largura fixa), mas não
+          da largura da conversa: 100%/0,78 do item é a largura da lista. Numa janela estreita o
+          balão encolhe, sem cobrir a coluna ao lado. */}
+      <div
+        className={cn(
+          'flex max-w-[calc(100%/0.78)] items-center gap-1',
+          outbound && 'flex-row-reverse',
+        )}
+      >
         <div
           data-slot="message-bubble"
           className={cn(
