@@ -182,6 +182,16 @@ async function assignContact(baseURL: string, sectorId: number, email: string, n
   return id
 }
 
+// Inicia a conversa pela API, como a pessoa: o chamado nasce iniciado por ela, no sistema.
+async function startBySystem(baseURL: string, sectorId: number, email: string, contact: number) {
+  const api = await sessionOf(baseURL, email)
+  const response = await api.post(`/api/sectors/${sectorId}/conversations`, {
+    data: { contactId: contact, clientRequestId: crypto.randomUUID(), body: 'Bom dia' },
+  })
+  expect(response.ok(), await response.text()).toBeTruthy()
+  await api.dispose()
+}
+
 // Clique de mouse no centro do elemento. Diferente de `click({ force: true })`, o clique vai para
 // o que realmente está naquele ponto da tela, como o de uma pessoa. O elemento precisa estar fora
 // do link: o link esticado da linha é que recebe o clique.
@@ -928,11 +938,26 @@ test('Fila e Em atendimento paginam de 5 em 5, os mais recentes primeiro e com a
   // Cada lista pagina sozinha: a Fila muda de página sem mexer em Em atendimento.
   await expect(listRegion(page, 'Em atendimento')).toHaveAccessibleName(/^Em atendimento \(0\)$/)
 
+  // A página fica no endereço, com parâmetro próprio (regra 9 de interface.md):
+  // recarregar e sair para um chamado e voltar devolvem a mesma página.
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await expect(page).not.toHaveURL(/paginaAtendimento/)
+  await page.reload()
+  await expect(queue.getByRole('row')).toHaveCount(2)
+  await queue.getByRole('link').first().click()
+  await expect(page).toHaveURL(/\/chamados\/\d+/)
+  await page.goBack()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await expect(queue.getByRole('row')).toHaveCount(2)
+
   // Seis assumidos: Em atendimento pagina de 5 em 5, também com a altura fixa.
   for (let index = 0; index < 6; index++) {
     const assigned = await assignNext(baseURL!, sector.id, agent)
     await assigned.api.dispose()
   }
+  // A fila ficou com um chamado: a página 2 deixou de existir, e o endereço se corrige.
+  await expect(page).not.toHaveURL(/paginaFila/)
+  await expect(queue.getByRole('row')).toHaveCount(1)
   const progress = listRegion(page, 'Em atendimento')
   await expect(progress).toHaveAccessibleName(/^Em atendimento \(6\)$/)
   await expect(progress.getByRole('row')).toHaveCount(5)
@@ -940,6 +965,26 @@ test('Fila e Em atendimento paginam de 5 em 5, os mais recentes primeiro e com a
   await progress.getByRole('button', { name: 'Próxima' }).click()
   await expect(progress.getByRole('row')).toHaveCount(1)
   expect((await progress.boundingBox())!.height).toBe(progressHeight)
+
+  // A página da outra lista também sobrevive ao recarregar, sem mexer na primeira.
+  await expect(page).toHaveURL(/[?&]paginaAtendimento=2(&|$)/)
+  await expect(page).not.toHaveURL(/paginaFila/)
+  await page.reload()
+  await expect(progress.getByRole('row')).toHaveCount(1)
+
+  // Página além da última mostra a última, e o endereço é corrigido.
+  await page.goto('/dashboard?paginaFila=9&paginaAtendimento=9')
+  await expect(queue.getByRole('row')).toHaveCount(1)
+  await expect(progress.getByRole('row')).toHaveCount(1)
+  await expect(page).not.toHaveURL(/paginaFila/)
+  await expect(page).toHaveURL(/[?&]paginaAtendimento=2(&|$)/)
+
+  // Mudar um filtro volta as duas listas à primeira página.
+  await choose(page, 'Atendente', nameOf(agent))
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  // O filtro de atendente não vale para a fila (regra 20): ela segue com o chamado do setor.
+  await expect(queue.getByRole('row')).toHaveCount(1)
+  await expect(progress.getByRole('row')).toHaveCount(5)
 })
 
 test('a linha TOTAL soma as linhas e a média de atendimento é a geral; "Do setor" mostra recebidos e espera', async ({
@@ -1008,6 +1053,55 @@ test('a linha TOTAL soma as linhas e a média de atendimento é a geral; "Do set
   // "Do setor": os números que não pertencem a uma pessoa, no mesmo filtro.
   await expectSectorNumber(page, 'Recebidos', '1')
   await expectSectorNumber(page, 'Tempo médio de espera', 'menos de 1 min')
+})
+
+test('iniciados pelo celular do setor, sem pessoa, ficam em "Sem atendente" e o Total bate', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const contact = `Iniciado ${id}`
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: contact, phone: unique().phone, organization: 0, sector: sector.id }],
+  )
+  const admins = await adminApi(baseURL!)
+  expect((await admins.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
+  expect((await admins.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
+  await admins.dispose()
+  // Um iniciado no sistema, pela pessoa: é o que a linha dela mostra.
+  await startBySystem(baseURL!, sector.id, agent, await contactId(baseURL, contact))
+  // O adaptador falso não manda mensagem pelo celular do setor em teste ponta a ponta. A
+  // resposta do Dashboard recebe o iniciado a mais que o backend conta nesse caso (o caso
+  // "setor" de dashboard_test.go): Total 2, e a tabela por atendente só acha 1.
+  await page.route(/\/api\/dashboard\?/, async (route) => {
+    const response = await route.fetch()
+    const dashboard = (await response.json()) as { numbers: { started: { value: number } } }
+    dashboard.numbers.started.value += 1
+    await route.fulfill({ response, json: dashboard })
+  })
+
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  const table = page.getByRole('region', { name: 'Por atendente' })
+  await expect(
+    table
+      .getByRole('row', { name: new RegExp(`^${nameOf(agent)}`) })
+      .getByRole('cell')
+      .nth(2),
+  ).toHaveText('1')
+
+  // A linha sem pessoa mostra a diferença, para a soma das linhas bater com o Total.
+  const withoutPerson = table.getByRole('row', { name: /^Sem atendente/ })
+  await expect(withoutPerson.getByRole('cell').nth(1)).toHaveText('0')
+  await expect(withoutPerson.getByRole('cell').nth(2)).toHaveText('1')
+  await expect(withoutPerson.getByRole('cell').nth(6)).toHaveText('—')
+  await expectTotal(page, 'Iniciados', '2')
+  await expect(table).toContainText(
+    'Sem atendente: chamados iniciados pelo celular do setor, sem pessoa atribuída.',
+  )
 })
 
 for (const viewport of [
