@@ -206,6 +206,43 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, toSentMessageResponse(msg))
 }
 
+type contactMessageRequest struct {
+	ClientRequestID string `json:"clientRequestId" validate:"required,uuid"`
+	ContactID       int64  `json:"contactId" validate:"required"`
+	QuotedMessageID *int64 `json:"quotedMessageId"`
+}
+
+// sendContact sends a contact of the directory to the contact of the ticket
+// as a WhatsApp contact card, with an optional quotedMessageId as the other
+// messages. The backend builds the card from the registration.
+func (h *Handler) sendContact(w http.ResponseWriter, r *http.Request) {
+	ticketID, ok := urlTicketID(w, r)
+	if !ok {
+		return
+	}
+	var req contactMessageRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	out := Outgoing{CardContactID: &req.ContactID, QuotedMessageID: req.QuotedMessageID}
+	if !parseRequestID(w, req.ClientRequestID, &out.ClientRequestID) {
+		return
+	}
+	msg, err := h.service.Send(r.Context(), h.provider, auth.CurrentUser(r.Context()), ticketID, out)
+	switch {
+	case errors.Is(err, ErrUnknownContact):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Contato não encontrado.")
+		return
+	case errors.Is(err, ErrContactNotSendable):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Só é possível enviar contatos cadastrados com telefone.")
+		return
+	case err != nil:
+		h.ticketError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, toSentMessageResponse(msg))
+}
+
 func (h *Handler) readFileMessage(w http.ResponseWriter, r *http.Request) (Outgoing, bool) {
 	var out Outgoing
 	tooLarge := fmt.Sprintf("O arquivo passa de %d MB.", MaxFileSize>>20)

@@ -49,15 +49,16 @@ where client_request_id = @client_request_id;
 
 -- name: CreateAgentMessage :one
 -- Message sent by an agent through the system, recorded as pending before it
--- goes to the provider, with the message of the ticket it quotes, if any. A
--- repeated request (same client_request_id) returns no row.
+-- goes to the provider, with the message of the ticket it quotes, if any, and
+-- the cards of a contact message. A repeated request (same client_request_id)
+-- returns no row.
 insert into messages (
     ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, client_request_id, status, sent_at,
-    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards
 )
 values (
     @ticket_id, @sector_id, @contact_id, 'outbound', 'agent', @author_id, @type, @body, @media_id, @client_request_id, 'pending', now(),
-    @quoted_external_message_id, @quoted_message_id, @quoted_type, @quoted_body
+    @quoted_external_message_id, @quoted_message_id, @quoted_type, @quoted_body, @contact_cards
 )
 on conflict (client_request_id) where client_request_id is not null do nothing
 returning *;

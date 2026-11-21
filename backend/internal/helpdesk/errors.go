@@ -25,6 +25,9 @@ var (
 	ErrSectorNotFound      = errors.New("sector not found")
 	ErrUnknownContact      = errors.New("contact not found")
 	ErrContactWithoutPhone = errors.New("contact without phone")
+	// ErrContactNotSendable is a contact that cannot go as a card: not
+	// registered in the directory, or without phone.
+	ErrContactNotSendable = errors.New("contact cannot be sent as a card")
 )
 
 var (

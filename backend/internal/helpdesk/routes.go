@@ -86,6 +86,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/tickets/{ticketID}", h.getTicket)
 	r.Get("/tickets/{ticketID}/messages", h.listMessages)
 	r.Post("/tickets/{ticketID}/messages", h.sendMessage)
+	r.Post("/tickets/{ticketID}/messages/contact", h.sendContact)
 	r.Post("/messages/{messageID}/retry", h.retryMessage)
 	// Reação do setor: só o responsável, com o chamado aberto. O mesmo emoji remove.
 	r.Put("/messages/{messageID}/reaction", h.reactToMessage)
