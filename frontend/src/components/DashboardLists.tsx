@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { CircleAlert, Inbox, MessagesSquare, UserCheck } from 'lucide-react'
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Pagination } from '@/components/Pagination'
@@ -168,17 +168,6 @@ export function DashboardLists({
   const progressPage = pageIn(url, pageParams.progress)
   const setPage = (name: string, page: number) =>
     update({ [name]: page === 1 ? null : String(page) })
-  // Mudar um filtro volta as duas listas à primeira página.
-  const filtered = useRef(search)
-  useEffect(() => {
-    if (filtered.current === search) {
-      return
-    }
-    filtered.current = search
-    if (url.has(pageParams.queue) || url.has(pageParams.progress)) {
-      update({ [pageParams.queue]: null, [pageParams.progress]: null }, true)
-    }
-  }, [search, url, update])
   const { data, error } = useQuery({
     queryKey: ['dashboard', 'tickets', search],
     queryFn: () => api<Lists>(`/dashboard/tickets?${search}`),

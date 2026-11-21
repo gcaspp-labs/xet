@@ -987,6 +987,48 @@ test('Fila e Em atendimento paginam de 5 em 5, os mais recentes primeiro e com a
   await expect(progress.getByRole('row')).toHaveCount(5)
 })
 
+test('trocar um filtro volta as duas listas à primeira página, inclusive com "Agora" recolhida', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  const { id } = unique()
+  for (let index = 0; index < 7; index++) {
+    await receive(baseURL!, sector.id, `Filtro ${id} ${index + 1}`)
+  }
+  const module = await createModule(baseURL!, sector, `Módulo ${id}`)
+
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  const queue = listRegion(page, 'Fila')
+  await expect(queue).toHaveAccessibleName(/^Fila \(7\)$/)
+  await queue.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+
+  // Recolhida, a seção desmonta as listas: a limpeza não pode depender delas.
+  await page.getByRole('button', { name: 'Recolher Agora' }).click()
+  await expect(listRegion(page, 'Fila')).toHaveCount(0)
+  // O canal não filtra as listas, mas é um filtro: muda o número, e as páginas voltam.
+  await choose(page, 'Canal', 'WhatsApp')
+  await expect(page).toHaveURL(/[?&]channel=whatsapp(&|$)/)
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  await page.getByRole('button', { name: 'Abrir Agora' }).click()
+  await expect(queue.getByRole('row')).toHaveCount(5)
+
+  // Período e módulo, com a seção aberta, também limpam as duas páginas.
+  await queue.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await page.getByRole('button', { name: '30 dias' }).click()
+  await expect(page).toHaveURL(/[?&]period=30d(&|$)/)
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  await queue.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await choose(page, 'Módulo', module.name)
+  await expect(page).toHaveURL(new RegExp(`[?&]moduleId=${module.id}(&|$)`))
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  await expect(queue.getByRole('row')).toHaveCount(5)
+})
+
 test('a linha TOTAL soma as linhas e a média de atendimento é a geral; "Do setor" mostra recebidos e espera', async ({
   page,
   baseURL,
@@ -1055,6 +1097,22 @@ test('a linha TOTAL soma as linhas e a média de atendimento é a geral; "Do set
   await expectSectorNumber(page, 'Tempo médio de espera', 'menos de 1 min')
 })
 
+// Abre a conversa pelo celular do setor, fora do sistema: o chamado nasce iniciado pelo
+// celular, sem pessoa atribuída.
+async function sendOutside(baseURL: string, sectorId: number, contactName: string, phone?: string) {
+  const api = await apiRequest.newContext({ baseURL })
+  const response = await api.post(`/api/test/messaging/sectors/${sectorId}/send-outside`, {
+    data: {
+      externalMessageId: `E2E-OUT-${unique().id}`,
+      phone: phone ?? unique().phone,
+      contactName,
+      body: 'Bom dia',
+    },
+  })
+  expect(response.ok(), await response.text()).toBeTruthy()
+  await api.dispose()
+}
+
 test('iniciados pelo celular do setor, sem pessoa, ficam em "Sem atendente" e o Total bate', async ({
   page,
   baseURL,
@@ -1073,15 +1131,9 @@ test('iniciados pelo celular do setor, sem pessoa, ficam em "Sem atendente" e o 
   await admins.dispose()
   // Um iniciado no sistema, pela pessoa: é o que a linha dela mostra.
   await startBySystem(baseURL!, sector.id, agent, await contactId(baseURL, contact))
-  // O adaptador falso não manda mensagem pelo celular do setor em teste ponta a ponta. A
-  // resposta do Dashboard recebe o iniciado a mais que o backend conta nesse caso (o caso
-  // "setor" de dashboard_test.go): Total 2, e a tabela por atendente só acha 1.
-  await page.route(/\/api\/dashboard\?/, async (route) => {
-    const response = await route.fetch()
-    const dashboard = (await response.json()) as { numbers: { started: { value: number } } }
-    dashboard.numbers.started.value += 1
-    await route.fulfill({ response, json: dashboard })
-  })
+  // Outro iniciado pelo celular do setor, pelo adaptador falso: conta no Total e não tem
+  // linha por atendente. A resposta do Dashboard é a do backend, sem alteração.
+  await sendOutside(baseURL!, sector.id, `Celular ${id}`)
 
   await signIn(page, supervisor, userPassword)
   await page.getByRole('link', { name: 'Dashboard' }).click()
