@@ -135,11 +135,16 @@ export function useDashboardFilter() {
     [organizationId, organizationLabel],
   )
 
+  // Toda mudança aqui é de um filtro, e mudar um filtro volta as duas listas à primeira
+  // página (regra 22 de dashboard.md). A limpeza fica neste ponto, que continua montado
+  // com a seção "Agora" recolhida, e não nas listas, que desmontam com ela.
   const update = (change: (next: URLSearchParams) => void) =>
     setParams(
       (current) => {
         const next = new URLSearchParams(current)
         change(next)
+        next.delete('paginaFila')
+        next.delete('paginaAtendimento')
         return next
       },
       { replace: true },

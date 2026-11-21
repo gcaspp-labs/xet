@@ -72,7 +72,7 @@ Cores de estado (`--success`, `--warning`, `--danger` e seus `-soft`, `--warning
 | Cabeçalho | Componente próprio | Fixo no topo, na largura toda, sobre `surface` com borda `line` e altura `--header-height` (56px): marca à esquerda e notificações à direita |
 | Sino de notificações | `Popover` sobre `@base-ui/react` | Botão `outline` com contador em `accent`, ou em cor de alerta com número desconectado. Número desconectado no topo, depois os chamados na fila com `Button` `sm` "Abrir" (`ghost`) e "Assumir" (`outline`); vazio usa EmptyState. Erro ao assumir aparece como Note dentro da lista. Cabe na largura do celular |
 | Topbar | Componente próprio | Fixa abaixo do Cabeçalho, sobre `paper`: voltar nas telas internas (ex.: "Voltar à lista", do chamado para a lista de Atendimentos), breadcrumb, título `title-page` e no máximo uma ação primária |
-| KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption`. No dashboard, cada seção de KpiCards recolhe por um botão de ícone `ghost` ao lado do título, com `aria-expanded` e `aria-label` |
+| KpiCard | Componente próprio sobre `Card` | Rótulo `overline`, valor `kpi-value`, subtexto `caption`. Não é usado no Dashboard: lá os números vão para os títulos das listas e para a tabela por atendente, e cada seção recolhe por um botão de ícone `ghost` ao lado do título, com `aria-expanded` e `aria-label` |
 
 Assunto do formulário: campo de texto com sugestões, com o mesmo visual do `Combobox` dos órgãos e dos municípios, que aceita um texto fora da lista. Pergunta ao salvar: etapa na mesma janela do formulário, sem abrir outra por cima, com a frase e o texto em questão no corpo e, no rodapé, Voltar (ghost), Não adicionar (`outline`) e Adicionar (primário).
 

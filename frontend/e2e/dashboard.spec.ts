@@ -16,10 +16,37 @@ type Sector = { id: number; name: string }
 
 const notApplicable = 'Não se aplica ao filtro'
 
-const kpi = (page: Page, label: string) => page.getByRole('group', { name: label, exact: true })
+// As listas ao vivo: o título do card traz a quantidade entre parênteses.
+const listRegion = (page: Page, name: 'Fila' | 'Em atendimento') =>
+  page.getByRole('region', { name: new RegExp(`^${name} \\(`) })
 
-async function expectKpi(page: Page, label: string, value: string) {
-  await expect(kpi(page, label).locator('.kpi-value')).toHaveText(value)
+async function expectListCount(page: Page, name: 'Fila' | 'Em atendimento', value: string) {
+  await expect(
+    page.getByRole('region', { name: new RegExp(`^${name} \\(${value}\\)$`) }),
+  ).toBeVisible()
+}
+
+// A linha "Do setor" traz Recebidos e Tempo médio de espera.
+const sectorRow = (page: Page) => page.getByRole('row', { name: /^Do setor/ })
+
+async function expectSectorNumber(page: Page, label: string, value: string) {
+  await expect(sectorRow(page)).toContainText(`${label} ${value}`)
+}
+
+// Uma coluna da linha TOTAL da tabela por atendente, pelo rótulo do cabeçalho.
+async function expectTotal(page: Page, label: string, value: string) {
+  const table = page.getByRole('region', { name: 'Por atendente' })
+  await expect(table.getByRole('columnheader', { name: label })).toBeVisible()
+  const headers = await table.getByRole('columnheader').allTextContents()
+  const column = headers.indexOf(label)
+  expect(column, `coluna ${label}`).toBeGreaterThan(0)
+  const lead = headers.includes('Setor') ? 2 : 1
+  await expect(
+    table
+      .getByRole('row', { name: /^Total/ })
+      .getByRole('cell')
+      .nth(column - lead + 1),
+  ).toHaveText(value)
 }
 
 async function choose(page: Page, label: string, option: string | RegExp) {
@@ -153,6 +180,16 @@ async function assignContact(baseURL: string, sectorId: number, email: string, n
   expect((await api.post(`/api/tickets/${id}/assign`)).ok()).toBeTruthy()
   await api.dispose()
   return id
+}
+
+// Inicia a conversa pela API, como a pessoa: o chamado nasce iniciado por ela, no sistema.
+async function startBySystem(baseURL: string, sectorId: number, email: string, contact: number) {
+  const api = await sessionOf(baseURL, email)
+  const response = await api.post(`/api/sectors/${sectorId}/conversations`, {
+    data: { contactId: contact, clientRequestId: crypto.randomUUID(), body: 'Bom dia' },
+  })
+  expect(response.ok(), await response.text()).toBeTruthy()
+  await api.dispose()
 }
 
 // Clique de mouse no centro do elemento. Diferente de `click({ force: true })`, o clique vai para
@@ -357,12 +394,12 @@ test('supervisor abre pelo menu, vê só o próprio setor e não tem filtro de s
   await expect(page.getByText(own.sector.name, { exact: true })).toBeVisible()
   await expect(page.getByRole('combobox', { name: 'Setor' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Hoje' })).toHaveAttribute('aria-pressed', 'true')
-  await expectKpi(page, 'Na fila', '1')
-  await expectKpi(page, 'Recebidos', '1')
+  await expectListCount(page, 'Fila', '1')
+  await expectSectorNumber(page, 'Recebidos', '1')
 
   // Outro setor no endereço não muda o que ele vê.
   await page.goto(`/dashboard?sectorId=${other.sector.id}`)
-  await expectKpi(page, 'Na fila', '1')
+  await expectListCount(page, 'Fila', '1')
   await expect(page.getByText(own.sector.name, { exact: true })).toBeVisible()
 })
 
@@ -395,8 +432,8 @@ test('administrador alterna entre todos os setores e um setor; atendente e módu
   // Um setor: os números são dele, a coluna sai e os dois filtros abrem.
   await choose(page, 'Setor', first.sector.name)
   await expect(page).toHaveURL(new RegExp(`sectorId=${first.sector.id}`))
-  await expectKpi(page, 'Na fila', '1')
-  await expectKpi(page, 'Em atendimento', '1')
+  await expectListCount(page, 'Fila', '1')
+  await expectListCount(page, 'Em atendimento', '1')
   await expect(table.getByRole('columnheader', { name: 'Setor' })).toHaveCount(0)
   await expect(table.getByRole('row', { name: /^agent / })).toBeVisible()
   await expect(assigneeFilter).toBeEnabled()
@@ -410,7 +447,7 @@ test('administrador alterna entre todos os setores e um setor; atendente e módu
   await expect(assigneeFilter).toHaveText(/Todos os atendentes/)
   await expect(moduleFilter).toHaveText(/Todos os módulos/)
   await expect(page).not.toHaveURL(/assigneeId|moduleId/)
-  await expectKpi(page, 'Na fila', '0')
+  await expectListCount(page, 'Fila', '0')
   await expect(table.getByText('Nenhum atendente com números nestes filtros.')).toBeVisible()
 
   // Voltar a todos os setores desabilita de novo.
@@ -434,20 +471,21 @@ test('chamado novo muda "Na fila" e "Recebidos" sem recarregar', async ({ page, 
   const { sector, supervisor, agent } = await seedSector(baseURL!)
   await signIn(page, supervisor, userPassword)
   await page.getByRole('link', { name: 'Dashboard' }).click()
-  await expectKpi(page, 'Na fila', '0')
-  await expectKpi(page, 'Recebidos', '0')
-  await expectKpi(page, 'Tempo médio de espera', '—')
-  await expect(kpi(page, 'Tempo médio de espera')).not.toContainText(notApplicable)
+  await expectListCount(page, 'Fila', '0')
+  await expectSectorNumber(page, 'Recebidos', '0')
+  await expectSectorNumber(page, 'Tempo médio de espera', '—')
+  // Sem chamados para calcular, a média é "—", sem a indicação de filtro.
+  await expect(sectorRow(page)).not.toContainText(notApplicable)
 
   await receive(baseURL!, sector.id, 'Ana Cliente')
-  await expectKpi(page, 'Na fila', '1')
-  await expectKpi(page, 'Recebidos', '1')
+  await expectListCount(page, 'Fila', '1')
+  await expectSectorNumber(page, 'Recebidos', '1')
 
   const assigned = await assignNext(baseURL!, sector.id, agent)
   await assigned.api.dispose()
-  await expectKpi(page, 'Na fila', '0')
-  await expectKpi(page, 'Em atendimento', '1')
-  await expectKpi(page, 'Tempo médio de espera', 'menos de 1 min')
+  await expectListCount(page, 'Fila', '0')
+  await expectListCount(page, 'Em atendimento', '1')
+  await expectSectorNumber(page, 'Tempo médio de espera', 'menos de 1 min')
 })
 
 test('recarrega os números ao reconectar o tempo real', async ({ page, baseURL }) => {
@@ -467,14 +505,14 @@ test('recarrega os números ao reconectar o tempo real', async ({ page, baseURL 
   })
   await signIn(page, supervisor, userPassword)
   await page.getByRole('link', { name: 'Dashboard' }).click()
-  await expectKpi(page, 'Na fila', '0')
+  await expectListCount(page, 'Fila', '0')
 
   await receive(baseURL!, sector.id, 'Ana Cliente')
   await page.waitForTimeout(300)
-  await expectKpi(page, 'Na fila', '0')
+  await expectListCount(page, 'Fila', '0')
 
   dropConnection()
-  await expectKpi(page, 'Na fila', '1')
+  await expectListCount(page, 'Fila', '1')
 })
 
 test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao recarregar', async ({
@@ -526,24 +564,24 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   await signIn(page, supervisor, userPassword)
   await page.getByRole('link', { name: 'Dashboard' }).click()
   const table = page.getByRole('region', { name: 'Por atendente' })
-  await expectKpi(page, 'Encerrados', '2')
-  await expectKpi(page, 'Recebidos', '3')
-  await expectKpi(page, 'Na fila', '1')
+  await expectTotal(page, 'Encerrados', '2')
+  await expectSectorNumber(page, 'Recebidos', '3')
+  await expectListCount(page, 'Fila', '1')
   await expect(table.getByRole('row', { name: /^agent / })).toContainText('1')
   await expect(table.getByRole('row', { name: new RegExp(`^Segundo ${id}`) })).toContainText('1')
 
   // Período: "Na fila" não muda; os números do período, sim.
   await page.getByRole('button', { name: '7 dias' }).click()
   await expect(page).toHaveURL(/period=7d/)
-  await expectKpi(page, 'Encerrados', '2')
+  await expectTotal(page, 'Encerrados', '2')
   await page.getByRole('button', { name: 'Datas' }).click()
   await expect(page.getByLabel('Início')).toBeVisible()
   await page.getByLabel('Início').fill(yesterday())
   await page.getByLabel('Fim').fill(yesterday())
-  await expectKpi(page, 'Encerrados', '0')
-  await expectKpi(page, 'Recebidos', '0')
-  await expectKpi(page, 'Na fila', '1')
-  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toBeVisible()
+  await expectTotal(page, 'Encerrados', '0')
+  await expectSectorNumber(page, 'Recebidos', '0')
+  await expectListCount(page, 'Fila', '1')
+  await expect(listRegion(page, 'Fila').getByText('Caio Cliente')).toBeVisible()
   await expect(page.getByText('Nenhum atendente com números nestes filtros.')).toBeVisible()
 
   // Início depois do fim: avisa e não consulta a API.
@@ -552,44 +590,53 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   await page.getByRole('button', { name: 'Hoje' }).click()
   await expect(page.getByText(/Período incompleto ou invertido/)).toHaveCount(0)
   await expect(page).not.toHaveURL(/from=|period=/)
-  await expectKpi(page, 'Encerrados', '2')
+  await expectTotal(page, 'Encerrados', '2')
 
-  // Atendente: só os dele, e "Na fila", "Recebidos" e a espera não se aplicam.
+  // Atendente: só os dele, e "Recebidos" e a espera não se aplicam.
   await choose(page, 'Atendente', new RegExp(`^Segundo ${id}`))
-  await expectKpi(page, 'Encerrados', '1')
-  for (const label of ['Na fila', 'Recebidos', 'Tempo médio de espera']) {
-    await expectKpi(page, label, '—')
-    await expect(kpi(page, label)).toContainText(notApplicable)
+  await expectTotal(page, 'Encerrados', '1')
+  for (const label of ['Recebidos', 'Tempo médio de espera']) {
+    await expectSectorNumber(page, label, '—')
+    await expect(sectorRow(page)).toContainText(notApplicable)
   }
-  await expect(kpi(page, 'Encerrados')).not.toContainText(notApplicable)
-  await expect(table.getByRole('row')).toHaveCount(2)
-  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toBeVisible()
+  await expectTotal(page, 'Encerrados', '1')
+  await expect(
+    table
+      .getByRole('row', { name: /^Total/ })
+      .getByRole('cell')
+      .last(),
+  ).not.toContainText(notApplicable)
+  await expect(table.getByRole('row')).toHaveCount(4)
+  // A lista Fila não filtra por atendente: mostra a fila do setor, como antes.
+  await expectListCount(page, 'Fila', '1')
+  await expect(listRegion(page, 'Fila').getByText('Caio Cliente')).toBeVisible()
   await choose(page, 'Atendente', 'Todos os atendentes')
-  await expectKpi(page, 'Na fila', '1')
+  await expectListCount(page, 'Fila', '1')
 
-  // Módulo: os números sem módulo não se aplicam, no card e na tabela.
+  // Módulo: os números sem módulo não se aplicam, no total e na tabela.
   await choose(page, 'Módulo', 'Folha')
-  await expectKpi(page, 'Encerrados', '1')
-  for (const label of ['Na fila', 'Em atendimento', 'Recebidos', 'Iniciados', 'Cancelados']) {
-    await expect(kpi(page, label)).toContainText(notApplicable)
+  await expectTotal(page, 'Encerrados', '1')
+  await expectTotal(page, 'Em atendimento', `— ${notApplicable}`)
+  await expectTotal(page, 'Iniciados', `— ${notApplicable}`)
+  for (const label of ['Em atendimento', 'Iniciados', 'Cancelados']) {
+    await expect(table.getByText(new RegExp(`^${notApplicable}: `))).toContainText(label)
   }
-  await expect(table).toContainText(`${notApplicable}: Em atendimento, Iniciados e Cancelados.`)
-  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toBeVisible()
+  await expect(listRegion(page, 'Fila').getByText('Caio Cliente')).toBeVisible()
   await choose(page, 'Módulo', 'Todos os módulos')
 
   // Órgão: chamado sem órgão fica de fora.
   const organization = page.getByRole('combobox', { name: 'Órgão' })
   await organization.fill(`Prefeitura ${id}`)
   await page.getByRole('option', { name: new RegExp(`Prefeitura ${id}`) }).click()
-  await expectKpi(page, 'Encerrados', '1')
-  await expectKpi(page, 'Na fila', '0')
-  await expect(page.getByRole('region', { name: /^Fila/ }).getByText('Caio Cliente')).toHaveCount(0)
+  await expectTotal(page, 'Encerrados', '1')
+  await expectListCount(page, 'Fila', '0')
+  await expect(listRegion(page, 'Fila').getByText('Caio Cliente')).toHaveCount(0)
 
   // Tudo junto, no endereço, sobrevive ao recarregar.
   await choose(page, 'Atendente', /^agent /)
   await choose(page, 'Módulo', 'Folha')
   await page.getByRole('button', { name: '30 dias' }).click()
-  await expectKpi(page, 'Encerrados', '1')
+  await expectTotal(page, 'Encerrados', '1')
   await page.reload()
   await expect(page.getByRole('button', { name: '30 dias' })).toHaveAttribute(
     'aria-pressed',
@@ -598,7 +645,7 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   await expect(page.getByRole('combobox', { name: 'Atendente' })).toHaveText(/^agent /)
   await expect(page.getByRole('combobox', { name: 'Módulo' })).toHaveText(/Folha/)
   await expect(organization).toHaveValue(new RegExp(`Prefeitura ${id}`))
-  await expectKpi(page, 'Encerrados', '1')
+  await expectTotal(page, 'Encerrados', '1')
 
   // Datas também sobrevivem.
   await page.getByRole('button', { name: 'Datas' }).click()
@@ -647,34 +694,31 @@ test('o filtro Canal separa WhatsApp de Telefone e não se aplica aos números d
   await signIn(page, supervisor, userPassword)
   await page.getByRole('link', { name: 'Dashboard' }).click()
   const table = page.getByRole('region', { name: 'Por atendente' })
-  const queue = page.getByRole('region', { name: /^Fila/ })
+  const queue = listRegion(page, 'Fila')
   await expect(page.getByRole('combobox', { name: 'Canal' })).toHaveText(/Todos os canais/)
-  await expectKpi(page, 'Encerrados', '2')
-  await expectKpi(page, 'Recebidos', '2')
-  await expectKpi(page, 'Na fila', '1')
+  await expectTotal(page, 'Encerrados', '2')
+  await expectSectorNumber(page, 'Recebidos', '2')
+  await expectListCount(page, 'Fila', '1')
 
   // Telefone: só o registro por telefone conta, do início ao fim da ligação.
   await choose(page, 'Canal', 'Telefone')
   await expect(page).toHaveURL(/channel=phone/)
-  await expectKpi(page, 'Encerrados', '1')
-  await expectKpi(page, 'Transferidos', '0')
-  await expectKpi(page, 'Cancelados', '0')
-  await expectKpi(page, 'Tempo médio de atendimento', '15 min')
-  for (const label of [
-    'Na fila',
-    'Em atendimento',
-    'Recebidos',
-    'Iniciados',
-    'Tempo médio de espera',
-  ]) {
-    await expectKpi(page, label, '—')
-    await expect(kpi(page, label)).toContainText(notApplicable)
+  await expectTotal(page, 'Encerrados', '1')
+  await expectTotal(page, 'Transferidos', '0')
+  await expectTotal(page, 'Cancelados', '0')
+  await expectTotal(page, 'Tempo médio de atendimento', '15 min')
+  for (const label of ['Em atendimento', 'Iniciados']) {
+    await expectTotal(page, label, `— ${notApplicable}`)
   }
+  for (const label of ['Recebidos', 'Tempo médio de espera']) {
+    await expectSectorNumber(page, label, '—')
+  }
+  await expect(sectorRow(page)).toContainText(notApplicable)
   // As listas ao vivo continuam como estão: o canal não vale para elas.
   await expect(queue.getByText(caio)).toBeVisible()
 
   // Só quem tem registro por telefone aparece, com zero no lugar de "—" onde o canal vale.
-  await expect(table.getByRole('row')).toHaveCount(2)
+  await expect(table.getByRole('row')).toHaveCount(4)
   const row = table.getByRole('row', { name: new RegExp(`^${nameOf(agent)}`) })
   const cells = row.getByRole('cell')
   await expect(cells.nth(1)).toHaveText(`— ${notApplicable}`)
@@ -683,37 +727,31 @@ test('o filtro Canal separa WhatsApp de Telefone e não se aplica aos números d
   await expect(cells.nth(4)).toHaveText('0')
   await expect(cells.nth(5)).toHaveText('0')
   await expect(cells.nth(6)).toHaveText('15 min')
-  await expect(table).toContainText(`${notApplicable}: Em atendimento e Iniciados.`)
+  await expect(table.getByText(new RegExp(`^${notApplicable}: `))).toContainText(
+    'Em atendimento, Iniciados, Recebidos e Tempo médio de espera.',
+  )
 
   // WhatsApp: o registro por telefone fica de fora, e os encerrados são só do WhatsApp.
   await choose(page, 'Canal', 'WhatsApp')
   await expect(page).toHaveURL(/channel=whatsapp/)
-  await expectKpi(page, 'Encerrados', '1')
-  await expectKpi(page, 'Transferidos', '0')
-  await expectKpi(page, 'Cancelados', '0')
-  await expectKpi(page, 'Tempo médio de atendimento', 'menos de 1 min')
-  for (const label of [
-    'Na fila',
-    'Em atendimento',
-    'Recebidos',
-    'Iniciados',
-    'Tempo médio de espera',
-  ]) {
-    await expect(kpi(page, label)).toContainText(notApplicable)
-  }
+  await expectTotal(page, 'Encerrados', '1')
+  await expectTotal(page, 'Transferidos', '0')
+  await expectTotal(page, 'Cancelados', '0')
+  await expectTotal(page, 'Tempo médio de atendimento', 'menos de 1 min')
+  await expect(sectorRow(page)).toContainText(notApplicable)
   await expect(row.getByRole('cell').nth(3)).toHaveText('1')
 
   // O filtro fica no endereço e sobrevive ao recarregar.
   await page.reload()
   await expect(page.getByRole('combobox', { name: 'Canal' })).toHaveText(/WhatsApp/)
-  await expectKpi(page, 'Encerrados', '1')
+  await expectTotal(page, 'Encerrados', '1')
 
   // Todos os canais: os dois encerrados somam de novo.
   await choose(page, 'Canal', 'Todos os canais')
   await expect(page).not.toHaveURL(/channel=/)
-  await expectKpi(page, 'Encerrados', '2')
-  await expectKpi(page, 'Na fila', '1')
-  await expect(kpi(page, 'Recebidos')).not.toContainText(notApplicable)
+  await expectTotal(page, 'Encerrados', '2')
+  await expectListCount(page, 'Fila', '1')
+  await expect(sectorRow(page)).not.toContainText(notApplicable)
   await expect(table).not.toContainText(notApplicable)
 })
 
@@ -777,8 +815,9 @@ test('cada seção recolhe e abre, por clique e por teclado, sem afetar a outra'
     'aria-expanded',
     'true',
   )
-  await expectKpi(page, 'Na fila', '1')
-  await expectKpi(page, 'Recebidos', '1')
+  await expectListCount(page, 'Fila', '1')
+  await expectListCount(page, 'Em atendimento', '0')
+  await expectSectorNumber(page, 'Recebidos', '1')
 
   // Filtro ativo, para mostrar que recolher não mexe nele nem na tabela.
   await choose(page, 'Módulo', 'Folha')
@@ -797,47 +836,48 @@ test('cada seção recolhe e abre, por clique e por teclado, sem afetar a outra'
     'aria-expanded',
     'false',
   )
-  await expect(kpi(page, 'Na fila')).toHaveCount(0)
-  await expect(kpi(page, 'Em atendimento')).toHaveCount(0)
+  await expect(listRegion(page, 'Fila')).toHaveCount(0)
+  await expect(listRegion(page, 'Em atendimento')).toHaveCount(0)
   await expect(now.getByRole('heading', { name: 'Agora' })).toBeVisible()
-  await expect(kpi(page, 'Recebidos')).toBeVisible()
+  await expect(sectorRow(page)).toBeVisible()
+  // Recolher "Agora" não mudou filtros nem tabela.
+  expect(page.url()).toBe(address)
+  await expect(page.getByRole('combobox', { name: 'Módulo' })).toHaveText(/Folha/)
+  await expect(page.getByRole('button', { name: '7 dias' })).toHaveAttribute('aria-pressed', 'true')
+  expect(await table.innerText()).toBe(tableBefore)
 
   // Por teclado: "No período" recolhe com Enter, mantém título e datas, e o foco fica no botão.
   await period.getByRole('button', { name: 'Recolher No período' }).focus()
   await page.keyboard.press('Enter')
   const openPeriod = period.getByRole('button', { name: 'Abrir No período' })
   await expect(openPeriod).toBeFocused()
-  await expect(kpi(page, 'Recebidos')).toHaveCount(0)
-  await expect(kpi(page, 'Tempo médio de atendimento')).toHaveCount(0)
+  await expect(sectorRow(page)).toHaveCount(0)
+  await expect(table).toHaveCount(0)
   await expect(period.getByRole('heading', { name: 'No período' })).toBeVisible()
   await expect(detail).toHaveText(dates)
 
-  // Recolher não mudou filtros nem tabela.
   expect(page.url()).toBe(address)
-  await expect(page.getByRole('combobox', { name: 'Módulo' })).toHaveText(/Folha/)
-  await expect(page.getByRole('button', { name: '7 dias' })).toHaveAttribute('aria-pressed', 'true')
-  expect(await table.innerText()).toBe(tableBefore)
 
   // A escolha sobrevive ao recarregar.
   await page.reload()
   await expect(now.getByRole('button', { name: 'Abrir Agora' })).toBeVisible()
   await expect(period.getByRole('button', { name: 'Abrir No período' })).toBeVisible()
-  await expect(kpi(page, 'Na fila')).toHaveCount(0)
-  await expect(kpi(page, 'Recebidos')).toHaveCount(0)
+  await expect(listRegion(page, 'Fila')).toHaveCount(0)
+  await expect(table).toHaveCount(0)
 
   // Por teclado, com espaço, "Agora" abre sem abrir a outra.
   await now.getByRole('button', { name: 'Abrir Agora' }).focus()
   await page.keyboard.press('Space')
   await expect(now.getByRole('button', { name: 'Recolher Agora' })).toBeFocused()
-  await expect(kpi(page, 'Na fila')).toBeVisible()
-  await expect(kpi(page, 'Recebidos')).toHaveCount(0)
+  await expect(listRegion(page, 'Fila')).toBeVisible()
+  await expect(table).toHaveCount(0)
 
   // Por clique, "No período" abre, e aberta também sobrevive ao recarregar.
   await period.getByRole('button', { name: 'Abrir No período' }).click()
-  await expect(kpi(page, 'Recebidos')).toBeVisible()
+  await expect(table).toBeVisible()
   await page.reload()
-  await expect(kpi(page, 'Na fila')).toBeVisible()
-  await expect(kpi(page, 'Recebidos')).toBeVisible()
+  await expect(listRegion(page, 'Fila')).toBeVisible()
+  await expect(table).toBeVisible()
 })
 
 test('sem acesso ao armazenamento, recolher vale até recarregar', async ({ page, baseURL }) => {
@@ -854,18 +894,266 @@ test('sem acesso ao armazenamento, recolher vale até recarregar', async ({ page
   await page.getByRole('link', { name: 'Dashboard' }).click()
 
   await page.getByRole('button', { name: 'Recolher Agora' }).click()
-  await expect(kpi(page, 'Na fila')).toHaveCount(0)
+  await expect(listRegion(page, 'Fila')).toHaveCount(0)
 
   // Trocar de tela não perde a escolha.
   await page.getByRole('link', { name: 'Atendimentos' }).click()
   await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
   await page.getByRole('link', { name: 'Dashboard' }).click()
   await expect(page.getByRole('button', { name: 'Abrir Agora' })).toBeVisible()
-  await expect(kpi(page, 'Na fila')).toHaveCount(0)
+  await expect(listRegion(page, 'Fila')).toHaveCount(0)
 
   await page.reload()
   await expect(page.getByRole('button', { name: 'Recolher Agora' })).toBeVisible()
-  await expect(kpi(page, 'Na fila')).toBeVisible()
+  await expect(listRegion(page, 'Fila')).toBeVisible()
+})
+
+test('Fila e Em atendimento paginam de 5 em 5, os mais recentes primeiro e com a altura fixa', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const names = Array.from({ length: 7 }, (_, index) => `Fila Pag ${id} ${index + 1}`)
+  for (const name of names) await receive(baseURL!, sector.id, name)
+
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  const queue = listRegion(page, 'Fila')
+  await expect(queue).toHaveAccessibleName(/^Fila \(7\)$/)
+  // A primeira página tem os 5 mais recentes, do mais novo para o mais antigo.
+  await expect(queue.getByRole('row')).toHaveCount(5)
+  for (const [index, name] of names.slice().reverse().slice(0, 5).entries()) {
+    await expect(queue.getByRole('row').nth(index)).toContainText(name)
+  }
+  await expect(queue.getByText(names[1])).toHaveCount(0)
+  const firstHeight = (await queue.boundingBox())!.height
+
+  // A segunda página tem os 2 mais antigos, e a lista mantém a mesma altura.
+  await queue.getByRole('button', { name: 'Próxima' }).click()
+  await expect(queue.getByRole('row')).toHaveCount(2)
+  await expect(queue.getByRole('row').nth(0)).toContainText(names[1])
+  await expect(queue.getByRole('row').nth(1)).toContainText(names[0])
+  expect((await queue.boundingBox())!.height).toBe(firstHeight)
+  // Cada lista pagina sozinha: a Fila muda de página sem mexer em Em atendimento.
+  await expect(listRegion(page, 'Em atendimento')).toHaveAccessibleName(/^Em atendimento \(0\)$/)
+
+  // A página fica no endereço, com parâmetro próprio (regra 9 de interface.md):
+  // recarregar e sair para um chamado e voltar devolvem a mesma página.
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await expect(page).not.toHaveURL(/paginaAtendimento/)
+  await page.reload()
+  await expect(queue.getByRole('row')).toHaveCount(2)
+  await queue.getByRole('link').first().click()
+  await expect(page).toHaveURL(/\/chamados\/\d+/)
+  await page.goBack()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await expect(queue.getByRole('row')).toHaveCount(2)
+
+  // Seis assumidos: Em atendimento pagina de 5 em 5, também com a altura fixa.
+  for (let index = 0; index < 6; index++) {
+    const assigned = await assignNext(baseURL!, sector.id, agent)
+    await assigned.api.dispose()
+  }
+  // A fila ficou com um chamado: a página 2 deixou de existir, e o endereço se corrige.
+  await expect(page).not.toHaveURL(/paginaFila/)
+  await expect(queue.getByRole('row')).toHaveCount(1)
+  const progress = listRegion(page, 'Em atendimento')
+  await expect(progress).toHaveAccessibleName(/^Em atendimento \(6\)$/)
+  await expect(progress.getByRole('row')).toHaveCount(5)
+  const progressHeight = (await progress.boundingBox())!.height
+  await progress.getByRole('button', { name: 'Próxima' }).click()
+  await expect(progress.getByRole('row')).toHaveCount(1)
+  expect((await progress.boundingBox())!.height).toBe(progressHeight)
+
+  // A página da outra lista também sobrevive ao recarregar, sem mexer na primeira.
+  await expect(page).toHaveURL(/[?&]paginaAtendimento=2(&|$)/)
+  await expect(page).not.toHaveURL(/paginaFila/)
+  await page.reload()
+  await expect(progress.getByRole('row')).toHaveCount(1)
+
+  // Página além da última mostra a última, e o endereço é corrigido.
+  await page.goto('/dashboard?paginaFila=9&paginaAtendimento=9')
+  await expect(queue.getByRole('row')).toHaveCount(1)
+  await expect(progress.getByRole('row')).toHaveCount(1)
+  await expect(page).not.toHaveURL(/paginaFila/)
+  await expect(page).toHaveURL(/[?&]paginaAtendimento=2(&|$)/)
+
+  // Mudar um filtro volta as duas listas à primeira página.
+  await choose(page, 'Atendente', nameOf(agent))
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  // O filtro de atendente não vale para a fila (regra 20): ela segue com o chamado do setor.
+  await expect(queue.getByRole('row')).toHaveCount(1)
+  await expect(progress.getByRole('row')).toHaveCount(5)
+})
+
+test('trocar um filtro volta as duas listas à primeira página, inclusive com "Agora" recolhida', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  const { id } = unique()
+  for (let index = 0; index < 7; index++) {
+    await receive(baseURL!, sector.id, `Filtro ${id} ${index + 1}`)
+  }
+  const module = await createModule(baseURL!, sector, `Módulo ${id}`)
+
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  const queue = listRegion(page, 'Fila')
+  await expect(queue).toHaveAccessibleName(/^Fila \(7\)$/)
+  await queue.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+
+  // Recolhida, a seção desmonta as listas: a limpeza não pode depender delas.
+  await page.getByRole('button', { name: 'Recolher Agora' }).click()
+  await expect(listRegion(page, 'Fila')).toHaveCount(0)
+  // O canal não filtra as listas, mas é um filtro: muda o número, e as páginas voltam.
+  await choose(page, 'Canal', 'WhatsApp')
+  await expect(page).toHaveURL(/[?&]channel=whatsapp(&|$)/)
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  await page.getByRole('button', { name: 'Abrir Agora' }).click()
+  await expect(queue.getByRole('row')).toHaveCount(5)
+
+  // Período e módulo, com a seção aberta, também limpam as duas páginas.
+  await queue.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await page.getByRole('button', { name: '30 dias' }).click()
+  await expect(page).toHaveURL(/[?&]period=30d(&|$)/)
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  await queue.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page).toHaveURL(/[?&]paginaFila=2(&|$)/)
+  await choose(page, 'Módulo', module.name)
+  await expect(page).toHaveURL(new RegExp(`[?&]moduleId=${module.id}(&|$)`))
+  await expect(page).not.toHaveURL(/paginaFila|paginaAtendimento/)
+  await expect(queue.getByRole('row')).toHaveCount(5)
+})
+
+test('a linha TOTAL soma as linhas e a média de atendimento é a geral; "Do setor" mostra recebidos e espera', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const ana = `Ana ${id}`
+  const bia = `Bia ${id}`
+  const [cityHall] = await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [
+      { name: ana, phone: unique().phone, organization: 0, sector: sector.id },
+      { name: bia, phone: unique().phone, organization: 0, sector: sector.id },
+    ],
+  )
+  const payroll = await createModule(baseURL!, sector, 'Folha')
+  const api = await adminApi(baseURL!)
+  const secondEmail = `agent2.${id}@e2e.test`
+  const created = await api.post('/api/users', {
+    data: {
+      name: `Segundo ${id}`,
+      email: secondEmail,
+      role: 'agent',
+      sectorId: sector.id,
+      password: userPassword,
+    },
+  })
+  expect(created.ok()).toBeTruthy()
+  await api.dispose()
+  // Dois atendimentos por telefone, com 15 e 30 minutos de atendimento.
+  await registerPhone(baseURL!, sector.id, agent, {
+    contact: ana,
+    organizationId: cityHall.id,
+    moduleId: payroll.id,
+    minutes: [40, 25],
+  })
+  await registerPhone(baseURL!, sector.id, secondEmail, {
+    contact: bia,
+    organizationId: cityHall.id,
+    moduleId: payroll.id,
+    minutes: [50, 20],
+  })
+  await receive(baseURL!, sector.id, 'Caio Cliente')
+  await assignContact(baseURL!, sector.id, agent, 'Caio Cliente')
+
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  const table = page.getByRole('region', { name: 'Por atendente' })
+  const first = table.getByRole('row', { name: new RegExp(`^${nameOf(agent)}`) })
+  const second = table.getByRole('row', { name: new RegExp(`^Segundo ${id}`) })
+  await expect(first.getByRole('cell').nth(1)).toHaveText('1')
+  await expect(first.getByRole('cell').nth(3)).toHaveText('1')
+  await expect(first.getByRole('cell').nth(6)).toHaveText('15 min')
+  await expect(second.getByRole('cell').nth(3)).toHaveText('1')
+  await expect(second.getByRole('cell').nth(6)).toHaveText('30 min')
+
+  // O TOTAL é a soma das linhas...
+  await expectTotal(page, 'Em atendimento', '1')
+  await expectTotal(page, 'Encerrados', '2')
+  // ...e a média de atendimento é a geral dos dois (22,5 min), não a soma (45 min).
+  await expectTotal(page, 'Tempo médio de atendimento', '22 min')
+
+  // "Do setor": os números que não pertencem a uma pessoa, no mesmo filtro.
+  await expectSectorNumber(page, 'Recebidos', '1')
+  await expectSectorNumber(page, 'Tempo médio de espera', 'menos de 1 min')
+})
+
+// Abre a conversa pelo celular do setor, fora do sistema: o chamado nasce iniciado pelo
+// celular, sem pessoa atribuída.
+async function sendOutside(baseURL: string, sectorId: number, contactName: string, phone?: string) {
+  const api = await apiRequest.newContext({ baseURL })
+  const response = await api.post(`/api/test/messaging/sectors/${sectorId}/send-outside`, {
+    data: {
+      externalMessageId: `E2E-OUT-${unique().id}`,
+      phone: phone ?? unique().phone,
+      contactName,
+      body: 'Bom dia',
+    },
+  })
+  expect(response.ok(), await response.text()).toBeTruthy()
+  await api.dispose()
+}
+
+test('iniciados pelo celular do setor, sem pessoa, ficam em "Sem atendente" e o Total bate', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const contact = `Iniciado ${id}`
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: contact, phone: unique().phone, organization: 0, sector: sector.id }],
+  )
+  const admins = await adminApi(baseURL!)
+  expect((await admins.post(`/api/sectors/${sector.id}/connection`)).ok()).toBeTruthy()
+  expect((await admins.post(`/api/test/messaging/sectors/${sector.id}/pair`)).ok()).toBeTruthy()
+  await admins.dispose()
+  // Um iniciado no sistema, pela pessoa: é o que a linha dela mostra.
+  await startBySystem(baseURL!, sector.id, agent, await contactId(baseURL, contact))
+  // Outro iniciado pelo celular do setor, pelo adaptador falso: conta no Total e não tem
+  // linha por atendente. A resposta do Dashboard é a do backend, sem alteração.
+  await sendOutside(baseURL!, sector.id, `Celular ${id}`)
+
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  const table = page.getByRole('region', { name: 'Por atendente' })
+  await expect(
+    table
+      .getByRole('row', { name: new RegExp(`^${nameOf(agent)}`) })
+      .getByRole('cell')
+      .nth(2),
+  ).toHaveText('1')
+
+  // A linha sem pessoa mostra a diferença, para a soma das linhas bater com o Total.
+  const withoutPerson = table.getByRole('row', { name: /^Sem atendente/ })
+  await expect(withoutPerson.getByRole('cell').nth(1)).toHaveText('0')
+  await expect(withoutPerson.getByRole('cell').nth(2)).toHaveText('1')
+  await expect(withoutPerson.getByRole('cell').nth(6)).toHaveText('—')
+  await expectTotal(page, 'Iniciados', '2')
+  await expect(table).toContainText(
+    'Sem atendente: chamados iniciados pelo celular do setor, sem pessoa atribuída.',
+  )
 })
 
 for (const viewport of [
@@ -887,7 +1175,7 @@ for (const viewport of [
     await signIn(page, supervisor, userPassword)
     await page.goto('/dashboard?from=2026-01-01&to=2026-01-31')
     const table = page.getByRole('region', { name: 'Por atendente' })
-    await expect(table.getByRole('row')).toHaveCount(2)
+    await expect(table.getByRole('row')).toHaveCount(4)
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     )
