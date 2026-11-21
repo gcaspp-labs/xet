@@ -46,7 +46,7 @@ export default function App() {
   if (
     import.meta.env.DEV &&
     window.location.pathname === '/chamados' &&
-    new URLSearchParams(window.location.search).get('prototype') === '337'
+    ['337', '338'].includes(new URLSearchParams(window.location.search).get('prototype') ?? '')
   )
     return <Prototype337 />
   return (

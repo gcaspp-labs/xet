@@ -1,10 +1,11 @@
-// PROTÓTIPO #337 — descartável, não vai para a main.
-// Plano: uma versão da tela Chamados com o chamado pendente (spec #332): o item
-// "Colocar como pendente" no menu ⋯ com a janela de motivo, a aba Pendentes no
-// painel da direita, o pendente aberto só leitura com a faixa e o Retomar, e a
-// janela "Retomar chamado" a partir de um chamado novo.
+// PROTÓTIPO #338 — descartável, não vai para a main. Sai do protótipo da #337.
+// Plano: uma versão (ajuste de tela existente) do chamado novo B em atendimento
+// com o aviso "Este contato tem N chamado(s) pendente(s)" e o Retomar chamado no
+// aviso e no menu ⋯, com a janela que lista os pendentes do contato.
+// Estados: com 1 e com 2 pendentes, sem pendente, B na fila, quem não é o
+// responsável, a janela aberta e o menu aberto.
 // Parâmetros de URL para as capturas:
-//   ?prototype=337&estado=...&tema=claro|escuro|contraste&captura=1
+//   ?prototype=338&estado=...&tema=claro|escuro|contraste&captura=1
 // Dados fictícios. A barra inferior troca estado e tema; fora das capturas.
 import { type CSSProperties, useEffect, useState } from 'react'
 import {
@@ -394,28 +395,39 @@ function Conversa({
   entradas,
   somenteLeitura,
   aviso,
+  podeRetomar = true,
+  naFila = false,
   aoRetomar,
   className,
 }: {
   entradas: Entrada[]
   somenteLeitura: boolean
-  aviso?: boolean
+  // Quantos pendentes do contato no setor; 0 esconde o aviso.
+  aviso?: number
+  podeRetomar?: boolean
+  naFila?: boolean
   aoRetomar?: () => void
   className?: string
 }) {
   const [texto, setTexto] = useState('')
   return (
     <Card role="region" aria-label="Conversa" className={cn('relative h-full min-h-0', className)}>
-      {aviso && (
+      {!!aviso && (
         <div className="border-b border-line-soft p-3">
           <Alert variant="warning">
             <CirclePause strokeWidth={1.7} aria-hidden />
-            <AlertDescription className="flex flex-col items-start gap-2">
-              Este contato tem 2 chamados pendentes.
-              <Button variant="outline" size="sm" onClick={aoRetomar}>
-                <CirclePlay strokeWidth={1.7} aria-hidden />
-                Retomar chamado
-              </Button>
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Este contato tem {aviso} {aviso === 1 ? 'chamado pendente' : 'chamados pendentes'}.
+                {naFila && ' Assuma o chamado para retomar o pendente.'}
+                {!naFila && !podeRetomar && ' Só quem atende este chamado pode retomar o pendente.'}
+              </span>
+              {podeRetomar && (
+                <Button variant="outline" size="sm" onClick={aoRetomar}>
+                  <CirclePlay strokeWidth={1.7} aria-hidden />
+                  Retomar chamado
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         </div>
@@ -473,7 +485,9 @@ function Conversa({
       {somenteLeitura ? (
         <div className="caption flex shrink-0 items-center gap-2 border-t border-line-soft px-4 py-3 text-ink-soft">
           <Lock strokeWidth={1.7} aria-hidden className="size-[15px] shrink-0" />
-          Somente leitura. Retome o chamado para responder ao contato.
+          {naFila
+            ? 'Somente leitura. Assuma o chamado para responder ao contato.'
+            : 'Somente leitura. Retome o chamado para responder ao contato.'}
         </div>
       ) : (
         <div className="shrink-0 border-t border-line-soft p-4">
@@ -632,16 +646,24 @@ type Estado =
   | 'marcar-erro'
   | 'retomar'
   | 'estreito'
+  | 'aviso'
+  | 'aviso1'
+  | 'sem-aviso'
+  | 'fila'
 type Tema = 'claro' | 'escuro' | 'contraste'
 type Painel = 'meus' | 'conversa' | 'fila' | 'pendentes'
 type Aba = 'fila' | 'pendentes' | 'assuntos'
 
 const params = new URLSearchParams(window.location.search)
-const estadoParam = (params.get('estado') ?? 'inicio') as Estado
+const estadoParam = (params.get('estado') ?? 'aviso') as Estado
 const temaParam = (params.get('tema') ?? 'claro') as Tema
 const captura = params.get('captura') === '1'
 
 const titulos: Record<Estado, string> = {
+  aviso: 'Aviso com 2 pendentes (responsável)',
+  aviso1: 'Aviso com 1 pendente',
+  'sem-aviso': 'Sem pendente (sem aviso)',
+  fila: 'Chamado na fila: aviso sem a ação',
   inicio: 'Aba Pendentes',
   admin: 'Administrador, com o setor na linha',
   vazio: 'Aba Pendentes vazia',
@@ -675,6 +697,10 @@ function derivar(estado: Estado) {
           ? 'meus'
           : 'conversa') as Painel,
     aba: (semChamado || estado === 'estreito' ? 'pendentes' : 'fila') as Aba,
+    // PROTÓTIPO #338: o aviso conta os pendentes do contato; a ação é de quem atende B.
+    pendentesDoContato: estado === 'sem-aviso' ? 0 : estado === 'aviso1' ? 1 : 2,
+    naFila: estado === 'fila',
+    responsavel: estado !== 'fila',
   }
 }
 
@@ -688,6 +714,8 @@ export default function Prototype337() {
   const [aba, setAba] = useState<Aba>(inicial.aba)
   const [menu, setMenu] = useState(inicial.menu)
   const [dialogo, setDialogo] = useState(inicial.dialogo)
+  const [pendentesDoContato, setPendentesDoContato] = useState(inicial.pendentesDoContato)
+  const [naFila, setNaFila] = useState(inicial.naFila)
 
   const aplicar = (proximo: Estado) => {
     const proximoEstado = derivar(proximo)
@@ -698,6 +726,8 @@ export default function Prototype337() {
     setSelecionado(proximoEstado.selecionado)
     setPainel(proximoEstado.painel)
     setAba(proximoEstado.aba)
+    setPendentesDoContato(proximoEstado.pendentesDoContato)
+    setNaFila(proximoEstado.naFila)
   }
 
   useEffect(() => {
@@ -714,6 +744,8 @@ export default function Prototype337() {
         : pendentes
   const pendenteAberto = pendentes[0]
   const numeroPendentes = listaPendentes.length
+  // PROTÓTIPO #338: na fila, o chamado ainda não é de ninguém, então sai de Meus chamados.
+  const meusLista = naFila ? meusChamados.filter((chamado) => chamado.id !== 9) : meusChamados
   const podeAssuntos = selecionado === 'novo'
   const faixaPendente = selecionado === 'pendente' && pendenteAberto
   const mostrar = (qual: Painel) => (painel === qual ? undefined : 'max-xl:hidden')
@@ -795,60 +827,74 @@ export default function Prototype337() {
                 </Button>
               ) : selecionado === 'novo' ? (
                 <div className="flex items-center gap-2">
-                  <Button>Encerrar</Button>
-                  <DropdownMenu open={menu} onOpenChange={setMenu}>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label="Mais ações"
-                          title="Mais ações"
-                          aria-haspopup="menu"
-                        />
-                      }
-                    >
-                      <MoreHorizontal strokeWidth={1.7} aria-hidden />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-52">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setMenu(false)
-                          aplicar('retomar')
-                        }}
+                  {naFila ? (
+                    <Button>
+                      <UserCheck strokeWidth={1.7} aria-hidden />
+                      Assumir
+                    </Button>
+                  ) : (
+                    <Button>Encerrar</Button>
+                  )}
+                  {/* PROTÓTIPO #338: na fila, as ações do chamado em atendimento não se aplicam. */}
+                  {!naFila && (
+                    <DropdownMenu open={menu} onOpenChange={setMenu}>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Mais ações"
+                            title="Mais ações"
+                            aria-haspopup="menu"
+                          />
+                        }
                       >
-                        <CirclePlay strokeWidth={1.7} aria-hidden />
-                        Retomar chamado
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => setMenu(false)}>
-                        <Undo2 strokeWidth={1.7} aria-hidden />
-                        Devolver à fila
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setMenu(false)
-                          aplicar('marcar')
-                        }}
-                      >
-                        <CirclePause strokeWidth={1.7} aria-hidden />
-                        Colocar como pendente
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setMenu(false)}>
-                        <UserRoundCog strokeWidth={1.7} aria-hidden />
-                        Transferir
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setMenu(false)}>
-                        <ArrowRightLeft strokeWidth={1.7} aria-hidden />
-                        Outro setor
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem variant="destructive" onClick={() => setMenu(false)}>
-                        <Ban strokeWidth={1.7} aria-hidden />
-                        Cancelar chamado
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <MoreHorizontal strokeWidth={1.7} aria-hidden />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-52">
+                        {!naFila && (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setMenu(false)
+                                aplicar('retomar')
+                              }}
+                            >
+                              <CirclePlay strokeWidth={1.7} aria-hidden />
+                              Retomar chamado
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                          </>
+                        )}
+                        <DropdownMenuItem onClick={() => setMenu(false)}>
+                          <Undo2 strokeWidth={1.7} aria-hidden />
+                          Devolver à fila
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setMenu(false)
+                            aplicar('marcar')
+                          }}
+                        >
+                          <CirclePause strokeWidth={1.7} aria-hidden />
+                          Colocar como pendente
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setMenu(false)}>
+                          <UserRoundCog strokeWidth={1.7} aria-hidden />
+                          Transferir
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setMenu(false)}>
+                          <ArrowRightLeft strokeWidth={1.7} aria-hidden />
+                          Outro setor
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem variant="destructive" onClick={() => setMenu(false)}>
+                          <Ban strokeWidth={1.7} aria-hidden />
+                          Cancelar chamado
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -874,7 +920,7 @@ export default function Prototype337() {
             >
               <TabsList aria-label="Mostrar" className="w-full gap-2">
                 <TabsTrigger value="meus" className="flex-1">
-                  Meus <Contagem n={meusChamados.length} />
+                  Meus <Contagem n={meusLista.length} />
                 </TabsTrigger>
                 <TabsTrigger value="conversa" className="flex-1">
                   Conversa
@@ -894,7 +940,7 @@ export default function Prototype337() {
                 className={cn('min-h-0', mostrar('meus'))}
               >
                 <CardHeader className="flex flex-row items-center justify-between gap-2">
-                  <CardTitle id="meus-chamados">Meus chamados ({meusChamados.length})</CardTitle>
+                  <CardTitle id="meus-chamados">Meus chamados ({meusLista.length})</CardTitle>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -906,7 +952,7 @@ export default function Prototype337() {
                 </CardHeader>
                 <nav aria-label="Meus chamados" className="flex-1 overflow-y-auto">
                   <ul className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
-                    {meusChamados.map((chamado) => (
+                    {meusLista.map((chamado) => (
                       <li key={chamado.id}>
                         <LinhaMeus
                           chamado={chamado}
@@ -928,8 +974,10 @@ export default function Prototype337() {
                 <Conversa
                   key={estado}
                   entradas={conversaNova}
-                  somenteLeitura={false}
-                  aviso
+                  somenteLeitura={naFila}
+                  aviso={pendentesDoContato}
+                  podeRetomar={!naFila}
+                  naFila={naFila}
                   aoRetomar={() => aplicar('retomar')}
                   className={mostrar('conversa')}
                 />
@@ -1022,7 +1070,7 @@ export default function Prototype337() {
 
       {!captura && (
         <div className="fixed bottom-3 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-line bg-card p-2 text-xs shadow-lg">
-          <strong>Protótipo #337</strong>
+          <strong>Protótipo #338</strong>
           <span className="text-ink-soft">{titulos[estado]}</span>
           <span className="flex items-center gap-1">
             Estado
@@ -1032,15 +1080,12 @@ export default function Prototype337() {
               value={estado}
               onChange={(event) => aplicar(event.target.value as Estado)}
             >
-              <option value="inicio">Aba Pendentes</option>
-              <option value="admin">Administrador</option>
-              <option value="vazio">Pendentes vazia</option>
-              <option value="pendente">Pendente aberto</option>
+              <option value="aviso">Aviso com 2 pendentes</option>
+              <option value="aviso1">Aviso com 1 pendente</option>
+              <option value="sem-aviso">Sem pendente</option>
+              <option value="fila">Chamado na fila</option>
               <option value="menu">Menu Mais ações</option>
-              <option value="marcar">Colocar como pendente</option>
-              <option value="marcar-erro">Motivo vazio</option>
-              <option value="retomar">Retomar chamado</option>
-              <option value="estreito">Abas estreitas</option>
+              <option value="retomar">Janela Retomar chamado</option>
             </select>
           </span>
           <label className="flex items-center gap-1">
