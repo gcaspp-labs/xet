@@ -11,6 +11,7 @@ import {
   Mic,
   Paperclip,
   PencilLine,
+  Phone,
   RotateCw,
   SendHorizontal,
   Trash2,
@@ -40,6 +41,7 @@ import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
+import { TelefoneTag } from '@/components/TicketChannel'
 import type { HistoryReturnState } from '@/lib/history-return'
 import { PhoneCopy } from '@/components/PhoneCopy'
 import { Topbar } from '@/components/Topbar'
@@ -79,10 +81,12 @@ import {
   useTicketModules,
 } from '@/lib/conversation'
 import {
+  formatAverageTime,
   formatDateTime,
   formatDuration,
   formatFileSize,
   formatMessageTime,
+  formatTime,
   organizationLabel,
   ticketStatusLabel,
 } from '@/lib/format'
@@ -1118,6 +1122,7 @@ function DetailsTab({ ticket }: { ticket: TicketDetail }) {
       {(ticket.previous || ticket.next) && <TransferChain ticket={ticket} />}
       {row('Protocolo', <span className="mono-num">{ticket.protocol}</span>)}
       {row('Situação', <Badge tone={status.tone}>{status.label}</Badge>)}
+      {row('Canal', ticket.channel === 'phone' ? <TelefoneTag /> : 'WhatsApp')}
       {row('Setor', ticket.sector.name)}
       {row(
         'Contato',
@@ -1404,6 +1409,47 @@ function ReadOnlyConversation({ ticket }: { ticket: TicketDetail }) {
   )
 }
 
+// O registro por telefone não tem conversa: no lugar dela, o aviso e a ligação, com
+// quem registrou e quando no pé. Corrigir continua no topo, como nos outros encerrados.
+function PhoneConversation({ ticket }: { ticket: TicketDetail }) {
+  const callTime = ticket.startedAt ? formatTime(ticket.startedAt) : null
+  const endTime = ticket.endedAt ? formatTime(ticket.endedAt) : null
+  const seconds =
+    ticket.startedAt && ticket.endedAt
+      ? (new Date(ticket.endedAt).getTime() - new Date(ticket.startedAt).getTime()) / 1000
+      : null
+  const registeredBy = ticket.closedBy?.name ?? ticket.assignee?.name
+  return (
+    <Card role="region" aria-label="Atendimento por telefone" className="flex min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-10">
+        <Empty>
+          <EmptyMedia>
+            <Phone strokeWidth={1.7} aria-hidden />
+          </EmptyMedia>
+          <EmptyDescription>
+            <span className="body-strong block text-ink">
+              Atendimento por telefone, sem conversa
+            </span>
+            {callTime && endTime
+              ? `Ligação das ${callTime} às ${endTime}${
+                  seconds !== null ? ` · ${formatAverageTime(seconds)}` : ''
+                }.`
+              : 'O registro fica nos Detalhes, ao lado.'}
+          </EmptyDescription>
+        </Empty>
+      </div>
+      {ticket.closedAt && (
+        <div className="border-t border-line-soft px-4 py-3">
+          <p className="caption text-ink-faint">
+            Registrado{registeredBy ? ` por ${registeredBy}` : ''} em{' '}
+            <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>.
+          </p>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export default function TicketPage() {
   const location = useLocation()
   const origin = location.state as Partial<HistoryReturnState> | null
@@ -1471,7 +1517,11 @@ export default function TicketPage() {
       )}
       {/* A tela de conversas usa a largura toda (design.md). */}
       <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[minmax(0,1fr)]">
-        <ReadOnlyConversation ticket={ticket} />
+        {ticket.channel === 'phone' ? (
+          <PhoneConversation ticket={ticket} />
+        ) : (
+          <ReadOnlyConversation ticket={ticket} />
+        )}
         <Card role="region" aria-labelledby="ticket-info-title" className="min-h-0">
           <CardHeader>
             <CardTitle id="ticket-info-title">Atendimento</CardTitle>

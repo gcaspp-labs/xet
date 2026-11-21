@@ -94,6 +94,11 @@ export function formatDateTime(value: string) {
   return format(new Date(value), 'dd/MM/yyyy HH:mm')
 }
 
+// Só a hora de um momento (14:05), como no início e no fim de uma ligação.
+export function formatTime(value: string) {
+  return format(new Date(value), 'HH:mm')
+}
+
 // Hora da mensagem: só a hora quando é de hoje (14:05), senão dia e hora (02/03 14:05).
 export function formatMessageTime(value: string) {
   const date = new Date(value)

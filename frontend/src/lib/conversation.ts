@@ -12,10 +12,14 @@ export const maxFileSize = 16 * 1024 * 1024
 
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
 
+export type TicketChannel = 'whatsapp' | 'phone'
+
 export type TicketDetail = {
   id: number
   protocol: string
   status: 'queued' | 'in_progress' | 'closed'
+  // Como o atendimento aconteceu: WhatsApp ou registro por telefone.
+  channel: TicketChannel
   sector: { id: number; name: string }
   arrivedAt: string
   assignedAt: string | null
@@ -102,6 +106,7 @@ export type HistoryEntry = {
   id: number
   protocol: string
   status: 'queued' | 'in_progress' | 'closed'
+  channel: TicketChannel
   closureType: 'resolved' | 'transferred' | 'cancelled' | null
   sectorName: string
   arrivedAt: string

@@ -23,24 +23,26 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and ($1::bigint is null or t.sector_id = $1)
   and ($2::bigint is null or t.assignee_id = $2)
-  and ($3::text is null
+  and ($3::ticket_channel is null or t.channel = $3)
+  and ($4::text is null
       or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
           where tm.ticket_id = t.id
-            and strpos(lower(unaccent(md.name)), lower(unaccent($3::text))) > 0))
-  and ($4::timestamptz is null or t.closed_at >= $4::timestamptz)
-  and ($5::timestamptz is null or t.closed_at < $5::timestamptz)
-  and ($6::text is null
-      or strpos(lower(unaccent(coalesce(t.subject, ''))), lower(unaccent($6::text))) > 0)
+            and strpos(lower(unaccent(md.name)), lower(unaccent($4::text))) > 0))
+  and ($5::timestamptz is null or t.closed_at >= $5::timestamptz)
+  and ($6::timestamptz is null or t.closed_at < $6::timestamptz)
   and ($7::text is null
-      or strpos(lower(unaccent(t.protocol)), lower(unaccent($7::text))) > 0
-      or strpos(lower(unaccent(c.name)), lower(unaccent($7::text))) > 0
-      or strpos(lower(unaccent(coalesce(o.name, ''))), lower(unaccent($7::text))) > 0
-      or ($8::text is not null and strpos(coalesce(c.phone, ''), $8::text) > 0))
+      or strpos(lower(unaccent(coalesce(t.subject, ''))), lower(unaccent($7::text))) > 0)
+  and ($8::text is null
+      or strpos(lower(unaccent(t.protocol)), lower(unaccent($8::text))) > 0
+      or strpos(lower(unaccent(c.name)), lower(unaccent($8::text))) > 0
+      or strpos(lower(unaccent(coalesce(o.name, ''))), lower(unaccent($8::text))) > 0
+      or ($9::text is not null and strpos(coalesce(c.phone, ''), $9::text) > 0))
 `
 
 type CountClosedTicketsPageParams struct {
 	SectorID     *int64
 	AssigneeID   *int64
+	Channel      NullTicketChannel
 	Module       *string
 	ClosedFrom   *time.Time
 	ClosedUntil  *time.Time
@@ -57,6 +59,7 @@ func (q *Queries) CountClosedTicketsPage(ctx context.Context, arg CountClosedTic
 	row := q.db.QueryRow(ctx, countClosedTicketsPage,
 		arg.SectorID,
 		arg.AssigneeID,
+		arg.Channel,
 		arg.Module,
 		arg.ClosedFrom,
 		arg.ClosedUntil,
@@ -127,44 +130,46 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and ($1::bigint is null or t.sector_id = $1)
   and ($2::bigint is null or t.assignee_id = $2)
-  and ($3::text is null
+  and ($3::ticket_channel is null or t.channel = $3)
+  and ($4::text is null
       or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
           where tm.ticket_id = t.id
-            and strpos(lower(unaccent(md.name)), lower(unaccent($3::text))) > 0))
-  and ($4::timestamptz is null or t.closed_at >= $4::timestamptz)
-  and ($5::timestamptz is null or t.closed_at < $5::timestamptz)
-  and ($6::text is null
-      or strpos(lower(unaccent(coalesce(t.subject, ''))), lower(unaccent($6::text))) > 0)
+            and strpos(lower(unaccent(md.name)), lower(unaccent($4::text))) > 0))
+  and ($5::timestamptz is null or t.closed_at >= $5::timestamptz)
+  and ($6::timestamptz is null or t.closed_at < $6::timestamptz)
   and ($7::text is null
-      or strpos(lower(unaccent(t.protocol)), lower(unaccent($7::text))) > 0
-      or strpos(lower(unaccent(c.name)), lower(unaccent($7::text))) > 0
-      or strpos(lower(unaccent(coalesce(o.name, ''))), lower(unaccent($7::text))) > 0
-      or ($8::text is not null and strpos(coalesce(c.phone, ''), $8::text) > 0))
+      or strpos(lower(unaccent(coalesce(t.subject, ''))), lower(unaccent($7::text))) > 0)
+  and ($8::text is null
+      or strpos(lower(unaccent(t.protocol)), lower(unaccent($8::text))) > 0
+      or strpos(lower(unaccent(c.name)), lower(unaccent($8::text))) > 0
+      or strpos(lower(unaccent(coalesce(o.name, ''))), lower(unaccent($8::text))) > 0
+      or ($9::text is not null and strpos(coalesce(c.phone, ''), $9::text) > 0))
 order by
-    case when $9::text = 'protocol' and $10::text = 'asc' then lower(unaccent(t.protocol)) end asc nulls last,
-    case when $9::text = 'protocol' and $10::text = 'desc' then lower(unaccent(t.protocol)) end desc nulls last,
-    case when $9::text = 'date' and $10::text = 'asc' then t.closed_at end asc nulls last,
-    case when $9::text = 'date' and $10::text = 'desc' then t.closed_at end desc nulls last,
-    case when $9::text = 'contact' and $10::text = 'asc' then lower(unaccent(c.name)) end asc nulls last,
-    case when $9::text = 'contact' and $10::text = 'desc' then lower(unaccent(c.name)) end desc nulls last,
-    case when $9::text = 'organization' and $10::text = 'asc' then lower(unaccent(o.name)) end asc nulls last,
-    case when $9::text = 'organization' and $10::text = 'desc' then lower(unaccent(o.name)) end desc nulls last,
-    case when $9::text = 'sector' and $10::text = 'asc' then lower(unaccent(s.name)) end asc nulls last,
-    case when $9::text = 'sector' and $10::text = 'desc' then lower(unaccent(s.name)) end desc nulls last,
-    case when $9::text = 'assignee' and $10::text = 'asc' then lower(unaccent(u.name)) end asc nulls last,
-    case when $9::text = 'assignee' and $10::text = 'desc' then lower(unaccent(u.name)) end desc nulls last,
-    case when $9::text = 'subject' and $10::text = 'asc' then lower(unaccent(t.subject)) end asc nulls last,
-    case when $9::text = 'subject' and $10::text = 'desc' then lower(unaccent(t.subject)) end desc nulls last,
-    case when $9::text = 'situation' and $10::text = 'asc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' else 'encerrado' end end asc nulls last,
-    case when $9::text = 'situation' and $10::text = 'desc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' else 'encerrado' end end desc nulls last,
-    case when $10::text = 'asc' then t.id end asc,
-    case when $10::text = 'desc' then t.id end desc
-limit 20 offset $11
+    case when $10::text = 'protocol' and $11::text = 'asc' then lower(unaccent(t.protocol)) end asc nulls last,
+    case when $10::text = 'protocol' and $11::text = 'desc' then lower(unaccent(t.protocol)) end desc nulls last,
+    case when $10::text = 'date' and $11::text = 'asc' then t.closed_at end asc nulls last,
+    case when $10::text = 'date' and $11::text = 'desc' then t.closed_at end desc nulls last,
+    case when $10::text = 'contact' and $11::text = 'asc' then lower(unaccent(c.name)) end asc nulls last,
+    case when $10::text = 'contact' and $11::text = 'desc' then lower(unaccent(c.name)) end desc nulls last,
+    case when $10::text = 'organization' and $11::text = 'asc' then lower(unaccent(o.name)) end asc nulls last,
+    case when $10::text = 'organization' and $11::text = 'desc' then lower(unaccent(o.name)) end desc nulls last,
+    case when $10::text = 'sector' and $11::text = 'asc' then lower(unaccent(s.name)) end asc nulls last,
+    case when $10::text = 'sector' and $11::text = 'desc' then lower(unaccent(s.name)) end desc nulls last,
+    case when $10::text = 'assignee' and $11::text = 'asc' then lower(unaccent(u.name)) end asc nulls last,
+    case when $10::text = 'assignee' and $11::text = 'desc' then lower(unaccent(u.name)) end desc nulls last,
+    case when $10::text = 'subject' and $11::text = 'asc' then lower(unaccent(t.subject)) end asc nulls last,
+    case when $10::text = 'subject' and $11::text = 'desc' then lower(unaccent(t.subject)) end desc nulls last,
+    case when $10::text = 'situation' and $11::text = 'asc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' else 'encerrado' end end asc nulls last,
+    case when $10::text = 'situation' and $11::text = 'desc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' else 'encerrado' end end desc nulls last,
+    case when $11::text = 'asc' then t.id end asc,
+    case when $11::text = 'desc' then t.id end desc
+limit 20 offset $12
 `
 
 type ListClosedTicketsPageParams struct {
 	SectorID     *int64
 	AssigneeID   *int64
+	Channel      NullTicketChannel
 	Module       *string
 	ClosedFrom   *time.Time
 	ClosedUntil  *time.Time
@@ -202,6 +207,7 @@ func (q *Queries) ListClosedTicketsPage(ctx context.Context, arg ListClosedTicke
 	rows, err := q.db.Query(ctx, listClosedTicketsPage,
 		arg.SectorID,
 		arg.AssigneeID,
+		arg.Channel,
 		arg.Module,
 		arg.ClosedFrom,
 		arg.ClosedUntil,

@@ -177,6 +177,165 @@ async function choose(page: Page, label: string, option: string | RegExp) {
   await page.getByRole('option', { name: option }).click()
 }
 
+// Id do contato cadastrado com o nome informado, pela busca da lista.
+async function contactIdOf(baseURL: string, name: string) {
+  const api = await adminApi(baseURL)
+  const response = await api.get(`/api/contacts?q=${encodeURIComponent(name)}`)
+  expect(response.ok()).toBeTruthy()
+  const listed = (await response.json()) as { items: { id: number; name: string }[] }
+  await api.dispose()
+  const contact = listed.items.find((item) => item.name === name)
+  expect(contact, `contato ${name}`).toBeDefined()
+  return contact!.id
+}
+
+// Um setor com um chamado de WhatsApp encerrado e um registro por telefone do mesmo
+// contato e órgão, para a lista, o filtro Canal e o histórico (ação da API de #316).
+async function seedPhoneRecord(baseURL: string) {
+  const origin = await seedSector(baseURL)
+  const { id } = unique()
+  const admins = await adminApi(baseURL)
+  ok(await admins.post(`/api/sectors/${origin.sector.id}/connection`))
+  ok(await admins.post(`/api/test/messaging/sectors/${origin.sector.id}/pair`))
+  const module = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${origin.sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
+  await admins.dispose()
+
+  const contact = `Rita ${id}`
+  const [organization] = await seedDirectory(
+    baseURL,
+    [{ name: `Prefeitura de Itu ${id}` }],
+    [{ name: contact, phone: phoneOf(id, 0), organization: 0, sector: origin.sector.id }],
+  )
+  const system = await apiRequest.newContext({ baseURL })
+  await receive(system, origin.sector.id, phoneOf(id, 0), contact)
+  await system.dispose()
+
+  const api = await agentApi(baseURL, origin.agent)
+  const whatsapp = await queued(api, origin.sector.id, contact)
+  ok(await api.post(`/api/tickets/${whatsapp.id}/assign`))
+  ok(
+    await api.post(`/api/tickets/${whatsapp.id}/close`, {
+      data: {
+        subject: 'Contracheque',
+        resolution: 'Enviada a segunda via.',
+        moduleIds: [module.id],
+        organizationId: organization.id,
+      },
+    }),
+  )
+  // Ligação de meia hora, encerrada há um minuto.
+  const ended = new Date(Date.now() - 60_000)
+  const started = new Date(ended.getTime() - 30 * 60_000)
+  const registered = await json<{ id: number; protocol: string }>(
+    await api.post(`/api/sectors/${origin.sector.id}/phone-tickets`, {
+      data: {
+        contactId: await contactIdOf(baseURL, contact),
+        organizationId: organization.id,
+        moduleIds: [module.id],
+        subject: 'Contracheque',
+        resolution: 'Orientado por telefone.',
+        startedAt: started.toISOString(),
+        endedAt: ended.toISOString(),
+        clientRequestId: crypto.randomUUID(),
+      },
+    }),
+  )
+  await api.dispose()
+  return { origin, id, contact, module, organization, whatsapp, phone: registered }
+}
+
+test('registro por telefone aparece com a marca Telefone, e o filtro Canal recorta a lista', async ({
+  page,
+  baseURL,
+}) => {
+  const h = await seedPhoneRecord(baseURL!)
+  await openList(page, h.origin.agent, userPassword)
+  await expect(bodyRows(page)).toHaveCount(2)
+
+  // Só o registro por telefone ganha a marca; o de WhatsApp fica como sempre.
+  const phoneRow = bodyRows(page).filter({ hasText: h.phone.protocol })
+  await expect(phoneRow.getByText('Telefone', { exact: true })).toBeVisible()
+  const whatsappRow = bodyRows(page).filter({ hasText: h.whatsapp.protocol })
+  await expect(whatsappRow.getByText('Telefone', { exact: true })).toHaveCount(0)
+
+  // O filtro Canal recorta a lista no servidor, fica no endereço e sobrevive a recarregar.
+  await choose(page, 'Canal', 'Telefone')
+  await expect(page).toHaveURL(/canal=telefone/)
+  await expect(bodyRows(page)).toHaveCount(1)
+  await expect(bodyRows(page).first()).toContainText(h.phone.protocol)
+  await page.reload()
+  await expect(page).toHaveURL(/canal=telefone/)
+  await expect(bodyRows(page)).toHaveCount(1)
+  await expect(bodyRows(page).first()).toContainText(h.phone.protocol)
+
+  await choose(page, 'Canal', 'WhatsApp')
+  await expect(page).toHaveURL(/canal=whatsapp/)
+  await expect(bodyRows(page)).toHaveCount(1)
+  await expect(bodyRows(page).first()).toContainText(h.whatsapp.protocol)
+
+  // "Todos" volta à lista inteira, sem o canal no endereço.
+  await choose(page, 'Canal', 'Todos')
+  await expect(page).not.toHaveURL(/canal=/)
+  await expect(bodyRows(page)).toHaveCount(2)
+})
+
+test('a ficha do registro por telefone não tem conversa, e a correção salva com motivo', async ({
+  page,
+  baseURL,
+}) => {
+  const h = await seedPhoneRecord(baseURL!)
+  await openList(page, h.origin.agent, userPassword)
+  await bodyRows(page).filter({ hasText: h.phone.protocol }).getByRole('link').click()
+  await expect(page).toHaveURL(new RegExp(`/atendimentos/${h.phone.id}$`))
+
+  // No lugar da conversa, o aviso com a ligação; sem área de mensagens nem campo de envio.
+  const panel = page.getByRole('region', { name: 'Atendimento por telefone' })
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('Atendimento por telefone, sem conversa')
+  await expect(panel).toContainText(/Ligação das \d{2}:\d{2} às \d{2}:\d{2} · 30 min/)
+  await expect(panel).toContainText(
+    `Registrado por ${h.origin.agent.replace(/^(\w+)\.(\d+)@.*$/, '$1 $2')}`,
+  )
+  await expect(page.getByRole('region', { name: 'Conversa' })).toHaveCount(0)
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+  await expect(page.getByRole('status', { name: 'Só leitura' })).toHaveCount(0)
+
+  // Os dados do registro como os outros encerrados, com o Canal junto da Situação.
+  const details = page.getByRole('region', { name: 'Atendimento', exact: true })
+  await expect(details).toContainText(h.contact)
+  await expect(details).toContainText('Canal')
+  await expect(details.getByText('Telefone', { exact: true })).toBeVisible()
+  await expect(details).toContainText('Encerrado')
+  await expect(details).toContainText(`Prefeitura de Itu ${h.id}`)
+  await expect(details).toContainText('Contracheque')
+  await expect(details).toContainText('Orientado por telefone.')
+
+  // A correção funciona igual, e sem motivo é recusada.
+  await page.getByRole('button', { name: 'Corrigir' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Corrigir atendimento' })
+  await sheet.getByLabel('Assunto').fill('Segunda via do contracheque')
+  await sheet.getByRole('button', { name: 'Salvar correção' }).click()
+  await expect(sheet).toContainText('Informe o motivo da correção.')
+  await sheet.getByLabel('Motivo da correção').fill('Assunto registrado errado.')
+  await sheet.getByRole('button', { name: 'Salvar correção' }).click()
+  // O assunto alterado não está na lista do setor: a janela pergunta antes de gravar.
+  await sheet.getByRole('button', { name: 'Não adicionar' }).click()
+  await expect(page.getByText('Atendimento corrigido')).toBeVisible()
+  await expect(sheet).toHaveCount(0)
+
+  // O histórico do contato e o do órgão mostram o registro com a marca Telefone.
+  await page.getByRole('tab', { name: 'Histórico' }).click()
+  const contato = page.getByRole('list', { name: 'Chamados do contato' })
+  await expect(contato).toContainText(h.phone.protocol)
+  await expect(contato).toContainText(h.whatsapp.protocol)
+  await expect(contato.getByText('Telefone', { exact: true })).toHaveCount(1)
+  const orgao = page.getByRole('list', { name: 'Chamados do órgão' })
+  await expect(orgao).toContainText(h.phone.protocol)
+  await expect(orgao.getByText('Telefone', { exact: true })).toHaveCount(1)
+})
+
 test('abre com todos os chamados encerrados, do mais recente ao mais antigo, sem situação aberta nem Novo chamado', async ({
   page,
   baseURL,

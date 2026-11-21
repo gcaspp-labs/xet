@@ -29,9 +29,10 @@ type closedTicketResponse struct {
 }
 
 // closedTicketsFilter reads ?q=, ?period= (today, 7d or 30d) or ?from= and ?to=
-// (YYYY-MM-DD, either may be missing), ?sectorId=, ?assigneeId=, ?module= and
-// ?subject= (the last two are texts the name contains). Without a period, it is every period. A situation is refused: the
-// history only has closed tickets.
+// (YYYY-MM-DD, either may be missing), ?sectorId=, ?assigneeId=, ?channel= (whatsapp
+// or phone), ?module= and ?subject= (the last two are texts the name contains).
+// Without a period, it is every period. A situation is refused: the history only
+// has closed tickets.
 func closedTicketsFilter(w http.ResponseWriter, r *http.Request) (ClosedTicketsFilter, bool) {
 	query := r.URL.Query()
 	if query.Has("status") || query.Has("situation") || query.Has("closureType") {
@@ -77,10 +78,11 @@ func closedTicketsFilter(w http.ResponseWriter, r *http.Request) (ClosedTicketsF
 		}
 	}
 
-	var okSector, okAssignee bool
+	var okSector, okAssignee, okChannel bool
 	filter.SectorID, okSector = dashboardFilterID(r, "sectorId")
 	filter.AssigneeID, okAssignee = dashboardFilterID(r, "assigneeId")
-	if !okSector || !okAssignee {
+	filter.Channel, okChannel = dashboardFilterChannel(r)
+	if !okSector || !okAssignee || !okChannel {
 		httpx.WriteError(w, http.StatusBadRequest, "Filtro inválido.")
 		return filter, false
 	}

@@ -6,6 +6,9 @@ import { type Page, pageParams, type PageRequest, useQueryState } from '@/lib/pa
 
 export type ClosureType = 'resolved' | 'transferred' | 'cancelled'
 
+// Como o atendimento aconteceu: WhatsApp ou registro por telefone.
+export type TicketChannel = 'whatsapp' | 'phone'
+
 type Ref = { id: number; name: string }
 
 // Um chamado encerrado da lista de Atendimentos. `closedAt` é o momento real do
@@ -14,6 +17,7 @@ export type ClosedTicket = {
   id: number
   protocol: string
   closureType: ClosureType | null
+  channel: TicketChannel
   closedAt: string | null
   subject: string | null
   contact: { id: number; name: string; phone: string | null; registered: boolean }
@@ -44,6 +48,13 @@ export const closedTicketColumns: Record<string, ClosedTicketSort> = {
 // Abre pelo encerramento mais recente.
 export const defaultClosedTicketColumn = 'data'
 
+// Canal no endereço (?canal=): "telefone" é o registro por telefone, "phone" na API.
+export type ChannelChoice = 'whatsapp' | 'telefone'
+const channelParams: Record<ChannelChoice, TicketChannel> = {
+  whatsapp: 'whatsapp',
+  telefone: 'phone',
+}
+
 export type PeriodChoice = 'all' | 'today' | '7d' | '30d' | 'custom'
 
 // Valor de cada período no endereço; "todo o período" é a ausência dele.
@@ -65,8 +76,8 @@ function positiveId(raw: string | null) {
   return raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined
 }
 
-// Busca e filtros guardados no endereço (?busca=, ?periodo=, ?de=, ?ate=, ?setor=,
-// ?responsavel=, ?modulo=, ?assunto=; módulo e assunto são texto contido), para voltar à mesma lista; mudar qualquer um volta
+// Busca e filtros guardados no endereço (?busca=, ?periodo=, ?de=, ?ate=, ?canal=,
+// ?setor=, ?responsavel=, ?modulo=, ?assunto=; módulo e assunto são texto contido), para voltar à mesma lista; mudar qualquer um volta
 // à página 1. Atendente e supervisor ficam no próprio setor, seja o que for que o endereço
 // diga; responsável e módulo pertencem a um setor, então o administrador só os usa depois
 // de escolher um, e trocar de setor limpa os dois.
@@ -83,6 +94,10 @@ export function useClosedTicketsFilter() {
   const query = params.get('busca') ?? ''
   const subject = params.get('assunto') ?? ''
 
+  const channel = (Object.keys(channelParams) as ChannelChoice[]).find(
+    (value) => value === params.get('canal'),
+  )
+
   const periodParam = params.get('periodo')
   const period: PeriodChoice =
     (Object.entries(periodParams).find(([, value]) => value === periodParam)?.[0] as
@@ -96,6 +111,9 @@ export function useClosedTicketsFilter() {
     const next = new URLSearchParams()
     if (query.trim()) {
       next.set('q', query.trim())
+    }
+    if (channel !== undefined) {
+      next.set('channel', channelParams[channel])
     }
     if (period === 'custom') {
       if (from) {
@@ -120,7 +138,7 @@ export function useClosedTicketsFilter() {
       next.set('subject', subject.trim())
     }
     return next
-  }, [query, period, from, to, sectorId, assigneeId, module, subject])
+  }, [query, period, from, to, sectorId, channel, assigneeId, module, subject])
 
   return {
     isAdmin,
@@ -130,6 +148,7 @@ export function useClosedTicketsFilter() {
     module,
     query,
     subject,
+    channel,
     period,
     from,
     to,
@@ -148,6 +167,8 @@ export function useClosedTicketsFilter() {
       }),
     setAssignee: (value: number | undefined) =>
       update({ responsavel: value === undefined ? null : String(value), pagina: null }),
+    setChannel: (value: ChannelChoice | undefined) =>
+      update({ canal: value === undefined ? null : value, pagina: null }),
     setModule: (value: string) =>
       update({ modulo: value === '' ? null : value, pagina: null }, true),
     setPeriod: (value: PeriodChoice) =>
