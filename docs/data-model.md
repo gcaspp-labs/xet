@@ -60,6 +60,7 @@ erDiagram
 | `user_role` | `agent`, `supervisor`, `admin` | Atendente, supervisor do setor, administrador (supervisor global) |
 | `connection_status` | `disconnected`, `connecting`, `connected`, `logged_out` | Estado da conexão do número do setor; `logged_out` exige novo QR code |
 | `ticket_status` | `queued`, `in_progress`, `closed` | Na fila sem responsável, com responsável, encerrado |
+| `ticket_channel` | `whatsapp`, `phone` | Canal do chamado: WhatsApp (mensagem recebida, enviada pelo celular ou Novo chamado) ou Telefone (registro por telefone, que já nasce encerrado) |
 | `closure_type` | `resolved`, `transferred`, `cancelled` | Encerrado normalmente, etapa encerrada por transferência entre setores ou cancelado sem lançar o atendimento |
 | `message_direction` | `inbound`, `outbound` | Recebida do cliente ou enviada pelo setor |
 | `message_origin` | `customer`, `agent`, `phone` | Enviada pelo cliente, por um atendente no sistema ou pelo celular fora do sistema |
@@ -233,6 +234,8 @@ Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-l
 | `subject` | text | Obrigatório para encerrar, exceto no cancelamento e na transferência entre setores |
 | `resolution` | text | Obrigatório para encerrar, exceto no cancelamento e na transferência entre setores |
 | `transfer_reason` | text | Motivo da transferência entre setores, texto livre e opcional, na etapa de origem; vazio quando não informado (nunca em branco) |
+| `channel` | ticket_channel | Obrigatório; padrão `whatsapp`. Os chamados anteriores à coluna ficaram `whatsapp` |
+| `client_request_id` | uuid | Chave de idempotência do registro por telefone, gerada pela tela; único quando preenchido; vazio nos chamados do WhatsApp |
 
 Restrições:
 
@@ -241,6 +244,8 @@ Restrições:
 - `status = 'closed'` ⇒ `ended_at`, `closed_at`, `closed_by_id` e `closure_type` preenchidos e, exceto em `closure_type = 'cancelled'` e `closure_type = 'transferred'`, também `organization_id`, `subject` e `resolution`. As transferências feitas com o formulário de encerramento, antes de [#243](https://github.com/gcaspp-labs/xet/issues/243), têm esses campos e continuam válidas.
 - `transfer_reason` preenchido ⇒ não em branco.
 - `ended_at >= started_at`.
+- `channel = 'phone'` ⇒ `status = 'closed'` e `closure_type = 'resolved'` (`tickets_phone_closed`): o registro por telefone nasce e fica encerrado.
+- `client_request_id` único quando preenchido (`tickets_client_request_id_key`).
 - Índice único parcial em `(sector_id, contact_id) where status <> 'closed'`: um chamado aberto por contato e setor.
 - Encerrar exige ao menos um registro em `ticket_modules` (validado na transação de encerramento), exceto na transferência entre setores.
 - O contato do chamado precisa estar com `registered = true` para encerrar, exceto na transferência entre setores.
@@ -290,6 +295,7 @@ O protocolo é gerado na mesma transação que cria o chamado, com `insert ... o
 stateDiagram-v2
     [*] --> queued: mensagem do cliente ou enviada pelo celular sem chamado aberto
     [*] --> in_progress: atendente inicia conversa
+    [*] --> closed: registro por telefone (resolved, canal phone)
     queued --> in_progress: atendente assume
     in_progress --> in_progress: transferência entre atendentes
     in_progress --> closed: encerramento (resolved)
@@ -306,6 +312,7 @@ stateDiagram-v2
 | Mensagem do cliente com chamado aberto | Entra no chamado existente |
 | Mensagem enviada pelo celular sem chamado aberto | Cria chamado `queued`; mensagem com origem `phone` |
 | Atendente inicia conversa | Cria chamado `in_progress` com `assignee_id` e `created_by_id` = atendente e `arrived_at` = envio; auditoria `ticket_started` na mesma transação |
+| Registro por telefone | Numa só transação, sem passar pela fila e sem mensagens: protocolo da mesma sequência, chamado `closed` com `channel = 'phone'`, `closure_type = 'resolved'`, `assignee_id` e `closed_by_id` = quem registrou (`created_by_id` fica vazio: é de quem iniciou conversa), `arrived_at`, `assigned_at` e `started_at` = início informado, `ended_at` = fim informado, `closed_at = now()`, órgão, assunto, resolução e `client_request_id`; grava `ticket_modules` (módulos ativos do setor), os itens "adicionar à lista" e a auditoria `ticket_phone_registered`. O contato é travado para leitura (`for share`) e precisa estar cadastrado. O índice parcial de chamado aberto não o alcança, então um chamado aberto do contato no setor continua como está. O mesmo `client_request_id` devolve o mesmo chamado; com outro autor, é recusado. O aviso de chamado é publicado depois do commit |
 | Assumir | `update ... set assignee_id = :user, status = 'in_progress', assigned_at = coalesce(assigned_at, now()) where id = :id and status = 'queued'`; nenhuma linha afetada significa que outro atendente assumiu antes |
 | Transferência entre atendentes | Com o chamado travado (`for update`) e `in_progress`, troca `assignee_id`; auditoria `ticket_transferred_user` com `assignee_id` de/para na mesma transação. Repetir a transferência para quem já é o responsável não grava de novo |
 | Encerramento | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável, e o contato travado para leitura (`for share`) e cadastrado: preenche os campos de encerramento com `closure_type = 'resolved'`, `closed_at = now()`, `closed_by_id` = responsável e `ended_at` informado ou `now()`; grava `ticket_modules` (módulos ativos do setor) e a auditoria `ticket_closed` na mesma transação |
@@ -489,6 +496,7 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | --- | --- |
 | `ticket_assigned` | Atendente assume chamado |
 | `ticket_started` | Atendente inicia conversa; o chamado nasce assumido por ele |
+| `ticket_phone_registered` | Registro por telefone: `actor_id` é quem registrou; `changes` com `status`, `channel`, `assignee_id`, `subject`, `resolution`, `organization_id`, `module_ids`, `started_at` e `ended_at`, de vazio para o valor gravado |
 | `ticket_transferred_user` | Transferência entre atendentes |
 | `ticket_transferred_sector` | Transferência entre setores (no chamado de origem): `changes` com `status`, `closure_type`, `ended_at`, `next_ticket_id`, `sector_id` (de origem para destino), `started_at` quando o início estava à frente da transferência e, quando informado, `transfer_reason`. As transferências feitas com o formulário (antes de [#243](https://github.com/gcaspp-labs/xet/issues/243)) trazem os campos do `ticket_closed` (`subject`, `resolution`, `module_ids` e, quando alterados, `started_at` e `organization_id`) no lugar de `closure_type` e `transfer_reason` |
 | `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |

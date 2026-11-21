@@ -14,6 +14,10 @@ _Evite_: conversa, atendimento, ticket
 A tela e o conjunto dos chamados já encerrados — encerrados normalmente, transferidos para outro setor e cancelados —, para consulta.
 _Evite_: histórico de conversas, atendimentos do dia
 
+**Canal** (`tickets.channel`):
+Por onde o atendimento aconteceu: **WhatsApp** (`whatsapp`, todos os chamados que nascem de uma mensagem ou do Novo chamado) ou **Telefone** (`phone`). Um registro por telefone é um chamado encerrado com canal Telefone, sem conversa; não é um conceito separado.
+_Evite_: origem, meio, tipo de chamado
+
 **Fila** (`ticket_status = 'queued'`):
 Os chamados do setor que ainda não têm responsável, à espera de alguém assumir.
 _Evite_: pendentes, abertos
