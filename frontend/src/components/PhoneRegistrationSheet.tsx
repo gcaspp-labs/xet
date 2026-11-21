@@ -24,7 +24,7 @@ import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
 import { checkPeriod, closingShape, localInput } from '@/lib/closing'
 import { newRequestId } from '@/lib/conversation'
-import { type Contact, useContactOptions } from '@/lib/directory'
+import { type Contact, useContactOptions, useContactPagination } from '@/lib/directory'
 import { formatPhone, organizationLabel } from '@/lib/format'
 import { usePhoneForm, useRegisterPhone } from '@/lib/phone'
 
@@ -74,28 +74,13 @@ function ContactSearch({
   const search = useDeferredValue(query)
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useContactOptions(search)
   const contacts = data?.pages.flatMap((page) => page.items) ?? []
-  const end = useRef<HTMLDivElement>(null)
-
-  // Nova busca: a lista recomeça na página 1, e a rolagem volta ao topo.
-  useEffect(() => {
-    end.current?.closest('[data-slot="dialog-body"]')?.scrollTo({ top: 0 })
-  }, [search])
-
-  // A próxima página vem quando o fim da lista aparece na rolagem, também quando a lista
-  // cabe na janela e não há o que rolar.
-  useEffect(() => {
-    const target = end.current
-    if (!target || !hasNextPage || isFetchingNextPage) {
-      return
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void fetchNextPage()
-      }
-    })
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, contacts.length])
+  const end = useContactPagination({
+    query: search,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    itemCount: contacts.length,
+  })
 
   // As setas movem o foco entre os contatos; ao focar o último contato que dá pra escolher, vem a próxima página.
   const moveFocus = (event: KeyboardEvent<HTMLUListElement>) => {

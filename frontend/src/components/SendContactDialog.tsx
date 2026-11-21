@@ -5,7 +5,12 @@ import { ContactFilters } from '@/components/ContactFilters'
 import { FormDialog } from '@/components/FormDialog'
 import { SearchBox } from '@/components/SearchBox'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
-import { type Contact, useContactFilter, useContactOptions } from '@/lib/directory'
+import {
+  type Contact,
+  useContactFilter,
+  useContactOptions,
+  useContactPagination,
+} from '@/lib/directory'
 import { type ContactCard, newRequestId, useSendContact } from '@/lib/conversation'
 import { formatPhone, organizationLabel } from '@/lib/format'
 
@@ -69,28 +74,14 @@ function ContactSearch({
   const contacts = (data?.pages.flatMap((page) => page.items) ?? []).filter(
     (contact) => contact.registered && contact.phone,
   )
-  const end = useRef<HTMLDivElement>(null)
-
-  // Nova busca ou outro filtro: a lista recomeça na página 1, e a rolagem volta ao topo.
-  useEffect(() => {
-    end.current?.closest('[data-slot="dialog-body"]')?.scrollTo({ top: 0 })
-  }, [search, filter.sectorId, filter.moduleId, filter.municipalityId, filter.organizationId])
-
-  // A próxima página vem quando o fim da lista aparece na rolagem, também quando a lista cabe na
-  // janela e não há o que rolar.
-  useEffect(() => {
-    const target = end.current
-    if (!target || !hasNextPage || isFetchingNextPage) {
-      return
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void fetchNextPage()
-      }
-    })
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, contacts.length])
+  const end = useContactPagination({
+    query: search,
+    filter,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    itemCount: contacts.length,
+  })
 
   return (
     <div className="flex flex-col gap-3">
@@ -162,11 +153,12 @@ export function SendContactDialog({
   // escolhida. A prévia recebe o foco ao aparecer, como a pergunta da FormDialog.
   const chosenRow = useRef<HTMLButtonElement>(null)
   const preview = useRef<HTMLDivElement>(null)
+  // O corpo rolável da própria janela, que a lista e a prévia dividem.
+  const root = useRef<HTMLDivElement>(null)
   const bodyScroll = useRef(0)
   const returning = useRef(false)
 
-  // O corpo rolável da janela, que a lista e a prévia dividem.
-  const dialogBody = () => document.querySelector<HTMLDivElement>('[data-slot="dialog-body"]')
+  const dialogBody = () => root.current?.closest<HTMLDivElement>('[data-slot="dialog-body"]')
 
   useEffect(() => {
     if (step === 'preview') {
@@ -235,11 +227,16 @@ export function SendContactDialog({
       back={step === 'preview' ? { label: 'Voltar', onClick: back } : undefined}
     >
       {/* A lista fica montada por baixo da prévia: a busca e os filtros continuam como estavam. */}
-      <div hidden={step === 'preview'}>
+      <div ref={root} hidden={step === 'preview'}>
         <ContactSearch onChoose={choose} selectedId={contact?.id} selectedRow={chosenRow} />
       </div>
       {step === 'preview' && contact && (
-        <div ref={preview} tabIndex={-1} className="flex flex-col gap-3 outline-none">
+        <div
+          ref={preview}
+          tabIndex={-1}
+          data-slot="contact-preview"
+          className="flex flex-col gap-3 outline-none"
+        >
           <ContactPreview contact={contact} />
         </div>
       )}

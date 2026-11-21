@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useId, useEffect, useRef, useState } from 'react'
 import type { Module } from '@/lib/admin'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
@@ -277,6 +277,57 @@ export function useContactOptions(query: string, filter: ContactFilter = {}) {
     // Sair de uma busca joga fora as páginas dela: voltar a ela recomeça na página 1.
     gcTime: 0,
   })
+}
+
+// A rolagem da lista em consulta contínua das janelas: mudar a busca ou um filtro recomeça a
+// lista na página 1, com a rolagem de volta ao topo; a próxima página vem quando o fim da lista
+// aparece na rolagem, também quando a lista cabe na janela e não há o que rolar. O ref do fim da
+// lista continua no componente. O corpo rolável é o da janela que contém a lista, e não outro
+// corpo aberto na página.
+export function useContactPagination({
+  query,
+  filter = {},
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
+  itemCount,
+}: {
+  query: string
+  filter?: ContactFilter
+  hasNextPage: boolean
+  isFetchingNextPage: boolean
+  fetchNextPage: () => unknown
+  itemCount: number
+}) {
+  const end = useRef<HTMLDivElement>(null)
+  const resetKey = [
+    query,
+    filter.sectorId,
+    filter.moduleId,
+    filter.municipalityId,
+    filter.organizationId,
+  ].join('\u0000')
+
+  // Nova busca ou outro filtro: a lista recomeça na página 1, e a rolagem volta ao topo.
+  useEffect(() => {
+    end.current?.closest('[data-slot="dialog-body"]')?.scrollTo({ top: 0 })
+  }, [resetKey])
+
+  useEffect(() => {
+    const target = end.current
+    if (!target || !hasNextPage || isFetchingNextPage) {
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void fetchNextPage()
+      }
+    })
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, itemCount])
+
+  return end
 }
 
 export function useContact(id: number, enabled: boolean) {

@@ -1,12 +1,5 @@
 import { BookUser, Plus } from 'lucide-react'
-import {
-  type FormEvent,
-  type KeyboardEvent,
-  useDeferredValue,
-  useEffect,
-  useRef,
-  useState,
-} from 'react'
+import { type FormEvent, type KeyboardEvent, useDeferredValue, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { ContactFilters } from '@/components/ContactFilters'
@@ -18,7 +11,12 @@ import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { newRequestId } from '@/lib/conversation'
-import { type Contact, useContactFilter, useContactOptions } from '@/lib/directory'
+import {
+  type Contact,
+  useContactFilter,
+  useContactOptions,
+  useContactPagination,
+} from '@/lib/directory'
 import { formatPhone, organizationLabel } from '@/lib/format'
 import { openTicketOf, useStartConversation } from '@/lib/tickets'
 
@@ -59,28 +57,14 @@ function ContactSearch({
   const { filter } = contactFilter
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useContactOptions(search, filter)
   const contacts = data?.pages.flatMap((page) => page.items) ?? []
-  const end = useRef<HTMLDivElement>(null)
-
-  // Nova busca ou outro filtro: a lista recomeça na página 1, e a rolagem volta ao topo.
-  useEffect(() => {
-    end.current?.closest('[data-slot="dialog-body"]')?.scrollTo({ top: 0 })
-  }, [search, filter.sectorId, filter.moduleId, filter.municipalityId, filter.organizationId])
-
-  // A próxima página vem quando o fim da lista aparece na rolagem, também quando a lista
-  // cabe na janela e não há o que rolar.
-  useEffect(() => {
-    const target = end.current
-    if (!target || !hasNextPage || isFetchingNextPage) {
-      return
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void fetchNextPage()
-      }
-    })
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, contacts.length])
+  const end = useContactPagination({
+    query: search,
+    filter,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    itemCount: contacts.length,
+  })
 
   // As setas movem o foco entre os contatos; ao focar o último contato que dá pra escolher, vem a próxima página.
   const moveFocus = (event: KeyboardEvent<HTMLUListElement>) => {
