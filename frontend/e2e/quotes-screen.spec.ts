@@ -714,9 +714,8 @@ test('Responder pelo menu de um cartão enviado mostra "👤 Nome", e o cliente 
     .toBe(1)
   const atProvider = (await cardsSentToProvider(request, sector.id, name))[0]
 
-  // No cartão enviado o Responder fica no menu (⋯), não ao lado do balão. O cartão ocupa a largura
-  // da conversa e, numa janela estreita, o menu fica sob a coluna da lista: o teclado o alcança,
-  // como um leitor de tela faria.
+  // No cartão enviado o Responder fica no menu (⋯), não ao lado do balão. Aqui pelo teclado, como
+  // um leitor de tela faria; o mouse no ⋯ está no teste da janela de 1280px.
   await card.hover()
   await expect(card.getByRole('button', { name: 'Responder', exact: true })).toHaveCount(0)
   await card.getByRole('button', { name: 'Ações da mensagem' }).focus()
@@ -755,6 +754,83 @@ test('Responder pelo menu de um cartão enviado mostra "👤 Nome", e o cliente 
   const fromClient = bubbleOf(conversation, 'Falo com ela também')
   await expect(fromClient.getByRole('button', citation)).toBeVisible()
   await expect(fromClient.getByRole('button', citation)).toContainText(name)
+})
+
+test('em janela de 1280px, o cartão enviado cabe na conversa e o mouse alcança o ⋯ e o Reagir', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const { agent, sector, receive } = await seedCustomer(request, baseURL!, 'Clara Cita')
+  await receive('1', { body: first })
+  const { id } = unique()
+  const name = `Rita ${id}`
+  await seedContact(baseURL!, sector.id, name, unique().phone)
+
+  const conversation = await openAssigned(page, agent, 'Clara Cita')
+  await sendContact(page, name)
+  const card = cardBubble(conversation, 'Mensagem enviada', name)
+  await expect(card).toContainText('Enviada')
+
+  // O cartão, o Reagir e o ⋯ ficam dentro da coluna da conversa, sem passar para "Meus chamados".
+  const column = (await conversation.boundingBox())!
+  await card.hover()
+  const menu = card.getByRole('button', { name: 'Ações da mensagem' })
+  const react = card.getByRole('button', { name: 'Reagir', exact: true })
+  for (const part of [card, menu, react]) {
+    const box = (await part.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(column.x)
+    expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width)
+  }
+
+  // O ⋯ abre pelo clique do mouse (o Playwright recusa o clique se outro elemento cobre o botão).
+  await menu.click()
+  await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toHaveCount(0)
+
+  // O Reagir também abre pelo mouse, e a reação escolhida aparece no cartão.
+  await card.hover()
+  await react.click()
+  const bar = page.getByRole('group', { name: 'Reagir à mensagem' })
+  await expect(bar).toBeVisible()
+  await bar.getByRole('button', { name: 'Reagir com 👍' }).click()
+  await expect(card.getByRole('listitem', { name: /^Setor reagiu com 👍, / })).toBeVisible()
+})
+
+test('em janela de 1280px, o cartão recebido cabe na conversa e o mouse alcança o Responder e o Reagir', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const { agent, receive } = await seedCustomer(request, baseURL!, 'Clara Recebe')
+  await receive('1', { type: 'contact', contactCards: [joaoCard] })
+
+  const conversation = await openAssigned(page, agent, 'Clara Recebe')
+  const card = cardBubble(conversation, 'Mensagem recebida', 'João Silva')
+  await expect(card).toBeVisible()
+
+  // O cartão, o Responder e o Reagir ficam dentro da coluna da conversa.
+  const column = (await conversation.boundingBox())!
+  await card.hover()
+  const reply = card.getByRole('button', { name: 'Responder', exact: true })
+  const react = card.getByRole('button', { name: 'Reagir', exact: true })
+  for (const part of [card, reply, react]) {
+    const box = (await part.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(column.x)
+    expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width)
+  }
+
+  // Os dois abrem pelo clique do mouse (o Playwright recusa o clique se outro elemento cobre o botão).
+  await reply.click()
+  await expect(page.getByRole('group', { name: 'Respondendo a Cliente' })).toContainText(
+    '👤 João Silva',
+  )
+  await card.hover()
+  await react.click()
+  await expect(page.getByRole('group', { name: 'Reagir à mensagem' })).toBeVisible()
 })
 
 test('cartão enviando ou com falha não oferece reação nem Responder', async ({
