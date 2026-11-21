@@ -1,11 +1,13 @@
-import { CircleAlert, Inbox } from 'lucide-react'
-import { type ReactNode, useDeferredValue, useEffect } from 'react'
+import { CircleAlert, Inbox, Phone } from 'lucide-react'
+import { type ReactNode, useDeferredValue, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { Pagination } from '@/components/Pagination'
+import { PhoneRegistrationSheet } from '@/components/PhoneRegistrationSheet'
 import { SearchBox } from '@/components/SearchBox'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import {
   Autocomplete,
   AutocompleteContent,
@@ -238,7 +240,7 @@ function SubjectField({ filter }: { filter: ClosedTicketsFilter }) {
   )
 }
 
-function Filters({ filter }: { filter: ClosedTicketsFilter }) {
+function Filters({ filter, onRegister }: { filter: ClosedTicketsFilter; onRegister: () => void }) {
   const { data: sectors = [] } = useSectors()
   const { data: options } = useClosedTicketFilterOptions(filter)
   const locked = !filter.hasSector
@@ -252,23 +254,29 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
           label="Buscar chamados"
           placeholder="Protocolo, contato, telefone ou órgão"
         />
-        <ToggleGroup
-          aria-label="Período"
-          value={[filter.period]}
-          onValueChange={(values: string[]) => {
-            // Seleção única: clicar no chip ativo não o desliga.
-            const [value] = values
-            if (value) {
-              filter.setPeriod(value as PeriodChoice)
-            }
-          }}
-        >
-          {periodChoices.map((choice) => (
-            <ToggleGroupItem key={choice.value} value={choice.value}>
-              {choice.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        <div className="flex flex-wrap items-center gap-(--space-12)">
+          <ToggleGroup
+            aria-label="Período"
+            value={[filter.period]}
+            onValueChange={(values: string[]) => {
+              // Seleção única: clicar no chip ativo não o desliga.
+              const [value] = values
+              if (value) {
+                filter.setPeriod(value as PeriodChoice)
+              }
+            }}
+          >
+            {periodChoices.map((choice) => (
+              <ToggleGroupItem key={choice.value} value={choice.value}>
+                {choice.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <Button onClick={onRegister}>
+            <Phone strokeWidth={1.7} aria-hidden />
+            Registrar atendimento por telefone
+          </Button>
+        </div>
       </div>
       {/* Com os campos de filtro altos (celular, Datas aberto, texto Maior), só esta área rola: a
           busca e o período, a lista e a paginação continuam à vista. */}
@@ -412,6 +420,7 @@ export default function AtendimentosPage() {
   // devolve a mesma lista.
   const filter = useClosedTicketsFilter()
   const list = usePagedList(closedTicketColumns, defaultClosedTicketColumn, 'desc')
+  const [registering, setRegistering] = useState(false)
   const { data: sectors = [] } = useSectors()
   const { data, error, isPlaceholderData } = useClosedTickets(filter, list.request)
   const tickets = data?.items
@@ -437,7 +446,12 @@ export default function AtendimentosPage() {
         title="Atendimentos"
       />
       <div className="mx-auto flex min-h-0 w-full max-w-(--content-max) flex-1 flex-col gap-4 overflow-hidden px-4 py-4 md:px-[30px] md:py-[30px]">
-        <Filters filter={filter} />
+        <Filters filter={filter} onRegister={() => setRegistering(true)} />
+        <PhoneRegistrationSheet
+          key={registering ? 'open' : 'closed'}
+          open={registering}
+          onOpenChange={setRegistering}
+        />
         {!filter.datesValid && (
           <Alert variant="warning" className="shrink-0">
             <CircleAlert strokeWidth={1.7} aria-hidden />
