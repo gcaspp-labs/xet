@@ -839,7 +839,12 @@ function Composer({
         </div>
       )}
       {contactOpen && (
-        <SendContactDialog ticketId={ticketId} onClose={() => setContactOpen(false)} />
+        <SendContactDialog
+          ticketId={ticketId}
+          quotedMessageId={quoted?.id}
+          onSent={onCancelQuote}
+          onClose={() => setContactOpen(false)}
+        />
       )}
     </div>
   )

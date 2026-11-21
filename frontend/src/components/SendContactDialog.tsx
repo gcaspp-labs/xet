@@ -135,12 +135,17 @@ function ContactPreview({ contact }: { contact: Contact }) {
 
 // Janela "Enviar contato": a busca ocupa a janela, e escolher um contato troca a lista pela prévia,
 // com Voltar, Cancelar e Enviar. A ação é a de envio de contato do backend, que monta o cartão do
-// cadastro; a mensagem segue o caminho das outras, com a situação de entrega na conversa.
+// cadastro; a mensagem segue o caminho das outras, com a situação de entrega na conversa. Com
+// `quotedMessageId`, o cartão vai como resposta citada, e `onSent` limpa a citação em preparo.
 export function SendContactDialog({
   ticketId,
+  quotedMessageId,
+  onSent,
   onClose,
 }: {
   ticketId: number
+  quotedMessageId?: number
+  onSent?: () => void
   onClose: () => void
 }) {
   const send = useSendContact(ticketId)
@@ -198,10 +203,11 @@ export function SendContactDialog({
     }
     requestId.current ??= newRequestId()
     send.mutate(
-      { requestId: requestId.current, contactId: contact.id },
+      { requestId: requestId.current, contactId: contact.id, quotedMessageId },
       {
         onSuccess: () => {
           requestId.current = null
+          onSent?.()
           onClose()
         },
       },

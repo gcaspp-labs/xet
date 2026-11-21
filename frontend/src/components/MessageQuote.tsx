@@ -22,6 +22,8 @@ function describe(type: MessageType | null, text: string | null, seconds?: numbe
     case 'media_unavailable':
       return `📎 ${text ?? 'Arquivo não pôde ser baixado'}`
     case 'contact':
+      // A citação de um cartão mostra o nome do primeiro cartão ("👤 Nome"), como a prévia das listas.
+      return text ? `👤 ${text}` : '👤 Contato'
     case 'unsupported':
       return 'Tipo de mensagem não suportado'
     default:
@@ -31,6 +33,10 @@ function describe(type: MessageType | null, text: string | null, seconds?: numbe
 
 // O conteúdo de uma mensagem do XET como a citação o mostra.
 function quotedPreview(message: Message) {
+  // O cartão de contato não tem texto: o trecho é o nome do primeiro cartão.
+  if (message.type === 'contact') {
+    return describe('contact', message.contactCards?.[0]?.name ?? null)
+  }
   const body =
     message.direction === 'outbound' && message.origin === 'agent'
       ? (message.body?.replace(senderPrefix, '') ?? null)
