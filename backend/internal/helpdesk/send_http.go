@@ -39,6 +39,9 @@ type messageResponse struct {
 	// EditedAt is the time of the current version, when the message was edited.
 	EditedAt *time.Time        `json:"editedAt"`
 	Deletion *deletionResponse `json:"deletion"`
+	// ContactCards are the cards of a contact message, in order; null in the
+	// other types.
+	ContactCards []contactCardResponse `json:"contactCards"`
 }
 
 // quoteResponse is the message a reply cites; null when there is no quote.
@@ -81,10 +84,15 @@ type deletionResponse struct {
 	Origin db.MessageOrigin        `json:"origin"`
 }
 
-func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
+func toMessageResponse(m db.ListTicketMessagesRow) (messageResponse, error) {
+	cards, err := contactCardsResponse(m.ContactCards)
+	if err != nil {
+		return messageResponse{}, err
+	}
 	out := messageResponse{
 		ID: m.ID, TicketID: m.TicketID, Direction: m.Direction, Origin: m.Origin, Type: m.Type,
 		Body: m.Body, FailureReason: m.FailureReason, SentAt: m.SentAt, EditedAt: m.EditedAt,
+		ContactCards: cards,
 	}
 	if m.DeletedAt != nil && m.DeletionScope.Valid && m.DeletionOrigin.Valid {
 		out.Deletion = &deletionResponse{At: *m.DeletedAt, Scope: m.DeletionScope.MessageDeletionScope, Origin: m.DeletionOrigin.MessageOrigin}
@@ -114,7 +122,7 @@ func toMessageResponse(m db.ListTicketMessagesRow) messageResponse {
 			out.Quote.Type = &m.QuotedType.MessageType
 		}
 	}
-	return out
+	return out, nil
 }
 
 // sentMessageResponse is the message right after a send or retry; the panel
@@ -146,7 +154,10 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]messageResponse, len(rows))
 	for i, m := range rows {
-		out[i] = toMessageResponse(m)
+		if out[i], err = toMessageResponse(m); err != nil {
+			httpx.InternalError(h.logger, w, r, err)
+			return
+		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }

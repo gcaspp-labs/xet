@@ -48,7 +48,8 @@ func (a *Adapter) Handler() http.Handler {
 	// Message from a contact, identified by the phone: a text or, with type
 	// and media (content in base64), an image, video, audio or document. An
 	// optional quote cites another message by its provider ID, with or
-	// without the snippet (type, text by default).
+	// without the snippet (type, text by default). Type "contact" takes the
+	// cards in contactCards, in order.
 	r.Post("/messaging/sectors/{sectorID}/receive", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			ExternalMessageID string                `json:"externalMessageId"`
@@ -69,6 +70,14 @@ func (a *Adapter) Handler() http.Handler {
 					Text string                `json:"text"`
 				} `json:"snippet"`
 			} `json:"quote"`
+			ContactCards []struct {
+				Name         string `json:"name"`
+				Organization string `json:"organization"`
+				Phones       []struct {
+					Phone      string `json:"phone"`
+					WhatsAppID string `json:"whatsAppId"`
+				} `json:"phones"`
+			} `json:"contactCards"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ExternalMessageID == "" || body.Phone == "" {
 			http.Error(w, "externalMessageId and phone are required", http.StatusBadRequest)
@@ -100,6 +109,13 @@ func (a *Adapter) Handler() http.Handler {
 					msg.Quote.Snippet.Type = sn.Type
 				}
 			}
+		}
+		for _, c := range body.ContactCards {
+			card := messaging.ContactCard{Name: c.Name, Organization: c.Organization}
+			for _, p := range c.Phones {
+				card.Phones = append(card.Phones, messaging.ContactPhone{Phone: p.Phone, WhatsAppID: p.WhatsAppID})
+			}
+			msg.ContactCards = append(msg.ContactCards, card)
 		}
 		a.control(w, r, func(sectorID int64) error { return a.Receive(r.Context(), sectorID, msg) })
 	})

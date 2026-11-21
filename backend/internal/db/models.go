@@ -577,6 +577,7 @@ const (
 	MessageTypeDocument         MessageType = "document"
 	MessageTypeUnsupported      MessageType = "unsupported"
 	MessageTypeMediaUnavailable MessageType = "media_unavailable"
+	MessageTypeContact          MessageType = "contact"
 )
 
 func (e *MessageType) Scan(src interface{}) error {
@@ -622,7 +623,8 @@ func (e MessageType) Valid() bool {
 		MessageTypeAudio,
 		MessageTypeDocument,
 		MessageTypeUnsupported,
-		MessageTypeMediaUnavailable:
+		MessageTypeMediaUnavailable,
+		MessageTypeContact:
 		return true
 	}
 	return false
@@ -637,6 +639,7 @@ func AllMessageTypeValues() []MessageType {
 		MessageTypeDocument,
 		MessageTypeUnsupported,
 		MessageTypeMediaUnavailable,
+		MessageTypeContact,
 	}
 }
 
@@ -957,6 +960,7 @@ type Message struct {
 	DeletedAt               *time.Time
 	DeletionScope           NullMessageDeletionScope
 	DeletionOrigin          NullMessageOrigin
+	ContactCards            []byte
 }
 
 type MessageAction struct {

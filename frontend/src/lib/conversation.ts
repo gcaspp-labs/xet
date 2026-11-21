@@ -75,6 +75,14 @@ export type Message = {
     scope: 'everyone' | 'local'
     origin: 'customer' | 'agent' | 'phone'
   } | null
+  // Cartões da mensagem de contato, em ordem; nulo nos outros tipos. A tela ainda não os mostra.
+  contactCards: ContactCard[] | null
+}
+
+export type ContactCard = {
+  name: string
+  organization: string | null
+  phones: { phone: string; whatsAppId: string | null }[]
 }
 
 // A mensagem que uma resposta cita; `quote` é null quando não há citação. `messageId` liga à
@@ -307,10 +315,10 @@ export function canReactTo(message: Message) {
 }
 
 // Só a mensagem que o WhatsApp conhece é citada, como na reação, e a exibida como não suportada
-// (figurinha, localização, aviso antigo de reação) fica de fora. Só o responsável cita; o backend
+// (figurinha, localização, aviso antigo de reação e, até a fatia da tela, o contato) fica de fora. Só o responsável cita; o backend
 // confere de novo.
 export function canQuoteMessage(message: Message) {
-  return canReactTo(message) && message.type !== 'unsupported'
+  return canReactTo(message) && message.type !== 'unsupported' && message.type !== 'contact'
 }
 
 // Conteúdo ocultado pelo XET (excluída para todos ou para mim): em Chamados vira um aviso. A exclusão

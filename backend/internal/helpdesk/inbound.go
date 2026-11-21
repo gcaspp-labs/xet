@@ -92,6 +92,17 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		sentAt = time.Now()
 	}
 
+	var cards []byte
+	if msg.Type == messaging.TypeContact {
+		var ok bool
+		if cards, ok, err = contactCardsOf(msg); err != nil {
+			return err
+		}
+		if !ok {
+			msg.Type = messaging.TypeUnsupported
+		}
+	}
+
 	// The file is saved before the message is committed (docs/data-model.md). If
 	// the transaction fails or loses to a concurrent delivery, the file is
 	// left without a message.
@@ -152,6 +163,7 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 			MediaID:           mediaID,
 			ExternalMessageID: &msg.ExternalMessageID,
 			SentAt:            sentAt,
+			ContactCards:      cards,
 		}
 		if err := setQuote(ctx, q, &params, msg.Quote); err != nil {
 			return err

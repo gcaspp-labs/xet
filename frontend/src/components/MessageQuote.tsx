@@ -21,6 +21,7 @@ function describe(type: MessageType | null, text: string | null, seconds?: numbe
       return text ? `🎬 Vídeo · ${text}` : '🎬 Vídeo'
     case 'media_unavailable':
       return `📎 ${text ?? 'Arquivo não pôde ser baixado'}`
+    case 'contact':
     case 'unsupported':
       return 'Tipo de mensagem não suportado'
     default:

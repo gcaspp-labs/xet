@@ -410,7 +410,7 @@ function MessageBubble({
           {!hidden && message.type === 'media_unavailable' && (
             <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
           )}
-          {hidden ? null : message.type === 'unsupported' ? (
+          {hidden ? null : message.type === 'unsupported' || message.type === 'contact' ? (
             <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
           ) : (
             message.body && (
