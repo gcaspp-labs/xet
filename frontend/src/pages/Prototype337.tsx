@@ -637,7 +637,6 @@ type Painel = 'meus' | 'conversa' | 'fila' | 'pendentes'
 type Aba = 'fila' | 'pendentes' | 'assuntos'
 
 const params = new URLSearchParams(window.location.search)
-const estadoParam = (params.get('estado') ?? 'inicio') as Estado
 const temaParam = (params.get('tema') ?? 'claro') as Tema
 const captura = params.get('captura') === '1'
 
@@ -679,9 +678,13 @@ function derivar(estado: Estado) {
 }
 
 export default function Prototype337() {
-  const inicial = derivar(estadoParam)
-  const [estado, setEstado] = useState<Estado>(estadoParam)
-  const [tema, setTema] = useState<Tema>(temaParam)
+  // PROTÓTIPO #342: relido a cada montagem, para o link do quadro abrir o estado certo
+  // sem recarregar a página (o módulo já foi importado uma vez).
+  const query = new URLSearchParams(window.location.search)
+  const estadoNaUrl = (query.get('estado') ?? 'inicio') as Estado
+  const inicial = derivar(estadoNaUrl)
+  const [estado, setEstado] = useState<Estado>(estadoNaUrl)
+  const [tema, setTema] = useState<Tema>((query.get('tema') ?? temaParam) as Tema)
   const [admin, setAdmin] = useState(inicial.admin)
   const [selecionado, setSelecionado] = useState(inicial.selecionado)
   const [painel, setPainel] = useState<Painel>(inicial.painel)

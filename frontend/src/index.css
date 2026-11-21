@@ -1,5 +1,6 @@
 /* Design system GCASPP LAB: tokens antes do Tailwind (ver design.md). */
-@import '@gcaspp-labs/glab-design-system/tokens/tokens.css';
+/* Protótipo #223: tokens do design system 1.1.0 fixados no commit a05e5eb. */
+@import './prototype/tokens-223.css';
 @import '@fontsource/ibm-plex-sans/400.css';
 @import '@fontsource/ibm-plex-sans/500.css';
 @import '@fontsource/ibm-plex-sans/600.css';

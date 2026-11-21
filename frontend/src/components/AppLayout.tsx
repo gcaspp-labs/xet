@@ -1,5 +1,6 @@
-import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
-import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
+// Protótipo #223: logos do design system 1.1.0 (commit a05e5eb).
+import symbol from '@/prototype/glab-simbolo-223.svg'
+import symbolDark from '@/prototype/glab-simbolo-escuro-223.svg'
 import {
   ALargeSmall,
   BellRing,

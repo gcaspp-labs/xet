@@ -1,13 +1,19 @@
-import { BarChart3, ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
+// PROTÓTIPO #223: uma proposta para o dashboard, com resumo dos números do setor abaixo do total. Descartável.
+import { ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
 import { useId, type ReactNode } from 'react'
 import { OrganizationPicker } from '@/components/ContactSheet'
-import { KpiCard } from '@/components/KpiCard'
 import { DashboardLists } from '@/components/DashboardLists'
+import {
+  PendingA,
+  PendingB,
+  PendingC,
+  Prototype342Bar,
+  type Variante,
+} from '@/components/DashboardPending'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
-import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
+import { Card } from '@/components/ui/card'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -22,6 +28,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -57,24 +64,6 @@ const asCount: Format = String
 
 function display(number: DashboardNumber, format: Format) {
   return number.applicable && number.value !== null ? format(number.value) : noDataMark
-}
-
-function Kpi({
-  label,
-  number,
-  format = asCount,
-}: {
-  label: string
-  number: DashboardNumber | undefined
-  format?: Format
-}) {
-  return (
-    <KpiCard
-      label={label}
-      value={number ? display(number, format) : <Skeleton className="my-2 h-6 w-16" />}
-      hint={number && !number.applicable ? notApplicable : undefined}
-    />
-  )
 }
 
 function FilterSelect({
@@ -233,7 +222,8 @@ function Filters({
   )
 }
 
-function KpiSection({
+// PROTÓTIPO #223: a seção recolhe o que estiver dentro (agora, as tabelas), não só cards.
+function Section({
   section,
   title,
   detail,
@@ -264,11 +254,7 @@ function KpiSection({
         </Button>
         {detail && <p className="caption mono-num text-ink-faint">{detail}</p>}
       </div>
-      {!collapsed && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,calc(170px*var(--text-scale))),1fr))] gap-3">
-          {children}
-        </div>
-      )}
+      {!collapsed && children}
     </section>
   )
 }
@@ -282,92 +268,195 @@ function periodDetail(period: Dashboard['period'] | undefined) {
     : `${formatDay(period.from)} a ${formatDay(period.to)}`
 }
 
-const assigneeColumns: {
-  key: keyof Omit<DashboardAssignee, 'user' | 'sector'>
-  label: string
-  format: Format
-}[] = [
+const listFormat = new Intl.ListFormat('pt-BR')
+
+type Numbers = Dashboard['numbers']
+type Variant = 'A' | 'B'
+
+// PROTÓTIPO #223: os números do setor que não são de uma pessoa.
+const sectorOnly: { key: keyof Numbers; label: string; format: Format }[] = [
+  { key: 'received', label: 'Recebidos', format: asCount },
+  { key: 'averageWaitSeconds', label: 'Tempo médio de espera', format: formatAverageTime },
+]
+
+// A: Recebidos e Tempo médio de espera viram colunas do setor, preenchidas só no TOTAL.
+const columnsA: { key: keyof Numbers; label: string; format: Format; sector?: boolean }[] = [
+  { key: 'received', label: 'Recebidos', format: asCount, sector: true },
   { key: 'inProgress', label: 'Em atendimento', format: asCount },
   { key: 'started', label: 'Iniciados', format: asCount },
   { key: 'resolved', label: 'Encerrados', format: asCount },
   { key: 'transferred', label: 'Transferidos', format: asCount },
   { key: 'cancelled', label: 'Cancelados', format: asCount },
+  {
+    key: 'averageWaitSeconds',
+    label: 'Tempo médio de espera',
+    format: formatAverageTime,
+    sector: true,
+  },
   { key: 'averageHandlingSeconds', label: 'Tempo médio de atendimento', format: formatAverageTime },
 ]
 
-const listFormat = new Intl.ListFormat('pt-BR')
+function NumberCell({
+  number,
+  format,
+  className,
+}: {
+  number: DashboardNumber
+  format: Format
+  className?: string
+}) {
+  return (
+    <TableCell className={`mono-num text-right ${className ?? ''}`}>
+      {display(number, format)}
+      {!number.applicable && <span className="sr-only"> {notApplicable}</span>}
+    </TableCell>
+  )
+}
 
-function AssigneesCard({
+function PeriodTable({
   assignees,
+  numbers,
   allSectors,
+  variant,
 }: {
   assignees: DashboardAssignee[]
+  numbers: Numbers
   allSectors: boolean
+  variant: Variant
 }) {
-  // Com "—" na célula, a nota diz quais colunas o filtro deixou de fora.
-  const excluded = assigneeColumns.filter((column) =>
-    assignees.some((row) => !row[column.key].applicable),
+  const columns = variant === 'A' ? columnsA : columnsA.filter((column) => !column.sector)
+  const lead = allSectors ? 2 : 1
+  // Com "—", a nota diz quais números o filtro deixou de fora (agora contando o TOTAL).
+  const excluded = (variant === 'A' ? columnsA : [...columns, ...sectorOnly]).filter(
+    (column) => !numbers[column.key].applicable,
   )
+  const sectorCol = 'bg-muted/50'
   return (
     <Card role="region" aria-labelledby="dashboard-assignees-title">
-      <CardHeader>
-        <CardTitle id="dashboard-assignees-title">Por atendente</CardTitle>
-      </CardHeader>
-      {assignees.length > 0 ? (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Atendente</TableHead>
-                {allSectors && <TableHead>Setor</TableHead>}
-                {assigneeColumns.map((column) => (
-                  <TableHead key={column.key} className="text-right">
-                    {column.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignees.map((row) => (
-                <TableRow key={`${row.sector.id}-${row.user.id}`}>
-                  <TableCell className="body-strong">{row.user.name}</TableCell>
-                  {allSectors && <TableCell>{row.sector.name}</TableCell>}
-                  {assigneeColumns.map((column) => (
-                    <TableCell key={column.key} className="mono-num text-right">
-                      {display(row[column.key], column.format)}
-                      {!row[column.key].applicable && (
+      <Table>
+        <caption id="dashboard-assignees-title" className="sr-only">
+          Por atendente
+        </caption>
+        <TableHeader className="bg-muted">
+          <TableRow>
+            <TableHead className="body-strong text-ink">Atendente</TableHead>
+            {allSectors && <TableHead className="body-strong text-ink">Setor</TableHead>}
+            {columns.map((column) => (
+              <TableHead
+                key={column.key}
+                className="body-strong text-right whitespace-normal text-ink"
+                title={column.sector ? 'Número do setor, não de uma pessoa' : undefined}
+              >
+                {column.label}
+                {column.sector && <span className="caption block text-ink-faint">do setor</span>}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {assignees.map((row) => (
+            <TableRow key={`${row.sector.id}-${row.user.id}`}>
+              <TableCell className="body-strong">{row.user.name}</TableCell>
+              {allSectors && <TableCell>{row.sector.name}</TableCell>}
+              {columns.map((column) =>
+                column.sector ? (
+                  <TableCell key={column.key} className={sectorCol} aria-label="Número do setor" />
+                ) : (
+                  <NumberCell
+                    key={column.key}
+                    number={row[column.key as keyof Omit<DashboardAssignee, 'user' | 'sector'>]}
+                    format={column.format}
+                  />
+                ),
+              )}
+            </TableRow>
+          ))}
+          {assignees.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={lead + columns.length}
+                className="py-6 text-center text-ink-faint"
+              >
+                Nenhum atendente com números nestes filtros.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+        <TableFooter className="border-t-2 border-line bg-muted font-normal">
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={lead} className="body-strong uppercase tracking-wide">
+              Total
+            </TableCell>
+            {columns.map((column) => (
+              <NumberCell
+                key={column.key}
+                number={numbers[column.key]}
+                format={column.format}
+                className="body-strong"
+              />
+            ))}
+          </TableRow>
+          {variant === 'B' && (
+            <TableRow className="border-t border-line-soft hover:bg-transparent">
+              <TableCell colSpan={lead} className="body-strong">
+                Do setor
+              </TableCell>
+              <TableCell colSpan={columns.length} className="text-left">
+                <span className="flex flex-wrap gap-x-6">
+                  {sectorOnly.map((item) => (
+                    <span key={item.key}>
+                      {item.label}{' '}
+                      <span className="mono-num body-strong">
+                        {display(numbers[item.key], item.format)}
+                      </span>
+                      {!numbers[item.key].applicable && (
                         <span className="sr-only"> {notApplicable}</span>
                       )}
-                    </TableCell>
+                    </span>
                   ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {excluded.length > 0 && (
-            <p className="caption border-t border-line-soft px-5 py-3 text-ink-faint">
-              {notApplicable}: {listFormat.format(excluded.map((column) => column.label))}.
-            </p>
+                </span>
+              </TableCell>
+            </TableRow>
           )}
-        </>
-      ) : (
-        <Empty>
-          <EmptyMedia>
-            <BarChart3 strokeWidth={1.7} aria-hidden />
-          </EmptyMedia>
-          <EmptyDescription>Nenhum atendente com números nestes filtros.</EmptyDescription>
-        </Empty>
+        </TableFooter>
+      </Table>
+      {excluded.length > 0 && (
+        <p className="caption border-t border-line-soft px-5 py-3 text-ink-faint">
+          {notApplicable}: {listFormat.format(excluded.map((column) => column.label))}.
+        </p>
       )}
     </Card>
   )
 }
 
+// PROTÓTIPO #342: o quadro Pendentes entra por ?prototype=342&variante=A|B|C.
+function usePosicaoPendentes(): Variante | null {
+  if (!import.meta.env.DEV) return null
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('prototype') !== '342') return null
+  // Tema do parâmetro, aplicado antes de a tela pintar.
+  const tema = params.get('tema')
+  if (tema) {
+    const root = document.documentElement
+    root.dataset.theme = tema === 'escuro' ? 'dark' : 'light'
+    if (tema === 'contraste') root.dataset.contrast = 'high'
+    else delete root.dataset.contrast
+  }
+  const value = (params.get('variante') ?? 'A').toUpperCase()
+  return value === 'B' || value === 'C' ? value : 'A'
+}
+
 export default function DashboardPage() {
+  const position = usePosicaoPendentes()
   const filter = useDashboardFilter()
   const { data, error } = useDashboard(filter.search, filter.datesValid)
   const { data: sectors = [] } = useSectors()
   const sector = sectors.find((item) => item.id === filter.sectorId)
   const numbers = data?.numbers
+  const variant: Variant = 'B'
+  // PROTÓTIPO #342: o quadro só muda com o setor; período, atendente e órgão não filtram.
+  const pendingSearch = filter.sectorId === undefined ? '' : `sectorId=${String(filter.sectorId)}`
+  const showSector = filter.isAdmin && filter.sectorId === undefined
 
   return (
     <>
@@ -388,35 +477,49 @@ export default function DashboardPage() {
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
-        <KpiSection section="now" title="Agora">
-          <Kpi label="Na fila" number={numbers?.queued} />
-          <Kpi label="Em atendimento" number={numbers?.inProgress} />
-        </KpiSection>
-        <DashboardLists
-          sectorId={filter.sectorId}
-          assigneeId={filter.assigneeId}
-          organizationId={filter.organization?.id}
-          showSector={filter.isAdmin && filter.sectorId === undefined}
-        />
-        <KpiSection section="period" title="No período" detail={periodDetail(data?.period)}>
-          <Kpi label="Recebidos" number={numbers?.received} />
-          <Kpi label="Iniciados" number={numbers?.started} />
-          <Kpi label="Encerrados" number={numbers?.resolved} />
-          <Kpi label="Transferidos" number={numbers?.transferred} />
-          <Kpi label="Cancelados" number={numbers?.cancelled} />
-          <Kpi
-            label="Tempo médio de espera"
-            number={numbers?.averageWaitSeconds}
-            format={formatAverageTime}
-          />
-          <Kpi
-            label="Tempo médio de atendimento"
-            number={numbers?.averageHandlingSeconds}
-            format={formatAverageTime}
-          />
-        </KpiSection>
-        {data && <AssigneesCard assignees={data.assignees} allSectors={data.sectorId === null} />}
+        {position === 'B' && <PendingB search={pendingSearch} admin={showSector} />}
+        <Section section="now" title="Agora">
+          {position === 'C' ? (
+            <div className="grid items-start gap-4 lg:grid-cols-[2fr_1fr]">
+              <DashboardLists
+                sectorId={filter.sectorId}
+                assigneeId={filter.assigneeId}
+                organizationId={filter.organization?.id}
+                showSector={showSector}
+                stacked
+              />
+              <PendingC search={pendingSearch} admin={showSector} />
+            </div>
+          ) : (
+            <>
+              <DashboardLists
+                sectorId={filter.sectorId}
+                assigneeId={filter.assigneeId}
+                organizationId={filter.organization?.id}
+                showSector={showSector}
+              />
+              {position === 'A' && (
+                <div className="mt-4">
+                  <PendingA search={pendingSearch} admin={showSector} />
+                </div>
+              )}
+            </>
+          )}
+        </Section>
+        <Section section="period" title="No período" detail={periodDetail(data?.period)}>
+          {data && numbers ? (
+            <PeriodTable
+              assignees={data.assignees}
+              numbers={numbers}
+              allSectors={data.sectorId === null}
+              variant={variant}
+            />
+          ) : (
+            <Skeleton className="h-40 w-full" />
+          )}
+        </Section>
       </PageContent>
+      {position && <Prototype342Bar variante={position} />}
     </>
   )
 }

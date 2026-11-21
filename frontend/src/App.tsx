@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
 import AppLayout from '@/components/AppLayout'
 import { type Role, useCurrentUser } from '@/lib/auth'
 import DashboardPage from '@/pages/DashboardPage'
@@ -43,12 +43,15 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #342: o quadro Pendentes leva à aba Pendentes da #337 ("Ver todos",
+  // com ?aba=pendentes) e ao pendente aberto quando se clica numa linha.
+  const location = useLocation()
   if (
     import.meta.env.DEV &&
-    window.location.pathname === '/chamados' &&
-    new URLSearchParams(window.location.search).get('prototype') === '337'
+    /^\/chamados(\/\d+)?$/.test(location.pathname) &&
+    new URLSearchParams(location.search).get('prototype') === '337'
   )
-    return <Prototype337 />
+    return <Prototype337 key={`${location.pathname}${location.search}`} />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
