@@ -39,12 +39,15 @@ func (p DashboardPeriod) Days() (int, bool) {
 
 // DashboardFilter holds the filters of the dashboard. From and To are the
 // first and last days of the period, both at midnight of the office clock.
+// Channel is the way the service happened, WhatsApp or phone; nil is every
+// channel.
 type DashboardFilter struct {
 	From, To       time.Time
 	SectorID       *int64
 	AssigneeID     *int64
 	ModuleID       *int64
 	OrganizationID *int64
+	Channel        *db.TicketChannel
 }
 
 // DashboardDays returns the first and last days of a named period.
@@ -147,6 +150,7 @@ func (s *Service) Dashboard(ctx context.Context, actor auth.User, filter Dashboa
 	closures, err := s.q.DashboardClosures(ctx, db.DashboardClosuresParams{
 		PeriodStart: start, PeriodEnd: end, SectorID: filter.SectorID, AssigneeID: filter.AssigneeID,
 		OrganizationID: filter.OrganizationID, ModuleID: filter.ModuleID,
+		Channel: dashboardChannel(filter.Channel),
 	})
 	if err != nil {
 		return DashboardResult{}, fmt.Errorf("dashboard closures: %w", err)
@@ -154,6 +158,7 @@ func (s *Service) Dashboard(ctx context.Context, actor auth.User, filter Dashboa
 	rows, err := s.q.DashboardByAssignee(ctx, db.DashboardByAssigneeParams{
 		PeriodStart: start, PeriodEnd: end, SectorID: filter.SectorID, AssigneeID: filter.AssigneeID,
 		OrganizationID: filter.OrganizationID, ModuleID: filter.ModuleID,
+		Channel: dashboardChannel(filter.Channel),
 	})
 	if err != nil {
 		return DashboardResult{}, fmt.Errorf("dashboard by assignee: %w", err)
@@ -161,17 +166,18 @@ func (s *Service) Dashboard(ctx context.Context, actor auth.User, filter Dashboa
 
 	// Which number each filter applies to: spec.md, Dashboard do atendimento.
 	noAssignee, noModule := filter.AssigneeID == nil, filter.ModuleID == nil
+	noChannel := filter.Channel == nil
 	result := DashboardResult{
 		Filter: filter,
 		Numbers: DashboardNumbers{
-			Queued:          dashboardCount(noAssignee && noModule, current.Queued),
-			InProgress:      dashboardCount(noModule, current.InProgress),
-			Received:        dashboardCount(noAssignee && noModule, arrivals.Received),
-			Started:         dashboardCount(noModule, arrivals.Started),
+			Queued:          dashboardCount(noAssignee && noModule && noChannel, current.Queued),
+			InProgress:      dashboardCount(noModule && noChannel, current.InProgress),
+			Received:        dashboardCount(noAssignee && noModule && noChannel, arrivals.Received),
+			Started:         dashboardCount(noModule && noChannel, arrivals.Started),
 			Resolved:        dashboardCount(true, closures.Resolved),
 			Transferred:     dashboardCount(true, closures.Transferred),
 			Cancelled:       dashboardCount(noModule, closures.Cancelled),
-			AverageWait:     dashboardAverage(noAssignee && noModule, wait.Waited, wait.WaitSeconds),
+			AverageWait:     dashboardAverage(noAssignee && noModule && noChannel, wait.Waited, wait.WaitSeconds),
 			AverageHandling: dashboardAverage(true, closures.Handled, closures.HandlingSeconds),
 		},
 		Assignees: make([]DashboardAssigneeRow, len(rows)),
@@ -179,8 +185,8 @@ func (s *Service) Dashboard(ctx context.Context, actor auth.User, filter Dashboa
 	for i, r := range rows {
 		result.Assignees[i] = DashboardAssigneeRow{
 			SectorID: r.SectorID, SectorName: r.SectorName, UserID: r.UserID, UserName: r.UserName,
-			InProgress:      dashboardCount(noModule, r.InProgress),
-			Started:         dashboardCount(noModule, r.Started),
+			InProgress:      dashboardCount(noModule && noChannel, r.InProgress),
+			Started:         dashboardCount(noModule && noChannel, r.Started),
 			Resolved:        dashboardCount(true, r.Resolved),
 			Transferred:     dashboardCount(true, r.Transferred),
 			Cancelled:       dashboardCount(noModule, r.Cancelled),
@@ -188,6 +194,14 @@ func (s *Service) Dashboard(ctx context.Context, actor auth.User, filter Dashboa
 		}
 	}
 	return result, nil
+}
+
+// dashboardChannel is the channel of the query, which may be absent.
+func dashboardChannel(channel *db.TicketChannel) db.NullTicketChannel {
+	if channel == nil {
+		return db.NullTicketChannel{}
+	}
+	return db.NullTicketChannel{TicketChannel: *channel, Valid: true}
 }
 
 // checkDashboardFilter settles the sector of the filter and confirms that the

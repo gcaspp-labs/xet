@@ -31,6 +31,7 @@ import { useModules, useSectors } from '@/lib/admin'
 import {
   type Dashboard,
   type DashboardAssignee,
+  type DashboardChannel,
   type DashboardNumber,
   type DashboardSection,
   type PeriodChoice,
@@ -125,6 +126,46 @@ function withStatus(option: { name: string; active: boolean }) {
   return option.active ? option.name : `${option.name} (inativo)`
 }
 
+const channelChoices: { value: DashboardChannel; label: string }[] = [
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'phone', label: 'Telefone' },
+]
+
+// O canal vale para os encerramentos e a tabela por atendente; nos demais
+// números, a API diz que ele não se aplica (regra 13 de dashboard.md).
+function ChannelFilter({
+  value,
+  onChange,
+}: {
+  value: DashboardChannel | undefined
+  onChange: (value: DashboardChannel | undefined) => void
+}) {
+  const items = [{ value: all, label: 'Todos os canais' }, ...channelChoices]
+  return (
+    <Field className="w-full sm:w-[calc(190px*var(--text-scale))]">
+      <FieldLabel htmlFor="dashboard-channel">Canal</FieldLabel>
+      <Select
+        items={items}
+        value={value ?? all}
+        onValueChange={(next) =>
+          next && onChange(next === all ? undefined : (next as DashboardChannel))
+        }
+      >
+        <SelectTrigger id="dashboard-channel">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  )
+}
+
 function Filters({
   filter,
   shownPeriod,
@@ -189,6 +230,7 @@ function Filters({
             onChange={filter.setSector}
           />
         )}
+        <ChannelFilter value={filter.channel} onChange={filter.setChannel} />
         <FilterSelect
           id="dashboard-assignee"
           label="Atendente"

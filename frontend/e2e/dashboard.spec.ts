@@ -74,6 +74,44 @@ async function assignAndClose(
   await api.dispose()
 }
 
+// Id do contato cadastrado com o nome informado, pela busca da lista.
+async function contactId(baseURL: string, name: string) {
+  const api = await adminApi(baseURL)
+  const response = await api.get(`/api/contacts?q=${encodeURIComponent(name)}`)
+  expect(response.ok()).toBeTruthy()
+  const listed = (await response.json()) as { items: { id: number; name: string }[] }
+  await api.dispose()
+  const contact = listed.items.find((item) => item.name === name)
+  expect(contact, `contato ${name}`).toBeDefined()
+  return contact!.id
+}
+
+// Registra um atendimento por telefone já encerrado, como a ação da API de #316.
+async function registerPhone(
+  baseURL: string,
+  sectorId: number,
+  email: string,
+  data: { contact: string; organizationId: number; moduleId: number; minutes: [number, number] },
+) {
+  const api = await sessionOf(baseURL, email)
+  const started = new Date(Date.now() - data.minutes[0] * 60_000)
+  const ended = new Date(Date.now() - data.minutes[1] * 60_000)
+  const response = await api.post(`/api/sectors/${sectorId}/phone-tickets`, {
+    data: {
+      contactId: await contactId(baseURL, data.contact),
+      organizationId: data.organizationId,
+      moduleIds: [data.moduleId],
+      subject: 'Contracheque',
+      resolution: 'Orientado por telefone.',
+      startedAt: started.toISOString(),
+      endedAt: ended.toISOString(),
+      clientRequestId: crypto.randomUUID(),
+    },
+  })
+  expect(response.ok(), await response.text()).toBeTruthy()
+  await api.dispose()
+}
+
 async function createModule(baseURL: string, sector: Sector, name: string) {
   const api = await adminApi(baseURL)
   const response = await api.post(`/api/sectors/${sector.id}/modules`, { data: { name } })
@@ -572,6 +610,105 @@ test('filtros mudam os números, indicam o que não se aplica e sobrevivem ao re
   // Limpar o órgão tira o filtro do endereço.
   await page.getByRole('button', { name: 'Limpar órgão' }).click()
   await expect(page).not.toHaveURL(/organizationId/)
+})
+
+test('o filtro Canal separa WhatsApp de Telefone e não se aplica aos números da fila', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor, agent } = await seedSector(baseURL!)
+  const { id } = unique()
+  const anaPhone = unique().phone
+  const ana = `Ana ${id}`
+  const bia = `Bia ${id}`
+  const caio = `Caio ${id}`
+  const [cityHall] = await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [
+      { name: ana, phone: anaPhone, organization: 0, sector: sector.id },
+      { name: bia, phone: unique().phone, organization: 0, sector: sector.id },
+    ],
+  )
+  const payroll = await createModule(baseURL!, sector, 'Folha')
+  await receive(baseURL!, sector.id, ana, anaPhone)
+  await assignAndClose(baseURL!, sector.id, agent, {
+    moduleId: payroll.id,
+    organizationId: cityHall.id,
+  })
+  await receive(baseURL!, sector.id, caio)
+  await registerPhone(baseURL!, sector.id, agent, {
+    contact: bia,
+    organizationId: cityHall.id,
+    moduleId: payroll.id,
+    minutes: [40, 25],
+  })
+
+  await signIn(page, supervisor, userPassword)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  const table = page.getByRole('region', { name: 'Por atendente' })
+  const queue = page.getByRole('region', { name: /^Fila/ })
+  await expect(page.getByRole('combobox', { name: 'Canal' })).toHaveText(/Todos os canais/)
+  await expectKpi(page, 'Encerrados', '2')
+  await expectKpi(page, 'Recebidos', '2')
+  await expectKpi(page, 'Na fila', '1')
+
+  // Telefone: só o registro por telefone conta, do início ao fim da ligação.
+  await choose(page, 'Canal', 'Telefone')
+  await expect(page).toHaveURL(/channel=phone/)
+  await expectKpi(page, 'Encerrados', '1')
+  await expectKpi(page, 'Transferidos', '0')
+  await expectKpi(page, 'Cancelados', '0')
+  await expectKpi(page, 'Tempo médio de atendimento', '15 min')
+  for (const label of ['Na fila', 'Em atendimento', 'Recebidos', 'Iniciados', 'Tempo médio de espera']) {
+    await expectKpi(page, label, '—')
+    await expect(kpi(page, label)).toContainText(notApplicable)
+  }
+  // As listas ao vivo continuam como estão: o canal não vale para elas.
+  await expect(queue.getByText(caio)).toBeVisible()
+
+  // Só quem tem registro por telefone aparece, com zero no lugar de "—" onde o canal vale.
+  await expect(table.getByRole('row')).toHaveCount(2)
+  const row = table.getByRole('row', { name: new RegExp(`^${nameOf(agent)}`) })
+  const cells = row.getByRole('cell')
+  await expect(cells.nth(1)).toHaveText(`— ${notApplicable}`)
+  await expect(cells.nth(2)).toHaveText(`— ${notApplicable}`)
+  await expect(cells.nth(3)).toHaveText('1')
+  await expect(cells.nth(4)).toHaveText('0')
+  await expect(cells.nth(5)).toHaveText('0')
+  await expect(cells.nth(6)).toHaveText('15 min')
+  await expect(table).toContainText(`${notApplicable}: Em atendimento e Iniciados.`)
+
+  // WhatsApp: o registro por telefone fica de fora, e os encerrados são só do WhatsApp.
+  await choose(page, 'Canal', 'WhatsApp')
+  await expect(page).toHaveURL(/channel=whatsapp/)
+  await expectKpi(page, 'Encerrados', '1')
+  await expectKpi(page, 'Transferidos', '0')
+  await expectKpi(page, 'Cancelados', '0')
+  await expectKpi(page, 'Tempo médio de atendimento', 'menos de 1 min')
+  for (const label of [
+    'Na fila',
+    'Em atendimento',
+    'Recebidos',
+    'Iniciados',
+    'Tempo médio de espera',
+  ]) {
+    await expect(kpi(page, label)).toContainText(notApplicable)
+  }
+  await expect(row.getByRole('cell').nth(3)).toHaveText('1')
+
+  // O filtro fica no endereço e sobrevive ao recarregar.
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Canal' })).toHaveText(/WhatsApp/)
+  await expectKpi(page, 'Encerrados', '1')
+
+  // Todos os canais: os dois encerrados somam de novo.
+  await choose(page, 'Canal', 'Todos os canais')
+  await expect(page).not.toHaveURL(/channel=/)
+  await expectKpi(page, 'Encerrados', '2')
+  await expectKpi(page, 'Na fila', '1')
+  await expect(kpi(page, 'Recebidos')).not.toContainText(notApplicable)
+  await expect(table).not.toContainText(notApplicable)
 })
 
 test('o seletor de órgão do filtro mostra o nome inteiro e município · CNPJ em uma lista mais larga', async ({

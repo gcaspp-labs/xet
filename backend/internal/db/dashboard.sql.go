@@ -22,6 +22,7 @@ from (
             and (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1) is distinct from 'phone') as came_in
     from tickets t
     where t.arrived_at >= $2::timestamptz and t.arrived_at < $3::timestamptz
+      and t.channel <> 'phone'
       and ($4::bigint is null or t.sector_id = $4)
       and ($5::bigint is null or t.organization_id = $5)
 ) a
@@ -70,18 +71,20 @@ from (
         1 as in_progress, 0 as started, 0 as resolved, 0 as transferred, 0 as cancelled, 0 as handled, 0::float8 as handling_seconds
     from tickets t
     where t.status = 'in_progress' and $1::bigint is null
-      and ($2::bigint is null or t.sector_id = $2)
-      and ($3::bigint is null or t.assignee_id = $3)
-      and ($4::bigint is null or t.organization_id = $4)
+      and $2::ticket_channel is null
+      and ($3::bigint is null or t.sector_id = $3)
+      and ($4::bigint is null or t.assignee_id = $4)
+      and ($5::bigint is null or t.organization_id = $5)
     union all
     select t.sector_id, t.created_by_id,
         0, 1, 0, 0, 0, 0, 0::float8
     from tickets t
-    where t.created_by_id is not null and $1::bigint is null
-      and t.arrived_at >= $5::timestamptz and t.arrived_at < $6::timestamptz
-      and ($2::bigint is null or t.sector_id = $2)
-      and ($3::bigint is null or t.created_by_id = $3)
-      and ($4::bigint is null or t.organization_id = $4)
+    where t.created_by_id is not null and t.channel <> 'phone'
+      and $1::bigint is null and $2::ticket_channel is null
+      and t.arrived_at >= $6::timestamptz and t.arrived_at < $7::timestamptz
+      and ($3::bigint is null or t.sector_id = $3)
+      and ($4::bigint is null or t.created_by_id = $4)
+      and ($5::bigint is null or t.organization_id = $5)
     union all
     select t.sector_id, t.assignee_id,
         0, 0,
@@ -92,10 +95,11 @@ from (
         case when t.closure_type <> 'cancelled' and t.ended_at >= t.assigned_at
             then extract(epoch from t.ended_at - t.assigned_at)::float8 else 0::float8 end
     from tickets t
-    where t.status = 'closed' and t.closed_at >= $5::timestamptz and t.closed_at < $6::timestamptz
-      and ($2::bigint is null or t.sector_id = $2)
-      and ($3::bigint is null or t.assignee_id = $3)
-      and ($4::bigint is null or t.organization_id = $4)
+    where t.status = 'closed' and t.closed_at >= $6::timestamptz and t.closed_at < $7::timestamptz
+      and ($3::bigint is null or t.sector_id = $3)
+      and ($4::bigint is null or t.assignee_id = $4)
+      and ($5::bigint is null or t.organization_id = $5)
+      and ($2::ticket_channel is null or t.channel = $2)
       and ($1::bigint is null or (t.closure_type <> 'cancelled'
           and exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = $1)))
 ) r
@@ -107,6 +111,7 @@ order by lower(u.name), r.user_id, lower(s.name), r.sector_id
 
 type DashboardByAssigneeParams struct {
 	ModuleID       *int64
+	Channel        NullTicketChannel
 	SectorID       *int64
 	AssigneeID     *int64
 	OrganizationID *int64
@@ -130,10 +135,13 @@ type DashboardByAssigneeRow struct {
 
 // One row per person and sector, with the rules of the numbers above. Only
 // what counts makes a row, so nobody appears with everything at zero. With a
-// module, only the closings that apply to it count.
+// module, only the closings that apply to it count. With a channel, the tickets
+// in progress and the started ones do not make a row: the channel does not
+// apply to those numbers, and the closings are the numbers of the channel.
 func (q *Queries) DashboardByAssignee(ctx context.Context, arg DashboardByAssigneeParams) ([]DashboardByAssigneeRow, error) {
 	rows, err := q.db.Query(ctx, dashboardByAssignee,
 		arg.ModuleID,
+		arg.Channel,
 		arg.SectorID,
 		arg.AssigneeID,
 		arg.OrganizationID,
@@ -183,8 +191,9 @@ where t.status = 'closed' and t.closed_at >= $1::timestamptz and t.closed_at < $
   and ($3::bigint is null or t.sector_id = $3)
   and ($4::bigint is null or t.assignee_id = $4)
   and ($5::bigint is null or t.organization_id = $5)
-  and ($6::bigint is null
-      or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = $6))
+  and ($6::ticket_channel is null or t.channel = $6)
+  and ($7::bigint is null
+      or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = $7))
 `
 
 type DashboardClosuresParams struct {
@@ -193,6 +202,7 @@ type DashboardClosuresParams struct {
 	SectorID       *int64
 	AssigneeID     *int64
 	OrganizationID *int64
+	Channel        NullTicketChannel
 	ModuleID       *int64
 }
 
@@ -207,6 +217,8 @@ type DashboardClosuresRow struct {
 // Tickets closed in the period, by the real closing moment, and the handling
 // time: from the first assignment to the end of the form, which may be edited.
 // An end before the assignment and the cancelled tickets stay out of the average.
+// The phone registration is assigned at the start of the call, so the handling
+// time goes from the start to the end informed there.
 func (q *Queries) DashboardClosures(ctx context.Context, arg DashboardClosuresParams) (DashboardClosuresRow, error) {
 	row := q.db.QueryRow(ctx, dashboardClosures,
 		arg.PeriodStart,
@@ -214,6 +226,7 @@ func (q *Queries) DashboardClosures(ctx context.Context, arg DashboardClosuresPa
 		arg.SectorID,
 		arg.AssigneeID,
 		arg.OrganizationID,
+		arg.Channel,
 		arg.ModuleID,
 	)
 	var i DashboardClosuresRow
@@ -255,7 +268,9 @@ type DashboardCurrentRow struct {
 // customer; otherwise the team started it, in the system or on the phone. The
 // first message is the lowest id, the one that opened the ticket: sent_at
 // comes from the clock of the phone. A transferred ticket is received even if
-// the phone is the first to write in it.
+// the phone is the first to write in it. A phone registration (#316) never
+// arrived from the customer nor from the team: it is born closed, with the
+// times of the call.
 // Tickets open right now, whatever the period.
 func (q *Queries) DashboardCurrent(ctx context.Context, arg DashboardCurrentParams) (DashboardCurrentRow, error) {
 	row := q.db.QueryRow(ctx, dashboardCurrent, arg.AssigneeID, arg.SectorID, arg.OrganizationID)
@@ -286,6 +301,7 @@ select
     coalesce(sum(greatest(extract(epoch from t.assigned_at - t.arrived_at), 0)), 0)::float8 as wait_seconds
 from tickets t
 where t.assigned_at >= $1::timestamptz and t.assigned_at < $2::timestamptz
+  and t.channel <> 'phone'
   and (t.previous_ticket_id is not null or (t.created_by_id is null
       and (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1) is distinct from 'phone'))
   and ($3::bigint is null or t.sector_id = $3)
@@ -307,7 +323,7 @@ type DashboardWaitRow struct {
 // Wait of the received tickets assumed in the period. assigned_at keeps the
 // first time, so the time after a return to the queue does not count. The
 // arrival comes from the clock of the sender: when it is after the assignment,
-// the wait is zero.
+// the wait is zero. The phone registration has no wait.
 func (q *Queries) DashboardWait(ctx context.Context, arg DashboardWaitParams) (DashboardWaitRow, error) {
 	row := q.db.QueryRow(ctx, dashboardWait,
 		arg.PeriodStart,

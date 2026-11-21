@@ -3,7 +3,9 @@
 -- customer; otherwise the team started it, in the system or on the phone. The
 -- first message is the lowest id, the one that opened the ticket: sent_at
 -- comes from the clock of the phone. A transferred ticket is received even if
--- the phone is the first to write in it.
+-- the phone is the first to write in it. A phone registration (#316) never
+-- arrived from the customer nor from the team: it is born closed, with the
+-- times of the call.
 
 -- name: DashboardCurrent :one
 -- Tickets open right now, whatever the period.
@@ -30,6 +32,7 @@ from (
             and (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1) is distinct from 'phone') as came_in
     from tickets t
     where t.arrived_at >= @period_start::timestamptz and t.arrived_at < @period_end::timestamptz
+      and t.channel <> 'phone'
       and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
       and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
 ) a;
@@ -38,12 +41,13 @@ from (
 -- Wait of the received tickets assumed in the period. assigned_at keeps the
 -- first time, so the time after a return to the queue does not count. The
 -- arrival comes from the clock of the sender: when it is after the assignment,
--- the wait is zero.
+-- the wait is zero. The phone registration has no wait.
 select
     count(*) as waited,
     coalesce(sum(greatest(extract(epoch from t.assigned_at - t.arrived_at), 0)), 0)::float8 as wait_seconds
 from tickets t
 where t.assigned_at >= @period_start::timestamptz and t.assigned_at < @period_end::timestamptz
+  and t.channel <> 'phone'
   and (t.previous_ticket_id is not null or (t.created_by_id is null
       and (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1) is distinct from 'phone'))
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
@@ -53,6 +57,8 @@ where t.assigned_at >= @period_start::timestamptz and t.assigned_at < @period_en
 -- Tickets closed in the period, by the real closing moment, and the handling
 -- time: from the first assignment to the end of the form, which may be edited.
 -- An end before the assignment and the cancelled tickets stay out of the average.
+-- The phone registration is assigned at the start of the call, so the handling
+-- time goes from the start to the end informed there.
 select
     count(*) filter (where t.closure_type = 'resolved') as resolved,
     count(*) filter (where t.closure_type = 'transferred') as transferred,
@@ -65,13 +71,16 @@ where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.cl
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
   and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
+  and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
   and (sqlc.narg(module_id)::bigint is null
       or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id)));
 
 -- name: DashboardByAssignee :many
 -- One row per person and sector, with the rules of the numbers above. Only
 -- what counts makes a row, so nobody appears with everything at zero. With a
--- module, only the closings that apply to it count.
+-- module, only the closings that apply to it count. With a channel, the tickets
+-- in progress and the started ones do not make a row: the channel does not
+-- apply to those numbers, and the closings are the numbers of the channel.
 select
     r.sector_id, s.name as sector_name, r.user_id::bigint as user_id, u.name as user_name,
     sum(r.in_progress)::bigint as in_progress,
@@ -86,6 +95,7 @@ from (
         1 as in_progress, 0 as started, 0 as resolved, 0 as transferred, 0 as cancelled, 0 as handled, 0::float8 as handling_seconds
     from tickets t
     where t.status = 'in_progress' and sqlc.narg(module_id)::bigint is null
+      and sqlc.narg(channel)::ticket_channel is null
       and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
       and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
       and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
@@ -93,7 +103,8 @@ from (
     select t.sector_id, t.created_by_id,
         0, 1, 0, 0, 0, 0, 0::float8
     from tickets t
-    where t.created_by_id is not null and sqlc.narg(module_id)::bigint is null
+    where t.created_by_id is not null and t.channel <> 'phone'
+      and sqlc.narg(module_id)::bigint is null and sqlc.narg(channel)::ticket_channel is null
       and t.arrived_at >= @period_start::timestamptz and t.arrived_at < @period_end::timestamptz
       and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
       and (sqlc.narg(assignee_id)::bigint is null or t.created_by_id = sqlc.narg(assignee_id))
@@ -112,6 +123,7 @@ from (
       and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
       and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
       and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
+      and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
       and (sqlc.narg(module_id)::bigint is null or (t.closure_type <> 'cancelled'
           and exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id))))
 ) r
