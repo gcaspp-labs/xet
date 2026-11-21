@@ -2,7 +2,7 @@
 
 O que a `merge-gate` confere antes de um merge sem a pessoa, e como classificar o risco de cada ticket. Na dúvida, a trava chama a pessoa.
 
-O script da `merge-gate` lê os **blocos de código com nome** deste arquivo (`checks`, `sensitive-paths`, `auto-merge-risk`, `marker`, `merge-method`). Edite o conteúdo dos blocos, mas mantenha os nomes.
+O script da `merge-gate` lê os **blocos de código com nome** deste arquivo (`checks`, `sensitive-paths`, `auto-merge-risk`, `command-mode-risk`, `command-mode-locked-paths`, `marker`, `merge-method`). Edite o conteúdo dos blocos, mas mantenha os nomes.
 
 ## Checks obrigatórios
 
@@ -17,7 +17,7 @@ Testes ponta a ponta
 
 ## Áreas sensíveis
 
-Um PR que toca qualquer um destes caminhos nunca entra sem a pessoa. Uma expressão regular por linha, comparada com o caminho de cada arquivo do diff a partir da raiz:
+Um PR que toca qualquer um destes caminhos nunca entra sem a pessoa, a não ser com o modo comando ligado (veja abaixo). Uma expressão regular por linha, comparada com o caminho de cada arquivo do diff a partir da raiz:
 
 ```sensitive-paths
 ^backend/db/migrations/
@@ -57,6 +57,19 @@ Os riscos que podem entrar sem a pessoa quando a trava passa, um rótulo por lin
 ```auto-merge-risk
 risk:low
 risk:medium
+```
+
+Os riscos que entram sem a pessoa **só enquanto o modo comando estiver ligado**, um rótulo por linha. O modo comando é uma janela com fim que a pessoa entrega ao Chief (ex.: até 06:00); passou do horário, desliga sozinho, e a trava não aceita janela com mais de 24h nem fim escrito de forma relativa. Com a janela aberta, as áreas sensíveis também deixam de barrar, em qualquer risco, menos as travadas (bloco abaixo). A janela é conferida de novo no momento da decisão: se ela expirar ou for desligada enquanto a trava consulta o CI, o merge chama a pessoa. As outras checagens continuam valendo: CI verde, parecer `approve` no último commit, nenhum teste removido, um único ticket. Fora da janela, nada muda. Liga e desliga na raiz do repo com o `command-mode.sh` da skill `merge-gate` (`on 06:00`, `status`, `off`), só quando a pessoa pedir. Quando o modo comando é o que libera o merge, a trava imprime uma linha `COMMAND MODE:` para o risco e outra com as áreas sensíveis liberadas; todas vão no comentário do PR.
+
+```command-mode-risk
+risk:high
+```
+
+As áreas que o modo comando **nunca** libera, uma expressão regular por linha. Estas duas são fixas: as regras dos agentes e da trava, e o CI. Um PR que toca uma delas sempre espera a pessoa, com a janela aberta ou não. Este bloco só acrescenta caminhos às duas de cima; ele não consegue tirá-las.
+
+```command-mode-locked-paths
+^docs/agents/
+^\.github/
 ```
 
 Método de merge (`merge`, `squash` ou `rebase`):

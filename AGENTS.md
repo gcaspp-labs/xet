@@ -18,7 +18,7 @@ O fluxo segue as skills de agente configuradas em `docs/agents/` (ver "Agent ski
 - Problemas e ideias viram issues com `needs-triage` (skill `journal`) e passam pela triagem (`triage`).
 - Uma mudança planejada vira uma spec (`to-spec`, rótulo `spec`), quebrada em tickets como sub-issues (`to-tickets`), com bloqueios nativos do GitHub e um rótulo de risco (`risk:low`, `risk:medium` ou `risk:high`). Tela nova ou mudança de layout passa antes pelo protótipo (`prototype`).
 - Cada ticket é implementado pela skill `implement`, em branch própria, até o PR aberto com `Closes #NN`. Um ticket por vez, porque as portas são fixas, e só depois de todos os bloqueios fechados.
-- O PR é revisado pela `code-review` e verificado no app pela `verify-app` quando toca a interface. Só a `merge-gate` faz merge sem a pessoa, e só de `risk:low` ou `risk:medium`; `risk:high` espera a aprovação da pessoa. A `chief-of-staff` conduz a sequência.
+- O PR é revisado pela `code-review` e verificado no app pela `verify-app` quando toca a interface. Só a `merge-gate` faz merge sem a pessoa, e só de `risk:low` ou `risk:medium`; `risk:high` espera a aprovação da pessoa, a não ser no modo comando (janela com fim, ligada pela pessoa, em que as áreas sensíveis também passam, menos `docs/agents/` e `.github/`; ver `docs/agents/merge-gate.md`). A `chief-of-staff` conduz a sequência.
 - Quando todos os tickets de uma spec entram, a `to-docs` atualiza `docs/features/`. Só a pessoa fecha a spec.
 - O ticket só termina quando todos os critérios de aceite forem atendidos e os testes passarem.
 - Não implementar nada fora do escopo do ticket atual. Melhorias percebidas viram issue com `needs-triage`, não código.
