@@ -296,6 +296,20 @@ export function useSendMessage(ticketId: number) {
   })
 }
 
+// Envia um contato do cadastro como cartão: o backend monta o cartão a partir do cadastro e a
+// mensagem segue as regras das outras, inclusive a idempotência pelo identificador do envio.
+export function useSendContact(ticketId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ requestId, contactId }: { requestId: string; contactId: number }) =>
+      api<SentMessage>(`/tickets/${ticketId}/messages/contact`, {
+        method: 'POST',
+        body: { clientRequestId: requestId, contactId },
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
+  })
+}
+
 export function useRetryMessage(ticketId: number) {
   const queryClient = useQueryClient()
   return useMutation({

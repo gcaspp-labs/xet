@@ -4,6 +4,7 @@ import {
   Check,
   CircleAlert,
   CircleCheck,
+  Contact,
   FileText,
   History,
   Lock,
@@ -41,6 +42,7 @@ import { MessageEditor } from '@/components/MessageEditor'
 import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
+import { SendContactDialog } from '@/components/SendContactDialog'
 import { HistorySheet, TicketHistoryList, useHistoryTarget } from '@/components/TicketHistory'
 import { PhoneTag } from '@/components/TicketChannel'
 import type { HistoryReturnState } from '@/lib/history-return'
@@ -50,6 +52,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -547,6 +555,8 @@ function Composer({
   const [file, setFile] = useState<File | null>(null)
   const [voice, setVoice] = useState<Recording | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
+  // A janela "Enviar contato" aberta no menu do anexo.
+  const [contactOpen, setContactOpen] = useState(false)
   // O mesmo identificador numa nova tentativa evita mensagem duplicada; muda
   // quando o conteúdo muda.
   const requestId = useRef<string | null>(null)
@@ -628,6 +638,22 @@ function Composer({
       messageInput.current?.focus()
     }
   }, [editingId])
+
+  // Ao fechar a janela "Enviar contato", o foco volta ao campo de mensagem, como ao terminar a
+  // edição. A espera é pelo fechamento da janela, que devolve o foco ao fim dele.
+  const wasContactOpen = useRef(false)
+  useEffect(() => {
+    if (contactOpen) {
+      wasContactOpen.current = true
+      return
+    }
+    if (!wasContactOpen.current) {
+      return
+    }
+    wasContactOpen.current = false
+    const frame = requestAnimationFrame(() => messageInput.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [contactOpen])
 
   // Entrar em edição com uma gravação em andamento a conclui, para o áudio ficar guardado como
   // rascunho em vez de se perder.
@@ -758,14 +784,23 @@ function Composer({
             aria-label="Arquivo para enviar"
             onChange={chooseFile}
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Anexar arquivo"
-            onClick={() => fileInput.current?.click()}
-          >
-            <Paperclip strokeWidth={1.7} aria-hidden />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon" aria-label="Anexar arquivo" />}
+            >
+              <Paperclip strokeWidth={1.7} aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" className="min-w-40">
+              <DropdownMenuItem onClick={() => fileInput.current?.click()}>
+                <Paperclip strokeWidth={1.7} aria-hidden />
+                Arquivo
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setContactOpen(true)}>
+                <Contact strokeWidth={1.7} aria-hidden />
+                Contato
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <EmojiPicker onSelect={insertEmoji} returnFocus={messageInput} />
           <Textarea
             ref={messageInput}
@@ -802,6 +837,9 @@ function Composer({
             </Button>
           )}
         </div>
+      )}
+      {contactOpen && (
+        <SendContactDialog ticketId={ticketId} onClose={() => setContactOpen(false)} />
       )}
     </div>
   )
