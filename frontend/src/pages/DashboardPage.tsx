@@ -318,6 +318,15 @@ const assigneeColumns: { key: AssigneeNumberKey; label: string; format: Format }
   { key: 'averageHandlingSeconds', label: 'Tempo médio de atendimento', format: formatAverageTime },
 ]
 
+// O Total soma estas colunas; o tempo médio fica de fora porque é a média geral.
+const countKeys: AssigneeNumberKey[] = [
+  'inProgress',
+  'started',
+  'resolved',
+  'transferred',
+  'cancelled',
+]
+
 // Os números do setor que não pertencem a uma pessoa (linha "Do setor").
 const sectorNumbers: { key: keyof Numbers; label: string; format: Format }[] = [
   { key: 'received', label: 'Recebidos', format: asCount },
@@ -356,6 +365,21 @@ function PeriodTable({
   const excluded = [...assigneeColumns, ...sectorNumbers].filter(
     (column) => !numbers[column.key].applicable,
   )
+  // O que o Total conta e nenhuma linha por atendente: os iniciados pelo celular do
+  // setor não têm pessoa. A linha "Sem atendente" mostra a diferença, para a soma das
+  // linhas bater com o Total (regra 15).
+  const withoutPerson: Partial<Record<AssigneeNumberKey, number>> = {}
+  for (const key of countKeys) {
+    if (!numbers[key].applicable || assignees.some((row) => !row[key].applicable)) {
+      continue
+    }
+    const sum = assignees.reduce((total, row) => total + (row[key].value ?? 0), 0)
+    const missing = (numbers[key].value ?? 0) - sum
+    if (missing > 0) {
+      withoutPerson[key] = missing
+    }
+  }
+  const hasWithoutPerson = Object.keys(withoutPerson).length > 0
   const lead = allSectors ? 2 : 1
   return (
     <Card role="region" aria-labelledby="dashboard-assignees-title">
@@ -392,6 +416,17 @@ function PeriodTable({
               >
                 Nenhum atendente com números nestes filtros.
               </TableCell>
+            </TableRow>
+          )}
+          {hasWithoutPerson && (
+            <TableRow>
+              <TableCell className="body-strong">Sem atendente</TableCell>
+              {allSectors && <TableCell>{noDataMark}</TableCell>}
+              {assigneeColumns.map((column) => (
+                <TableCell key={column.key} className="mono-num text-right">
+                  {countKeys.includes(column.key) ? (withoutPerson[column.key] ?? 0) : noDataMark}
+                </TableCell>
+              ))}
             </TableRow>
           )}
         </TableBody>
@@ -434,6 +469,11 @@ function PeriodTable({
       {excluded.length > 0 && (
         <p className="caption border-t border-line-soft px-5 py-3 text-ink-faint">
           {notApplicable}: {listFormat.format(excluded.map((column) => column.label))}.
+        </p>
+      )}
+      {hasWithoutPerson && (
+        <p className="caption border-t border-line-soft px-5 py-3 text-ink-faint">
+          Sem atendente: chamados iniciados pelo celular do setor, sem pessoa atribuída.
         </p>
       )}
     </Card>
