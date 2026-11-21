@@ -1,13 +1,11 @@
-import { BarChart3, ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
+import { ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
 import { useId, type ReactNode } from 'react'
-import { OrganizationPicker } from '@/components/ContactSheet'
-import { KpiCard } from '@/components/KpiCard'
 import { DashboardLists } from '@/components/DashboardLists'
+import { OrganizationPicker } from '@/components/ContactSheet'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
-import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
+import { Card } from '@/components/ui/card'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -22,6 +20,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -58,24 +57,6 @@ const asCount: Format = String
 
 function display(number: DashboardNumber, format: Format) {
   return number.applicable && number.value !== null ? format(number.value) : noDataMark
-}
-
-function Kpi({
-  label,
-  number,
-  format = asCount,
-}: {
-  label: string
-  number: DashboardNumber | undefined
-  format?: Format
-}) {
-  return (
-    <KpiCard
-      label={label}
-      value={number ? display(number, format) : <Skeleton className="my-2 h-6 w-16" />}
-      hint={number && !number.applicable ? notApplicable : undefined}
-    />
-  )
 }
 
 function FilterSelect({
@@ -275,7 +256,9 @@ function Filters({
   )
 }
 
-function KpiSection({
+// A seção recolhe o que estiver dentro dela (as listas, em "Agora", e a tabela, em
+// "No período"), com a escolha guardada no navegador (regra 6 de dashboard.md).
+function Section({
   section,
   title,
   detail,
@@ -306,11 +289,7 @@ function KpiSection({
         </Button>
         {detail && <p className="caption mono-num text-ink-faint">{detail}</p>}
       </div>
-      {!collapsed && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,calc(170px*var(--text-scale))),1fr))] gap-3">
-          {children}
-        </div>
-      )}
+      {!collapsed && children}
     </section>
   )
 }
@@ -324,11 +303,13 @@ function periodDetail(period: Dashboard['period'] | undefined) {
     : `${formatDay(period.from)} a ${formatDay(period.to)}`
 }
 
-const assigneeColumns: {
-  key: keyof Omit<DashboardAssignee, 'user' | 'sector'>
-  label: string
-  format: Format
-}[] = [
+const listFormat = new Intl.ListFormat('pt-BR')
+
+type Numbers = Dashboard['numbers']
+type AssigneeNumberKey = keyof Omit<DashboardAssignee, 'user' | 'sector'>
+
+// Colunas por atendente. O "Em atendimento" é a carga atual da pessoa.
+const assigneeColumns: { key: AssigneeNumberKey; label: string; format: Format }[] = [
   { key: 'inProgress', label: 'Em atendimento', format: asCount },
   { key: 'started', label: 'Iniciados', format: asCount },
   { key: 'resolved', label: 'Encerrados', format: asCount },
@@ -337,68 +318,123 @@ const assigneeColumns: {
   { key: 'averageHandlingSeconds', label: 'Tempo médio de atendimento', format: formatAverageTime },
 ]
 
-const listFormat = new Intl.ListFormat('pt-BR')
+// Os números do setor que não pertencem a uma pessoa (linha "Do setor").
+const sectorNumbers: { key: keyof Numbers; label: string; format: Format }[] = [
+  { key: 'received', label: 'Recebidos', format: asCount },
+  { key: 'averageWaitSeconds', label: 'Tempo médio de espera', format: formatAverageTime },
+]
 
-function AssigneesCard({
+function NumberCell({
+  number,
+  format,
+  className,
+}: {
+  number: DashboardNumber
+  format: Format
+  className?: string
+}) {
+  return (
+    <TableCell className={`mono-num text-right ${className ?? ''}`}>
+      {display(number, format)}
+      {!number.applicable && <span className="sr-only"> {notApplicable}</span>}
+    </TableCell>
+  )
+}
+
+// A tabela por atendente com a linha TOTAL (a média de atendimento é a média geral, não
+// a soma das médias) e a linha "Do setor", ambas seguindo os filtros (regra 13).
+function PeriodTable({
   assignees,
+  numbers,
   allSectors,
 }: {
   assignees: DashboardAssignee[]
+  numbers: Numbers
   allSectors: boolean
 }) {
-  // Com "—" na célula, a nota diz quais colunas o filtro deixou de fora.
-  const excluded = assigneeColumns.filter((column) =>
-    assignees.some((row) => !row[column.key].applicable),
+  // Com "—" na célula, a nota diz quais números o filtro deixou de fora.
+  const excluded = [...assigneeColumns, ...sectorNumbers].filter(
+    (column) => !numbers[column.key].applicable,
   )
+  const lead = allSectors ? 2 : 1
   return (
     <Card role="region" aria-labelledby="dashboard-assignees-title">
-      <CardHeader>
-        <CardTitle id="dashboard-assignees-title">Por atendente</CardTitle>
-      </CardHeader>
-      {assignees.length > 0 ? (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Atendente</TableHead>
-                {allSectors && <TableHead>Setor</TableHead>}
-                {assigneeColumns.map((column) => (
-                  <TableHead key={column.key} className="text-right">
-                    {column.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignees.map((row) => (
-                <TableRow key={`${row.sector.id}-${row.user.id}`}>
-                  <TableCell className="body-strong">{row.user.name}</TableCell>
-                  {allSectors && <TableCell>{row.sector.name}</TableCell>}
-                  {assigneeColumns.map((column) => (
-                    <TableCell key={column.key} className="mono-num text-right">
-                      {display(row[column.key], column.format)}
-                      {!row[column.key].applicable && (
-                        <span className="sr-only"> {notApplicable}</span>
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
+      <Table>
+        <caption id="dashboard-assignees-title" className="sr-only">
+          Por atendente
+        </caption>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="text-ink">Atendente</TableHead>
+            {allSectors && <TableHead className="text-ink">Setor</TableHead>}
+            {assigneeColumns.map((column) => (
+              <TableHead key={column.key} className="text-right text-ink">
+                {column.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {assignees.map((row) => (
+            <TableRow key={`${row.sector.id}-${row.user.id}`}>
+              <TableCell className="body-strong">{row.user.name}</TableCell>
+              {allSectors && <TableCell>{row.sector.name}</TableCell>}
+              {assigneeColumns.map((column) => (
+                <NumberCell key={column.key} number={row[column.key]} format={column.format} />
               ))}
-            </TableBody>
-          </Table>
-          {excluded.length > 0 && (
-            <p className="caption border-t border-line-soft px-5 py-3 text-ink-faint">
-              {notApplicable}: {listFormat.format(excluded.map((column) => column.label))}.
-            </p>
+            </TableRow>
+          ))}
+          {assignees.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={lead + assigneeColumns.length}
+                className="py-6 text-center text-ink-faint"
+              >
+                Nenhum atendente com números nestes filtros.
+              </TableCell>
+            </TableRow>
           )}
-        </>
-      ) : (
-        <Empty>
-          <EmptyMedia>
-            <BarChart3 strokeWidth={1.7} aria-hidden />
-          </EmptyMedia>
-          <EmptyDescription>Nenhum atendente com números nestes filtros.</EmptyDescription>
-        </Empty>
+        </TableBody>
+        <TableFooter className="border-t-2 border-line bg-muted font-normal">
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={lead} className="body-strong uppercase tracking-wide">
+              Total
+            </TableCell>
+            {assigneeColumns.map((column) => (
+              <NumberCell
+                key={column.key}
+                number={numbers[column.key]}
+                format={column.format}
+                className="body-strong"
+              />
+            ))}
+          </TableRow>
+          <TableRow className="border-t border-line-soft hover:bg-transparent">
+            <TableCell colSpan={lead} className="body-strong">
+              Do setor
+            </TableCell>
+            <TableCell colSpan={assigneeColumns.length}>
+              <span className="flex flex-wrap gap-x-6">
+                {sectorNumbers.map((item) => (
+                  <span key={item.key}>
+                    {item.label}{' '}
+                    <span className="mono-num body-strong">
+                      {display(numbers[item.key], item.format)}
+                    </span>
+                    {!numbers[item.key].applicable && (
+                      <span className="sr-only"> {notApplicable}</span>
+                    )}
+                  </span>
+                ))}
+              </span>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
+      {excluded.length > 0 && (
+        <p className="caption border-t border-line-soft px-5 py-3 text-ink-faint">
+          {notApplicable}: {listFormat.format(excluded.map((column) => column.label))}.
+        </p>
       )}
     </Card>
   )
@@ -409,7 +445,6 @@ export default function DashboardPage() {
   const { data, error } = useDashboard(filter.search, filter.datesValid)
   const { data: sectors = [] } = useSectors()
   const sector = sectors.find((item) => item.id === filter.sectorId)
-  const numbers = data?.numbers
 
   return (
     <>
@@ -430,34 +465,25 @@ export default function DashboardPage() {
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
-        <KpiSection section="now" title="Agora">
-          <Kpi label="Na fila" number={numbers?.queued} />
-          <Kpi label="Em atendimento" number={numbers?.inProgress} />
-        </KpiSection>
-        <DashboardLists
-          sectorId={filter.sectorId}
-          assigneeId={filter.assigneeId}
-          organizationId={filter.organization?.id}
-          showSector={filter.isAdmin && filter.sectorId === undefined}
-        />
-        <KpiSection section="period" title="No período" detail={periodDetail(data?.period)}>
-          <Kpi label="Recebidos" number={numbers?.received} />
-          <Kpi label="Iniciados" number={numbers?.started} />
-          <Kpi label="Encerrados" number={numbers?.resolved} />
-          <Kpi label="Transferidos" number={numbers?.transferred} />
-          <Kpi label="Cancelados" number={numbers?.cancelled} />
-          <Kpi
-            label="Tempo médio de espera"
-            number={numbers?.averageWaitSeconds}
-            format={formatAverageTime}
+        <Section section="now" title="Agora">
+          <DashboardLists
+            sectorId={filter.sectorId}
+            assigneeId={filter.assigneeId}
+            organizationId={filter.organization?.id}
+            showSector={filter.isAdmin && filter.sectorId === undefined}
           />
-          <Kpi
-            label="Tempo médio de atendimento"
-            number={numbers?.averageHandlingSeconds}
-            format={formatAverageTime}
-          />
-        </KpiSection>
-        {data && <AssigneesCard assignees={data.assignees} allSectors={data.sectorId === null} />}
+        </Section>
+        <Section section="period" title="No período" detail={periodDetail(data?.period)}>
+          {data ? (
+            <PeriodTable
+              assignees={data.assignees}
+              numbers={data.numbers}
+              allSectors={data.sectorId === null}
+            />
+          ) : (
+            <Skeleton className="h-40 w-full" />
+          )}
+        </Section>
       </PageContent>
     </>
   )
