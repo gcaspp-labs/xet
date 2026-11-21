@@ -68,6 +68,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.With(auth.RequireSector("sectorID")).Post("/sectors/{sectorID}/conversations", h.startConversation)
 	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/contacts/{contactID}/open-ticket", h.openTicket)
 	// Registrar atendimento por telefone, já encerrado: todos os papéis do setor; o administrador em qualquer setor ativo.
+	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/phone-tickets/form", h.phoneForm)
 	r.With(auth.RequireSector("sectorID")).Post("/sectors/{sectorID}/phone-tickets", h.registerPhoneTicket)
 	// O serviço confere o setor do chamado e, para responder, o responsável.
 	r.Post("/tickets/{ticketID}/assign", h.assignTicket)

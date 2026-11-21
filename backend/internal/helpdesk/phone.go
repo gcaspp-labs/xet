@@ -32,6 +32,41 @@ type PhoneRegistration struct {
 	AddSolution      bool
 }
 
+// PhoneForm returns what the phone registration window starts with for a
+// contact in a sector: the same data of the closing form (spec #311), without
+// a ticket, since the registration is born closed. A contact of another sector
+// is not refused: the call may come from any client, and the modules shown are
+// the active ones of the sector.
+func (s *Service) PhoneForm(ctx context.Context, actor auth.User, sectorID, contactID int64) (ClosingForm, error) {
+	if !actor.CanAccessSector(sectorID) {
+		return ClosingForm{}, ErrForbidden
+	}
+	sector, err := s.q.GetSector(ctx, sectorID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !sector.Active) {
+		return ClosingForm{}, ErrSectorNotFound
+	} else if err != nil {
+		return ClosingForm{}, fmt.Errorf("get sector: %w", err)
+	}
+	contact, err := s.q.GetContactWithOrganization(ctx, contactID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ClosingForm{}, ErrUnknownContact
+	} else if err != nil {
+		return ClosingForm{}, fmt.Errorf("get contact: %w", err)
+	}
+	form, err := s.closingFormData(ctx, sectorID, contactID, time.Now())
+	if err != nil {
+		return ClosingForm{}, err
+	}
+	if contact.Contact.OrganizationID != nil {
+		org, err := s.q.GetOrganization(ctx, *contact.Contact.OrganizationID)
+		if err != nil {
+			return ClosingForm{}, fmt.Errorf("get organization: %w", err)
+		}
+		form.Organization = &org
+	}
+	return form, nil
+}
+
 // RegisterPhone records a service given by phone as a ticket born closed,
 // with channel phone, in the sector (spec #311). It does not pass through the
 // queue, sends nothing to the messaging provider and does not need the sector

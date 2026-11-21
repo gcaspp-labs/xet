@@ -3,6 +3,7 @@ package helpdesk
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -31,6 +32,32 @@ type phoneTicketRequest struct {
 type phoneTicketResponse struct {
 	ID       int64  `json:"id"`
 	Protocol string `json:"protocol"`
+}
+
+// phoneForm returns what the window starts with for a contact in the sector:
+// the active modules and the subjects with their solutions, the modules of the
+// contact and the suggested organization.
+func (h *Handler) phoneForm(w http.ResponseWriter, r *http.Request) {
+	sectorID, ok := httpx.URLID(w, r, "sectorID", "Setor não encontrado.")
+	if !ok {
+		return
+	}
+	contactID, err := strconv.ParseInt(r.URL.Query().Get("contactId"), 10, 64)
+	if err != nil || contactID <= 0 {
+		httpx.WriteError(w, http.StatusBadRequest, "Escolha o contato.")
+		return
+	}
+	form, err := h.service.PhoneForm(r.Context(), auth.CurrentUser(r.Context()), sectorID, contactID)
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusOK, toClosingFormResponse(form))
+	case errors.Is(err, ErrSectorNotFound):
+		httpx.WriteError(w, http.StatusNotFound, "Setor não encontrado.")
+	case errors.Is(err, ErrUnknownContact):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Contato não encontrado.")
+	default:
+		h.ticketError(w, r, err)
+	}
 }
 
 // registerPhoneTicket records a service given by phone, born closed.
