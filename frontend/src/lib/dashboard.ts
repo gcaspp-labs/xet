@@ -71,6 +71,10 @@ export function useDashboardAssignees(sectorId: number | undefined) {
 const namedPeriods = ['today', '7d', '30d'] as const
 export type PeriodChoice = (typeof namedPeriods)[number] | 'custom'
 
+// Canal do atendimento: por onde ele aconteceu. Sem escolha, todos os canais.
+const dashboardChannels = ['whatsapp', 'phone'] as const
+export type DashboardChannel = (typeof dashboardChannels)[number]
+
 function positiveId(raw: string | null) {
   return raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined
 }
@@ -89,6 +93,7 @@ export function useDashboardFilter() {
   const moduleId = sectorId === undefined ? undefined : positiveId(params.get('moduleId'))
   const organizationId = positiveId(params.get('organizationId'))
   const organizationLabel = params.get('organization') ?? ''
+  const channel = dashboardChannels.find((value) => value === params.get('channel'))
 
   const custom = params.has('from') || params.has('to')
   const from = params.get('from') ?? ''
@@ -106,14 +111,14 @@ export function useDashboardFilter() {
     } else {
       query.set('period', named)
     }
-    const filters = { sectorId, assigneeId, moduleId, organizationId }
+    const filters = { sectorId, channel, assigneeId, moduleId, organizationId }
     for (const [name, value] of Object.entries(filters)) {
       if (value !== undefined) {
         query.set(name, String(value))
       }
     }
     return query.toString()
-  }, [custom, from, to, named, sectorId, assigneeId, moduleId, organizationId])
+  }, [custom, from, to, named, sectorId, channel, assigneeId, moduleId, organizationId])
 
   // A busca de órgãos não acha um órgão pelo id: o nome vem do endereço, só para mostrar no
   // campo. Os números seguem o id.
@@ -153,6 +158,7 @@ export function useDashboardFilter() {
     assigneeId,
     moduleId,
     organization,
+    channel,
     period,
     from,
     to,
@@ -167,6 +173,8 @@ export function useDashboardFilter() {
       }),
     setAssignee: (value: number | undefined) =>
       update((next) => setOrDelete(next, 'assigneeId', value?.toString())),
+    setChannel: (value: DashboardChannel | undefined) =>
+      update((next) => setOrDelete(next, 'channel', value)),
     setModule: (value: number | undefined) =>
       update((next) => setOrDelete(next, 'moduleId', value?.toString())),
     setOrganization: (value: Organization | null, label: string) =>

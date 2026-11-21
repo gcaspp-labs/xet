@@ -8,6 +8,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/auth"
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
+	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
 // dashboardNumber tells "does not apply to the filter" (applicable false) from
@@ -97,9 +98,23 @@ func dashboardFilterID(r *http.Request, name string) (*int64, bool) {
 	return &id, true
 }
 
+// dashboardFilterChannel reads the optional ?channel= of the query, WhatsApp
+// or phone. Without it, the channel does not filter.
+func dashboardFilterChannel(r *http.Request) (*db.TicketChannel, bool) {
+	raw := r.URL.Query().Get("channel")
+	if raw == "" {
+		return nil, true
+	}
+	channel := db.TicketChannel(raw)
+	if channel != db.TicketChannelWhatsapp && channel != db.TicketChannelPhone {
+		return nil, false
+	}
+	return &channel, true
+}
+
 // dashboard returns the numbers and the table of the dashboard, with the
-// filters ?period= or ?from= and ?to=, ?sectorId=, ?assigneeId=, ?moduleId=
-// and ?organizationId=.
+// filters ?period= or ?from= and ?to=, ?sectorId=, ?channel=, ?assigneeId=,
+// ?moduleId= and ?organizationId=.
 func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	from, to, ok := dashboardPeriod(r)
 	if !ok {
@@ -110,13 +125,15 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	assigneeID, okAssignee := dashboardFilterID(r, "assigneeId")
 	moduleID, okModule := dashboardFilterID(r, "moduleId")
 	organizationID, okOrganization := dashboardFilterID(r, "organizationId")
-	if !okSector || !okAssignee || !okModule || !okOrganization {
+	channel, okChannel := dashboardFilterChannel(r)
+	if !okSector || !okAssignee || !okModule || !okOrganization || !okChannel {
 		httpx.WriteError(w, http.StatusBadRequest, "Filtro inválido.")
 		return
 	}
 
 	result, err := h.service.Dashboard(r.Context(), auth.CurrentUser(r.Context()), DashboardFilter{
 		From: from, To: to, SectorID: sectorID, AssigneeID: assigneeID, ModuleID: moduleID, OrganizationID: organizationID,
+		Channel: channel,
 	})
 	switch {
 	case errors.Is(err, ErrForbidden):
