@@ -43,6 +43,7 @@ export function FormDialog({
   onSubmit,
   children,
   extra,
+  back,
   locked = false,
   question,
 }: {
@@ -58,6 +59,8 @@ export function FormDialog({
   onSubmit: FormEventHandler<HTMLFormElement>
   children: ReactNode
   extra?: ReactNode
+  // Etapa anterior na mesma janela, no rodapé antes de Cancelar (design.md, Assunto do formulário).
+  back?: { label: string; onClick: () => void }
   locked?: boolean
   question?: FormQuestion | null
 }) {
@@ -137,6 +140,11 @@ export function FormDialog({
           </DialogFooter>
         ) : (
           <DialogFooter>
+            {back && (
+              <Button variant="ghost" disabled={pending} onClick={back.onClick}>
+                {back.label}
+              </Button>
+            )}
             <DialogClose render={<Button variant="ghost" />}>{cancelLabel}</DialogClose>
             {submitLabel && (
               <Button type="submit" form={formId} disabled={pending}>

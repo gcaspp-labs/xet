@@ -8,7 +8,10 @@ import { cn } from '@/lib/utils'
 // Um cartão de contato dentro do balão. O recebido fica sobre o fundo do balão e tem o botão de
 // copiar em cada telefone; o enviado fica sobre o fundo do cartão, como o cliente o recebeu, sem
 // botão nenhum. O nome acessível do grupo é "Contato: Nome, telefone".
-function ContactCardItem({ card, outbound }: { card: ContactCard; outbound: boolean }) {
+//
+// É o mesmo componente na conversa e na prévia da janela "Enviar contato", que mostra o cartão no
+// formato do enviado.
+export function ContactCardItem({ card, outbound }: { card: ContactCard; outbound: boolean }) {
   const phones = card.phones.map((entry) => entry.phone)
   const label =
     phones.length > 0
