@@ -8,7 +8,10 @@ import {
 } from '@playwright/test'
 import {
   admin,
+  adminApi,
   json,
+  municipalityId,
+  ok,
   openQueued,
   queuedTicketId,
   recordToasts,
@@ -22,7 +25,13 @@ type Reactions = {
   customer: { emoji: string; at: string } | null
   sector: { emoji: string; at: string; by: unknown; viaPhone: boolean } | null
 }
-type ApiMessage = { id: number; body: string | null; reactions: Reactions }
+type ApiMessage = {
+  id: number
+  direction: string
+  type: string
+  body: string | null
+  reactions: Reactions
+}
 
 async function connectSector(baseURL: string, sectorId: number) {
   const api = await apiRequest.newContext({ baseURL })
@@ -452,4 +461,126 @@ test('teclado e leitor de tela: botão, barra, "+", seletor, reação e quem rea
   await expect(mine).toHaveAccessibleName(/^Setor reagiu com ❤️, agent \d+$/)
   await expect(customer).toHaveAccessibleName('Cliente reagiu com 👍')
   await expect(message.getByRole('list', { name: 'Reações' })).toBeVisible()
+})
+
+// O cartão de contato de João Silva, nos dois sentidos.
+const joaoCard = {
+  name: 'João Silva',
+  organization: 'Prefeitura de Itu',
+  phones: [{ phone: '5511988881234', whatsAppId: '5511988881234' }],
+}
+
+// Setor conectado e pareado, com um cartão de contato recebido do cliente, no chamado assumido.
+// Devolve o identificador externo do cartão, para a reação do cliente chegar pela rota de teste.
+async function openCardConversation(page: Page, request: APIRequestContext, baseURL: string) {
+  const seed = await seedSector(baseURL)
+  await connectSector(baseURL, seed.sector.id)
+  await simulateMessaging(request, seed.sector.id, 'pair')
+  const { phone, id } = unique()
+  const externalId = `E2E-REACT-CARD-${id}`
+  await simulateMessaging(request, seed.sector.id, 'receive', {
+    externalMessageId: externalId,
+    phone,
+    contactName: 'Clara Cartão',
+    type: 'contact',
+    contactCards: [joaoCard],
+  })
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, 'Clara Cartão')
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  const card = conversation
+    .getByRole('listitem', { name: 'Mensagem recebida' })
+    .filter({ has: page.getByRole('group', { name: /^Contato: João Silva,/ }) })
+  return { ...seed, conversation, card, externalId, phone }
+}
+
+// As reações guardadas no cartão, como a API as entrega.
+async function cardReactions(page: Page, ticketId: number) {
+  const messages = await json<ApiMessage[]>(
+    await page.request.get(`/api/tickets/${ticketId}/messages`),
+  )
+  const card = messages.find(
+    (message) => message.type === 'contact' && message.direction === 'inbound',
+  )
+  expect(card).toBeTruthy()
+  return card!.reactions
+}
+
+// Um contato do diretório no setor, para o cartão enviado pelo setor; devolve o id do contato.
+async function seedContact(baseURL: string, sectorId: number, name: string, phoneNumber: string) {
+  const api = await adminApi(baseURL)
+  const { id } = unique()
+  const organization = await json<{ id: number }>(
+    await api.post('/api/organizations', {
+      data: { name: `Órgão ${id}`, municipalityId: await municipalityId(api) },
+    }),
+  )
+  const contact = await json<{ id: number }>(
+    await api.post('/api/contacts', {
+      data: { name, phone: phoneNumber, organizationId: organization.id, sectorIds: [sectorId] },
+    }),
+  )
+  await api.dispose()
+  return contact.id
+}
+
+test('reação ao cartão de contato, recebido e enviado, e a do cliente embaixo do cartão', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { conversation, card, externalId, phone, sector, agent } = await openCardConversation(
+    page,
+    request,
+    baseURL!,
+  )
+  const ticketId = Number(new URL(page.url()).pathname.split('/').pop())
+  await expect(card).toBeVisible()
+
+  // A reação do cliente ao cartão aparece embaixo dele, como nas outras mensagens.
+  await simulateMessaging(request, sector.id, 'react', {
+    targetExternalMessageId: externalId,
+    phone,
+    emoji: '❤️',
+  })
+  await expect(card.getByRole('listitem', { name: 'Cliente reagiu com ❤️' })).toBeVisible()
+  await expect.poll(async () => (await cardReactions(page, ticketId)).customer?.emoji).toBe('❤️')
+
+  // O responsável reage ao cartão recebido pela barra de reações.
+  const onReceived = await openReactionBar(page, card)
+  await onReceived.getByRole('button', { name: 'Reagir com 👍' }).click()
+  await expect(sectorChip(card, '👍')).toContainText(/agent \d+/)
+  await expect.poll(async () => (await cardReactions(page, ticketId)).sector?.emoji).toBe('👍')
+
+  // Um cartão enviado pelo setor, já com o identificador do WhatsApp, também aceita reação.
+  const name = `Rita ${unique().id}`
+  const contactId = await seedContact(baseURL!, sector.id, name, unique().phone)
+  const api = await apiRequest.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  ok(
+    await api.post(`/api/tickets/${ticketId}/messages/contact`, {
+      data: { contactId, clientRequestId: crypto.randomUUID() },
+    }),
+  )
+  await api.dispose()
+
+  await page.reload()
+  const sent = conversation
+    .getByRole('listitem', { name: 'Mensagem enviada' })
+    .filter({ has: page.getByRole('group', { name: new RegExp(`^Contato: ${name},`) }) })
+  await expect(sent).toContainText('Enviada')
+  const onSent = await openReactionBar(page, sent)
+  await onSent.getByRole('button', { name: 'Reagir com 🙏' }).click()
+  await expect(sectorChip(sent, '🙏')).toBeVisible()
+
+  // A reação ficou gravada no cartão enviado, sem virar outra mensagem.
+  const stored = await json<ApiMessage[]>(
+    await page.request.get(`/api/tickets/${ticketId}/messages`),
+  )
+  const sentCard = stored.find(
+    (message) => message.type === 'contact' && message.direction === 'outbound',
+  )
+  expect(sentCard?.reactions.sector?.emoji).toBe('🙏')
+  await expect(conversation.getByRole('listitem', { name: 'Mensagem enviada' })).toHaveCount(1)
 })
