@@ -921,6 +921,80 @@ test('cartão de contato: o menu diz que não pode ser editado, excluir para tod
   ).toHaveCount(0)
 })
 
+test('cartão de contato recebido que o cliente excluiu aparece na janela de exclusão como recebido', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone: sender } = unique()
+  // O contato do chamado precisa estar cadastrado para o encerramento.
+  const nina = await seedContact(baseURL!, sector.id, `Nina ${id}`, sender)
+  const cardPhone = `551196${id.slice(-6)}`
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-328-IN-${id}`,
+    phone: sender,
+    contactName: `Nina ${id}`,
+    body: 'Segue o contato do meu filho',
+  })
+  // O cliente compartilha um cartão e depois o apaga: o cartão continua guardado.
+  const cardMessageId = `E2E-328-CARD-${id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: cardMessageId,
+    phone: sender,
+    contactName: `Nina ${id}`,
+    type: 'contact',
+    contactCards: [
+      {
+        name: `Diego ${id}`,
+        organization: 'Prefeitura Teste',
+        phones: [{ phone: cardPhone }],
+      },
+    ],
+  })
+  await openAssigned(page, agent, `Nina ${id}`)
+  const ticketId = ticketIdOf(page)
+  await phone(request, sector.id, 'revoke', {
+    targetExternalMessageId: cardMessageId,
+    phone: sender,
+  })
+
+  const admins = await adminApi(baseURL!)
+  const module = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }),
+  )
+  await admins.dispose()
+  ok(
+    await page.request.post(`/api/tickets/${ticketId}/close`, {
+      data: {
+        subject: 'Contracheque',
+        resolution: 'Orientei o contato.',
+        moduleIds: [module.id],
+        organizationId: nina.organizationId,
+      },
+    }),
+  )
+
+  // Em Atendimentos, o cartão recebido excluído abre a janela com o conteúdo preservado do jeito
+  // recebido: sem o formato do enviado e com o botão de copiar telefone.
+  await page.goto(`/atendimentos/${ticketId}`)
+  const received = page
+    .getByRole('listitem', { name: 'Mensagem recebida' })
+    .filter({ has: page.getByRole('group', { name: new RegExp(`^Contato: Diego ${id},`) }) })
+  await expect(received).toContainText('Excluída')
+  await received.getByRole('button', { name: 'Ver exclusão' }).click()
+  const changes = page.getByRole('dialog', { name: 'Mensagem excluída' })
+  await expect(changes).toContainText('Para todos (também no WhatsApp)')
+  const preserved = changes.getByTestId('message-preserved-contact')
+  await expect(preserved).toContainText(`Diego ${id}`)
+  await expect(
+    preserved.getByRole('group', { name: new RegExp(`^Contato: Diego ${id},`) }),
+  ).toBeVisible()
+  await expect(preserved.getByRole('button', { name: /^Copiar telefone / })).toBeVisible()
+})
+
 test('cartão de contato com falha só aceita excluir para mim', async ({
   page,
   request,

@@ -265,3 +265,4 @@ Acompanha a spec [#312](https://github.com/gcaspp-labs/xet/issues/312) (envio na
 | K11 | No celular do cliente, responder citando o cartão que o setor enviou | O painel mostra a citação com o nome do contato do cartão | Pendente |
 | K12 | No painel, responder com texto citando um cartão recebido | O celular mostra a bolha da citação no cartão certo, com o nome | Pendente |
 | K13 | No painel, enviar um cartão como resposta citando uma mensagem do cliente | O cartão chega ao celular com a bolha da citação na mensagem certa | Pendente |
+| K14 | No painel, excluir para todos um cartão enviado | O cartão some do celular do cliente | Pendente |

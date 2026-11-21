@@ -145,7 +145,10 @@ export function MessageChangesDialog({
             message.contactCards.length > 0 && (
               <div data-testid="message-preserved-contact" className="flex flex-col gap-1">
                 <p className="caption text-ink-soft">Conteúdo da mensagem</p>
-                <ContactCards cards={message.contactCards} outbound />
+                <ContactCards
+                  cards={message.contactCards}
+                  outbound={message.direction === 'outbound'}
+                />
               </div>
             )}
           {message.deletion && deletionScope && (
