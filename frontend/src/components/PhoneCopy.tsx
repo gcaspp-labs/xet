@@ -3,8 +3,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { dialPhone, formatPhone } from '@/lib/format'
 
-// Mesmo padrão de cópia e aviso de SubjectsTab.tsx.
-async function copyPhone(phone: string) {
+// Mesmo padrão de cópia e aviso de SubjectsTab.tsx. Também usado pelo cartão de contato.
+export async function copyPhone(phone: string) {
   try {
     await navigator.clipboard.writeText(dialPhone(phone))
     toast.success('Telefone copiado')

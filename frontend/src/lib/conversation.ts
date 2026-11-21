@@ -75,7 +75,7 @@ export type Message = {
     scope: 'everyone' | 'local'
     origin: 'customer' | 'agent' | 'phone'
   } | null
-  // Cartões da mensagem de contato, em ordem; nulo nos outros tipos. A tela ainda não os mostra.
+  // Cartões da mensagem de contato, em ordem; nulo nos outros tipos.
   contactCards: ContactCard[] | null
 }
 

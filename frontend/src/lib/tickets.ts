@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Role } from '@/lib/auth'
 
-// 'contact' (cartão de contato) aparece como não suportado até a fatia da tela (spec #312).
+// 'contact' é o cartão de contato, mostrado como cartão na conversa (spec #312).
 export type MessageType =
   | 'text'
   | 'image'
@@ -82,7 +82,7 @@ const mediaLabels: Record<Exclude<MessageType, 'text'>, string> = {
   video: 'Vídeo',
   audio: 'Áudio',
   document: 'Documento',
-  contact: 'Tipo de mensagem não suportado',
+  contact: 'Contato',
   unsupported: 'Tipo de mensagem não suportado',
   media_unavailable: 'Arquivo não pôde ser baixado',
 }
@@ -101,11 +101,14 @@ export function lastMessagePreview(ticket: TicketSummary) {
       ? message.body?.replace(/^\*([^*\n]+:)\*(?:\n|$)/, '$1 ')
       : message.body
   const content =
-    message.type === 'text'
-      ? (body ?? '')
-      : body
-        ? `${mediaLabels[message.type]}: ${body}`
-        : mediaLabels[message.type]
+    message.type === 'contact'
+      ? // Cartão de contato: o nome do primeiro cartão, como no WhatsApp.
+        `👤 ${message.contactName ?? 'Contato'}`
+      : message.type === 'text'
+        ? (body ?? '')
+        : body
+          ? `${mediaLabels[message.type]}: ${body}`
+          : mediaLabels[message.type]
   return message.origin === 'phone' ? `Pelo celular: ${content}` : content
 }
 

@@ -33,6 +33,7 @@ import {
 } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { AudioPlayer } from '@/components/AudioPlayer'
+import { ContactCards } from '@/components/ContactCards'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { DeleteMessageDialog, MessageMenu } from '@/components/MessageActions'
 import { MessageChangesDialog } from '@/components/MessageChanges'
@@ -377,7 +378,8 @@ function MessageBubble({
         <div
           data-slot="message-bubble"
           className={cn(
-            'flex min-w-0 flex-col gap-1 rounded-(--radius-12) border px-3 py-2',
+            'flex min-w-0 flex-col gap-1 rounded-(--radius-12) border',
+            message.type === 'contact' && !hidden ? 'p-2' : 'px-3 py-2',
             modern
               ? outbound
                 ? 'rounded-br-(--radius-6) border-primary bg-primary text-primary-foreground'
@@ -410,8 +412,16 @@ function MessageBubble({
           {!hidden && message.type === 'media_unavailable' && (
             <p className="italic text-ink-soft">Arquivo não pôde ser baixado</p>
           )}
-          {hidden ? null : message.type === 'unsupported' || message.type === 'contact' ? (
+          {hidden ? null : message.type === 'unsupported' ? (
             <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
+          ) : message.type === 'contact' ? (
+            // Cartão de contato: um balão por mensagem, com um cartão para cada contato recebido
+            // de uma vez. Sem cartões, a mensagem cai no aviso de sempre.
+            message.contactCards && message.contactCards.length > 0 ? (
+              <ContactCards cards={message.contactCards} outbound={outbound} />
+            ) : (
+              <p className="italic text-ink-soft">Tipo de mensagem não suportado</p>
+            )
           ) : (
             message.body && (
               <p className="whitespace-pre-wrap break-words">
