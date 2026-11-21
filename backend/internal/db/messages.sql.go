@@ -60,7 +60,7 @@ values (
     $9, $10, $11, $12
 )
 on conflict (client_request_id) where client_request_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
 `
 
 type CreateAgentMessageParams struct {
@@ -123,6 +123,7 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 		&i.DeletedAt,
 		&i.DeletionScope,
 		&i.DeletionOrigin,
+		&i.ContactCards,
 	)
 	return i, err
 }
@@ -233,14 +234,14 @@ func (q *Queries) CreateOriginalVersion(ctx context.Context, messageID int64) er
 const createProviderMessage = `-- name: CreateProviderMessage :one
 insert into messages (
     ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at,
-    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards
 )
 values (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-    $12, $13, $14, $15
+    $12, $13, $14, $15, $16
 )
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
 `
 
 type CreateProviderMessageParams struct {
@@ -259,6 +260,7 @@ type CreateProviderMessageParams struct {
 	QuotedMessageID         *int64
 	QuotedType              NullMessageType
 	QuotedBody              *string
+	ContactCards            []byte
 }
 
 // Message that came from the provider (received, or sent from the phone).
@@ -280,6 +282,7 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 		arg.QuotedMessageID,
 		arg.QuotedType,
 		arg.QuotedBody,
+		arg.ContactCards,
 	)
 	var i Message
 	err := row.Scan(
@@ -308,6 +311,7 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 		&i.DeletedAt,
 		&i.DeletionScope,
 		&i.DeletionOrigin,
+		&i.ContactCards,
 	)
 	return i, err
 }
@@ -420,7 +424,7 @@ func (q *Queries) GetMediaFileTicket(ctx context.Context, mediaID *int64) (int64
 }
 
 const getMessage = `-- name: GetMessage :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards from messages
 where id = $1
 `
 
@@ -453,12 +457,13 @@ func (q *Queries) GetMessage(ctx context.Context, id int64) (Message, error) {
 		&i.DeletedAt,
 		&i.DeletionScope,
 		&i.DeletionOrigin,
+		&i.ContactCards,
 	)
 	return i, err
 }
 
 const getMessageByClientRequestID = `-- name: GetMessageByClientRequestID :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards from messages
 where client_request_id = $1
 `
 
@@ -491,6 +496,7 @@ func (q *Queries) GetMessageByClientRequestID(ctx context.Context, clientRequest
 		&i.DeletedAt,
 		&i.DeletionScope,
 		&i.DeletionOrigin,
+		&i.ContactCards,
 	)
 	return i, err
 }
@@ -555,7 +561,8 @@ func (q *Queries) LinkMessageChange(ctx context.Context, arg LinkMessageChangePa
 }
 
 const listLastMessages = `-- name: ListLastMessages :many
-select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_origin
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_origin,
+    coalesce(contact_cards -> 0 ->> 'name', '')::text as contact_name
 from messages
 where ticket_id = any($1::bigint[])
 order by ticket_id, sent_at desc, id desc
@@ -568,11 +575,12 @@ type ListLastMessagesRow struct {
 	Origin         MessageOrigin
 	SentAt         time.Time
 	DeletionOrigin NullMessageOrigin
+	ContactName    string
 }
 
 // Last message of each ticket, for the ticket lists, with who deleted it: the
 // list never shows content hidden by the system (deleted through the XET, for
-// me or for everyone).
+// me or for everyone), and the name of the first card of a contact message.
 func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]ListLastMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listLastMessages, ticketIds)
 	if err != nil {
@@ -589,6 +597,7 @@ func (q *Queries) ListLastMessages(ctx context.Context, ticketIds []int64) ([]Li
 			&i.Origin,
 			&i.SentAt,
 			&i.DeletionOrigin,
+			&i.ContactName,
 		); err != nil {
 			return nil, err
 		}
@@ -708,7 +717,7 @@ select
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
     rs.via_phone as sector_reaction_via_phone,
     m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body,
-    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin
+    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin, m.contact_cards
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
@@ -751,6 +760,7 @@ type ListTicketMessagesRow struct {
 	DeletedAt                *time.Time
 	DeletionScope            NullMessageDeletionScope
 	DeletionOrigin           NullMessageOrigin
+	ContactCards             []byte
 }
 
 func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]ListTicketMessagesRow, error) {
@@ -794,6 +804,7 @@ func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]Lis
 			&i.DeletedAt,
 			&i.DeletionScope,
 			&i.DeletionOrigin,
+			&i.ContactCards,
 		); err != nil {
 			return nil, err
 		}
@@ -858,7 +869,7 @@ const markMessageFailed = `-- name: MarkMessageFailed :one
 update messages
 set status = 'failed', failure_reason = $1
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
 `
 
 type MarkMessageFailedParams struct {
@@ -895,6 +906,7 @@ func (q *Queries) MarkMessageFailed(ctx context.Context, arg MarkMessageFailedPa
 		&i.DeletedAt,
 		&i.DeletionScope,
 		&i.DeletionOrigin,
+		&i.ContactCards,
 	)
 	return i, err
 }
@@ -903,7 +915,7 @@ const markMessageSent = `-- name: MarkMessageSent :one
 update messages
 set status = 'sent', external_message_id = $1, failure_reason = null
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
 `
 
 type MarkMessageSentParams struct {
@@ -940,6 +952,7 @@ func (q *Queries) MarkMessageSent(ctx context.Context, arg MarkMessageSentParams
 		&i.DeletedAt,
 		&i.DeletionScope,
 		&i.DeletionOrigin,
+		&i.ContactCards,
 	)
 	return i, err
 }
@@ -1044,7 +1057,7 @@ const retryMessage = `-- name: RetryMessage :one
 update messages
 set status = 'pending', failure_reason = null
 where id = $1 and status = 'failed' and deleted_at is null
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
 `
 
 // Only a failed message goes back to pending, so a double click retries once.
@@ -1078,6 +1091,7 @@ func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
 		&i.DeletedAt,
 		&i.DeletionScope,
 		&i.DeletionOrigin,
+		&i.ContactCards,
 	)
 	return i, err
 }

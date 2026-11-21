@@ -207,11 +207,27 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 		doc := m.GetDocumentMessage()
 		msg.Type, msg.Body = messaging.TypeDocument, doc.GetCaption()
 		s.attach(ctx, &msg, doc, doc.GetMimetype(), doc.GetFileName(), 0)
+	case m.GetContactMessage() != nil:
+		sharedContacts(&msg, []*waE2E.ContactMessage{m.GetContactMessage()})
+	case m.GetContactsArrayMessage() != nil:
+		sharedContacts(&msg, m.GetContactsArrayMessage().GetContacts())
 	default:
 		msg.Type = messaging.TypeUnsupported
 	}
 	msg.Quote = quote(m)
 	return msg, true
+}
+
+// sharedContacts makes the message a contact message with the cards of its vCards.
+// Without a card that can be read it is unsupported, as before cards were
+// read, so a malformed vCard never stops the reception.
+func sharedContacts(msg *messaging.Message, contacts []*waE2E.ContactMessage) {
+	cards, ok := contactCards(contacts)
+	if !ok {
+		msg.Type = messaging.TypeUnsupported
+		return
+	}
+	msg.Type, msg.ContactCards = messaging.TypeContact, cards
 }
 
 // quote reads the message a reply cites, from the context of a text or media
@@ -223,7 +239,7 @@ func quote(m *waE2E.Message) *messaging.Quote {
 	var info *waE2E.ContextInfo
 	for _, c := range []interface{ GetContextInfo() *waE2E.ContextInfo }{
 		m.GetExtendedTextMessage(), m.GetImageMessage(), m.GetVideoMessage(),
-		m.GetAudioMessage(), m.GetDocumentMessage(),
+		m.GetAudioMessage(), m.GetDocumentMessage(), m.GetContactMessage(), m.GetContactsArrayMessage(),
 	} {
 		if info = c.GetContextInfo(); info != nil {
 			break

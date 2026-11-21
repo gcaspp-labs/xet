@@ -2,8 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Role } from '@/lib/auth'
 
+// 'contact' (cartão de contato) aparece como não suportado até a fatia da tela (spec #312).
 export type MessageType =
-  'text' | 'image' | 'video' | 'audio' | 'document' | 'unsupported' | 'media_unavailable'
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'document'
+  | 'contact'
+  | 'unsupported'
+  | 'media_unavailable'
 
 export type TicketSummary = {
   id: number
@@ -22,6 +30,8 @@ export type TicketSummary = {
     sentAt: string
     // Mensagem excluída só no XET ("para mim"): a lista mostra um aviso, e o conteúdo não vem.
     hidden?: boolean
+    // Nome do primeiro cartão da mensagem de contato; nulo nos outros tipos.
+    contactName?: string | null
   } | null
 }
 
@@ -72,6 +82,7 @@ const mediaLabels: Record<Exclude<MessageType, 'text'>, string> = {
   video: 'Vídeo',
   audio: 'Áudio',
   document: 'Documento',
+  contact: 'Tipo de mensagem não suportado',
   unsupported: 'Tipo de mensagem não suportado',
   media_unavailable: 'Arquivo não pôde ser baixado',
 }

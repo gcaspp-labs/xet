@@ -19,6 +19,9 @@ type lastMessageResponse struct {
 	// todos"): the list shows a notice, and the content is not sent. One deleted
 	// by the customer or from the sector's phone keeps its known content.
 	Hidden bool `json:"hidden"`
+	// ContactName is the name of the first card of a contact message, for
+	// the preview; null in the other types and when the message is hidden.
+	ContactName *string `json:"contactName"`
 }
 
 type ticketSummaryResponse struct {
@@ -52,8 +55,11 @@ func toTicketSummaryResponse(t Summary) ticketSummaryResponse {
 	}
 	if m := t.LastMessage; m != nil {
 		out.LastMessage = &lastMessageResponse{Type: m.Type, Body: m.Body, Origin: m.Origin, SentAt: m.SentAt}
+		if m.Type == db.MessageTypeContact {
+			out.LastMessage.ContactName = optional(m.ContactName)
+		}
 		if m.DeletionOrigin.Valid && m.DeletionOrigin.MessageOrigin == db.MessageOriginAgent {
-			out.LastMessage.Body, out.LastMessage.Hidden = nil, true
+			out.LastMessage.Body, out.LastMessage.ContactName, out.LastMessage.Hidden = nil, nil, true
 		}
 	}
 	return out

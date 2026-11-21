@@ -563,3 +563,92 @@ func TestTicketChannelKeepsExistingTicketsAsWhatsApp(t *testing.T) {
 		t.Fatal("down with a phone ticket: accepted")
 	}
 }
+
+// Os cartões de contato (#323) chegam sem mudar as mensagens existentes: a
+// antiga 'unsupported' continua 'unsupported' e sem cartões. Só a mensagem
+// 'contact' tem cartões, sempre ao menos um, e a volta recusa apagá-los.
+func TestContactCardsKeepExistingMessages(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 32); err != nil {
+		t.Fatalf("up to 32: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into contacts (name, registered) values ('Maria', false);
+		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000001', 1, 1, 'queued', now(), now());
+		insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, body, external_message_id, sent_at)
+		values (1, 1, 1, 'inbound', 'customer', 'text', 'Oi', 'IN-1', now()),
+		       (1, 1, 1, 'inbound', 'customer', 'unsupported', null, 'IN-2', now());`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	const snapshot = `select string_agg(row_to_json(m)::text, '|' order by id) from (
+		select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id,
+		    client_request_id, status, failure_reason, sent_at, created_at, quoted_external_message_id, quoted_message_id,
+		    quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin from messages) m`
+	var before, after string
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 34); err != nil {
+		t.Fatalf("up to 34: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("messages changed:\nbefore %s\nafter  %s", before, after)
+	}
+	var unsupported, withCards int
+	if err := db.QueryRowContext(ctx, `
+		select count(*) filter (where type = 'unsupported'), count(contact_cards) from messages`).Scan(&unsupported, &withCards); err != nil {
+		t.Fatal(err)
+	}
+	if unsupported != 1 || withCards != 0 {
+		t.Fatalf("unsupported = %d, with cards = %d", unsupported, withCards)
+	}
+
+	const insert = `insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, external_message_id, sent_at, contact_cards)
+		values (1, 1, 1, 'inbound', 'customer', $1, $2, now(), $3::jsonb)`
+	for name, args := range map[string][]any{
+		"contact without cards":   {"contact", "IN-3", nil},
+		"contact with empty list": {"contact", "IN-3", `[]`},
+		"contact with object":     {"contact", "IN-3", `{"name": "João"}`},
+		"text with cards":         {"text", "IN-3", `[{"name": "João", "phones": []}]`},
+		"unsupported with cards":  {"unsupported", "IN-3", `[{"name": "João", "phones": []}]`},
+	} {
+		if _, err := db.ExecContext(ctx, insert, args...); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+
+	// Sem mensagem de contato, a volta desfaz tudo; com uma, é recusada.
+	if _, err := p.DownTo(ctx, 32); err != nil {
+		t.Fatalf("down to 32: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("messages changed by down:\nbefore %s\nafter  %s", before, after)
+	}
+	if _, err := p.UpTo(ctx, 34); err != nil {
+		t.Fatalf("up again: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, insert, "contact", "IN-3",
+		`[{"name": "João", "organization": "Prefeitura", "phones": [{"phone": "5511977776666", "wa_id": "5511977776666"}]}]`); err != nil {
+		t.Fatalf("contact message: %v", err)
+	}
+	if _, err := p.DownTo(ctx, 32); err == nil {
+		t.Fatal("down with a contact message: accepted")
+	}
+}

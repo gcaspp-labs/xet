@@ -20,11 +20,11 @@ where sector_id = @sector_id and external_message_id = @external_message_id and 
 -- A message already recorded returns no row.
 insert into messages (
     ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at,
-    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards
 )
 values (
     @ticket_id, @sector_id, @contact_id, @direction, @origin, @type, @body, @media_id, @external_message_id, @status, @sent_at,
-    @quoted_external_message_id, @quoted_message_id, @quoted_type, @quoted_body
+    @quoted_external_message_id, @quoted_message_id, @quoted_type, @quoted_body, @contact_cards
 )
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
 returning *;
@@ -32,8 +32,9 @@ returning *;
 -- name: ListLastMessages :many
 -- Last message of each ticket, for the ticket lists, with who deleted it: the
 -- list never shows content hidden by the system (deleted through the XET, for
--- me or for everyone).
-select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_origin
+-- me or for everyone), and the name of the first card of a contact message.
+select distinct on (ticket_id) ticket_id, type, body, origin, sent_at, deletion_origin,
+    coalesce(contact_cards -> 0 ->> 'name', '')::text as contact_name
 from messages
 where ticket_id = any(@ticket_ids::bigint[])
 order by ticket_id, sent_at desc, id desc;
@@ -117,7 +118,7 @@ select
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
     rs.via_phone as sector_reaction_via_phone,
     m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body,
-    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin
+    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin, m.contact_cards
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
