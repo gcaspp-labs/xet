@@ -2,7 +2,7 @@
 
 O que a `merge-gate` confere antes de um merge sem a pessoa, e como classificar o risco de cada ticket. Na dúvida, a trava chama a pessoa.
 
-O script da `merge-gate` lê os **blocos de código com nome** deste arquivo (`checks`, `sensitive-paths`, `auto-merge-risk`, `marker`, `merge-method`). Edite o conteúdo dos blocos, mas mantenha os nomes.
+O script da `merge-gate` lê os **blocos de código com nome** deste arquivo (`checks`, `sensitive-paths`, `auto-merge-risk`, `command-mode-risk`, `marker`, `merge-method`). Edite o conteúdo dos blocos, mas mantenha os nomes.
 
 ## Checks obrigatórios
 
@@ -57,6 +57,12 @@ Os riscos que podem entrar sem a pessoa quando a trava passa, um rótulo por lin
 ```auto-merge-risk
 risk:low
 risk:medium
+```
+
+Os riscos que entram sem a pessoa **só enquanto o modo comando estiver ligado**, um rótulo por linha. O modo comando é uma janela com fim que a pessoa entrega ao Chief (ex.: até 06:00); passou do horário, desliga sozinho, e a trava não aceita janela com mais de 24h. Todas as outras checagens continuam valendo: CI verde, parecer `approve` no último commit, nenhuma área sensível, nenhum teste removido, um único ticket. Liga e desliga na raiz do repo com o `command-mode.sh` da skill `merge-gate` (`on 06:00`, `status`, `off`), só quando a pessoa pedir. Quando o modo comando é o que libera o merge, a trava imprime uma linha `COMMAND MODE:`, que vai no comentário do PR.
+
+```command-mode-risk
+risk:high
 ```
 
 Método de merge (`merge`, `squash` ou `rebase`):
