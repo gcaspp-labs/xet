@@ -59,13 +59,13 @@ risk:low
 risk:medium
 ```
 
-Os riscos que entram sem a pessoa **só enquanto o modo comando estiver ligado**, um rótulo por linha. O modo comando é uma janela com fim que a pessoa entrega ao Chief (ex.: até 06:00); passou do horário, desliga sozinho, e a trava não aceita janela com mais de 24h. Com a janela aberta, as áreas sensíveis também deixam de barrar, em qualquer risco, menos as travadas (bloco abaixo). As outras checagens continuam valendo: CI verde, parecer `approve` no último commit, nenhum teste removido, um único ticket. Fora da janela, nada muda. Liga e desliga na raiz do repo com o `command-mode.sh` da skill `merge-gate` (`on 06:00`, `status`, `off`), só quando a pessoa pedir. Quando o modo comando é o que libera o merge, a trava imprime uma linha `COMMAND MODE:` para o risco e outra com as áreas sensíveis liberadas; todas vão no comentário do PR.
+Os riscos que entram sem a pessoa **só enquanto o modo comando estiver ligado**, um rótulo por linha. O modo comando é uma janela com fim que a pessoa entrega ao Chief (ex.: até 06:00); passou do horário, desliga sozinho, e a trava não aceita janela com mais de 24h nem fim escrito de forma relativa. Com a janela aberta, as áreas sensíveis também deixam de barrar, em qualquer risco, menos as travadas (bloco abaixo). A janela é conferida de novo no momento da decisão: se ela expirar ou for desligada enquanto a trava consulta o CI, o merge chama a pessoa. As outras checagens continuam valendo: CI verde, parecer `approve` no último commit, nenhum teste removido, um único ticket. Fora da janela, nada muda. Liga e desliga na raiz do repo com o `command-mode.sh` da skill `merge-gate` (`on 06:00`, `status`, `off`), só quando a pessoa pedir. Quando o modo comando é o que libera o merge, a trava imprime uma linha `COMMAND MODE:` para o risco e outra com as áreas sensíveis liberadas; todas vão no comentário do PR.
 
 ```command-mode-risk
 risk:high
 ```
 
-As áreas que o modo comando **nunca** libera, uma expressão regular por linha: as regras dos agentes e da trava, e o CI. Um PR que toca uma delas sempre espera a pessoa, com a janela aberta ou não. Sem este bloco (ou vazio), a trava usa estes mesmos dois caminhos.
+As áreas que o modo comando **nunca** libera, uma expressão regular por linha. Estas duas são fixas: as regras dos agentes e da trava, e o CI. Um PR que toca uma delas sempre espera a pessoa, com a janela aberta ou não. Este bloco só acrescenta caminhos às duas de cima; ele não consegue tirá-las.
 
 ```command-mode-locked-paths
 ^docs/agents/
