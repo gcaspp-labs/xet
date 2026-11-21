@@ -406,7 +406,13 @@ export function messageChanges(message: Message, now = Date.now()): MessageChang
   const deleteForEveryone = age < revokeWindowMs
   let note: string | null = null
   if (!editable) {
-    note = 'Áudio não pode ser editado.'
+    // O cartão de contato e o áudio nunca são editados, como no backend; o menu diz o motivo.
+    note =
+      message.type === 'contact'
+        ? 'Contato não pode ser editado.'
+        : message.type === 'audio'
+          ? 'Áudio não pode ser editado.'
+          : 'Esta mensagem não pode ser editada.'
   } else if (!edit) {
     note = deleteForEveryone
       ? 'Prazo de edição encerrado.'

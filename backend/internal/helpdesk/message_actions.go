@@ -48,16 +48,17 @@ func (e ChangeNotAppliedError) Error() string { return "message change not appli
 
 // Why a message does not admit the change, shown to the agent.
 const (
-	changeNotFromSystem   = "Só é possível alterar mensagens enviadas pelo XET."
-	changeSending         = "A mensagem ainda está sendo enviada."
-	changeFailedLocalOnly = "Mensagem com falha só pode ser excluída para mim."
-	changeDeleted         = "Esta mensagem já foi excluída."
-	changeNotEditable     = "Só é possível editar texto ou legenda. Áudio não tem edição."
-	changeEditExpired     = "O prazo para editar esta mensagem terminou."
-	changeRevokeExpired   = "O prazo para excluir para todos terminou. Ainda é possível excluir para mim."
-	changeEditUnavailable = "O WhatsApp deste setor não permite editar mensagens."
-	changeRevokeUnavail   = "O WhatsApp deste setor não permite excluir para todos. Ainda é possível excluir para mim."
-	retryDeleted          = "Esta mensagem foi excluída e não pode ser reenviada."
+	changeNotFromSystem      = "Só é possível alterar mensagens enviadas pelo XET."
+	changeSending            = "A mensagem ainda está sendo enviada."
+	changeFailedLocalOnly    = "Mensagem com falha só pode ser excluída para mim."
+	changeDeleted            = "Esta mensagem já foi excluída."
+	changeNotEditable        = "Só é possível editar texto ou legenda. Áudio não tem edição."
+	changeContactNotEditable = "Contato não pode ser editado."
+	changeEditExpired        = "O prazo para editar esta mensagem terminou."
+	changeRevokeExpired      = "O prazo para excluir para todos terminou. Ainda é possível excluir para mim."
+	changeEditUnavailable    = "O WhatsApp deste setor não permite editar mensagens."
+	changeRevokeUnavail      = "O WhatsApp deste setor não permite excluir para todos. Ainda é possível excluir para mim."
+	retryDeleted             = "Esta mensagem foi excluída e não pode ser reenviada."
 )
 
 // Why the provider did not apply the change, shown to the agent.
@@ -292,7 +293,7 @@ func (s *Service) actionResult(ctx context.Context, a db.MessageAction) (db.Mess
 // sent through the system is changed. One still sending admits nothing; one
 // that failed never reached the contact, so it is only hidden in the system;
 // a deleted one admits nothing more. Edits change the text or the caption,
-// never audio, within the edit window of the provider; deletion for everyone
+// never audio nor a contact card, within the edit window of the provider; deletion for everyone
 // within its deletion window. A zero window is an action the provider does
 // not have.
 func changeable(m db.Message, kind db.MessageActionKind, c messaging.Capabilities, now time.Time) error {
@@ -316,6 +317,8 @@ func changeable(m db.Message, kind db.MessageActionKind, c messaging.Capabilitie
 	case db.MessageActionKindEdit:
 		switch m.Type {
 		case db.MessageTypeText, db.MessageTypeImage, db.MessageTypeVideo, db.MessageTypeDocument:
+		case db.MessageTypeContact:
+			return NotChangeableError{Reason: changeContactNotEditable}
 		default:
 			return NotChangeableError{Reason: changeNotEditable}
 		}

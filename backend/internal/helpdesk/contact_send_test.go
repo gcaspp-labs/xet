@@ -394,3 +394,64 @@ func TestContactCardIsQuotedBothWays(t *testing.T) {
 		t.Fatalf("quoting a failed card: status %d", r.Status)
 	}
 }
+
+// O cartão de contato é excluído como as outras mensagens, para todos (também
+// no WhatsApp) ou só no XET, mas nunca editado: o backend recusa a edição, como
+// recusa a do áudio, mesmo que a tela seja contornada.
+func TestContactCardIsDeletedButNeverEdited(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	carla := c.carla()
+
+	r := e.sendContact(c.ticket.ID, c.anaToken, requestC1, carla, 0)
+	if r.Status != http.StatusOK || r.Body["status"] != "sent" {
+		t.Fatalf("send contact: status %d, body %v", r.Status, r.Body)
+	}
+	everyone := id(r.Body)
+
+	// Editar é recusado antes de qualquer ida ao WhatsApp.
+	if r := e.editMessage(everyone, c.anaToken, requestE1, "João"); r.Status != http.StatusConflict ||
+		r.Body["error"] != "Contato não pode ser editado." {
+		t.Fatalf("edit of a contact card: status %d, body %v", r.Status, r.Body)
+	}
+	if got := e.sentChanges(); len(got) != 0 {
+		t.Fatalf("changes sent after the refused edit = %+v", got)
+	}
+
+	// Excluir para todos vai ao WhatsApp e mantém o cartão guardado.
+	if r := e.deleteMessage(everyone, c.anaToken, requestE2, "everyone"); r.Status != http.StatusOK ||
+		r.Body["deletion"].(map[string]any)["scope"] != "everyone" {
+		t.Fatalf("delete the card for everyone: status %d, body %v", r.Status, r.Body)
+	}
+	want := []any{messaging.MessageRevoke{
+		SectorID: c.sector.ID, To: "5511988887777@s.whatsapp.net",
+		TargetExternalMessageID: "fake-msg-" + requestC1, IdempotencyKey: requestE2,
+	}}
+	if got := e.sentChanges(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("changes sent:\ngot  %+v\nwant %+v", got, want)
+	}
+	if cards := e.recordedCards(everyone); !reflect.DeepEqual(cards, jsonValue(t, carlaStored)) {
+		t.Fatalf("cards kept after deletion = %v", cards)
+	}
+
+	// Um segundo cartão: "Excluir para mim" oculta sem chamar o WhatsApp.
+	second := e.sendContact(c.ticket.ID, c.anaToken, requestC3, carla, 0)
+	if second.Status != http.StatusOK || second.Body["status"] != "sent" {
+		t.Fatalf("send second contact: status %d, body %v", second.Status, second.Body)
+	}
+	if r := e.deleteMessage(id(second.Body), c.anaToken, requestE3, "local"); r.Status != http.StatusOK ||
+		r.Body["deletion"].(map[string]any)["scope"] != "local" {
+		t.Fatalf("delete the card for me: status %d, body %v", r.Status, r.Body)
+	}
+	if got := e.sentChanges(); len(got) != 1 {
+		t.Fatalf("changes sent after a local deletion = %+v", got)
+	}
+
+	// Excluído, o cartão não é mais editado por nenhum caminho.
+	if r := e.editMessage(everyone, c.anaToken, requestE4, "João"); r.Status != http.StatusConflict ||
+		r.Body["error"] != "Esta mensagem já foi excluída." {
+		t.Fatalf("edit of a deleted card: status %d, body %v", r.Status, r.Body)
+	}
+}
