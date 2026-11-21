@@ -660,7 +660,13 @@ test('o filtro Canal separa WhatsApp de Telefone e não se aplica aos números d
   await expectKpi(page, 'Transferidos', '0')
   await expectKpi(page, 'Cancelados', '0')
   await expectKpi(page, 'Tempo médio de atendimento', '15 min')
-  for (const label of ['Na fila', 'Em atendimento', 'Recebidos', 'Iniciados', 'Tempo médio de espera']) {
+  for (const label of [
+    'Na fila',
+    'Em atendimento',
+    'Recebidos',
+    'Iniciados',
+    'Tempo médio de espera',
+  ]) {
     await expectKpi(page, label, '—')
     await expect(kpi(page, label)).toContainText(notApplicable)
   }
