@@ -359,46 +359,38 @@ func (a *Adapter) sentTo(sectorID int64) []sentItem {
 	items := []sentItem{}
 	for _, entry := range a.outbox {
 		item := sentItem{ID: entry.id}
+		var sector int64
 		switch m := entry.message.(type) {
 		case messaging.TextMessage:
-			if m.SectorID != sectorID {
-				continue
-			}
+			sector = m.SectorID
 			item.Kind, item.To, item.Body, item.Quote = "text", m.To, m.Body, quoteOf(m.Quote)
 		case messaging.MediaMessage:
-			if m.SectorID != sectorID {
-				continue
-			}
+			sector = m.SectorID
 			item.Kind, item.Type, item.To = "media", string(m.Type), m.To
 			item.Body, item.Quote = m.Caption, quoteOf(m.Quote)
 		case messaging.ContactMessage:
-			if m.SectorID != sectorID {
-				continue
-			}
+			sector = m.SectorID
 			card := sentCard{Name: m.Card.Name, Organization: m.Card.Organization}
 			for _, p := range m.Card.Phones {
 				card.Phones = append(card.Phones, p.Phone)
 			}
 			item.Kind, item.To, item.Card, item.Quote = "contact", m.To, &card, quoteOf(m.Quote)
 		case messaging.Reaction:
-			if m.SectorID != sectorID {
-				continue
-			}
+			sector = m.SectorID
 			item.Kind, item.To, item.Emoji = "reaction", m.To, m.Emoji
 			item.TargetExternalMessageID = m.TargetExternalMessageID
 		case messaging.MessageEdit:
-			if m.SectorID != sectorID {
-				continue
-			}
+			sector = m.SectorID
 			item.Kind, item.Type, item.To = "edit", string(m.Type), m.To
 			item.Body, item.TargetExternalMessageID = m.Body, m.TargetExternalMessageID
 		case messaging.MessageRevoke:
-			if m.SectorID != sectorID {
-				continue
-			}
+			sector = m.SectorID
 			item.Kind, item.To = "revoke", m.To
 			item.TargetExternalMessageID = m.TargetExternalMessageID
 		default:
+			continue
+		}
+		if sector != sectorID {
 			continue
 		}
 		items = append(items, item)

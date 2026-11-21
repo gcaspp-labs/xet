@@ -8,11 +8,10 @@ import {
 } from '@playwright/test'
 import {
   admin,
-  adminApi,
   json,
-  municipalityId,
   ok,
   openQueued,
+  seedContact,
   seedSector,
   signIn,
   unique,
@@ -532,24 +531,6 @@ const cardBubble = (scope: Locator, direction: string, name: string) =>
     .getByRole('listitem', { name: direction })
     .filter({ has: scope.page().getByRole('group', { name: new RegExp(`^Contato: ${name},`) }) })
 
-// Um contato do diretório no setor, que o cartão enviado leva.
-async function seedContact(baseURL: string, sectorId: number, name: string, phoneNumber: string) {
-  const api = await adminApi(baseURL)
-  const { id } = unique()
-  const organization = await json<{ id: number }>(
-    await api.post('/api/organizations', {
-      data: { name: `Órgão ${id}`, municipalityId: await municipalityId(api) },
-    }),
-  )
-  const contact = await json<{ id: number }>(
-    await api.post('/api/contacts', {
-      data: { name, phone: phoneNumber, organizationId: organization.id, sectorIds: [sectorId] },
-    }),
-  )
-  await api.dispose()
-  return contact.id
-}
-
 // O que o adaptador falso do WhatsApp recebeu para o setor, pela rota de teste do próprio adaptador.
 type SentToProvider = {
   id: string
@@ -788,7 +769,7 @@ test('cartão enviando ou com falha não oferece reação nem Responder', async 
   const { id } = unique()
   const sending = `Rita ${id}`
   const failing = `Bruno ${id}`
-  const sendingId = await seedContact(baseURL!, sector.id, sending, unique().phone)
+  const { id: sendingId } = await seedContact(baseURL!, sector.id, sending, unique().phone)
   await seedContact(baseURL!, sector.id, failing, unique().phone)
   const conversation = await openAssigned(page, agent, 'Clara Cita')
   const ticketId = currentTicketId(page)

@@ -8,13 +8,12 @@ import {
 } from '@playwright/test'
 import {
   admin,
-  adminApi,
   json,
-  municipalityId,
   ok,
   openQueued,
   queuedTicketId,
   recordToasts,
+  seedContact,
   seedSector,
   signIn,
   unique,
@@ -507,24 +506,6 @@ async function cardReactions(page: Page, ticketId: number) {
   return card!.reactions
 }
 
-// Um contato do diretório no setor, para o cartão enviado pelo setor; devolve o id do contato.
-async function seedContact(baseURL: string, sectorId: number, name: string, phoneNumber: string) {
-  const api = await adminApi(baseURL)
-  const { id } = unique()
-  const organization = await json<{ id: number }>(
-    await api.post('/api/organizations', {
-      data: { name: `Órgão ${id}`, municipalityId: await municipalityId(api) },
-    }),
-  )
-  const contact = await json<{ id: number }>(
-    await api.post('/api/contacts', {
-      data: { name, phone: phoneNumber, organizationId: organization.id, sectorIds: [sectorId] },
-    }),
-  )
-  await api.dispose()
-  return contact.id
-}
-
 test('reação ao cartão de contato, recebido e enviado, e a do cliente embaixo do cartão', async ({
   page,
   request,
@@ -555,7 +536,7 @@ test('reação ao cartão de contato, recebido e enviado, e a do cliente embaixo
 
   // Um cartão enviado pelo setor, já com o identificador do WhatsApp, também aceita reação.
   const name = `Rita ${unique().id}`
-  const contactId = await seedContact(baseURL!, sector.id, name, unique().phone)
+  const { id: contactId } = await seedContact(baseURL!, sector.id, name, unique().phone)
   const api = await apiRequest.newContext({ baseURL })
   ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
   ok(

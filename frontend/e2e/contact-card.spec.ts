@@ -8,9 +8,9 @@ import {
 import {
   adminApi,
   json,
-  municipalityId,
   ok,
   openQueued,
+  seedContact,
   seedSector,
   signIn,
   unique,
@@ -37,29 +37,6 @@ async function phone(request: APIRequestContext, sectorId: number, action: strin
       data,
     }),
   )
-}
-
-// Contato cadastrado num órgão de Itu, devolvido com o id para o envio do cartão.
-async function seedContact(baseURL: string, sectorId: number, name: string, phoneNumber: string) {
-  const api = await adminApi(baseURL)
-  const id = unique().id
-  const organization = await json<{ id: number; name: string }>(
-    await api.post('/api/organizations', {
-      data: { name: `Órgão ${id}`, municipalityId: await municipalityId(api) },
-    }),
-  )
-  const contact = await json<{ id: number }>(
-    await api.post('/api/contacts', {
-      data: {
-        name,
-        phone: phoneNumber,
-        organizationId: organization.id,
-        sectorIds: [sectorId],
-      },
-    }),
-  )
-  await api.dispose()
-  return { id: contact.id, organizationId: organization.id, organizationName: organization.name }
 }
 
 // Chamado assumido pelo atendente a partir de uma mensagem recebida do contato.

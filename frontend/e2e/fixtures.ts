@@ -324,6 +324,30 @@ export async function adminApi(baseURL: string) {
   return api
 }
 
+// Contato do diretório num órgão novo de Itu, ligado ao setor, cadastrado pela API como
+// administrador; devolve o id do contato e o do órgão, com o nome dele.
+export async function seedContact(
+  baseURL: string,
+  sectorId: number,
+  name: string,
+  phoneNumber: string,
+) {
+  const api = await adminApi(baseURL)
+  const { id } = unique()
+  const organization = await json<{ id: number; name: string }>(
+    await api.post('/api/organizations', {
+      data: { name: `Órgão ${id}`, municipalityId: await municipalityId(api) },
+    }),
+  )
+  const contact = await json<{ id: number }>(
+    await api.post('/api/contacts', {
+      data: { name, phone: phoneNumber, organizationId: organization.id, sectorIds: [sectorId] },
+    }),
+  )
+  await api.dispose()
+  return { id: contact.id, organizationId: organization.id, organizationName: organization.name }
+}
+
 // Acha o assunto do setor pela busca da lista, percorrendo as páginas, porque ele pode estar
 // depois dos primeiros vinte itens.
 async function subjectId(api: APIRequestContext, sectorId: number, name: string) {
