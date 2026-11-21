@@ -378,16 +378,18 @@ function MessageBubble({
       id={`message-${message.id}`}
       aria-label={outbound ? 'Mensagem enviada' : 'Mensagem recebida'}
       className={cn(
-        'group/msg flex max-w-[78%] flex-col gap-1',
+        // A largura máxima da mensagem (78% da conversa) fica só em --msg-max: a linha do balão,
+        // abaixo, desfaz a mesma fração para chegar à largura da lista.
+        'group/msg flex max-w-[calc(var(--msg-max)*100%)] flex-col gap-1 [--msg-max:0.78]',
         outbound ? 'items-end self-end' : 'items-start self-start',
       )}
     >
-      {/* O balão com as ações pode passar dos 78% (o cartão de contato tem largura fixa), mas não
-          da largura da conversa: 100%/0,78 do item é a largura da lista. Numa janela estreita o
-          balão encolhe, sem cobrir a coluna ao lado. */}
+      {/* O balão com as ações pode passar da largura máxima da mensagem (o cartão de contato tem
+          largura fixa), mas não da largura da conversa: 100%/--msg-max do item é a largura da
+          lista. Numa janela estreita o balão encolhe, sem cobrir a coluna ao lado. */}
       <div
         className={cn(
-          'flex max-w-[calc(100%/0.78)] items-center gap-1',
+          'flex max-w-[calc(100%/var(--msg-max))] items-center gap-1',
           outbound && 'flex-row-reverse',
         )}
       >

@@ -799,6 +799,40 @@ test('em janela de 1280px, o cartão enviado cabe na conversa e o mouse alcança
   await expect(card.getByRole('listitem', { name: /^Setor reagiu com 👍, / })).toBeVisible()
 })
 
+test('em janela de 1280px, o cartão recebido cabe na conversa e o mouse alcança o Responder e o Reagir', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  const { agent, receive } = await seedCustomer(request, baseURL!, 'Clara Recebe')
+  await receive('1', { type: 'contact', contactCards: [joaoCard] })
+
+  const conversation = await openAssigned(page, agent, 'Clara Recebe')
+  const card = cardBubble(conversation, 'Mensagem recebida', 'João Silva')
+  await expect(card).toBeVisible()
+
+  // O cartão, o Responder e o Reagir ficam dentro da coluna da conversa.
+  const column = (await conversation.boundingBox())!
+  await card.hover()
+  const reply = card.getByRole('button', { name: 'Responder', exact: true })
+  const react = card.getByRole('button', { name: 'Reagir', exact: true })
+  for (const part of [card, reply, react]) {
+    const box = (await part.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(column.x)
+    expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width)
+  }
+
+  // Os dois abrem pelo clique do mouse (o Playwright recusa o clique se outro elemento cobre o botão).
+  await reply.click()
+  await expect(page.getByRole('group', { name: 'Respondendo a Cliente' })).toContainText(
+    '👤 João Silva',
+  )
+  await card.hover()
+  await react.click()
+  await expect(page.getByRole('group', { name: 'Reagir à mensagem' })).toBeVisible()
+})
+
 test('cartão enviando ou com falha não oferece reação nem Responder', async ({
   page,
   request,
