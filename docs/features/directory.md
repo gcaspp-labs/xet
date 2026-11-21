@@ -16,7 +16,7 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 10. Cada chamado fica vinculado ao contato e ao órgão. O órgão vem do cadastro do contato e pode ser alterado no formulário de encerramento, só para aquele chamado.
 11. Órgãos são cadastrados manualmente. Contatos são cadastrados manualmente ou importados do WhatsApp do setor (ver [contact-import.md](contact-import.md)).
 12. Cada telefone corresponde a um único contato. Quando um telefone é usado por mais de uma pessoa, o sistema não as distingue: todas aparecem no mesmo contato.
-13. A busca localiza órgãos e contatos por nome, município, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").
+13. A busca localiza órgãos e contatos por nome, município, telefone e CNPJ, sem diferenciar maiúsculas nem acentos ("camara" encontra "Câmara"). Na busca de órgãos, o termo é quebrado em palavras pelos espaços, e cada palavra precisa aparecer no nome do órgão, no município ou no CNPJ, em qualquer ordem: "câmara jales" e "jales câmara" encontram a Câmara de Jales, e uma palavra que não aparece em nenhum deles zera o resultado. Um trecho de CNPJ só encontra órgãos que têm CNPJ.
 14. A lista de contatos e a busca de "Novo chamado" filtram também por município e por órgão. O filtro de município mostra só os que têm órgão cadastrado; escolhido o município, o filtro de órgão mostra só os dele.
 15. Mensagens de números desconhecidos entram normalmente na fila.
 16. A mensagem recebida é ligada ao contato pelo identificador do WhatsApp gravado nele. Na primeira mensagem de um contato cadastrado à mão, ainda sem esse identificador, vale o telefone, com ou sem o nono dígito do celular (5511987654321 e 551187654321), e o identificador passa a ser gravado.
@@ -44,7 +44,7 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 ## Fora do escopo / limites conhecidos
 
 - A importação de contatos por planilha (CSV) fica para uma etapa posterior.
-- As páginas dos seletores continuam de 20 em 20, e a busca por palavras de campos diferentes (como "câmara jales") não é tratada aqui (#226).
+- As páginas dos seletores continuam de 20 em 20.
 - Os outros seletores (município, setor, atendente, módulo) já carregam a lista inteira. As listas das telas Contatos e Órgãos seguem paginadas por página (regras 32 e 34).
 
 ## Relacionado
@@ -60,3 +60,4 @@ O cadastro de quem é atendido: os órgãos públicos clientes, com o município
 - 2026-11-15: regra 12 alterada; spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190). Dizia "Cada telefone corresponde a um único contato. Quando um telefone é usado por mais de uma pessoa, o atendente anota no chamado com quem falou.".
 - 2026-11-17: regra 35 alterada e regra 36 adicionada; spec [#227](https://github.com/gcaspp-labs/xet/issues/227), PRs [#231](https://github.com/gcaspp-labs/xet/pull/231), [#232](https://github.com/gcaspp-labs/xet/pull/232). A 35 dizia "Os seletores de órgão (filtros, cadastro e importação de contatos, encerramento) mostram os 20 primeiros resultados da busca e avisam quando há mais, pedindo para refinar.".
 - 2026-11-17: regra 33 alterada; spec [#227](https://github.com/gcaspp-labs/xet/issues/227), PR [#233](https://github.com/gcaspp-labs/xet/pull/233). Dizia, no fim, "A busca de "Novo chamado" mostra os 20 primeiros resultados.".
+- 2026-11-20: regra 13 alterada; ticket [#226](https://github.com/gcaspp-labs/xet/issues/226). A busca de órgãos passa a aceitar palavras de campos diferentes, em qualquer ordem. Dizia "A busca localiza órgãos e contatos por nome, município, telefone e CNPJ. A busca por nome não diferencia maiúsculas nem acentos ("camara" encontra "Câmara").".
