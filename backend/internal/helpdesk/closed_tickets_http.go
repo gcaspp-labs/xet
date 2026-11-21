@@ -15,6 +15,7 @@ type closedTicketResponse struct {
 	ID               int64                 `json:"id"`
 	Protocol         string                `json:"protocol"`
 	ClosureType      *db.ClosureType       `json:"closureType"`
+	Channel          db.TicketChannel      `json:"channel"`
 	ClosedAt         *time.Time            `json:"closedAt"`
 	Subject          *string               `json:"subject"`
 	Contact          ticketContactResponse `json:"contact"`
@@ -113,7 +114,7 @@ func (h *Handler) listClosedTickets(w http.ResponseWriter, r *http.Request) {
 	out := make([]closedTicketResponse, len(rows))
 	for i, t := range rows {
 		item := closedTicketResponse{
-			ID: t.ID, Protocol: t.Protocol, ClosedAt: t.ClosedAt, Subject: t.Subject,
+			ID: t.ID, Protocol: t.Protocol, Channel: t.Channel, ClosedAt: t.ClosedAt, Subject: t.Subject,
 			Contact: ticketContactResponse{
 				ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered,
 			},

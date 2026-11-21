@@ -6,7 +6,7 @@ on conflict (year) do update set last_value = protocol_counters.last_value + 1
 returning last_value;
 
 -- name: GetOpenTicketForUpdate :one
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason from tickets
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
 where sector_id = @sector_id and contact_id = @contact_id and status <> 'closed'
 for update;
 
@@ -16,10 +16,10 @@ for update;
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, arrived_at, started_at)
 values (@protocol, @sector_id, @contact_id, @organization_id, 'queued', @arrived_at, @arrived_at)
 on conflict (sector_id, contact_id) where status <> 'closed' do nothing
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: GetTicket :one
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason from tickets
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
 where id = @id;
 
 -- name: AssignTicket :one
@@ -28,7 +28,7 @@ where id = @id;
 update tickets
 set assignee_id = @assignee_id, status = 'in_progress', assigned_at = coalesce(assigned_at, now())
 where id = @id and status = 'queued'
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: ListOpenTickets :many
 -- Open tickets of the sector with the contact and the assignee, oldest first.
@@ -82,7 +82,7 @@ select count(*)::integer from tickets
 where assignee_id = @assignee_id and status = 'in_progress';
 
 -- name: GetTicketForUpdate :one
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason from tickets
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
 where id = @id
 for update;
 
@@ -93,7 +93,7 @@ select
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     t.organization_id, o.name as organization_name, o.municipality_id, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name,
-    t.closed_by_id, cb.name as closed_by_name, t.closure_type,
+    t.closed_by_id, cb.name as closed_by_name, t.closure_type, t.channel,
     p.id as previous_id, p.protocol as previous_protocol, ps.name as previous_sector_name,
     p.subject as previous_subject, p.resolution as previous_resolution, pb.name as previous_closed_by_name,
     p.transfer_reason as previous_transfer_reason,
@@ -120,7 +120,7 @@ where t.contact_id = @contact_id
 
 -- name: ListContactTickets :many
 select
-    t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    t.id, t.protocol, t.status, t.closure_type, t.channel, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
@@ -154,7 +154,7 @@ where t.organization_id = @organization_id
 
 -- name: ListOrganizationTickets :many
 select
-    t.id, t.protocol, t.status, t.closure_type, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
+    t.id, t.protocol, t.status, t.closure_type, t.channel, s.name as sector_name, t.arrived_at, t.closed_at, t.subject,
     c.name as contact_name, o.name as organization_name, m.name as municipality_name, u.name as assignee_name
 from tickets t
 join sectors s on s.id = t.sector_id
@@ -192,14 +192,14 @@ where sector_id = @sector_id and contact_id = @contact_id and status <> 'closed'
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, created_by_id, arrived_at, assigned_at, started_at)
 values (@protocol, @sector_id, @contact_id, @organization_id, 'in_progress', @assignee_id, @assignee_id, now(), now(), now())
 on conflict (sector_id, contact_id) where status <> 'closed' do nothing
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: TransferTicket :one
 -- The caller holds the lock of the ticket and checked it is in progress.
 update tickets
 set assignee_id = @assignee_id
 where id = @id
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: ReturnTicketToQueue :one
 -- The caller holds the lock of the ticket and checked it is in progress.
@@ -207,7 +207,7 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 update tickets
 set status = 'queued', assignee_id = null
 where id = @id
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: AddTicketModules :many
 -- Records the active modules of the sector among the given ones; the caller
@@ -227,7 +227,7 @@ set status = 'closed', closure_type = @closure_type::closure_type, closed_at = n
     subject = @subject, resolution = @resolution, organization_id = @organization_id,
     started_at = @started_at, ended_at = coalesce(sqlc.narg(ended_at), now())
 where id = @id
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: CancelTicket :one
 -- The caller holds the lock of the ticket and checked it may be cancelled. A
@@ -238,7 +238,7 @@ update tickets
 set status = 'closed', closure_type = 'cancelled', closed_at = now(), closed_by_id = @actor_id::bigint,
     assignee_id = coalesce(assignee_id, @actor_id::bigint), ended_at = greatest(now(), started_at)
 where id = @id
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: CloseTransferredTicket :one
 -- Origin of a transfer between sectors, without the closing form: no subject,
@@ -251,7 +251,7 @@ update tickets
 set status = 'closed', closure_type = 'transferred', closed_at = now(), closed_by_id = assignee_id,
     started_at = least(started_at, now()), ended_at = now(), transfer_reason = sqlc.narg(transfer_reason)
 where id = @id
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: ListTicketModules :many
 select m.id, m.name
@@ -263,7 +263,7 @@ order by lower(m.name), m.id;
 -- name: GetOpenTicketsOfContactForUpdate :many
 -- Open tickets of the contact in every sector, locked in id order. Locking the
 -- tickets before the contact keeps the order used by the closing.
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason from tickets
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
 where contact_id = @contact_id and status <> 'closed'
 order by id
 for update;
@@ -272,7 +272,7 @@ for update;
 update tickets
 set organization_id = @organization_id
 where id = @id
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: ListTicketModuleIDs :many
 select module_id from ticket_modules
@@ -290,7 +290,7 @@ update tickets
 set subject = @subject, resolution = @resolution, organization_id = @organization_id,
     started_at = @started_at, ended_at = @ended_at
 where id = @id
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: CreateTransferredTicket :one
 -- Ticket of the destination of a transfer between sectors. An open ticket of
@@ -299,7 +299,7 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, previous_ticket_id, arrived_at, started_at)
 values (@protocol, @sector_id, @contact_id, @organization_id, 'queued', @previous_ticket_id, now(), now())
 on conflict (sector_id, contact_id) where status <> 'closed' do nothing
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason;
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
 
 -- name: ListLaterTicketSectors :many
 -- Sectors of the tickets that continue the given one through transfers
@@ -310,3 +310,23 @@ with recursive later as (
     select t.id, t.sector_id from tickets t join later l on t.previous_ticket_id = l.id
 )
 select distinct sector_id from later;
+
+-- name: CreatePhoneTicket :one
+-- Registro por telefone: o chamado nasce encerrado, sem fila nem mensagens. A
+-- chave de idempotência repetida (mesmo em requisições simultâneas) não cria
+-- outro: nenhuma linha volta e quem chamou busca o registro já gravado. O
+-- índice parcial de chamado aberto não o alcança, porque nasce closed.
+insert into tickets (
+    protocol, sector_id, contact_id, organization_id, status, channel, client_request_id,
+    assignee_id, closed_by_id, closure_type, subject, resolution,
+    arrived_at, assigned_at, started_at, ended_at, closed_at)
+values (
+    @protocol, @sector_id, @contact_id, @organization_id, 'closed', 'phone', @client_request_id,
+    @actor_id, @actor_id, 'resolved', @subject, @resolution,
+    @started_at, @started_at, @started_at, @ended_at, now())
+on conflict (client_request_id) where client_request_id is not null do nothing
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id;
+
+-- name: GetTicketByClientRequestID :one
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
+where client_request_id = @client_request_id;

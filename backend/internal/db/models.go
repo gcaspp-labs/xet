@@ -698,6 +698,64 @@ func AllReactionSideValues() []ReactionSide {
 	}
 }
 
+type TicketChannel string
+
+const (
+	TicketChannelWhatsapp TicketChannel = "whatsapp"
+	TicketChannelPhone    TicketChannel = "phone"
+)
+
+func (e *TicketChannel) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TicketChannel(s)
+	case string:
+		*e = TicketChannel(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TicketChannel: %T", src)
+	}
+	return nil
+}
+
+type NullTicketChannel struct {
+	TicketChannel TicketChannel
+	Valid         bool // Valid is true if TicketChannel is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTicketChannel) Scan(value interface{}) error {
+	if value == nil {
+		ns.TicketChannel, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TicketChannel.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTicketChannel) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TicketChannel), nil
+}
+
+func (e TicketChannel) Valid() bool {
+	switch e {
+	case TicketChannelWhatsapp,
+		TicketChannelPhone:
+		return true
+	}
+	return false
+}
+
+func AllTicketChannelValues() []TicketChannel {
+	return []TicketChannel{
+		TicketChannelWhatsapp,
+		TicketChannelPhone,
+	}
+}
+
 type TicketStatus string
 
 const (
@@ -1037,6 +1095,8 @@ type Ticket struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	TransferReason   *string
+	Channel          TicketChannel
+	ClientRequestID  pgtype.UUID
 }
 
 type TicketModule struct {

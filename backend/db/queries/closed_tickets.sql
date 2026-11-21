@@ -31,7 +31,7 @@ where t.status = 'closed'
 
 -- name: ListClosedTicketsPage :many
 select
-    t.id, t.protocol, t.closure_type, t.closed_at, t.subject,
+    t.id, t.protocol, t.closure_type, t.channel, t.closed_at, t.subject,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     o.name as organization_name, m.name as municipality_name,
     t.sector_id, s.name as sector_name,
