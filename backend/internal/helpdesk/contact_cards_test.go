@@ -119,7 +119,7 @@ func TestFakeReceivesContactOverHTTP(t *testing.T) {
 	body := `{"externalMessageId": "CT-HTTP", "phone": "5511988887777", "type": "contact", "contactCards": [
 		{"name": "João Silva", "organization": "Prefeitura de Itu", "phones": [{"phone": "+55 11 97777-6666", "whatsAppId": "5511977776666"}]},
 		{"name": "Maria", "phones": []}]}`
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/messaging/sectors/%d/receive", contab.ID), strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, fmt.Sprintf("/messaging/sectors/%d/receive", contab.ID), strings.NewReader(body))
 	rec := httptest.NewRecorder()
 	e.WhatsApp.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
