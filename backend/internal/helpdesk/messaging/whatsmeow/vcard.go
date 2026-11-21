@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
@@ -179,4 +180,40 @@ func joinNonEmpty(parts []string, sep string) string {
 		}
 	}
 	return strings.Join(kept, sep)
+}
+
+// vcardOf writes the card as the vCard 3.0 WhatsApp Web sends: the name (N
+// and FN), the organization (ORG) and each phone (TEL) with its WhatsApp
+// account (waid) when known, which lets the contact tap the card to talk.
+// The reverse of contactCard.
+func vcardOf(card messaging.ContactCard) string {
+	name := escape(card.Name)
+	lines := []string{"BEGIN:VCARD", "VERSION:3.0", "N:;" + name + ";;;", "FN:" + name}
+	if card.Organization != "" {
+		lines = append(lines, "ORG:"+escape(card.Organization))
+	}
+	for _, p := range card.Phones {
+		tel := "TEL;type=CELL"
+		if p.WhatsAppID != "" {
+			tel += ";waid=" + p.WhatsAppID
+		}
+		lines = append(lines, tel+":+"+p.Phone)
+	}
+	return strings.Join(append(lines, "END:VCARD"), "\n")
+}
+
+// contactContent is the message of a card to send, a reply when it carries
+// the context of a quote.
+func contactContent(card messaging.ContactCard, reply *waE2E.ContextInfo) *waE2E.Message {
+	return &waE2E.Message{ContactMessage: &waE2E.ContactMessage{
+		DisplayName: proto.String(card.Name),
+		Vcard:       proto.String(vcardOf(card)),
+		ContextInfo: reply,
+	}}
+}
+
+// escape escapes a vCard text value, so a comma, a semicolon or a line break
+// of the name stays in it.
+func escape(value string) string {
+	return strings.NewReplacer(`\`, `\\`, ",", `\,`, ";", `\;`, "\r\n", `\n`, "\n", `\n`).Replace(value)
 }

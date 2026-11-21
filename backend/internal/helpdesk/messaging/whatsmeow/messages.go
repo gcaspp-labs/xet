@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mau.fi/whatsmeow"
@@ -257,7 +258,8 @@ func quote(m *waE2E.Message) *messaging.Quote {
 
 // snippet tells the type and the text of a quoted message: the text, the
 // caption of an image or video, or the name of a document (its caption when it
-// has no name). Other kinds are unsupported, without text.
+// has no name), or the name of the first card of a contact. Other kinds are
+// unsupported, without text.
 func snippet(m *waE2E.Message) *messaging.QuoteSnippet {
 	switch {
 	case m.GetConversation() != "":
@@ -277,9 +279,26 @@ func snippet(m *waE2E.Message) *messaging.QuoteSnippet {
 			name = doc.GetCaption()
 		}
 		return &messaging.QuoteSnippet{Type: messaging.TypeDocument, Text: name}
+	case m.GetContactMessage() != nil:
+		return contactSnippet([]*waE2E.ContactMessage{m.GetContactMessage()})
+	case m.GetContactsArrayMessage() != nil:
+		return contactSnippet(m.GetContactsArrayMessage().GetContacts())
 	default:
 		return &messaging.QuoteSnippet{Type: messaging.TypeUnsupported}
 	}
+}
+
+// contactSnippet is the snippet of a quoted contact: the name of its first
+// card, read as a received card is. The quoted vCard may come cut, so without
+// a card that can be read the display name of the message is the name.
+func contactSnippet(contacts []*waE2E.ContactMessage) *messaging.QuoteSnippet {
+	sn := &messaging.QuoteSnippet{Type: messaging.TypeContact}
+	if cards, ok := contactCards(contacts); ok {
+		sn.Text = cards[0].Name
+	} else if len(contacts) > 0 {
+		sn.Text = strings.TrimSpace(contacts[0].GetDisplayName())
+	}
+	return sn
 }
 
 // contact returns the phone-number JID of the other side of a chat. WhatsApp
@@ -423,6 +442,9 @@ func quotedMessage(sn *messaging.QuoteSnippet) *waE2E.Message {
 		return &waE2E.Message{AudioMessage: &waE2E.AudioMessage{PTT: proto.Bool(true)}}
 	case messaging.TypeDocument:
 		return &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{FileName: text, Title: text}}
+	case messaging.TypeContact:
+		// The bubble of the quote shows the name of the card.
+		return &waE2E.Message{ContactMessage: &waE2E.ContactMessage{DisplayName: text}}
 	default:
 		// Text, and a file that could not be downloaded, whose original kind
 		// is unknown: its caption or name goes as text.
@@ -476,6 +498,41 @@ func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (st
 			}}, nil
 		}
 	})
+}
+
+// SendContact sends the card as a ContactMessage, a reply when it quotes. A
+// phone without its WhatsApp account gets it from WhatsApp, which also
+// matches numbers with or without the Brazilian ninth digit; a phone without
+// WhatsApp goes without it, as a card the contact may still save.
+func (a *Adapter) SendContact(ctx context.Context, msg messaging.ContactMessage) (string, error) {
+	return a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(ctx context.Context, cli *whatsmeow.Client, to types.JID) (*waE2E.Message, error) {
+		card, err := withWhatsAppIDs(ctx, cli, msg.Card)
+		if err != nil {
+			return nil, err
+		}
+		return contactContent(card, replyContext(cli, to, msg.Quote)), nil
+	})
+}
+
+// withWhatsAppIDs fills the WhatsApp account of the phones of the card that
+// have none, without changing the card it got.
+func withWhatsAppIDs(ctx context.Context, cli *whatsmeow.Client, card messaging.ContactCard) (messaging.ContactCard, error) {
+	phones := make([]messaging.ContactPhone, len(card.Phones))
+	copy(phones, card.Phones)
+	for i, p := range phones {
+		if p.WhatsAppID != "" {
+			continue
+		}
+		resp, err := cli.IsOnWhatsApp(ctx, []string{"+" + p.Phone})
+		if err != nil {
+			return card, fmt.Errorf("is on whatsapp: %w", err)
+		}
+		if len(resp) > 0 && resp[0].IsIn {
+			phones[i].WhatsAppID = resp[0].JID.User
+		}
+	}
+	card.Phones = phones
+	return card, nil
 }
 
 // SendReaction sends the reaction of the sector number, an empty text being

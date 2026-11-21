@@ -149,7 +149,8 @@ type Quote struct {
 
 // QuoteSnippet is what the provider tells of the quoted content, without its
 // media: the type and the text, the caption (image and video) or the file name
-// (document, or its caption when it has no name). Text may be empty, as in audio.
+// (document, or its caption when it has no name), or the name of the first
+// card (contact). Text may be empty, as in audio.
 type QuoteSnippet struct {
 	Type MessageType
 	Text string
@@ -304,6 +305,17 @@ type MediaMessage struct {
 	Quote *Quote
 }
 
+// ContactMessage is a contact card to send. It goes without caption, so without
+// the nickname of the agent. IdempotencyKey and Quote work as in TextMessage.
+type ContactMessage struct {
+	SectorID       int64
+	To             string
+	Card           ContactCard
+	IdempotencyKey string
+	// Quote is the message this one replies to; nil when it quotes nothing.
+	Quote *Quote
+}
+
 // Reaction is the reaction of the sector number to a message of a chat with a
 // contact. It points at the target only by its provider message ID, which
 // every provider has. It goes without the nickname of the agent.
@@ -383,6 +395,8 @@ type Provider interface {
 	SendText(ctx context.Context, msg TextMessage) (string, error)
 	// SendMedia sends an attachment and returns the provider message ID.
 	SendMedia(ctx context.Context, msg MediaMessage) (string, error)
+	// SendContact sends a contact card and returns the provider message ID.
+	SendContact(ctx context.Context, msg ContactMessage) (string, error)
 	// SendReaction sets the reaction of the sector number to a message, or
 	// removes it with an empty Emoji. It returns ErrNotConnected without a
 	// session and ErrNotAccepted for any refusal of the provider. Nothing may

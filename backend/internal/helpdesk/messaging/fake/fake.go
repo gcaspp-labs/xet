@@ -348,6 +348,11 @@ func (a *Adapter) SendMedia(_ context.Context, msg messaging.MediaMessage) (stri
 	return a.send(msg.SectorID, msg.IdempotencyKey, msg)
 }
 
+// SendContact records the card like SendText, quote included.
+func (a *Adapter) SendContact(_ context.Context, msg messaging.ContactMessage) (string, error) {
+	return a.send(msg.SectorID, msg.IdempotencyKey, msg)
+}
+
 // send records the message once per idempotency key, like the real provider
 // reusing the message ID.
 func (a *Adapter) send(sectorID int64, key string, msg any) (string, error) {
