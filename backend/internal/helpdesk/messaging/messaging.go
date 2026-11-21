@@ -46,6 +46,9 @@ const (
 	TypeVideo    MessageType = "video"
 	TypeAudio    MessageType = "audio"
 	TypeDocument MessageType = "document"
+	// TypeContact is a contact card, or several sent at once, with the cards
+	// in Message.ContactCards and no Body.
+	TypeContact MessageType = "contact"
 	// TypeUnsupported covers stickers, locations and other types outside the
 	// pilot, kept as a notice in the history. Reactions are not messages: they
 	// arrive as ReactionReceived.
@@ -97,6 +100,35 @@ type Message struct {
 	// no quote or the provider could not identify it, and nothing may
 	// require it.
 	Quote *Quote
+	// ContactCards are the cards of a TypeContact message, in the order they
+	// came, at least one; empty in the other types.
+	ContactCards []ContactCard
+}
+
+// ContactCard is a contact shared in a message, as it came: it has no link to
+// the contacts of the system. It covers the vCard of WhatsApp Web (Whatsmeow:
+// FN, each TEL with its waid, ORG) and the "contacts" message of the official
+// API, whose card has name.formatted_name, phones[] with phone and wa_id, and
+// org (https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/contacts-messages,
+// https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/contacts/).
+// No provider format (vCard or other) leaves the adapter.
+type ContactCard struct {
+	// Name is the name shown on the card. Required, never empty.
+	Name string
+	// Phones are the phones of the card, in order; may be empty.
+	Phones []ContactPhone
+	// Organization is the name of the organization of the contact. Optional.
+	Organization string
+}
+
+// ContactPhone is a phone of a contact card.
+type ContactPhone struct {
+	// Phone holds only the digits, as the card has them (with country code
+	// when the card has it).
+	Phone string
+	// WhatsAppID is the WhatsApp account of the phone (waid, wa_id), when the
+	// provider tells it. Optional.
+	WhatsAppID string
 }
 
 // Quote is the message a reply cites, in a received message or in one to
