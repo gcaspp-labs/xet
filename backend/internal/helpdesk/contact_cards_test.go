@@ -1,7 +1,6 @@
 package helpdesk_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,18 +11,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
-
-const (
-	cardContact = "5511988887777@s.whatsapp.net"
-	cardPhone   = "5511988887777"
-)
-
-// contactMessage is a contact message of the customer with the cards.
-func contactMessage(id string, cards ...messaging.ContactCard) messaging.Message {
-	m := text(id, cardContact, cardPhone, "")
-	m.Type, m.ContactCards = messaging.TypeContact, cards
-	return m
-}
 
 var (
 	joaoCard = messaging.ContactCard{
@@ -36,35 +23,6 @@ var (
 	}
 	mariaCard = messaging.ContactCard{Name: "Maria", Phones: []messaging.ContactPhone{{Phone: "5521966665555"}}}
 )
-
-// storedCards returns the type and the cards recorded in the message with
-// the provider ID, the cards as the column keeps them.
-func (e *testEnv) storedCards(externalID string) (string, any) {
-	e.T.Helper()
-	var typ string
-	var raw []byte
-	if err := e.Pool.QueryRow(e.T.Context(),
-		`select type::text, contact_cards from messages where external_message_id = $1`, externalID).Scan(&typ, &raw); err != nil {
-		e.T.Fatalf("message %s: %v", externalID, err)
-	}
-	if raw == nil {
-		return typ, nil
-	}
-	var cards any
-	if err := json.Unmarshal(raw, &cards); err != nil {
-		e.T.Fatal(err)
-	}
-	return typ, cards
-}
-
-func jsonValue(t *testing.T, s string) any {
-	t.Helper()
-	var v any
-	if err := json.Unmarshal([]byte(s), &v); err != nil {
-		t.Fatal(err)
-	}
-	return v
-}
 
 // The contact the customer sends is recorded as a contact message with its
 // cards, in order, by the rules of every received message: it opens the
