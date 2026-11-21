@@ -77,6 +77,30 @@ const textSizes = (page: Page) =>
     return sizes
   })
 
+// Compara o tamanho do mesmo texto em "Padrão" e em "Maior": cada ocorrência
+// conta, na ordem da tela, e todas crescem pela escala de 1.3.
+function expectScaled(
+  standard: { text: string; size: number }[],
+  larger: { text: string; size: number }[],
+  minimum: number,
+) {
+  const occurrences = (items: { text: string; size: number }[]) => {
+    const seen = new Map<string, number>()
+    return new Map(
+      items.map((item) => {
+        const count = (seen.get(item.text) ?? 0) + 1
+        seen.set(item.text, count)
+        return [`${item.text}#${count}`, item.size]
+      }),
+    )
+  }
+  const before = occurrences(standard)
+  const compared = [...occurrences(larger)].filter(([key]) => before.has(key))
+  expect(compared.length).toBeGreaterThan(minimum)
+  const unscaled = compared.filter(([key, size]) => Math.abs(size / before.get(key)! - 1.3) > 0.01)
+  expect(unscaled).toEqual([])
+}
+
 // Mede o contraste de todo texto visível, somando as transparências até o fundo da página.
 // Devolve o que ficou abaixo do mínimo e quantos textos foram medidos.
 const auditContrast = (page: Page, minimum: number) =>
@@ -322,23 +346,7 @@ test('todo texto das telas densas acompanha o tamanho escolhido', async ({ brows
   await page.getByRole('button', { name: 'Encerrar' }).click()
   await expect(sheet).toBeVisible()
   const larger = await textSizes(page)
-
-  // O mesmo texto pode aparecer em mais de um lugar: compara cada ocorrência, na ordem da tela.
-  const occurrences = (items: { text: string; size: number }[]) => {
-    const seen = new Map<string, number>()
-    return new Map(
-      items.map((item) => {
-        const count = (seen.get(item.text) ?? 0) + 1
-        seen.set(item.text, count)
-        return [`${item.text}#${count}`, item.size]
-      }),
-    )
-  }
-  const before = occurrences(standard)
-  const compared = [...occurrences(larger)].filter(([key]) => before.has(key))
-  expect(compared.length).toBeGreaterThan(10)
-  const unscaled = compared.filter(([key, size]) => Math.abs(size / before.get(key)! - 1.3) > 0.01)
-  expect(unscaled).toEqual([])
+  expectScaled(standard, larger, 10)
   await context.close()
 })
 
@@ -366,23 +374,7 @@ test('o texto da janela de registro por telefone acompanha o tamanho escolhido',
   await chooseInMenu(page, 'menuitemradio', 'Maior')
   await open()
   const larger = await textSizes(page)
-
-  // O mesmo texto pode aparecer em mais de um lugar: compara cada ocorrência, na ordem da tela.
-  const occurrences = (items: { text: string; size: number }[]) => {
-    const seen = new Map<string, number>()
-    return new Map(
-      items.map((item) => {
-        const count = (seen.get(item.text) ?? 0) + 1
-        seen.set(item.text, count)
-        return [`${item.text}#${count}`, item.size]
-      }),
-    )
-  }
-  const before = occurrences(standard)
-  const compared = [...occurrences(larger)].filter(([key]) => before.has(key))
-  expect(compared.length).toBeGreaterThan(5)
-  const unscaled = compared.filter(([key, size]) => Math.abs(size / before.get(key)! - 1.3) > 0.01)
-  expect(unscaled).toEqual([])
+  expectScaled(standard, larger, 5)
   await context.close()
 })
 

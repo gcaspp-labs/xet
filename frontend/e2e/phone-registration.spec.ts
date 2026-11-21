@@ -160,6 +160,110 @@ test('cadastrar o contato pela janela deixa o contato escolhido', async ({ page,
   )
 })
 
+test('trocar o contato e pedir Novo contato abre um cadastro vazio', async ({ page, baseURL }) => {
+  const seed = await seedPhoneSector(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await page.goto('/atendimentos')
+  const dialog = await openWindow(page)
+  await chooseContact(dialog, seed.contactName)
+
+  // Trocar esconde o resumo e volta à busca; o cadastro novo não pode trazer o anterior.
+  await dialog.getByRole('button', { name: 'Trocar' }).click()
+  await dialog.getByLabel('Buscar contato').fill(seed.contactName)
+  await dialog.getByRole('button', { name: 'Novo contato' }).click()
+  const registration = page.getByRole('dialog', { name: 'Novo contato' })
+  await expect(registration.getByLabel('Nome')).toHaveValue('')
+  await expect(registration.getByLabel('Telefone')).toHaveValue('')
+
+  // O contato salvo fica escolhido, com o órgão sugerido, no lugar do anterior.
+  const { id, phone } = unique()
+  const newContact = `João ${id}`
+  await registration.getByLabel('Nome').fill(newContact)
+  await registration.getByLabel('Telefone').fill(phone)
+  await registration.getByLabel('Órgão').fill(seed.organization.name)
+  await page
+    .getByRole('option', { name: new RegExp(seed.organization.name) })
+    .first()
+    .click()
+  await registration.getByRole('button', { name: 'Cadastrar contato' }).click()
+  await expect(registration).toBeHidden()
+  await expect(dialog.getByRole('button', { name: 'Trocar' })).toBeVisible()
+  await expect(dialog).toContainText(newContact)
+  await expect(dialog).not.toContainText(seed.contactName)
+})
+
+test('durante a troca, salvar pede o contato de quem ligou', async ({ page, baseURL }) => {
+  const seed = await seedPhoneSector(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await page.goto('/atendimentos')
+  const dialog = await openWindow(page)
+  await chooseContact(dialog, seed.contactName)
+  await fillService(page, dialog, seed.solution)
+
+  // O contato anterior fica oculto na troca: salvar não registra nele.
+  await dialog.getByRole('button', { name: 'Trocar' }).click()
+  await dialog.getByRole('button', { name: 'Registrar atendimento' }).click()
+  await expect(dialog).toContainText('Escolha o contato de quem ligou.')
+  await expect(dialog).not.toContainText('Atendimento registrado')
+  expect(await phoneRecords(baseURL!, seed.contact.id)).toHaveLength(0)
+
+  // Escolhido de novo, o mesmo preenchimento salva uma única vez.
+  await chooseContact(dialog, seed.contactName)
+  await fillService(page, dialog, seed.solution)
+  await dialog.getByRole('button', { name: 'Registrar atendimento' }).click()
+  await expect(dialog).toBeHidden()
+  expect(await phoneRecords(baseURL!, seed.contact.id)).toHaveLength(1)
+})
+
+test('cada campo obrigatório que falta é avisado sem perder o resto preenchido', async ({
+  page,
+  baseURL,
+}) => {
+  const seed = await seedPhoneSector(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await page.goto('/atendimentos')
+  const dialog = await openWindow(page)
+  await chooseContact(dialog, seed.contactName)
+  await fillService(page, dialog, seed.solution)
+  const organization = `${seed.organization.name} — ${seed.organization.municipality.name}`
+
+  // Sem módulo.
+  await dialog.getByRole('checkbox', { name: 'Tributos' }).click()
+  await dialog.getByRole('button', { name: 'Registrar atendimento' }).click()
+  await expect(dialog).toContainText('Selecione ao menos um módulo.')
+  await expect(dialog.getByLabel('Assunto')).toHaveValue('Certidão negativa')
+  await expect(dialog.getByLabel('Resolução')).toHaveValue(seed.solution)
+  await expect(dialog.getByLabel('Órgão')).toHaveValue(organization)
+  await dialog.getByRole('checkbox', { name: 'Tributos' }).click()
+
+  // Sem assunto.
+  await dialog.getByLabel('Assunto').fill('')
+  await dialog.getByRole('button', { name: 'Registrar atendimento' }).click()
+  await expect(dialog).toContainText('Informe o assunto.')
+  await expect(dialog.getByLabel('Resolução')).toHaveValue(seed.solution)
+  await expect(dialog.getByRole('checkbox', { name: 'Tributos' })).toBeChecked()
+  await expect(dialog.getByLabel('Órgão')).toHaveValue(organization)
+  await dialog.getByLabel('Assunto').fill('Certidão negativa')
+
+  // Sem resolução.
+  await dialog.getByLabel('Resolução').fill('')
+  await dialog.getByRole('button', { name: 'Registrar atendimento' }).click()
+  await expect(dialog).toContainText('Informe a resolução.')
+  await expect(dialog.getByLabel('Assunto')).toHaveValue('Certidão negativa')
+  await expect(dialog.getByRole('checkbox', { name: 'Tributos' })).toBeChecked()
+  await expect(dialog.getByLabel('Órgão')).toHaveValue(organization)
+
+  // Sem contato: o anterior fica oculto na troca, e o resto continua preenchido.
+  await dialog.getByLabel('Resolução').fill(seed.solution)
+  await dialog.getByRole('button', { name: 'Trocar' }).click()
+  await dialog.getByRole('button', { name: 'Registrar atendimento' }).click()
+  await expect(dialog).toContainText('Escolha o contato de quem ligou.')
+  await expect(dialog.getByRole('checkbox', { name: 'Tributos' })).toBeChecked()
+  await expect(dialog.getByLabel('Assunto')).toHaveValue('Certidão negativa')
+  await expect(dialog.getByLabel('Resolução')).toHaveValue(seed.solution)
+  await expect(dialog.getByLabel('Órgão')).toHaveValue(organization)
+})
+
 test('sem contato, módulo, assunto ou resolução a janela avisa no campo sem perder o preenchido', async ({
   page,
   baseURL,

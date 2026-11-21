@@ -198,7 +198,8 @@ export function PhoneRegistrationSheet({
   const [contact, setContact] = useState<Contact | null>(null)
   const [choosing, setChoosing] = useState(true)
   const [contactError, setContactError] = useState(false)
-  const [registering, setRegistering] = useState(false)
+  // 'new' cadastra um contato do zero; 'existing' completa o contato escolhido.
+  const [registering, setRegistering] = useState<'new' | 'existing' | null>(null)
   // Cada abertura é um registro novo: a página remonta a janela, e o
   // identificador da requisição nasce com ela.
   const requestId = useRef(newRequestId())
@@ -236,7 +237,8 @@ export function PhoneRegistrationSheet({
     subjectModuleId?: number,
     solutionModuleId?: number,
   ) => {
-    if (registerPhone.isPending || !contact) {
+    // Durante a troca, o contato anterior está oculto: nada é registrado nele.
+    if (registerPhone.isPending || !contact || choosing) {
       return
     }
     registerPhone.mutate(
@@ -284,13 +286,14 @@ export function PhoneRegistrationSheet({
 
   const onSubmit = handleSubmit(
     (values) => {
-      if (!contact) {
+      // Com a troca em andamento, o contato escolhido está oculto: pede de novo.
+      if (!contact || choosing) {
         setContactError(true)
         return
       }
       questions.start(values)
     },
-    () => setContactError(!contact),
+    () => setContactError(!contact || choosing),
   )
 
   const summary =
@@ -362,10 +365,10 @@ export function PhoneRegistrationSheet({
             </div>
           ) : (
             <div className="rounded-(--radius-7) border border-line bg-surface-2 p-3">
-              <ContactSearch onChoose={choose} onRegister={() => setRegistering(true)} />
+              <ContactSearch onChoose={choose} onRegister={() => setRegistering('new')} />
             </div>
           )}
-          {contact && !contact.registered && (
+          {!choosing && contact && !contact.registered && (
             <Alert variant="warning">
               <TriangleAlert strokeWidth={1.7} aria-hidden />
               <AlertDescription className="flex flex-col items-start gap-2">
@@ -375,7 +378,7 @@ export function PhoneRegistrationSheet({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setRegistering(true)}
+                  onClick={() => setRegistering('existing')}
                 >
                   Cadastrar contato
                 </Button>
@@ -390,6 +393,7 @@ export function PhoneRegistrationSheet({
         <FormProvider {...methods}>
           <ClosingFields
             idPrefix="phone"
+            organizationFirst
             modules={form?.modules ?? []}
             subjects={form?.subjects ?? []}
             emptyModules={
@@ -403,10 +407,10 @@ export function PhoneRegistrationSheet({
           Alterações de horário ficam registradas no histórico de auditoria.
         </FieldDescription>
       </FormDialog>
-      {registering && contact && (
+      {registering === 'existing' && contact && (
         <RegisterContactSheet
           contactId={contact.id}
-          onOpenChange={setRegistering}
+          onOpenChange={(open) => setRegistering(open ? 'existing' : null)}
           onSaved={(saved) => {
             applied.current = ''
             setContact(saved)
@@ -414,12 +418,12 @@ export function PhoneRegistrationSheet({
           }}
         />
       )}
-      {registering && !contact && (
+      {registering === 'new' && (
         <ContactSheet
           locked
           contact={null}
-          open={registering}
-          onOpenChange={setRegistering}
+          open
+          onOpenChange={(open) => setRegistering(open ? 'new' : null)}
           onSaved={choose}
         />
       )}

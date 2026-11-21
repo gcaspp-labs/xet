@@ -33,13 +33,16 @@ import { normalizeSearch } from '@/lib/format'
 
 type ClosingValues = z.input<typeof closingSchema>
 
-// Assunto, resolução, módulos, órgão, início e fim, dentro de um FormProvider
-// cujo formulário tem ao menos os campos de `closingShape`.
+// Módulos, assunto, resolução, órgão, início e fim, dentro de um FormProvider
+// cujo formulário tem ao menos os campos de `closingShape`. Com
+// `organizationFirst`, o órgão vem antes dos módulos, como o protótipo do
+// registro por telefone (#322) mostra.
 export function ClosingFields({
   idPrefix,
   modules,
   subjects,
   emptyModules,
+  organizationFirst = false,
 }: {
   idPrefix: string
   modules: { id: number; name: string }[]
@@ -48,6 +51,9 @@ export function ClosingFields({
   subjects: FormSubject[]
   // Aviso quando não há módulo para escolher.
   emptyModules?: string
+  // Órgão antes dos módulos (registro por telefone); o encerramento segue a
+  // ordem do `docs/features/closing.md`.
+  organizationFirst?: boolean
 }) {
   const {
     register,
@@ -66,8 +72,31 @@ export function ClosingFields({
         all.findIndex((other) => sameText(other.body, solution.body)) === index,
     )
 
+  const organizationField = (
+    <Field data-invalid={!!errors.organization}>
+      <FieldLabel htmlFor={`${idPrefix}-organization`}>Órgão</FieldLabel>
+      <Controller
+        control={control}
+        name="organization"
+        render={({ field }) => (
+          <OrganizationPicker
+            // Recria o campo quando o órgão sugerido chega, para mostrar o nome.
+            key={field.value?.id ?? 'none'}
+            id={`${idPrefix}-organization`}
+            value={field.value as Organization | null}
+            onChange={field.onChange}
+            invalid={!!errors.organization}
+          />
+        )}
+      />
+      <FieldDescription>Trocar o órgão vale só para este chamado.</FieldDescription>
+      <FieldError errors={[errors.organization]} />
+    </Field>
+  )
+
   return (
     <>
+      {organizationFirst && organizationField}
       <Controller
         control={control}
         name="moduleIds"
@@ -149,25 +178,7 @@ export function ClosingFields({
         />
         <FieldError errors={[errors.resolution]} />
       </Field>
-      <Field data-invalid={!!errors.organization}>
-        <FieldLabel htmlFor={`${idPrefix}-organization`}>Órgão</FieldLabel>
-        <Controller
-          control={control}
-          name="organization"
-          render={({ field }) => (
-            <OrganizationPicker
-              // Recria o campo quando o órgão sugerido chega, para mostrar o nome.
-              key={field.value?.id ?? 'none'}
-              id={`${idPrefix}-organization`}
-              value={field.value as Organization | null}
-              onChange={field.onChange}
-              invalid={!!errors.organization}
-            />
-          )}
-        />
-        <FieldDescription>Trocar o órgão vale só para este chamado.</FieldDescription>
-        <FieldError errors={[errors.organization]} />
-      </Field>
+      {!organizationFirst && organizationField}
       <div className="grid gap-[15px] sm:grid-cols-2">
         <Field data-invalid={!!errors.startedAt}>
           <FieldLabel htmlFor={`${idPrefix}-started-at`}>Início</FieldLabel>
