@@ -15,6 +15,7 @@ import ContactsPage from '@/pages/directory/ContactsPage'
 import OrganizationsPage from '@/pages/directory/OrganizationsPage'
 import TicketPage from '@/pages/ticket/TicketPage'
 import Prototype337 from '@/pages/Prototype337'
+import Prototype343 from '@/pages/Prototype343'
 
 // Rotas que exigem sessão; sem sessão, vai para o login.
 function RequireAuth() {
@@ -43,6 +44,13 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #343: a ficha do atendimento encerrado em /atendimentos/:id.
+  if (
+    import.meta.env.DEV &&
+    /^\/atendimentos\/\d+$/.test(window.location.pathname) &&
+    new URLSearchParams(window.location.search).get('prototype') === '343'
+  )
+    return <Prototype343 />
   if (
     import.meta.env.DEV &&
     window.location.pathname === '/chamados' &&
