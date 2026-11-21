@@ -56,24 +56,30 @@ where t.assigned_at >= @period_start::timestamptz and t.assigned_at < @period_en
 -- name: DashboardClosures :one
 -- Tickets closed in the period, by the real closing moment, and the handling
 -- time: from the first assignment to the end of the form, which may be edited.
--- An end before the assignment and the cancelled tickets stay out of the average.
--- The phone registration is assigned at the start of the call, so the handling
--- time goes from the start to the end informed there.
+-- An end before the start and the cancelled tickets stay out of the average.
+-- The phone registration is born at the start informed of the call and that
+-- start may be corrected, so its handling time goes from the start informed now
+-- to the end. The start of the phone registration is the current started_at,
+-- not assigned_at, which a correction does not touch.
 select
-    count(*) filter (where t.closure_type = 'resolved') as resolved,
-    count(*) filter (where t.closure_type = 'transferred') as transferred,
-    count(*) filter (where t.closure_type = 'cancelled') as cancelled,
-    count(*) filter (where t.closure_type <> 'cancelled' and t.ended_at >= t.assigned_at) as handled,
-    coalesce(sum(extract(epoch from t.ended_at - t.assigned_at))
-        filter (where t.closure_type <> 'cancelled' and t.ended_at >= t.assigned_at), 0)::float8 as handling_seconds
-from tickets t
-where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.closed_at < @period_end::timestamptz
-  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
-  and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
-  and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
-  and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
-  and (sqlc.narg(module_id)::bigint is null
-      or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id)));
+    count(*) filter (where c.closure_type = 'resolved') as resolved,
+    count(*) filter (where c.closure_type = 'transferred') as transferred,
+    count(*) filter (where c.closure_type = 'cancelled') as cancelled,
+    count(*) filter (where c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start) as handled,
+    coalesce(sum(extract(epoch from c.ended_at - c.handling_start))
+        filter (where c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start), 0)::float8 as handling_seconds
+from (
+    select t.closure_type, t.ended_at,
+        case when t.channel = 'phone' then t.started_at else t.assigned_at end as handling_start
+    from tickets t
+    where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.closed_at < @period_end::timestamptz
+      and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
+      and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
+      and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
+      and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
+      and (sqlc.narg(module_id)::bigint is null
+          or exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id)))
+) c;
 
 -- name: DashboardByAssignee :many
 -- One row per person and sector, with the rules of the numbers above. Only
@@ -110,22 +116,26 @@ from (
       and (sqlc.narg(assignee_id)::bigint is null or t.created_by_id = sqlc.narg(assignee_id))
       and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
     union all
-    select t.sector_id, t.assignee_id,
+    select c.sector_id, c.assignee_id,
         0, 0,
-        (t.closure_type = 'resolved')::int,
-        (t.closure_type = 'transferred')::int,
-        (t.closure_type = 'cancelled')::int,
-        case when t.closure_type <> 'cancelled' and t.ended_at >= t.assigned_at then 1 else 0 end,
-        case when t.closure_type <> 'cancelled' and t.ended_at >= t.assigned_at
-            then extract(epoch from t.ended_at - t.assigned_at)::float8 else 0::float8 end
-    from tickets t
-    where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.closed_at < @period_end::timestamptz
-      and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
-      and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
-      and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
-      and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
-      and (sqlc.narg(module_id)::bigint is null or (t.closure_type <> 'cancelled'
-          and exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id))))
+        (c.closure_type = 'resolved')::int,
+        (c.closure_type = 'transferred')::int,
+        (c.closure_type = 'cancelled')::int,
+        case when c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start then 1 else 0 end,
+        case when c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start
+            then extract(epoch from c.ended_at - c.handling_start)::float8 else 0::float8 end
+    from (
+        select t.sector_id, t.assignee_id, t.closure_type, t.ended_at,
+            case when t.channel = 'phone' then t.started_at else t.assigned_at end as handling_start
+        from tickets t
+        where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.closed_at < @period_end::timestamptz
+          and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
+          and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
+          and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
+          and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
+          and (sqlc.narg(module_id)::bigint is null or (t.closure_type <> 'cancelled'
+              and exists (select 1 from ticket_modules tm where tm.ticket_id = t.id and tm.module_id = sqlc.narg(module_id))))
+    ) c
 ) r
 join sectors s on s.id = r.sector_id
 join users u on u.id = r.user_id

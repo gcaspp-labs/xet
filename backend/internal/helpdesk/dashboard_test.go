@@ -1162,6 +1162,112 @@ func TestDashboardHandlingTimeUsesTheInformedTimesOfThePhoneRegistration(t *test
 	}
 }
 
+// A correção do início do registro por telefone vale para a média: o cartão e
+// a tabela por atendente contam do início corrigido, com e sem filtro de canal.
+func TestDashboardHandlingTimeOfThePhoneRegistrationFollowsTheCorrectedStart(t *testing.T) {
+	t.Parallel()
+	d := newDashboard(t)
+	sector := d.contab.ID
+	base := filtered("sectorId", sector)
+	phoneFilter := filtered("sectorId", sector, "channel", "phone")
+
+	phone := d.phoneRegistration(sector, d.orgA, d.anaToken, dashboardNoon, dashboardNoon.Add(time.Hour), d.modA)
+	d.setTimes(phone.ID, ticketTimes{closed: &dashboardNoon})
+	if got := d.number(d.supToken, base, "averageHandlingSeconds"); got != 3600 {
+		t.Fatalf("handling before the correction = %v", got)
+	}
+
+	// De 12:00–13:00 para 12:30–13:00: meia hora, não uma.
+	started := dashboardNoon.Add(30 * time.Minute)
+	resp := d.e.correct(phone.ID, d.supToken, map[string]any{
+		"subject": "Contracheque", "resolution": "Orientado por telefone.",
+		"moduleIds": []int64{d.modA}, "organizationId": d.orgA,
+		"startedAt": started, "endedAt": dashboardNoon.Add(time.Hour), "reason": "Início errado",
+	})
+	if resp.Status != http.StatusOK {
+		t.Fatalf("correct: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	for name, query := range map[string]url.Values{"all channels": base, "phone": phoneFilter} {
+		if got := d.number(d.supToken, query, "averageHandlingSeconds"); got != 1800 {
+			t.Fatalf("handling with %s = %v", name, got)
+		}
+		_, rows := d.rows(d.supToken, query)
+		row := rows[d.ana.Name+"/Contabilidade"]
+		if row["averageHandlingSeconds"] != 1800 || row["resolved"] != 1 {
+			t.Fatalf("row with %s = %v", name, row)
+		}
+	}
+}
+
+// A ligação corrigida para antes do início original continua na média: o
+// assigned_at gravado no registro não serve de começo, quem serve é o início
+// informado agora.
+func TestDashboardKeepsThePhoneRegistrationCorrectedToAnEarlierCall(t *testing.T) {
+	t.Parallel()
+	d := newDashboard(t)
+	sector := d.contab.ID
+
+	phone := d.phoneRegistration(sector, d.orgA, d.anaToken, dashboardNoon, dashboardNoon.Add(time.Hour), d.modA)
+	d.setTimes(phone.ID, ticketTimes{closed: &dashboardNoon})
+
+	// 10:00–10:20, antes do início original (12:00), que a correção não altera.
+	resp := d.e.correct(phone.ID, d.supToken, map[string]any{
+		"subject": "Contracheque", "resolution": "Orientado por telefone.",
+		"moduleIds": []int64{d.modA}, "organizationId": d.orgA,
+		"startedAt": dashboardNoon.Add(-2 * time.Hour), "endedAt": dashboardNoon.Add(-100 * time.Minute),
+		"reason": "Ligação de manhã",
+	})
+	if resp.Status != http.StatusOK {
+		t.Fatalf("correct: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	query := filtered("sectorId", sector)
+	if got := d.number(d.supToken, query, "averageHandlingSeconds"); got != 1200 {
+		t.Fatalf("handling after the correction = %v", got)
+	}
+	_, rows := d.rows(d.supToken, query)
+	row := rows[d.ana.Name+"/Contabilidade"]
+	if row["averageHandlingSeconds"] != 1200 || row["resolved"] != 1 {
+		t.Fatalf("row = %v", row)
+	}
+}
+
+// O "Início" corrigido do WhatsApp continua fora da conta: o tempo de
+// atendimento começa em quando foi assumido, e não no início editado.
+func TestDashboardCorrectedStartOfWhatsAppKeepsTheAssignment(t *testing.T) {
+	t.Parallel()
+	d := newDashboard(t)
+	query := filtered("sectorId", d.contab.ID)
+
+	assignedAt := dashboardNoon
+	endedAt := assignedAt.Add(20 * time.Minute)
+	ticket := d.assigned(d.contab.ID, d.orgA, d.anaToken)
+	d.setTimes(ticket.ID, ticketTimes{assigned: &assignedAt})
+	d.close(ticket.ID, d.anaToken, with(with(d.form(d.orgA, d.modA),
+		"startedAt", assignedAt.Add(-2*time.Hour)), "endedAt", endedAt))
+	d.setTimes(ticket.ID, ticketTimes{closed: &dashboardNoon})
+
+	// O início editado para bem antes continua não contando.
+	resp := d.e.correct(ticket.ID, d.anaToken, map[string]any{
+		"subject": "Dúvida", "resolution": "Resolvida.",
+		"moduleIds": []int64{d.modA}, "organizationId": d.orgA,
+		"startedAt": assignedAt.Add(-3 * time.Hour), "endedAt": endedAt, "reason": "Início errado",
+	})
+	if resp.Status != http.StatusOK {
+		t.Fatalf("correct: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	if got := d.number(d.supToken, query, "averageHandlingSeconds"); got != 1200 {
+		t.Fatalf("handling after the correction = %v", got)
+	}
+	_, rows := d.rows(d.supToken, query)
+	row := rows[d.ana.Name+"/Contabilidade"]
+	if row["averageHandlingSeconds"] != 1200 || row["resolved"] != 1 {
+		t.Fatalf("row = %v", row)
+	}
+}
+
 // O filtro de canal vale para os encerramentos e a tabela por atendente; nos
 // demais números, a API responde que ele não se aplica.
 func TestDashboardChannelFilterSeparatesWhatsAppFromPhone(t *testing.T) {
