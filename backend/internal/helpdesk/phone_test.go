@@ -403,3 +403,74 @@ func TestPhoneRegistrationIsCorrectedAsAnyClosedTicket(t *testing.T) {
 		t.Fatalf("after correction = %+v", p)
 	}
 }
+
+func (e *testEnv) phoneFormFor(sectorID, contactID int64, token string) response {
+	e.T.Helper()
+	return e.Do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/phone-tickets/form?contactId=%d", sectorID, contactID), token, nil)
+}
+
+// contactWithModule creates a contact registered in the sector with one of its
+// modules.
+func (e *testEnv) contactWithModule(token, name, phone string, orgID, sectorID, moduleID int64) int64 {
+	e.T.Helper()
+	resp := e.Do(http.MethodPost, "/api/contacts", token, map[string]any{
+		"name": name, "phone": phone, "organizationId": orgID,
+		"sectorIds": []int64{sectorID}, "moduleIds": []int64{moduleID},
+	})
+	if resp.Status != http.StatusCreated {
+		e.T.Fatalf("create contact %s: status %d, body %v", name, resp.Status, resp.Body)
+	}
+	return id(resp.Body)
+}
+
+func TestPhoneFormReturnsTheSectorDefaults(t *testing.T) {
+	t.Parallel()
+	c := newPhone(t)
+	e := c.e
+	subject := e.createSubject(c.sector.ID, c.supToken, "Contracheque")
+	contact := e.contactWithModule(c.supToken, "Fernanda Lima", "5513977772222", c.org, c.sector.ID, c.modules[0])
+
+	// O formulário começa com os módulos ativos do setor, o assunto na lista, o
+	// módulo do contato entre os ativos do setor e o órgão principal do contato.
+	resp := e.phoneFormFor(c.sector.ID, contact, c.anaToken)
+	if resp.Status != http.StatusOK {
+		t.Fatalf("phone form: status %d, body %v", resp.Status, resp.Body)
+	}
+	modules, _ := resp.Body["modules"].([]any)
+	if len(modules) != 2 || modules[0].(map[string]any)["name"] != "Folha" {
+		t.Fatalf("form modules = %v", resp.Body["modules"])
+	}
+	subjects, _ := resp.Body["subjects"].([]any)
+	if len(subjects) != 1 || subjects[0].(map[string]any)["name"] != "Contracheque" ||
+		subjects[0].(map[string]any)["moduleId"] != float64(c.modules[0]) {
+		t.Fatalf("form subjects = %v", resp.Body["subjects"])
+	}
+	contactModules, _ := resp.Body["contactModuleIds"].([]any)
+	if len(contactModules) != 1 || contactModules[0] != float64(c.modules[0]) {
+		t.Fatalf("form contact modules = %v", resp.Body["contactModuleIds"])
+	}
+	if org := resp.Body["organization"].(map[string]any); org["id"] != float64(c.org) || org["municipality"].(map[string]any)["name"] != "Itu" {
+		t.Fatalf("form organization = %v", resp.Body["organization"])
+	}
+	if _, err := time.Parse(time.RFC3339Nano, resp.Body["startedAt"].(string)); err != nil {
+		t.Fatalf("form start = %v", resp.Body["startedAt"])
+	}
+	if subject == 0 {
+		t.Fatal("subject was not created")
+	}
+
+	// O atendente de outro setor é recusado; o administrador lê qualquer setor ativo.
+	if resp := e.phoneFormFor(c.sector.ID, contact, c.rhToken); resp.Status != http.StatusForbidden {
+		t.Fatalf("other sector: status %d, body %v", resp.Status, resp.Body)
+	}
+	if resp := e.phoneFormFor(c.sector.ID, contact, c.adminToken); resp.Status != http.StatusOK {
+		t.Fatalf("admin: status %d, body %v", resp.Status, resp.Body)
+	}
+	// Contato desconhecido e contato faltando são recusados.
+	if resp := e.phoneFormFor(c.sector.ID, 999999, c.anaToken); resp.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown contact: status %d, body %v", resp.Status, resp.Body)
+	}
+	if resp := e.Do(http.MethodGet, fmt.Sprintf("/api/sectors/%d/phone-tickets/form", c.sector.ID), c.anaToken, nil); resp.Status != http.StatusBadRequest {
+		t.Fatalf("no contact: status %d, body %v", resp.Status, resp.Body)
+	}
+}

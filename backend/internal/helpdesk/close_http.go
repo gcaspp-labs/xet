@@ -39,6 +39,12 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 		h.ticketError(w, r, err)
 		return
 	}
+	httpx.WriteJSON(w, http.StatusOK, toClosingFormResponse(form))
+}
+
+// toClosingFormResponse converts the closing form data to the response shared
+// by the closing form of a ticket and the phone registration window.
+func toClosingFormResponse(form ClosingForm) closingFormResponse {
 	out := closingFormResponse{
 		Modules:          make([]httpx.Ref, len(form.Modules)),
 		Subjects:         make([]formSubjectResponse, 0, len(form.Subjects)),
@@ -59,7 +65,7 @@ func (h *Handler) closingForm(w http.ResponseWriter, r *http.Request) {
 			Municipality: httpx.Ref{ID: o.Organization.MunicipalityID, Name: o.MunicipalityName},
 		}
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	return out
 }
 
 // closeRequest has no limit on the subject: a text over the limit of the list
