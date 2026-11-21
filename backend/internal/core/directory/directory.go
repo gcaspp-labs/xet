@@ -194,6 +194,31 @@ func escapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }
 
+// organizationSearchPatterns holds the patterns of the organization search, one
+// entry per word of the query, in order: the name pattern matches anywhere in
+// the name of the organization or of its municipality; the CNPJ pattern is set
+// only when the word, without formatting, could be part of a CNPJ. A word has
+// to match in at least one of them, and the order of the words doesn't matter.
+type organizationSearchPatterns struct {
+	names, cnpjs []string
+}
+
+func newOrganizationSearchPatterns(query string) organizationSearchPatterns {
+	words := strings.Fields(query)
+	p := organizationSearchPatterns{names: make([]string, 0, len(words)), cnpjs: make([]string, 0, len(words))}
+	for _, word := range words {
+		p.names = append(p.names, "%"+escapeLike(word)+"%")
+		// A CNPJ fragment has at least one digit, so plain words do not match
+		// the letters of alphanumeric CNPJs.
+		cnpj := ""
+		if fragment := strings.ToUpper(cnpjFormatting.Replace(word)); isCNPJFragment(fragment) {
+			cnpj = "%" + fragment + "%"
+		}
+		p.cnpjs = append(p.cnpjs, cnpj)
+	}
+	return p
+}
+
 func isDigits(s string) bool {
 	if s == "" {
 		return false
@@ -250,15 +275,16 @@ const (
 // OrganizationSortColumns are the columns the organization list accepts in ?sort=.
 var OrganizationSortColumns = []string{SortOrganizationName, SortMunicipality, SortCNPJ}
 
-// SearchOrganizations finds a page of the organizations by name, municipality or
-// CNPJ, in the municipality, if any; an empty query lists them all. It returns
-// the total the filter finds and the page actually returned: the last one when
-// the request goes past it.
+// SearchOrganizations finds a page of the organizations by the words of the
+// query, each one matching the name, the municipality or the CNPJ, in the
+// municipality, if any; an empty query lists them all. It returns the total the
+// filter finds and the page actually returned: the last one when the request
+// goes past it.
 func (s *Service) SearchOrganizations(ctx context.Context, query string, municipalityID int64, page paging.Request) ([]Organization, int64, paging.Request, error) {
-	p := newSearchPatterns(query)
+	p := newOrganizationSearchPatterns(query)
 	total, err := s.q.CountOrganizations(ctx, db.CountOrganizationsParams{
-		NamePattern:    p.name,
-		CnpjPattern:    p.cnpj,
+		NamePatterns:   p.names,
+		CnpjPatterns:   p.cnpjs,
 		MunicipalityID: municipalityID,
 	})
 	if err != nil {
@@ -266,8 +292,8 @@ func (s *Service) SearchOrganizations(ctx context.Context, query string, municip
 	}
 	page = page.Clamp(total)
 	rows, err := s.q.SearchOrganizations(ctx, db.SearchOrganizationsParams{
-		NamePattern:    p.name,
-		CnpjPattern:    p.cnpj,
+		NamePatterns:   p.names,
+		CnpjPatterns:   p.cnpjs,
 		MunicipalityID: municipalityID,
 		SortColumn:     page.Sort,
 		Descending:     page.Descending,

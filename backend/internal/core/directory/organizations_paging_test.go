@@ -37,6 +37,10 @@ func TestOrganizationListPages(t *testing.T) {
 		}
 		return out
 	}
+	// A busca é por palavras, cada uma em qualquer campo: "orgao 3" encontra os
+	// órgãos cujo nome tem "3", em qualquer posição.
+	withThree := append([]string{"Órgão 03", "Órgão 13", "Órgão 23"}, numbered(30, 39)...)
+	withThree = append(withThree, "Órgão 43")
 	for _, tc := range []struct {
 		query       string
 		want        []string
@@ -59,7 +63,7 @@ func TestOrganizationListPages(t *testing.T) {
 		// sem o antigo corte de 50.
 		{fmt.Sprintf("?municipalityId=%d", salto), numbered(41, 45), 5, 1},
 		{"?q=salto", numbered(41, 45), 5, 1},
-		{"?q=" + url.QueryEscape("orgao 3"), numbered(30, 39), 10, 1},
+		{"?q=" + url.QueryEscape("orgao 3"), withThree, 14, 1},
 		{fmt.Sprintf("?q=ORGAO&municipalityId=%d&direction=desc&page=2", itu), numbered(20, 1), 40, 2},
 		{fmt.Sprintf("?q=itu&municipalityId=%d&page=5", salto), nil, 0, 1},
 		{"?q=inexistente&page=3", nil, 0, 1},

@@ -335,6 +335,45 @@ func TestDirectorySearch(t *testing.T) {
 	}
 }
 
+// A busca de órgãos aceita palavras de campos diferentes: cada palavra precisa
+// aparecer no nome do órgão, no município ou no CNPJ, em qualquer ordem.
+func TestOrganizationSearchByWords(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("admin@exemplo.com", testPassword)
+	e.OrganizationIn(token, "Câmara Municipal", "", "Jales")
+	e.OrganizationIn(token, "Câmara dos Vereadores", "", "Salto")
+	e.OrganizationIn(token, "Prefeitura Municipal", alphanumericCNPJ, "Jales")
+
+	search := func(q string) []string {
+		t.Helper()
+		return names(e.DoPageItems("/api/organizations?q="+url.QueryEscape(q), token))
+	}
+	cases := []struct {
+		q    string
+		want []string
+	}{
+		{"câmara jales", []string{"Câmara Municipal"}},      // nome + município
+		{"jales câmara", []string{"Câmara Municipal"}},      // a ordem das palavras não importa
+		{"camara jales", []string{"Câmara Municipal"}},      // sem acento
+		{"CÂMARA JALES", []string{"Câmara Municipal"}},      // maiúsculas acentuadas
+		{"câmara salto", []string{"Câmara dos Vereadores"}}, // outro município
+		{"municipal jales", []string{"Câmara Municipal", "Prefeitura Municipal"}},
+		{"prefeitura 12abc345", []string{"Prefeitura Municipal"}},         // nome + trecho do CNPJ
+		{"12ABC34501DE35 jales", []string{"Prefeitura Municipal"}},        // CNPJ inteiro + município
+		{"camara", []string{"Câmara dos Vereadores", "Câmara Municipal"}}, // uma palavra só
+		{"câmara vinhedo", nil},                                           // uma palavra que não aparece em nenhum campo zera
+		{"câmara jales salto", nil},
+	}
+	for _, tc := range cases {
+		got := search(tc.q)
+		if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("organizations q=%q: got %v, want %v", tc.q, got, tc.want)
+		}
+	}
+}
+
 // Os municípios vêm da migração: os 645 de São Paulo, com o código AUDESP de 4
 // dígitos, e só supervisor e administrador os leem, para o formulário de órgão.
 func TestMunicipalitiesAreLoaded(t *testing.T) {
