@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -366,5 +367,73 @@ func TestContactCardBecomesContactMessage(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s: quote = %+v (snippet %+v), want snippet %+v", name, got, got.Snippet, want.Snippet)
 		}
+	}
+}
+
+// The card of the register has no WhatsApp account: the send asks WhatsApp
+// for it by the phone and puts the account it answers (with or without the
+// ninth digit) as the waid. A phone without WhatsApp still goes, without
+// waid; an error of the query fails the send, before anything is sent, and
+// the card it got stays as it was, for "Reenviar" to ask again.
+func TestContactCardGetsItsWhatsAppIDFromThePhone(t *testing.T) {
+	registered := messaging.ContactCard{
+		Name:         "Carla Souza",
+		Phones:       []messaging.ContactPhone{{Phone: "5511977776666"}},
+		Organization: "Prefeitura de Itu — Itu",
+	}
+	var asked [][]string
+	answer := func(resp []types.IsOnWhatsAppResponse, err error) isOnWhatsApp {
+		return func(_ context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
+			asked = append(asked, phones)
+			return resp, err
+		}
+	}
+	vcardSent := func(lookup isOnWhatsApp) (string, error) {
+		card, err := withWhatsAppIDs(t.Context(), lookup, registered)
+		if err != nil {
+			return "", err
+		}
+		return contactContent(card, nil).GetContactMessage().GetVcard(), nil
+	}
+
+	// Resolved: WhatsApp answers the account without the ninth digit.
+	onWhatsApp := answer([]types.IsOnWhatsAppResponse{{Query: "+5511977776666", JID: types.NewJID("551177776666", types.DefaultUserServer), IsIn: true}}, nil)
+	v, err := vcardSent(onWhatsApp)
+	if err != nil || !strings.Contains(v, "\nTEL;type=CELL;waid=551177776666:+5511977776666\n") {
+		t.Fatalf("resolved vCard = %q, %v", v, err)
+	}
+	if !reflect.DeepEqual(asked, [][]string{{"+5511977776666"}}) {
+		t.Fatalf("asked WhatsApp = %v", asked)
+	}
+	if registered.Phones[0].WhatsAppID != "" {
+		t.Fatalf("the card it got changed: %+v", registered)
+	}
+
+	// A phone that already has its account is not asked again.
+	asked = nil
+	known := registered
+	known.Phones = []messaging.ContactPhone{{Phone: "5511977776666", WhatsAppID: "551177776666"}}
+	if card, err := withWhatsAppIDs(t.Context(), onWhatsApp, known); err != nil || len(asked) != 0 || !reflect.DeepEqual(card, known) {
+		t.Fatalf("known account: card %+v, err %v, asked %v", card, err, asked)
+	}
+
+	// Without WhatsApp: the card goes, without waid.
+	for name, resp := range map[string][]types.IsOnWhatsAppResponse{
+		"not in":    {{Query: "+5511977776666", IsIn: false}},
+		"no answer": nil,
+	} {
+		v, err := vcardSent(answer(resp, nil))
+		if err != nil || !strings.Contains(v, "\nTEL;type=CELL:+5511977776666\n") || strings.Contains(v, "waid") {
+			t.Fatalf("%s: vCard = %q, %v", name, v, err)
+		}
+	}
+
+	// The query fails: no message to send, and the error says why.
+	queryErr := errors.New("websocket not connected")
+	if v, err := vcardSent(answer(nil, queryErr)); !errors.Is(err, queryErr) || v != "" {
+		t.Fatalf("query error: vCard %q, err %v", v, err)
+	}
+	if registered.Phones[0].WhatsAppID != "" {
+		t.Fatalf("the card it got changed: %+v", registered)
 	}
 }

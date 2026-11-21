@@ -26,16 +26,11 @@ type storedContactPhone struct {
 	WhatsAppID *string `json:"wa_id"`
 }
 
-// contactCardsOf returns the cards of a contact message to record, in order.
-// Names are trimmed and phones keep only their digits; a card without name and
-// a phone without digits are left out. Without any card left, ok is false:
-// the message is recorded as unsupported, as before cards were read, so a
-// provider that delivers a bad card never stops the reception.
-func contactCardsOf(msg messaging.Message) (cards []byte, ok bool, err error) {
-	return encodeContactCards(msg.ContactCards)
-}
-
-// encodeContactCards returns the cards to record, as contactCardsOf.
+// encodeContactCards returns the cards of a contact message to record, in
+// order. Names are trimmed and phones keep only their digits; a card without
+// name and a phone without digits are left out. Without any card left, ok is
+// false: the message is recorded as unsupported, as before cards were read,
+// so a provider that delivers a bad card never stops the reception.
 func encodeContactCards(in []messaging.ContactCard) (cards []byte, ok bool, err error) {
 	var stored []storedContactCard
 	for _, c := range in {

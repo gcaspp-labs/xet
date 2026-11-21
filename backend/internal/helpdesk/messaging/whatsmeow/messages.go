@@ -506,7 +506,7 @@ func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (st
 // WhatsApp goes without it, as a card the contact may still save.
 func (a *Adapter) SendContact(ctx context.Context, msg messaging.ContactMessage) (string, error) {
 	return a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(ctx context.Context, cli *whatsmeow.Client, to types.JID) (*waE2E.Message, error) {
-		card, err := withWhatsAppIDs(ctx, cli, msg.Card)
+		card, err := withWhatsAppIDs(ctx, cli.IsOnWhatsApp, msg.Card)
 		if err != nil {
 			return nil, err
 		}
@@ -514,16 +514,20 @@ func (a *Adapter) SendContact(ctx context.Context, msg messaging.ContactMessage)
 	})
 }
 
+// isOnWhatsApp asks WhatsApp for the accounts of phones, as
+// whatsmeow.Client.IsOnWhatsApp; tests pass their own.
+type isOnWhatsApp func(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)
+
 // withWhatsAppIDs fills the WhatsApp account of the phones of the card that
 // have none, without changing the card it got.
-func withWhatsAppIDs(ctx context.Context, cli *whatsmeow.Client, card messaging.ContactCard) (messaging.ContactCard, error) {
+func withWhatsAppIDs(ctx context.Context, lookup isOnWhatsApp, card messaging.ContactCard) (messaging.ContactCard, error) {
 	phones := make([]messaging.ContactPhone, len(card.Phones))
 	copy(phones, card.Phones)
 	for i, p := range phones {
 		if p.WhatsAppID != "" {
 			continue
 		}
-		resp, err := cli.IsOnWhatsApp(ctx, []string{"+" + p.Phone})
+		resp, err := lookup(ctx, []string{"+" + p.Phone})
 		if err != nil {
 			return card, fmt.Errorf("is on whatsapp: %w", err)
 		}

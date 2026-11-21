@@ -95,7 +95,7 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 	var cards []byte
 	if msg.Type == messaging.TypeContact {
 		var ok bool
-		if cards, ok, err = contactCardsOf(msg); err != nil {
+		if cards, ok, err = encodeContactCards(msg.ContactCards); err != nil {
 			return err
 		}
 		if !ok {

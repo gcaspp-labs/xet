@@ -2,6 +2,7 @@ package helpdesk_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -284,6 +285,41 @@ func TestContactCardFailsAndIsRetriedOnce(t *testing.T) {
 	}
 }
 
+// A consulta do WhatsApp que o envio faz (a conta do telefone do cartão)
+// falha: o cartão fica com falha, gravado, e "Reenviar" leva o mesmo cartão
+// com a mesma chave, sem duplicar.
+func TestContactCardFailsOnAProviderErrorAndIsRetried(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	carla := c.carla()
+
+	e.WhatsApp.FailNextSend(c.sector.ID, errors.New("is on whatsapp: websocket not connected"))
+	r := e.sendContact(c.ticket.ID, c.anaToken, requestC1, carla, 0)
+	if r.Status != http.StatusOK || r.Body["status"] != "failed" || r.Body["failureReason"] != "O WhatsApp não aceitou a mensagem." {
+		t.Fatalf("send with the query failing: status %d, body %v", r.Status, r.Body)
+	}
+	msgID := id(r.Body)
+	if sent := e.sentContacts(); len(sent) != 0 {
+		t.Fatalf("sent to WhatsApp after the failure = %+v", sent)
+	}
+	if cards := e.recordedCards(msgID); !reflect.DeepEqual(cards, jsonValue(t, carlaStored)) {
+		t.Fatalf("failed message cards = %v", cards)
+	}
+
+	if r := e.Do(http.MethodPost, fmt.Sprintf("/api/messages/%d/retry", msgID), c.anaToken, nil); r.Status != http.StatusOK || r.Body["status"] != "sent" {
+		t.Fatalf("retry: status %d, body %v", r.Status, r.Body)
+	}
+	sent := e.sentContacts()
+	if len(sent) != 1 || sent[0].IdempotencyKey != requestC1 || !reflect.DeepEqual(sent[0].Card, carlaCard) {
+		t.Fatalf("sent to WhatsApp = %+v", sent)
+	}
+	if got := e.outbound(c.ticket.ID); len(got) != 1 || got[0].ID != msgID || str(got[0].Status) != string(db.MessageStatusSent) {
+		t.Fatalf("outbound = %+v", got)
+	}
+}
+
 // O cartão sai como resposta citada, e o responsável cita um cartão do
 // chamado, enviado ou recebido: o trecho é contact com o nome do primeiro cartão.
 func TestContactCardIsQuotedBothWays(t *testing.T) {
@@ -322,12 +358,7 @@ func TestContactCardIsQuotedBothWays(t *testing.T) {
 		messaging.ContactCard{Name: "João Silva", Phones: []messaging.ContactPhone{{Phone: "5511955554444"}}},
 		messaging.ContactCard{Name: "Maria", Phones: []messaging.ContactPhone{{Phone: "5511944443333"}}},
 	))
-	var received int64
-	for _, m := range e.messages(c.ticket.ID) {
-		if str(m.ExternalMessageID) == "IN-CT" {
-			received = m.ID
-		}
-	}
+	received := e.messageID(c.ticket.ID, "IN-CT")
 	r = e.sendQuoting(c.ticket.ID, c.anaToken, requestC3, "Recebi os contatos", received)
 	if r.Status != http.StatusOK {
 		t.Fatalf("quoting the received card: status %d, body %v", r.Status, r.Body)
@@ -347,12 +378,7 @@ func TestContactCardIsQuotedBothWays(t *testing.T) {
 	reply := text("IN-Q", cardContact, cardPhone, "Obrigado")
 	reply.Quote = &messaging.Quote{ExternalMessageID: "fake-msg-" + requestC1, Snippet: quoteSnippet(messaging.TypeContact, "Carla Souza")}
 	e.receive(c.sector.ID, reply)
-	var replyID int64
-	for _, m := range e.messages(c.ticket.ID) {
-		if str(m.ExternalMessageID) == "IN-Q" {
-			replyID = m.ID
-		}
-	}
+	replyID := e.messageID(c.ticket.ID, "IN-Q")
 	wantQuote(t, e.apiQuote(c.ticket.ID, replyID, c.anaToken), float64(card), "contact", "Carla Souza")
 
 	// Um cartão que ainda não saiu (com falha) não pode ser citado.
