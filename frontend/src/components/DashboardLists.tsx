@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { CircleAlert, Inbox, MessagesSquare, UserCheck } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Pagination } from '@/components/Pagination'
@@ -14,6 +14,7 @@ import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
 import { useAssignTicket } from '@/lib/conversation'
 import { organizationLabel } from '@/lib/format'
+import { useQueryState } from '@/lib/paging'
 import type { TicketSummary } from '@/lib/tickets'
 
 type LiveTicket = TicketSummary & { sector: { id: number; name: string } }
@@ -22,6 +23,16 @@ type Lists = { queued: LiveTicket[]; inProgress: LiveTicket[] }
 // As listas do Dashboard paginam no navegador, de 5 em 5 (exceção à regra 7 de
 // interface.md, registrada em dashboard.md).
 const pageSize = 5
+
+// A página de cada lista fica no endereço, com parâmetro próprio (regra 9 de
+// interface.md): recarregar, voltar de outra tela ou abrir o link devolve a mesma
+// página, e recolher a seção não a perde.
+const pageParams = { queue: 'paginaFila', progress: 'paginaAtendimento' } as const
+
+function pageIn(params: URLSearchParams, name: string) {
+  const page = Math.trunc(Number(params.get(name)))
+  return page >= 1 ? page : 1
+}
 
 function elapsed(iso: string) {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
@@ -152,17 +163,46 @@ export function DashboardLists({
   if (assigneeId !== undefined) params.set('assigneeId', String(assigneeId))
   if (organizationId !== undefined) params.set('organizationId', String(organizationId))
   const search = params.toString()
-  const [pages, setPages] = useState({ search, queue: 1, progress: 1 })
+  const { params: url, update } = useQueryState()
+  const queuePage = pageIn(url, pageParams.queue)
+  const progressPage = pageIn(url, pageParams.progress)
+  const setPage = (name: string, page: number) =>
+    update({ [name]: page === 1 ? null : String(page) })
   // Mudar um filtro volta as duas listas à primeira página.
-  if (pages.search !== search) {
-    setPages({ search, queue: 1, progress: 1 })
-  }
-  const setQueuePage = (page: number) => setPages((current) => ({ ...current, queue: page }))
-  const setProgressPage = (page: number) => setPages((current) => ({ ...current, progress: page }))
+  const filtered = useRef(search)
+  useEffect(() => {
+    if (filtered.current === search) {
+      return
+    }
+    filtered.current = search
+    if (url.has(pageParams.queue) || url.has(pageParams.progress)) {
+      update({ [pageParams.queue]: null, [pageParams.progress]: null }, true)
+    }
+  }, [search, url, update])
   const { data, error } = useQuery({
     queryKey: ['dashboard', 'tickets', search],
     queryFn: () => api<Lists>(`/dashboard/tickets?${search}`),
   })
+  // Página além da última mostra a última, e o endereço é corrigido (regra 9 de
+  // interface.md).
+  useEffect(() => {
+    if (!data) {
+      return
+    }
+    const last = (count: number) => Math.max(1, Math.ceil(count / pageSize))
+    const fix: Record<string, string | null> = {}
+    const queueLast = last(data.queued.length)
+    if (queuePage > queueLast) {
+      fix[pageParams.queue] = queueLast === 1 ? null : String(queueLast)
+    }
+    const progressLast = last(data.inProgress.length)
+    if (progressPage > progressLast) {
+      fix[pageParams.progress] = progressLast === 1 ? null : String(progressLast)
+    }
+    if (Object.keys(fix).length > 0) {
+      update(fix, true)
+    }
+  }, [data, queuePage, progressPage, update])
   const { data: user } = useCurrentUser()
   const assign = useAssignTicket()
   const navigate = useNavigate()
@@ -181,8 +221,8 @@ export function DashboardLists({
             title="Fila"
             count={data.queued.length}
             tickets={data.queued}
-            page={pages.queue}
-            onPage={setQueuePage}
+            page={queuePage}
+            onPage={(page) => setPage(pageParams.queue, page)}
             action
             empty={
               <Empty>
@@ -229,8 +269,8 @@ export function DashboardLists({
             title="Em atendimento"
             count={data.inProgress.length}
             tickets={data.inProgress}
-            page={pages.progress}
-            onPage={setProgressPage}
+            page={progressPage}
+            onPage={(page) => setPage(pageParams.progress, page)}
             action={false}
             empty={
               <Empty>
