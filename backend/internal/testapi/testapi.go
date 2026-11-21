@@ -261,7 +261,13 @@ func (e *Env) Municipality(name string) int64 {
 
 func (e *Env) Organization(token, name, cnpj string) int64 {
 	e.T.Helper()
-	resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]any{"name": name, "cnpj": cnpj, "municipalityId": e.Municipality("Itu")})
+	return e.OrganizationIn(token, name, cnpj, "Itu")
+}
+
+// OrganizationIn creates an organization in a municipality loaded by the migration.
+func (e *Env) OrganizationIn(token, name, cnpj, municipality string) int64 {
+	e.T.Helper()
+	resp := e.Do(http.MethodPost, "/api/organizations", token, map[string]any{"name": name, "cnpj": cnpj, "municipalityId": e.Municipality(municipality)})
 	if resp.Status != http.StatusCreated {
 		e.T.Fatalf("create organization %s: status %d, body %v", name, resp.Status, resp.Body)
 	}

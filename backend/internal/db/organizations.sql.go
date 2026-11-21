@@ -13,22 +13,25 @@ const countOrganizations = `-- name: CountOrganizations :one
 select count(*)
 from organizations o
 join municipalities m on m.id = o.municipality_id
-where ($1::text = ''
-       or immutable_unaccent(o.name) ilike immutable_unaccent($1)
-       or immutable_unaccent(m.name) ilike immutable_unaccent($1)
-       or ($2::text <> '' and o.cnpj like $2))
+where not exists (
+        select 1
+        from unnest($1::text[]) with ordinality as w(name_pattern, position)
+        where not (immutable_unaccent(o.name) ilike immutable_unaccent(w.name_pattern)
+                   or immutable_unaccent(m.name) ilike immutable_unaccent(w.name_pattern)
+                   or coalesce(o.cnpj like ($2::text[])[w.position], false))
+      )
   and ($3::bigint = 0 or o.municipality_id = $3)
 `
 
 type CountOrganizationsParams struct {
-	NamePattern    string
-	CnpjPattern    string
+	NamePatterns   []string
+	CnpjPatterns   []string
 	MunicipalityID int64
 }
 
 // Counts the organizations SearchOrganizations finds, with the same filter.
 func (q *Queries) CountOrganizations(ctx context.Context, arg CountOrganizationsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countOrganizations, arg.NamePattern, arg.CnpjPattern, arg.MunicipalityID)
+	row := q.db.QueryRow(ctx, countOrganizations, arg.NamePatterns, arg.CnpjPatterns, arg.MunicipalityID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -144,10 +147,13 @@ const searchOrganizations = `-- name: SearchOrganizations :many
 select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, m.name as municipality_name
 from organizations o
 join municipalities m on m.id = o.municipality_id
-where ($1::text = ''
-       or immutable_unaccent(o.name) ilike immutable_unaccent($1)
-       or immutable_unaccent(m.name) ilike immutable_unaccent($1)
-       or ($2::text <> '' and o.cnpj like $2))
+where not exists (
+        select 1
+        from unnest($1::text[]) with ordinality as w(name_pattern, position)
+        where not (immutable_unaccent(o.name) ilike immutable_unaccent(w.name_pattern)
+                   or immutable_unaccent(m.name) ilike immutable_unaccent(w.name_pattern)
+                   or coalesce(o.cnpj like ($2::text[])[w.position], false))
+      )
   and ($3::bigint = 0 or o.municipality_id = $3)
 order by
   case when $4::text = 'municipality' and not $5::bool
@@ -168,8 +174,8 @@ limit $7 offset $6
 `
 
 type SearchOrganizationsParams struct {
-	NamePattern    string
-	CnpjPattern    string
+	NamePatterns   []string
+	CnpjPatterns   []string
 	MunicipalityID int64
 	SortColumn     string
 	Descending     bool
@@ -182,17 +188,19 @@ type SearchOrganizationsRow struct {
 	MunicipalityName string
 }
 
-// An empty query lists them all. name_pattern is an ILIKE pattern compared
-// without accents with the names of the organization and its municipality;
-// cnpj_pattern is a LIKE pattern, empty when the query cannot be part of a CNPJ.
-// A zero municipality disables that filter. Keep the filter equal to
-// CountOrganizations. Sorts by the name (default), the municipality or the CNPJ
-// (organizations without one last), ignoring case and accents, then by the
-// name, the municipality and the id, in the same direction.
+// An empty query lists them all. name_patterns and cnpj_patterns hold one entry
+// per word of the query, in the same order: name_patterns are ILIKE patterns
+// compared without accents with the names of the organization and its
+// municipality, and cnpj_patterns are LIKE patterns, empty when the word cannot
+// be part of a CNPJ. Every word has to match in at least one of them, and the
+// order of the words doesn't matter. A zero municipality disables that filter.
+// Keep the filter equal to CountOrganizations. Sorts by the name (default), the
+// municipality or the CNPJ (organizations without one last), ignoring case and
+// accents, then by the name, the municipality and the id, in the same direction.
 func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizationsParams) ([]SearchOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, searchOrganizations,
-		arg.NamePattern,
-		arg.CnpjPattern,
+		arg.NamePatterns,
+		arg.CnpjPatterns,
 		arg.MunicipalityID,
 		arg.SortColumn,
 		arg.Descending,

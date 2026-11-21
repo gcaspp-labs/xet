@@ -111,6 +111,9 @@ test('supervisor cadastra órgãos com CNPJ validado', async ({ page, baseURL })
   await search.fill('peruibe')
   await expect(found).toHaveCount(1)
   await expect(found.first()).toContainText(`Prefeitura ${id}`)
+  // A busca aceita palavras de campos diferentes, em qualquer ordem.
+  await search.fill(`peruibe ${id}`)
+  await expect(found).toHaveCount(1)
   // A tabela é compartilhada entre testes e a edição pode mudar a página da linha.
   await search.fill(id)
 
@@ -991,9 +994,10 @@ test('órgãos em páginas de 20, ordenados pela coluna, com busca, página e or
   const own = await seedSector(baseURL!)
   const { id } = unique()
   // 23 órgãos com o mesmo marcador; o último fica no município que vem primeiro.
+  // O sufixo leva letra ("n01") para não se confundir com os dígitos do id na busca.
   const names = Array.from(
     { length: 23 },
-    (_, i) => `Órgão ${id} ${String(i + 1).padStart(2, '0')}`,
+    (_, i) => `Órgão ${id} n${String(i + 1).padStart(2, '0')}`,
   )
   await seedDirectory(
     baseURL!,
@@ -1057,8 +1061,9 @@ test('órgãos em páginas de 20, ordenados pela coluna, com busca, página e or
   await expect(page.getByLabel('Buscar órgãos')).toHaveValue(id)
   await expect(rows).toHaveCount(3)
 
-  // Mudar a busca volta à página 1; com tudo numa página, a faixa some.
-  await page.getByLabel('Buscar órgãos').fill(`${id} 1`)
+  // Mudar a busca volta à página 1; com tudo numa página, a faixa some. A busca é
+  // por palavras, então "<id> n1" encontra n10 a n19.
+  await page.getByLabel('Buscar órgãos').fill(`${id} n1`)
   await expect(page).not.toHaveURL(/pagina=/)
   await expect(rows).toHaveCount(10)
   await expect(pagination).toBeHidden()
@@ -1077,9 +1082,10 @@ test('órgãos em páginas de 20, ordenados pela coluna, com busca, página e or
 async function openOrganizationPicker(page: Page, baseURL: string) {
   const own = await seedSector(baseURL)
   const { id } = unique()
+  // O sufixo leva letra ("n01") para não se confundir com os dígitos do id na busca.
   const names = Array.from(
     { length: 23 },
-    (_, i) => `Órgão ${id} ${String(i + 1).padStart(2, '0')}`,
+    (_, i) => `Órgão ${id} n${String(i + 1).padStart(2, '0')}`,
   )
   await seedDirectory(
     baseURL,
@@ -1112,8 +1118,9 @@ test('o seletor de órgão carrega o resto da lista ao chegar no fim e avisa qua
   await expect(page.getByRole('option', { name: new RegExp(names[22]) })).toBeVisible()
   await expect(page.getByText(/Mostrando \d+ de/)).toBeHidden()
 
-  // Digitar de novo recomeça na página 1, e a lista volta ao topo.
-  await picker.fill(`${id} 0`)
+  // Digitar de novo recomeça na página 1, e a lista volta ao topo. A busca é por
+  // palavras, então "<id> n0" encontra n01 a n09.
+  await picker.fill(`${id} n0`)
   await expect(options).toHaveCount(9)
   await expect(page.getByText(/Mostrando \d+ de/)).toBeHidden()
   await picker.fill(id)
