@@ -672,6 +672,8 @@ test('cartão enviando ou com falha não oferece reação nem Responder', async 
   request,
   baseURL,
 }) => {
+  // Dois contatos, o envio segurado e a falha: dá mais passos que os testes vizinhos.
+  test.slow()
   const { agent, sector, receive } = await seedCustomer(request, baseURL!, 'Clara Cita')
   await receive('1', { body: first })
   const { id } = unique()
@@ -695,20 +697,35 @@ test('cartão enviando ou com falha não oferece reação nem Responder', async 
   }
 
   // Em envio: o provedor segura o envio, e o cartão fica "Enviando" enquanto isso, sem as ações.
+  // O envio sai de outra sessão para não prender a janela do compositor; a tela é recarregada para
+  // mostrar o cartão como ele está, sem depender do aviso em tempo real sob carga no CI.
   await phone(request, sector.id, 'hold')
   const api = await apiRequest.newContext({ baseURL })
   ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
   const sendingSend = api.post(`/api/tickets/${ticketId}/messages/contact`, {
     data: { contactId: sendingId, clientRequestId: crypto.randomUUID() },
   })
+  const cardStatuses = async () =>
+    (await listMessages(page, ticketId))
+      .filter((message) => message.type === 'contact')
+      .map((message) => message.status)
+  await expect.poll(cardStatuses).toEqual(['pending'])
+
+  await page.reload()
   const pending = cardBubble(conversation, 'Mensagem enviada', sending)
   await expect(pending).toContainText('Enviando')
   await noActions(pending)
+
   await phone(request, sector.id, 'release')
   ok(await sendingSend)
   await api.dispose()
-  await expect(pending).toContainText('Enviada')
-  await expect(pending.getByRole('button', { name: 'Reagir', exact: true })).toBeAttached()
+  await expect.poll(cardStatuses).toEqual(['sent'])
+
+  // Enviada, o cartão volta a oferecer reação.
+  await page.reload()
+  const sent = cardBubble(conversation, 'Mensagem enviada', sending)
+  await expect(sent).toContainText('Enviada')
+  await expect(sent.getByRole('button', { name: 'Reagir', exact: true })).toBeAttached()
 
   // Com falha: também sem reação e sem Responder, só a exclusão para mim no menu.
   await phone(request, sector.id, 'drop')
