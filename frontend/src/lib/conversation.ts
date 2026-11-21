@@ -4,7 +4,7 @@ import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
-import { closedTicketsKey } from '@/lib/closed-tickets'
+import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
 import { type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
@@ -16,6 +16,8 @@ export type TicketDetail = {
   id: number
   protocol: string
   status: 'queued' | 'in_progress' | 'closed'
+  // Como o atendimento aconteceu: WhatsApp ou registro por telefone.
+  channel: TicketChannel
   sector: { id: number; name: string }
   arrivedAt: string
   assignedAt: string | null
@@ -102,6 +104,7 @@ export type HistoryEntry = {
   id: number
   protocol: string
   status: 'queued' | 'in_progress' | 'closed'
+  channel: TicketChannel
   closureType: 'resolved' | 'transferred' | 'cancelled' | null
   sectorName: string
   arrivedAt: string

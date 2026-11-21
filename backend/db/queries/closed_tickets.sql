@@ -15,6 +15,7 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
+  and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
   and (sqlc.narg(module)::text is null
       or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
           where tm.ticket_id = t.id
@@ -50,6 +51,7 @@ left join sectors ns on ns.id = n.sector_id
 where t.status = 'closed'
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
+  and (sqlc.narg(channel)::ticket_channel is null or t.channel = sqlc.narg(channel))
   and (sqlc.narg(module)::text is null
       or exists (select 1 from ticket_modules tm join modules md on md.id = tm.module_id
           where tm.ticket_id = t.id

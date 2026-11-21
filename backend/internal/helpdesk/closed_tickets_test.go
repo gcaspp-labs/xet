@@ -47,6 +47,8 @@ type closedTicket struct {
 	subject               string
 	modules               []int64
 	closedAt              time.Time
+	// channel is whatsapp when empty.
+	channel string
 }
 
 // insertClosed inserts a closed ticket that arrived three days before it was
@@ -58,14 +60,18 @@ func (e *testEnv) insertClosed(f closedTicket) int64 {
 	if f.subject != "" {
 		subject = &f.subject
 	}
+	channel := f.channel
+	if channel == "" {
+		channel = "whatsapp"
+	}
 	var id int64
 	err := e.Pool.QueryRow(e.T.Context(), `
 		insert into tickets (protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id,
-		    arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution)
-		values ($1, $2, $3, $4, $5, 'closed', $6, $7, $7, $7, $8, $9, $5, $10::closure_type, $11, 'Resolvido')
+		    arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, channel)
+		values ($1, $2, $3, $4, $5, 'closed', $6, $7, $7, $7, $8, $9, $5, $10::closure_type, $11, 'Resolvido', $12::ticket_channel)
 		returning id`,
 		f.protocol, f.sector, f.contact, f.organization, f.assignee, f.previous,
-		arrived, f.closedAt.Add(-time.Minute), f.closedAt, f.closureType, subject).Scan(&id)
+		arrived, f.closedAt.Add(-time.Minute), f.closedAt, f.closureType, subject, channel).Scan(&id)
 	if err != nil {
 		e.T.Fatal(err)
 	}
@@ -315,6 +321,43 @@ func TestClosedTicketsSearchAndFilters(t *testing.T) {
 	// The filters combine.
 	c.expect(c.supToken, qs("q", "campinas", "assigneeId", id(c.ana.ID), "period", "7d"), "9001-000001")
 	c.expect(c.supToken, qs("module", "folha", "subject", "ferias", "assigneeId", id(c.bia)), "9001-000002")
+}
+
+// The channel: every record of the history is WhatsApp unless it was registered
+// by phone, and the filter narrows the list to one of the two.
+func TestClosedTicketsChannelFilter(t *testing.T) {
+	t.Parallel()
+	c := newClosedList(t)
+	c.e.insertClosed(closedTicket{
+		protocol: "9001-000007", closureType: "resolved", sector: c.sector.ID, contact: c.joao, organization: &c.org,
+		assignee: c.ana.ID, subject: "Ligação", modules: c.modules[:1],
+		closedAt: dayStart(t, 0).Add(3 * time.Hour), channel: "phone",
+	})
+
+	// The phone record joins the history as the others, by the closing moment.
+	c.expect(c.supToken, "", "9001-000007", "9001-000001", "9001-000002", "9001-000003", "9001-000004")
+	c.expect(c.supToken, qs("channel", "phone"), "9001-000007")
+	c.expect(c.supToken, qs("channel", "whatsapp"), "9001-000001", "9001-000002", "9001-000003", "9001-000004")
+	c.expect(c.adminToken, qs("channel", "phone"), "9001-000007")
+	c.expect(c.adminToken, qs("sectorId", fmt.Sprint(c.rh), "channel", "phone"))
+
+	// The channel combines with the other filters and stays inside the sector.
+	c.expect(c.supToken, qs("channel", "whatsapp", "subject", "contra"), "9001-000001")
+	c.expect(c.supToken, qs("channel", "phone", "subject", "contra"))
+
+	// Each row carries its channel.
+	for _, item := range c.e.DoPageItems("/api/closed-tickets", c.supToken) {
+		want := "whatsapp"
+		if item["protocol"] == "9001-000007" {
+			want = "phone"
+		}
+		if item["channel"] != want {
+			t.Errorf("%v: channel %v, want %v", item["protocol"], item["channel"], want)
+		}
+	}
+
+	// A channel that does not exist is refused.
+	c.refuse(c.supToken, qs("channel", "fax"), http.StatusBadRequest)
 }
 
 func TestClosedTicketsSortAndPage(t *testing.T) {

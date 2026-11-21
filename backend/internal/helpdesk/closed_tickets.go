@@ -25,6 +25,7 @@ type ClosedTicketsFilter struct {
 	ClosedFrom, ClosedUntil *time.Time
 	SectorID                *int64
 	AssigneeID              *int64
+	Channel                 *db.TicketChannel
 	Module                  string
 	Subject                 string
 }
@@ -74,7 +75,7 @@ func (s *Service) ClosedTickets(ctx context.Context, actor auth.User, filter Clo
 		digits = searchDigits(*search)
 	}
 	total, err := s.q.CountClosedTicketsPage(ctx, db.CountClosedTicketsPageParams{
-		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, Module: module,
+		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, Channel: dashboardChannel(filter.Channel), Module: module,
 		ClosedFrom: filter.ClosedFrom, ClosedUntil: filter.ClosedUntil,
 		Subject: nonEmpty(filter.Subject), Search: search, SearchDigits: digits,
 	})
@@ -83,7 +84,7 @@ func (s *Service) ClosedTickets(ctx context.Context, actor auth.User, filter Clo
 	}
 	page = page.Clamp(total)
 	rows, err := s.q.ListClosedTicketsPage(ctx, db.ListClosedTicketsPageParams{
-		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, Module: module,
+		SectorID: scope.SectorID, AssigneeID: scope.AssigneeID, Channel: dashboardChannel(filter.Channel), Module: module,
 		ClosedFrom: filter.ClosedFrom, ClosedUntil: filter.ClosedUntil,
 		Subject: nonEmpty(filter.Subject), Search: search, SearchDigits: digits,
 		Sort: page.Sort, Direction: historyDirection(page), PageOffset: page.Offset(),

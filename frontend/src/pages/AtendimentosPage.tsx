@@ -36,7 +36,9 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
+import { PhoneTag } from '@/components/TicketChannel'
 import {
+  type ChannelChoice,
   type ClosedTicket,
   type ClosedTicketsFilter,
   closedTicketColumns,
@@ -165,6 +167,46 @@ function ModuleField({
   )
 }
 
+const channelChoices: { value: ChannelChoice; label: string }[] = [
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'telefone', label: 'Telefone' },
+]
+
+// Canal do atendimento: todos, só WhatsApp ou só os registros por telefone. Vale
+// para o servidor, então a paginação também conta só o canal escolhido.
+function ChannelFilter({
+  value,
+  onChange,
+}: {
+  value: ChannelChoice | undefined
+  onChange: (value: ChannelChoice | undefined) => void
+}) {
+  const items = [{ value: all, label: 'Todos' }, ...channelChoices]
+  return (
+    <Field className="w-full sm:w-[calc(190px*var(--text-scale))]">
+      <FieldLabel htmlFor="atendimentos-canal">Canal</FieldLabel>
+      <Select
+        items={items}
+        value={value ?? all}
+        onValueChange={(next) =>
+          next && onChange(next === all ? undefined : (next as ChannelChoice))
+        }
+      >
+        <SelectTrigger id="atendimentos-canal">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  )
+}
+
 function withStatus(option: { name: string; active: boolean }) {
   return option.active ? option.name : `${option.name} (inativo)`
 }
@@ -253,6 +295,7 @@ function Filters({ filter }: { filter: ClosedTicketsFilter }) {
             </Field>
           </>
         )}
+        <ChannelFilter value={filter.channel} onChange={filter.setChannel} />
         {filter.isAdmin && (
           <FilterSelect
             id="atendimentos-setor"
@@ -289,8 +332,9 @@ function Faint({ children }: { children: ReactNode }) {
 function SituationCell({ ticket }: { ticket: ClosedTicket }) {
   const type = ticket.closureType ?? 'resolved'
   return (
-    <span className="flex flex-col gap-(--space-4)">
+    <span className="flex flex-col items-start gap-(--space-4)">
       <Badge tone={type === 'cancelled' ? 'danger' : 'neutral'}>{closureTypeLabels[type]}</Badge>
+      {ticket.channel === 'phone' && <PhoneTag />}
       {ticket.transferredTo && (
         <span className="caption text-ink-faint">para {ticket.transferredTo.name}</span>
       )}
