@@ -119,6 +119,35 @@ func (a *Adapter) Handler() http.Handler {
 		}
 		a.control(w, r, func(sectorID int64) error { return a.Receive(r.Context(), sectorID, msg) })
 	})
+	// Message sent from the phone of the sector, outside the system: it opens a
+	// ticket started by the sector phone, with no agent as author.
+	r.Post("/messaging/sectors/{sectorID}/send-outside", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ExternalMessageID string    `json:"externalMessageId"`
+			Phone             string    `json:"phone"`
+			ContactName       string    `json:"contactName"`
+			Body              string    `json:"body"`
+			At                time.Time `json:"at"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ExternalMessageID == "" || body.Phone == "" {
+			http.Error(w, "externalMessageId and phone are required", http.StatusBadRequest)
+			return
+		}
+		sentAt := body.At
+		if sentAt.IsZero() {
+			sentAt = time.Now()
+		}
+		msg := messaging.Message{
+			ExternalMessageID: body.ExternalMessageID,
+			ExternalContactID: body.Phone + "@s.whatsapp.net",
+			Phone:             body.Phone,
+			ContactName:       body.ContactName,
+			Type:              messaging.TypeText,
+			Body:              body.Body,
+			SentAt:            sentAt,
+		}
+		a.control(w, r, func(sectorID int64) error { return a.SendOutside(r.Context(), sectorID, msg) })
+	})
 	// Reaction of a contact to a message, or from the phone of the sector;
 	// an empty emoji removes it.
 	r.Post("/messaging/sectors/{sectorID}/react", func(w http.ResponseWriter, r *http.Request) {
