@@ -53,11 +53,11 @@ func (q *Queries) AdvanceMessageStatus(ctx context.Context, arg AdvanceMessageSt
 const createAgentMessage = `-- name: CreateAgentMessage :one
 insert into messages (
     ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, client_request_id, status, sent_at,
-    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards
 )
 values (
     $1, $2, $3, 'outbound', 'agent', $4, $5, $6, $7, $8, 'pending', now(),
-    $9, $10, $11, $12
+    $9, $10, $11, $12, $13
 )
 on conflict (client_request_id) where client_request_id is not null do nothing
 returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
@@ -76,11 +76,13 @@ type CreateAgentMessageParams struct {
 	QuotedMessageID         *int64
 	QuotedType              NullMessageType
 	QuotedBody              *string
+	ContactCards            []byte
 }
 
 // Message sent by an agent through the system, recorded as pending before it
-// goes to the provider, with the message of the ticket it quotes, if any. A
-// repeated request (same client_request_id) returns no row.
+// goes to the provider, with the message of the ticket it quotes, if any, and
+// the cards of a contact message. A repeated request (same client_request_id)
+// returns no row.
 func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) (Message, error) {
 	row := q.db.QueryRow(ctx, createAgentMessage,
 		arg.TicketID,
@@ -95,6 +97,7 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 		arg.QuotedMessageID,
 		arg.QuotedType,
 		arg.QuotedBody,
+		arg.ContactCards,
 	)
 	var i Message
 	err := row.Scan(

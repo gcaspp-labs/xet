@@ -226,3 +226,42 @@ Acompanha a spec [#196](https://github.com/gcaspp-labs/xet/issues/196) (tarefa [
 | --- | --- | --- | --- |
 | E1 | No campo de mensagem, colocar o cursor no meio do texto, inserir um emoji pelo seletor e enviar | O emoji entra na posição do cursor e chega igual ao celular do cliente, depois do apelido | Pendente |
 | E2 | Receber no painel uma mensagem do cliente com emojis | Os emojis aparecem corretamente no painel | Pendente |
+
+## Roteiro manual: cartão de contato com o WhatsApp real
+
+Acompanha a spec [#312](https://github.com/gcaspp-labs/xet/issues/312) (envio na tarefa [#324](https://github.com/gcaspp-labs/xet/issues/324), recepção na [#323](https://github.com/gcaspp-labs/xet/issues/323)). Só o aparelho real prova o vCard que o adaptador falso simula, por isso estes itens são **manuais**: não entram no CI e não bloqueiam o merge de nenhuma tarefa. A tela de envio ("Contato" no menu do anexo) vem nas tarefas seguintes da spec; até lá, os itens de envio só podem ser feitos pela API (`POST /api/tickets/{id}/messages/contact`, com `clientRequestId`, `contactId` e, se quiser, `quotedMessageId`), por isso o mais simples é executá-los depois que a tela entrar.
+
+**Antes de começar**
+
+- As mesmas regras do roteiro de reação e citação: só **número de teste** no setor de teste e outro celular de teste no papel do cliente; nenhum contato, telefone ou órgão reais (o repositório é público).
+- Cadastre no XET um contato fictício **com telefone de um celular de teste que tenha WhatsApp** (por exemplo "Contato Teste", órgão "Prefeitura Teste" em algum município) e outro com um telefone fixo fictício, sem WhatsApp.
+- O chamado de teste precisa estar **aberto e assumido** por quem vai enviar.
+- Registre em cada linha a **data**, a **versão** (commit ou tag do XET em teste) e o **resultado** (OK, Falhou, com uma frase do que apareceu). Linhas não executadas ficam como **Pendente**.
+
+### Cartão enviado (painel → celular do cliente)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| K1 | Enviar o contato cadastrado com WhatsApp | O celular do cliente recebe um cartão de contato (não um texto), com o nome do cadastro, sem apelido de quem enviou | Pendente |
+| K2 | No celular do cliente, abrir o cartão | Aparecem o nome, o telefone e o órgão com o município ("Prefeitura Teste — Município") | Pendente |
+| K3 | Tocar em "Conversar" (ou "Mensagem") no cartão | Abre a conversa do WhatsApp com o celular do contato enviado, inclusive se o número tiver o nono dígito | Pendente |
+| K4 | Tocar em "Salvar contato" | O celular salva o contato com nome, telefone e órgão | Pendente |
+| K5 | Enviar o contato com telefone sem WhatsApp | O cartão chega; no celular ele não oferece conversar pelo WhatsApp (oferece convidar ou salvar) | Pendente |
+| K6 | Desconectar o número, enviar o cartão (fica "Falhou"), reconectar e usar "Reenviar" | Chega um cartão só ao celular | Pendente |
+| K7 | Mudar o nome do contato no cadastro depois de enviar e recarregar o chamado | O cartão já enviado continua com o nome de antes | Pendente |
+
+### Cartão recebido (celular do cliente → painel)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| K8 | No celular do cliente, compartilhar um contato da agenda | O painel mostra a mensagem como contato, com nome, telefone e órgão (se houver), sem o aviso "tipo de mensagem não suportado" | Pendente |
+| K9 | Compartilhar três contatos de uma vez | O painel mostra os três cartões, na ordem em que foram escolhidos | Pendente |
+| K10 | Compartilhar um contato com dois telefones | O cartão no painel mostra os dois telefones | Pendente |
+
+### Citação de cartão, nos dois sentidos
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| K11 | No celular do cliente, responder citando o cartão que o setor enviou | O painel mostra a citação com o nome do contato do cartão | Pendente |
+| K12 | No painel, responder com texto citando um cartão recebido | O celular mostra a bolha da citação no cartão certo, com o nome | Pendente |
+| K13 | No painel, enviar um cartão como resposta citando uma mensagem do cliente | O cartão chega ao celular com a bolha da citação na mensagem certa | Pendente |

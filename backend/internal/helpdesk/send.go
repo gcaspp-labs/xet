@@ -35,14 +35,16 @@ const (
 )
 
 // Outgoing is a message an agent sends from the panel: a text, a file with
-// an optional caption, or audio recorded in the browser to go as a voice
-// message (Voice), without caption. QuotedMessageID, when set, is the message
-// of the same ticket it replies to.
+// an optional caption, audio recorded in the browser to go as a voice
+// message (Voice), without caption, or the card of a registered contact
+// (CardContactID), without caption either. QuotedMessageID, when set, is the
+// message of the same ticket it replies to.
 type Outgoing struct {
 	ClientRequestID pgtype.UUID
 	Body            string
 	File            *messaging.Media
 	Voice           bool
+	CardContactID   *int64
 	QuotedMessageID *int64
 }
 
@@ -86,6 +88,14 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 	}
 
 	msgType := messaging.TypeText
+	var cards []byte
+	if out.CardContactID != nil {
+		var err error
+		if cards, err = s.cardOf(ctx, *out.CardContactID); err != nil {
+			return db.Message{}, err
+		}
+		msgType, out.Body = messaging.TypeContact, ""
+	}
 	var media *db.CreateMediaFileParams
 	if out.File != nil {
 		file := *out.File
@@ -133,9 +143,10 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 			}
 			mediaID = &m.ID
 		}
-		// The voice message goes without caption, so it has no prefix.
+		// The voice message and the card go without caption, so they have
+		// no prefix.
 		body := optional(out.Body)
-		if msgType != messaging.TypeAudio {
+		if msgType != messaging.TypeAudio && msgType != messaging.TypeContact {
 			prefixed, err := withNickname(ctx, q, actor.ID, out.Body)
 			if err != nil {
 				return err
@@ -151,6 +162,7 @@ func (s *Service) Send(ctx context.Context, provider messaging.Provider, actor a
 			Body:            body,
 			MediaID:         mediaID,
 			ClientRequestID: out.ClientRequestID,
+			ContactCards:    cards,
 
 			QuotedExternalMessageID: quote.QuotedExternalMessageID,
 			QuotedMessageID:         quote.QuotedMessageID,
@@ -210,11 +222,18 @@ func quoteFor(ctx context.Context, q *db.Queries, ticketID int64, quotedID *int6
 	}
 	// The snippet follows the rule of received quotes: the text, the caption
 	// of an image or video, the name of a document (its caption without a
-	// name), nothing for audio; media_unavailable keeps its caption or name.
+	// name), nothing for audio, the name of the first card of a contact;
+	// media_unavailable keeps its caption or name.
 	text := m.Body
 	switch m.Type {
 	case db.MessageTypeAudio:
 		text = nil
+	case db.MessageTypeContact:
+		name, err := firstCardName(m.ContactCards)
+		if err != nil {
+			return recordedQuote{}, err
+		}
+		text = &name
 	case db.MessageTypeDocument:
 		if m.MediaID != nil {
 			f, err := q.GetMediaFile(ctx, *m.MediaID)
@@ -360,6 +379,13 @@ func (s *Service) send(ctx context.Context, provider messaging.Provider, msg db.
 		return "", err
 	}
 
+	if msg.Type == db.MessageTypeContact {
+		card, err := sentCard(msg.ContactCards)
+		if err != nil {
+			return "", err
+		}
+		return provider.SendContact(ctx, messaging.ContactMessage{SectorID: msg.SectorID, To: to, Card: card, IdempotencyKey: key, Quote: quote})
+	}
 	if msg.MediaID == nil {
 		return provider.SendText(ctx, messaging.TextMessage{SectorID: msg.SectorID, To: to, Body: body, IdempotencyKey: key, Quote: quote})
 	}

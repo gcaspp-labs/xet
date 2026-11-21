@@ -52,6 +52,8 @@ type Adapter struct {
 	refuseReaction map[int64]bool
 	// Sectors whose next edit or deletion for everyone fails with the error.
 	failChange map[int64]error
+	// Sectors whose next send fails with the error.
+	failSend map[int64]error
 	// Sectors whose sends wait for Release, to keep a message pending.
 	held map[int64]chan struct{}
 	// What the provider supports on a message already sent; see SetCapabilities.
@@ -76,6 +78,7 @@ func New(handler messaging.EventHandler) *Adapter {
 		sent:           map[string]string{},
 		refuseReaction: map[int64]bool{},
 		failChange:     map[int64]error{},
+		failSend:       map[int64]error{},
 		held:           map[int64]chan struct{}{},
 		capabilities:   DefaultCapabilities,
 	}
@@ -348,6 +351,11 @@ func (a *Adapter) SendMedia(_ context.Context, msg messaging.MediaMessage) (stri
 	return a.send(msg.SectorID, msg.IdempotencyKey, msg)
 }
 
+// SendContact records the card like SendText, quote included.
+func (a *Adapter) SendContact(_ context.Context, msg messaging.ContactMessage) (string, error) {
+	return a.send(msg.SectorID, msg.IdempotencyKey, msg)
+}
+
 // send records the message once per idempotency key, like the real provider
 // reusing the message ID.
 func (a *Adapter) send(sectorID int64, key string, msg any) (string, error) {
@@ -361,6 +369,10 @@ func (a *Adapter) send(sectorID int64, key string, msg any) (string, error) {
 	defer a.mu.Unlock()
 	if a.session(sectorID).status != messaging.StatusConnected {
 		return "", messaging.ErrNotConnected
+	}
+	if err := a.failSend[sectorID]; err != nil {
+		delete(a.failSend, sectorID)
+		return "", err
 	}
 	if id, ok := a.sent[key]; ok && key != "" {
 		return id, nil
@@ -452,6 +464,15 @@ func (a *Adapter) FailNextChange(sectorID int64, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.failChange[sectorID] = err
+}
+
+// FailNextSend makes the next text, attachment or card of the sector fail
+// with err before reaching WhatsApp, as a query of the provider that fails
+// on the way.
+func (a *Adapter) FailNextSend(sectorID int64, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failSend[sectorID] = err
 }
 
 // SentMessages returns a copy of what was handed to the provider, in order.

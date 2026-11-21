@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waAdv"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
@@ -285,5 +287,153 @@ func TestContactsBecomeNeutralCards(t *testing.T) {
 				t.Fatalf("events = %#v\nwant [%#v]", rec.events, c.want)
 			}
 		})
+	}
+}
+
+// The neutral card goes as the ContactMessage WhatsApp Web sends: the display
+// name and a vCard with the name, the phone with its waid and the
+// organization with the municipality, which reads back as the same card. As
+// a reply it carries the context of the quote, and a quoted card has the
+// snippet contact with its name, received and sent.
+func TestContactCardBecomesContactMessage(t *testing.T) {
+	a, rec, _ := newTestAdapter(t)
+	sector := storeDevice(t, a, "5511900001111", 3)
+	device, err := a.container.GetDevice(t.Context(), sector)
+	if err != nil || device == nil {
+		t.Fatalf("device: %v", err)
+	}
+	cli := whatsmeow.NewClient(device, nil)
+
+	card := messaging.ContactCard{
+		Name:         "Carla Souza; Financeiro",
+		Phones:       []messaging.ContactPhone{{Phone: "5511977776666", WhatsAppID: "551177776666"}},
+		Organization: "Prefeitura de Itu — Itu",
+	}
+	m := contactContent(card, nil).GetContactMessage()
+	if m == nil || m.GetDisplayName() != card.Name || m.GetContextInfo() != nil {
+		t.Fatalf("contact message = %v", m)
+	}
+	wantVCard := "BEGIN:VCARD\nVERSION:3.0\nN:;Carla Souza\\; Financeiro;;;\nFN:Carla Souza\\; Financeiro\n" +
+		"ORG:Prefeitura de Itu — Itu\nTEL;type=CELL;waid=551177776666:+5511977776666\nEND:VCARD"
+	if m.GetVcard() != wantVCard {
+		t.Fatalf("vCard = %q\nwant %q", m.GetVcard(), wantVCard)
+	}
+	if back, ok := contactCard(m); !ok || !reflect.DeepEqual(back, card) {
+		t.Fatalf("vCard read back = %+v, want %+v", back, card)
+	}
+	// A phone without WhatsApp goes without waid.
+	if v := vcardOf(messaging.ContactCard{Name: "Sem WhatsApp", Phones: []messaging.ContactPhone{{Phone: "551140221000"}}}); !strings.Contains(v, "\nTEL;type=CELL:+551140221000\n") || strings.Contains(v, "ORG:") {
+		t.Fatalf("vCard without waid nor organization = %q", v)
+	}
+
+	// As a reply, quoting a card the sector sent.
+	to := contactChat
+	quote := &messaging.Quote{ExternalMessageID: "OUT-CT", FromSector: true, Snippet: &messaging.QuoteSnippet{Type: messaging.TypeContact, Text: "João Silva"}}
+	reply := contactContent(card, replyContext(cli, to, quote)).GetContactMessage().GetContextInfo()
+	if reply.GetStanzaID() != "OUT-CT" || reply.GetParticipant() != "5511900001111@s.whatsapp.net" ||
+		reply.GetQuotedMessage().GetContactMessage().GetDisplayName() != "João Silva" {
+		t.Fatalf("reply context = %v", reply)
+	}
+	// The quoted card reads back as the snippet it came from.
+	if sn := snippet(reply.GetQuotedMessage()); !reflect.DeepEqual(sn, quote.Snippet) {
+		t.Fatalf("snippet of the quoted card = %+v", sn)
+	}
+
+	// The customer quotes a card, one or several: the snippet is the name of the first.
+	at := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	s := &session{sectorID: 7, adapter: a}
+	quoting := func(id string, quoted *waE2E.Message) *events.Message {
+		return incoming(id, false, at, &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text:        proto.String("Esse?"),
+			ContextInfo: &waE2E.ContextInfo{StanzaID: proto.String("CT-1"), QuotedMessage: quoted},
+		}})
+	}
+	for name, c := range map[string]struct {
+		quoted *waE2E.Message
+		want   string
+	}{
+		"one card":           {quoted: contactContent(card, nil), want: card.Name},
+		"several cards":      {quoted: &waE2E.Message{ContactsArrayMessage: &waE2E.ContactsArrayMessage{Contacts: []*waE2E.ContactMessage{contactContent(messaging.ContactCard{Name: "Maria", Phones: []messaging.ContactPhone{{Phone: "5521966665555"}}}, nil).GetContactMessage(), m}}}, want: "Maria"},
+		"vCard cut in quote": {quoted: &waE2E.Message{ContactMessage: &waE2E.ContactMessage{DisplayName: proto.String("Pedro")}}, want: "Pedro"},
+	} {
+		rec.reset()
+		if !s.message(quoting("Q-"+name, c.quoted)) {
+			t.Fatalf("%s: event not acknowledged", name)
+		}
+		rec.mu.Lock()
+		got := rec.events[0].(messaging.MessageReceived).Message.Quote
+		rec.mu.Unlock()
+		want := &messaging.Quote{ExternalMessageID: "CT-1", Snippet: &messaging.QuoteSnippet{Type: messaging.TypeContact, Text: c.want}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: quote = %+v (snippet %+v), want snippet %+v", name, got, got.Snippet, want.Snippet)
+		}
+	}
+}
+
+// The card of the register has no WhatsApp account: the send asks WhatsApp
+// for it by the phone and puts the account it answers (with or without the
+// ninth digit) as the waid. A phone without WhatsApp still goes, without
+// waid; an error of the query fails the send, before anything is sent, and
+// the card it got stays as it was, for "Reenviar" to ask again.
+func TestContactCardGetsItsWhatsAppIDFromThePhone(t *testing.T) {
+	registered := messaging.ContactCard{
+		Name:         "Carla Souza",
+		Phones:       []messaging.ContactPhone{{Phone: "5511977776666"}},
+		Organization: "Prefeitura de Itu — Itu",
+	}
+	var asked [][]string
+	answer := func(resp []types.IsOnWhatsAppResponse, err error) isOnWhatsApp {
+		return func(_ context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
+			asked = append(asked, phones)
+			return resp, err
+		}
+	}
+	vcardSent := func(lookup isOnWhatsApp) (string, error) {
+		card, err := withWhatsAppIDs(t.Context(), lookup, registered)
+		if err != nil {
+			return "", err
+		}
+		return contactContent(card, nil).GetContactMessage().GetVcard(), nil
+	}
+
+	// Resolved: WhatsApp answers the account without the ninth digit.
+	onWhatsApp := answer([]types.IsOnWhatsAppResponse{{Query: "+5511977776666", JID: types.NewJID("551177776666", types.DefaultUserServer), IsIn: true}}, nil)
+	v, err := vcardSent(onWhatsApp)
+	if err != nil || !strings.Contains(v, "\nTEL;type=CELL;waid=551177776666:+5511977776666\n") {
+		t.Fatalf("resolved vCard = %q, %v", v, err)
+	}
+	if !reflect.DeepEqual(asked, [][]string{{"+5511977776666"}}) {
+		t.Fatalf("asked WhatsApp = %v", asked)
+	}
+	if registered.Phones[0].WhatsAppID != "" {
+		t.Fatalf("the card it got changed: %+v", registered)
+	}
+
+	// A phone that already has its account is not asked again.
+	asked = nil
+	known := registered
+	known.Phones = []messaging.ContactPhone{{Phone: "5511977776666", WhatsAppID: "551177776666"}}
+	if card, err := withWhatsAppIDs(t.Context(), onWhatsApp, known); err != nil || len(asked) != 0 || !reflect.DeepEqual(card, known) {
+		t.Fatalf("known account: card %+v, err %v, asked %v", card, err, asked)
+	}
+
+	// Without WhatsApp: the card goes, without waid.
+	for name, resp := range map[string][]types.IsOnWhatsAppResponse{
+		"not in":    {{Query: "+5511977776666", IsIn: false}},
+		"no answer": nil,
+	} {
+		v, err := vcardSent(answer(resp, nil))
+		if err != nil || !strings.Contains(v, "\nTEL;type=CELL:+5511977776666\n") || strings.Contains(v, "waid") {
+			t.Fatalf("%s: vCard = %q, %v", name, v, err)
+		}
+	}
+
+	// The query fails: no message to send, and the error says why.
+	queryErr := errors.New("websocket not connected")
+	if v, err := vcardSent(answer(nil, queryErr)); !errors.Is(err, queryErr) || v != "" {
+		t.Fatalf("query error: vCard %q, err %v", v, err)
+	}
+	if registered.Phones[0].WhatsAppID != "" {
+		t.Fatalf("the card it got changed: %+v", registered)
 	}
 }
