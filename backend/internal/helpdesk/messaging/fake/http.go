@@ -300,7 +300,110 @@ func (a *Adapter) Handler() http.Handler {
 	r.Post("/messaging/sectors/{sectorID}/logout", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error { return a.LogOut(r.Context(), sectorID) })
 	})
+	// What was handed to the provider for the sector, in order, with the ID it
+	// returned for each one: the end-to-end tests see only the server process,
+	// so they read here the card, the text and the quote that reached WhatsApp.
+	r.Get("/messaging/sectors/{sectorID}/sent", func(w http.ResponseWriter, r *http.Request) {
+		sectorID, err := strconv.ParseInt(chi.URLParam(r, "sectorID"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid sector", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(a.sentTo(sectorID))
+	})
 	return r
+}
+
+// sentItem is one of what the provider received, as the test route shows it.
+type sentItem struct {
+	ID                      string     `json:"id"`
+	Kind                    string     `json:"kind"`
+	Type                    string     `json:"type,omitempty"`
+	To                      string     `json:"to,omitempty"`
+	Body                    string     `json:"body,omitempty"`
+	Card                    *sentCard  `json:"card,omitempty"`
+	Quote                   *sentQuote `json:"quote,omitempty"`
+	Emoji                   string     `json:"emoji,omitempty"`
+	TargetExternalMessageID string     `json:"targetExternalMessageId,omitempty"`
+}
+
+type sentCard struct {
+	Name         string   `json:"name"`
+	Organization string   `json:"organization,omitempty"`
+	Phones       []string `json:"phones,omitempty"`
+}
+
+type sentQuote struct {
+	ExternalMessageID string `json:"externalMessageId"`
+	Type              string `json:"type,omitempty"`
+	Text              string `json:"text,omitempty"`
+}
+
+func quoteOf(q *messaging.Quote) *sentQuote {
+	if q == nil {
+		return nil
+	}
+	out := &sentQuote{ExternalMessageID: q.ExternalMessageID}
+	if q.Snippet != nil {
+		out.Type = string(q.Snippet.Type)
+		out.Text = q.Snippet.Text
+	}
+	return out
+}
+
+// sentTo is what the provider received for the sector, in the order it came.
+func (a *Adapter) sentTo(sectorID int64) []sentItem {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	items := []sentItem{}
+	for _, entry := range a.outbox {
+		item := sentItem{ID: entry.id}
+		switch m := entry.message.(type) {
+		case messaging.TextMessage:
+			if m.SectorID != sectorID {
+				continue
+			}
+			item.Kind, item.To, item.Body, item.Quote = "text", m.To, m.Body, quoteOf(m.Quote)
+		case messaging.MediaMessage:
+			if m.SectorID != sectorID {
+				continue
+			}
+			item.Kind, item.Type, item.To = "media", string(m.Type), m.To
+			item.Body, item.Quote = m.Caption, quoteOf(m.Quote)
+		case messaging.ContactMessage:
+			if m.SectorID != sectorID {
+				continue
+			}
+			card := sentCard{Name: m.Card.Name, Organization: m.Card.Organization}
+			for _, p := range m.Card.Phones {
+				card.Phones = append(card.Phones, p.Phone)
+			}
+			item.Kind, item.To, item.Card, item.Quote = "contact", m.To, &card, quoteOf(m.Quote)
+		case messaging.Reaction:
+			if m.SectorID != sectorID {
+				continue
+			}
+			item.Kind, item.To, item.Emoji = "reaction", m.To, m.Emoji
+			item.TargetExternalMessageID = m.TargetExternalMessageID
+		case messaging.MessageEdit:
+			if m.SectorID != sectorID {
+				continue
+			}
+			item.Kind, item.Type, item.To = "edit", string(m.Type), m.To
+			item.Body, item.TargetExternalMessageID = m.Body, m.TargetExternalMessageID
+		case messaging.MessageRevoke:
+			if m.SectorID != sectorID {
+				continue
+			}
+			item.Kind, item.To = "revoke", m.To
+			item.TargetExternalMessageID = m.TargetExternalMessageID
+		default:
+			continue
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 // changeBody is what an edit and a deletion share.

@@ -6,7 +6,18 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test'
-import { admin, json, openQueued, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  adminApi,
+  json,
+  municipalityId,
+  ok,
+  openQueued,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 type Quote = { messageId: number | null; type: string | null; text: string | null }
 type ApiMessage = {
@@ -489,4 +500,346 @@ test('teclado e leitor de tela: responder, citação em preparo, cancelar e cita
   await expect(shown).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(message).toBeInViewport()
+})
+
+// O cartão de contato de João Silva, nos dois sentidos.
+const joaoCard = {
+  name: 'João Silva',
+  organization: 'Prefeitura de Itu',
+  phones: [{ phone: '5511988881234', whatsAppId: '5511988881234' }],
+}
+
+// A janela "Enviar contato", aberta pelo menu do clipe.
+const contactDialog = (page: Page) => page.getByRole('dialog', { name: 'Enviar contato' })
+
+// Escolhe o contato pela busca e envia o cartão, como o responsável faz na janela do anexo.
+async function sendContact(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Anexar arquivo' }).click()
+  await page.getByRole('menuitem', { name: 'Contato', exact: true }).click()
+  await expect(contactDialog(page)).toBeVisible()
+  await contactDialog(page).getByRole('searchbox', { name: 'Buscar contato' }).fill(name)
+  await contactDialog(page)
+    .getByRole('list', { name: 'Contatos' })
+    .getByRole('button', { name: new RegExp(name) })
+    .click()
+  await contactDialog(page).getByRole('button', { name: 'Enviar' }).click()
+  await expect(contactDialog(page)).toHaveCount(0)
+}
+
+// O balão que tem o cartão do contato, na direção pedida.
+const cardBubble = (scope: Locator, direction: string, name: string) =>
+  scope
+    .getByRole('listitem', { name: direction })
+    .filter({ has: scope.page().getByRole('group', { name: new RegExp(`^Contato: ${name},`) }) })
+
+// Um contato do diretório no setor, que o cartão enviado leva.
+async function seedContact(baseURL: string, sectorId: number, name: string, phoneNumber: string) {
+  const api = await adminApi(baseURL)
+  const { id } = unique()
+  const organization = await json<{ id: number }>(
+    await api.post('/api/organizations', {
+      data: { name: `Órgão ${id}`, municipalityId: await municipalityId(api) },
+    }),
+  )
+  const contact = await json<{ id: number }>(
+    await api.post('/api/contacts', {
+      data: { name, phone: phoneNumber, organizationId: organization.id, sectorIds: [sectorId] },
+    }),
+  )
+  await api.dispose()
+  return contact.id
+}
+
+// O que o adaptador falso do WhatsApp recebeu para o setor, pela rota de teste do próprio adaptador.
+type SentToProvider = {
+  id: string
+  kind: string
+  type?: string
+  to?: string
+  body?: string
+  card?: { name: string; organization?: string; phones?: string[] }
+  quote?: { externalMessageId: string; type?: string; text?: string }
+}
+
+const sentToProvider = async (request: APIRequestContext, sectorId: number) =>
+  json<SentToProvider[]>(await request.get(`/api/test/messaging/sectors/${sectorId}/sent`))
+
+// Os cartões que o adaptador falso recebeu, pelo nome do contato.
+const cardsSentToProvider = async (request: APIRequestContext, sectorId: number, name: string) =>
+  (await sentToProvider(request, sectorId)).filter(
+    (item) => item.kind === 'contact' && item.card?.name === name,
+  )
+
+test('Responder num cartão mostra "👤 Nome" na citação em preparo e na resposta, e o cliente citando um cartão também', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { agent, receive, externalId } = await seedCustomer(request, baseURL!, 'Clara Cartão')
+  await receive('1', { body: 'Segue o contato do setor.' })
+  await receive('2', { type: 'contact', contactCards: [joaoCard] })
+  // O cliente cita o cartão que ele mesmo mandou: a citação também mostra "👤 Nome".
+  await receive('3', {
+    body: 'E o outro?',
+    quote: { externalMessageId: externalId('2'), snippet: { type: 'contact', text: 'João Silva' } },
+  })
+
+  const conversation = await openAssigned(page, agent, 'Clara Cartão')
+  const ticketId = currentTicketId(page)
+  const card = cardBubble(conversation, 'Mensagem recebida', 'João Silva')
+  await expect(card).toBeVisible()
+  const draft = page.getByRole('group', { name: 'Respondendo a Cliente' })
+  const input = page.getByRole('textbox', { name: 'Mensagem' })
+
+  // A citação em preparo mostra o nome do primeiro cartão, e o foco vai para o campo.
+  await pressReply(card)
+  await expect(draft).toContainText('👤 João Silva')
+  await expect(input).toBeFocused()
+
+  // Enviada, a citação continua acima da resposta, com o mesmo nome.
+  await input.fill('Fale com ele')
+  await input.press('Enter')
+  const reply = bubbleOf(conversation, 'Fale com ele')
+  await expect(reply).toContainText('Enviada')
+  await expect(draft).toHaveCount(0)
+  await expect(
+    reply.getByRole('button', { name: 'Citação de Cliente: 👤 João Silva' }),
+  ).toBeVisible()
+  const sent = (await listMessages(page, ticketId)).find((m) => m.body?.includes('Fale com ele'))
+  expect(sent?.quote).toEqual({
+    messageId: (await listMessages(page, ticketId)).find((m) => m.type === 'contact')?.id,
+    type: 'contact',
+    text: 'João Silva',
+  })
+
+  // O cartão citado pelo cliente mostra o nome do cartão também.
+  await expect(
+    bubbleOf(conversation, 'E o outro?').getByRole('button', {
+      name: 'Citação de Cliente: 👤 João Silva',
+    }),
+  ).toBeVisible()
+
+  // Continua depois de recarregar.
+  await page.reload()
+  const reloaded = page.getByRole('region', { name: 'Conversa', exact: true })
+  await expect(
+    bubbleOf(reloaded, 'Fale com ele').getByRole('button', {
+      name: 'Citação de Cliente: 👤 João Silva',
+    }),
+  ).toBeVisible()
+  await expect(
+    bubbleOf(reloaded, 'E o outro?').getByRole('button', {
+      name: 'Citação de Cliente: 👤 João Silva',
+    }),
+  ).toBeVisible()
+})
+
+test('o cartão enviado pela janela vai como resposta citada, a citação sai do campo e Reenviar repete a mesma citação', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { agent, sector, receive, externalId } = await seedCustomer(request, baseURL!, 'Clara Cita')
+  await receive('1', { body: first })
+  const { id } = unique()
+  const name = `Rita ${id}`
+  await seedContact(baseURL!, sector.id, name, unique().phone)
+
+  const conversation = await openAssigned(page, agent, 'Clara Cita')
+  const ticketId = currentTicketId(page)
+  const target = (await listMessages(page, ticketId))[0].id
+  const draft = page.getByRole('group', { name: 'Respondendo a Cliente' })
+
+  // Com a citação em preparo, o cartão vai como resposta citada e a faixa some do compositor.
+  await pressReply(bubbleOf(conversation, first))
+  await expect(draft).toBeVisible()
+  await sendContact(page, name)
+  const card = cardBubble(conversation, 'Mensagem enviada', name)
+  await expect(card).toContainText('Enviada')
+  await expect(draft).toHaveCount(0)
+  await expect(card.getByRole('button', { name: `Citação de Cliente: ${first}` })).toBeVisible()
+  const contacts = async () =>
+    (await listMessages(page, ticketId)).filter((message) => message.type === 'contact')
+  expect((await contacts())[0].quote).toEqual({
+    messageId: target,
+    type: 'text',
+    text: first,
+  })
+
+  // O adaptador falso recebe o cartão com a citação: o que a tela guarda não basta.
+  await expect
+    .poll(async () => (await cardsSentToProvider(request, sector.id, name)).length)
+    .toBe(1)
+  expect((await cardsSentToProvider(request, sector.id, name))[0].quote).toMatchObject({
+    externalMessageId: externalId('1'),
+    type: 'text',
+    text: first,
+  })
+
+  // Com o número desconectado, o cartão fica com falha e mantém a citação; o falso recebe a mesma
+  // citação de novo no Reenviar, sem duplicar a mensagem.
+  const other = `Bruno ${id}`
+  await seedContact(baseURL!, sector.id, other, unique().phone)
+  await phone(request, sector.id, 'drop')
+  await pressReply(bubbleOf(conversation, first))
+  await sendContact(page, other)
+  const failed = cardBubble(conversation, 'Mensagem enviada', other)
+  await expect(failed).toContainText('Falhou')
+  await expect(draft).toHaveCount(0)
+  await expect(failed.getByRole('button', { name: `Citação de Cliente: ${first}` })).toBeVisible()
+  // Desconectado, o cartão com falha não chegou ao provedor.
+  expect(await cardsSentToProvider(request, sector.id, other)).toHaveLength(0)
+
+  await connectSector(baseURL!, sector.id)
+  await failed.getByRole('button', { name: 'Reenviar' }).click()
+  await expect(failed).toContainText('Enviada')
+  const sent = await contacts()
+  expect(sent).toHaveLength(2)
+  expect(sent[1].quote?.messageId).toBe(target)
+  await expect(page.getByRole('group', { name: new RegExp(`^Contato: ${other},`) })).toHaveCount(1)
+
+  // O Reenviar chegou ao falso uma vez só, com a mesma citação.
+  const resent = await cardsSentToProvider(request, sector.id, other)
+  expect(resent).toHaveLength(1)
+  expect(resent[0].quote).toMatchObject({
+    externalMessageId: externalId('1'),
+    type: 'text',
+    text: first,
+  })
+})
+
+test('Responder pelo menu de um cartão enviado mostra "👤 Nome", e o cliente também cita esse cartão', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { agent, sector, receive } = await seedCustomer(request, baseURL!, 'Clara Cita')
+  await receive('1', { body: first })
+  const { id } = unique()
+  const name = `Rita ${id}`
+  await seedContact(baseURL!, sector.id, name, unique().phone)
+
+  const conversation = await openAssigned(page, agent, 'Clara Cita')
+  const ticketId = currentTicketId(page)
+  const input = page.getByRole('textbox', { name: 'Mensagem' })
+  const draft = page.getByRole('group', { name: /^Respondendo a agent \d+$/ })
+
+  // O cartão sai pela janela do anexo, como nas outras jornadas.
+  await sendContact(page, name)
+  const card = cardBubble(conversation, 'Mensagem enviada', name)
+  await expect(card).toContainText('Enviada')
+  await expect
+    .poll(async () => (await cardsSentToProvider(request, sector.id, name)).length)
+    .toBe(1)
+  const atProvider = (await cardsSentToProvider(request, sector.id, name))[0]
+
+  // No cartão enviado o Responder fica no menu (⋯), não ao lado do balão. O cartão ocupa a largura
+  // da conversa e, numa janela estreita, o menu fica sob a coluna da lista: o teclado o alcança,
+  // como um leitor de tela faria.
+  await card.hover()
+  await expect(card.getByRole('button', { name: 'Responder', exact: true })).toHaveCount(0)
+  await card.getByRole('button', { name: 'Ações da mensagem' }).focus()
+  await page.keyboard.press('Enter')
+  const replyItem = page.getByRole('menuitem', { name: 'Responder', exact: true })
+  await expect(replyItem).toBeVisible()
+  await replyItem.focus()
+  await page.keyboard.press('Enter')
+  await expect(draft).toContainText(`👤 ${name}`)
+  await expect(input).toBeFocused()
+
+  // A resposta citada mostra o nome do cartão, como as demais mensagens citadas.
+  await input.fill('Falo com ela')
+  await input.press('Enter')
+  const reply = bubbleOf(conversation, 'Falo com ela')
+  await expect(reply).toContainText('Enviada')
+  await expect(draft).toHaveCount(0)
+  const citation = { name: new RegExp(`^Citação de agent \\d+: 👤 ${name}$`) }
+  await expect(reply.getByRole('button', citation)).toBeVisible()
+  const sentCard = (await listMessages(page, ticketId)).find(
+    (message) => message.type === 'contact',
+  )
+  expect(
+    (await listMessages(page, ticketId)).find((m) => m.body?.includes('Falo com ela'))?.quote,
+  ).toEqual({
+    messageId: sentCard?.id,
+    type: 'contact',
+    text: name,
+  })
+
+  // O cliente cita o cartão que o setor mandou, pelo identificador que chegou ao provedor.
+  await receive('2', {
+    body: 'Falo com ela também',
+    quote: { externalMessageId: atProvider.id, snippet: { type: 'contact', text: name } },
+  })
+  const fromClient = bubbleOf(conversation, 'Falo com ela também')
+  await expect(fromClient.getByRole('button', citation)).toBeVisible()
+  await expect(fromClient.getByRole('button', citation)).toContainText(name)
+})
+
+test('cartão enviando ou com falha não oferece reação nem Responder', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  // Dois contatos, o envio segurado e a falha: dá mais passos que os testes vizinhos.
+  test.slow()
+  const { agent, sector, receive } = await seedCustomer(request, baseURL!, 'Clara Cita')
+  await receive('1', { body: first })
+  const { id } = unique()
+  const sending = `Rita ${id}`
+  const failing = `Bruno ${id}`
+  const sendingId = await seedContact(baseURL!, sector.id, sending, unique().phone)
+  await seedContact(baseURL!, sector.id, failing, unique().phone)
+  const conversation = await openAssigned(page, agent, 'Clara Cita')
+  const ticketId = currentTicketId(page)
+  const noActions = async (message: Locator) => {
+    await message.hover()
+    await expect(message.getByRole('button', { name: 'Reagir', exact: true })).toHaveCount(0)
+    await expect(message.getByRole('button', { name: 'Responder', exact: true })).toHaveCount(0)
+    // A mensagem do XET tem o menu (⋯), que também não oferece Responder.
+    const menu = message.getByRole('button', { name: 'Ações da mensagem' })
+    if ((await menu.count()) > 0) {
+      await menu.click()
+      await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toHaveCount(0)
+      await page.keyboard.press('Escape')
+    }
+  }
+
+  // Em envio: o provedor segura o envio, e o cartão fica "Enviando" enquanto isso, sem as ações.
+  // O envio sai de outra sessão para não prender a janela do compositor; a tela é recarregada para
+  // mostrar o cartão como ele está, sem depender do aviso em tempo real sob carga no CI.
+  await phone(request, sector.id, 'hold')
+  const api = await apiRequest.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const sendingSend = api.post(`/api/tickets/${ticketId}/messages/contact`, {
+    data: { contactId: sendingId, clientRequestId: crypto.randomUUID() },
+  })
+  const cardStatuses = async () =>
+    (await listMessages(page, ticketId))
+      .filter((message) => message.type === 'contact')
+      .map((message) => message.status)
+  await expect.poll(cardStatuses).toEqual(['pending'])
+
+  await page.reload()
+  const pending = cardBubble(conversation, 'Mensagem enviada', sending)
+  await expect(pending).toContainText('Enviando')
+  await noActions(pending)
+
+  await phone(request, sector.id, 'release')
+  ok(await sendingSend)
+  await api.dispose()
+  await expect.poll(cardStatuses).toEqual(['sent'])
+
+  // Enviada, o cartão volta a oferecer reação.
+  await page.reload()
+  const sent = cardBubble(conversation, 'Mensagem enviada', sending)
+  await expect(sent).toContainText('Enviada')
+  await expect(sent.getByRole('button', { name: 'Reagir', exact: true })).toBeAttached()
+
+  // Com falha: também sem reação e sem Responder, só a exclusão para mim no menu.
+  await phone(request, sector.id, 'drop')
+  await sendContact(page, failing)
+  const failed = cardBubble(conversation, 'Mensagem enviada', failing)
+  await expect(failed).toContainText('Falhou')
+  await noActions(failed)
 })

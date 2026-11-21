@@ -297,14 +297,23 @@ export function useSendMessage(ticketId: number) {
 }
 
 // Envia um contato do cadastro como cartão: o backend monta o cartão a partir do cadastro e a
-// mensagem segue as regras das outras, inclusive a idempotência pelo identificador do envio.
+// mensagem segue as regras das outras, inclusive a idempotência pelo identificador do envio. Com
+// `quotedMessageId`, o cartão vai como resposta citada, como o texto, o arquivo e o áudio.
 export function useSendContact(ticketId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ requestId, contactId }: { requestId: string; contactId: number }) =>
+    mutationFn: ({
+      requestId,
+      contactId,
+      quotedMessageId,
+    }: {
+      requestId: string
+      contactId: number
+      quotedMessageId?: number
+    }) =>
       api<SentMessage>(`/tickets/${ticketId}/messages/contact`, {
         method: 'POST',
-        body: { clientRequestId: requestId, contactId },
+        body: { clientRequestId: requestId, contactId, quotedMessageId },
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
   })
@@ -329,10 +338,11 @@ export function canReactTo(message: Message) {
 }
 
 // Só a mensagem que o WhatsApp conhece é citada, como na reação, e a exibida como não suportada
-// (figurinha, localização, aviso antigo de reação e, até a fatia da tela, o contato) fica de fora. Só o responsável cita; o backend
+// (figurinha, localização, aviso antigo de reação) fica de fora. O cartão de contato é citado como
+// os outros tipos, e a citação mostra o nome do primeiro cartão. Só o responsável cita; o backend
 // confere de novo.
 export function canQuoteMessage(message: Message) {
-  return canReactTo(message) && message.type !== 'unsupported' && message.type !== 'contact'
+  return canReactTo(message) && message.type !== 'unsupported'
 }
 
 // Conteúdo ocultado pelo XET (excluída para todos ou para mim): em Chamados vira um aviso. A exclusão

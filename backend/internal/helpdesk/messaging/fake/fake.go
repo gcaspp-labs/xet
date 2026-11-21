@@ -59,7 +59,14 @@ type Adapter struct {
 	// What the provider supports on a message already sent; see SetCapabilities.
 	capabilities messaging.Capabilities
 	sent         map[string]string
-	Sent         []any
+	outbox       []sentEntry
+}
+
+// sentEntry is one of what was handed to the provider, with the ID it returned
+// for it (empty for a reaction, which returns none).
+type sentEntry struct {
+	id      string
+	message any
 }
 
 var (
@@ -377,13 +384,13 @@ func (a *Adapter) send(sectorID int64, key string, msg any) (string, error) {
 	if id, ok := a.sent[key]; ok && key != "" {
 		return id, nil
 	}
-	a.Sent = append(a.Sent, msg)
 	// Derived from the key, like Whatsmeow, so the ID survives a restart.
-	id := fmt.Sprintf("fake-msg-%d", len(a.Sent))
+	id := fmt.Sprintf("fake-msg-%d", len(a.outbox)+1)
 	if key != "" {
 		id = "fake-msg-" + key
 		a.sent[key] = id
 	}
+	a.outbox = append(a.outbox, sentEntry{id: id, message: msg})
 	return id, nil
 }
 
@@ -400,7 +407,7 @@ func (a *Adapter) SendReaction(_ context.Context, r messaging.Reaction) error {
 		delete(a.refuseReaction, r.SectorID)
 		return messaging.ErrNotAccepted
 	}
-	a.Sent = append(a.Sent, r)
+	a.outbox = append(a.outbox, sentEntry{message: r})
 	return nil
 }
 
@@ -453,7 +460,7 @@ func (a *Adapter) change(ctx context.Context, sectorID int64, prefix, key string
 		return id, nil
 	}
 	a.sent[id] = id
-	a.Sent = append(a.Sent, change)
+	a.outbox = append(a.outbox, sentEntry{id: id, message: change})
 	return id, nil
 }
 
@@ -479,7 +486,11 @@ func (a *Adapter) FailNextSend(sectorID int64, err error) {
 func (a *Adapter) SentMessages() []any {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return append([]any(nil), a.Sent...)
+	sent := make([]any, len(a.outbox))
+	for i, entry := range a.outbox {
+		sent[i] = entry.message
+	}
+	return sent
 }
 
 // UpdateStatus simulates the contact's phone confirming the delivery or the
