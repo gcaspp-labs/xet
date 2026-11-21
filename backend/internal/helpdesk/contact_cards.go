@@ -18,8 +18,8 @@ type storedContactCard struct {
 }
 
 type storedContactPhone struct {
-	Phone string  `json:"phone"`
-	WaID  *string `json:"wa_id"`
+	Phone      string  `json:"phone"`
+	WhatsAppID *string `json:"wa_id"`
 }
 
 // contactCardsOf returns the cards of a contact message to record, in order.
@@ -40,7 +40,7 @@ func contactCardsOf(msg messaging.Message) (cards []byte, ok bool, err error) {
 			if phone == "" {
 				continue
 			}
-			card.Phones = append(card.Phones, storedContactPhone{Phone: phone, WaID: optional(onlyDigits(p.WhatsAppID))})
+			card.Phones = append(card.Phones, storedContactPhone{Phone: phone, WhatsAppID: optional(onlyDigits(p.WhatsAppID))})
 		}
 		if card.Name != "" {
 			stored = append(stored, card)
@@ -81,7 +81,7 @@ func contactCardsResponse(raw []byte) ([]contactCardResponse, error) {
 	for i, c := range stored {
 		out[i] = contactCardResponse{Name: c.Name, Organization: c.Organization, Phones: make([]contactPhoneResponse, len(c.Phones))}
 		for j, p := range c.Phones {
-			out[i].Phones[j] = contactPhoneResponse{Phone: p.Phone, WhatsAppID: p.WaID}
+			out[i].Phones[j] = contactPhoneResponse(p)
 		}
 	}
 	return out, nil
