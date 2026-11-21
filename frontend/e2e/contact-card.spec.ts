@@ -6,7 +6,6 @@ import {
   type Page,
 } from '@playwright/test'
 import {
-  admin,
   adminApi,
   json,
   municipalityId,
@@ -20,10 +19,16 @@ import {
 
 // Liga o número do setor pelo adaptador falso.
 async function connectSector(baseURL: string, sectorId: number) {
-  const api = await apiRequest.newContext({ baseURL })
-  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
+  const api = await adminApi(baseURL)
   ok(await api.post(`/api/sectors/${sectorId}/connection`))
   await api.dispose()
+}
+
+// Contexto de requisição autenticado como o atendente, que o chamador encerra com `dispose()`.
+async function agentApi(baseURL: string, agent: string) {
+  const api = await apiRequest.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  return api
 }
 
 async function phone(request: APIRequestContext, sectorId: number, action: string, data?: object) {
@@ -59,8 +64,7 @@ async function seedContact(baseURL: string, sectorId: number, name: string, phon
 
 // Chamado assumido pelo atendente a partir de uma mensagem recebida do contato.
 async function assignTicket(baseURL: string, sectorId: number, agent: string, contact: string) {
-  const api = await apiRequest.newContext({ baseURL })
-  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const api = await agentApi(baseURL, agent)
   const tickets = await json<{ id: number; contact: { name: string } }[]>(
     await api.get(`/api/sectors/${sectorId}/tickets`),
   )
@@ -78,8 +82,7 @@ async function sendCard(
   contactId: number,
   requestId = crypto.randomUUID(),
 ) {
-  const api = await apiRequest.newContext({ baseURL })
-  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const api = await agentApi(baseURL, agent)
   const response = await api.post(`/api/tickets/${ticketId}/messages/contact`, {
     data: { contactId, clientRequestId: requestId },
   })
@@ -92,6 +95,17 @@ async function sendCard(
 }
 
 const conversation = (page: Page) => page.getByRole('region', { name: 'Conversa', exact: true })
+
+type CardPhone = { phone: string; whatsAppId: string | null }
+type ContactCard = { name: string; organization: string | null; phones: CardPhone[] }
+
+// O cartão de João Silva dos cenários de recebimento; o cenário de cópia acrescenta um fixo.
+const joaoCard = (overrides: Partial<ContactCard> = {}): ContactCard => ({
+  name: 'João Silva',
+  organization: 'Prefeitura de Itu',
+  phones: [{ phone: '5511988881234', whatsAppId: '5511988881234' }],
+  ...overrides,
+})
 
 // O balão que tem um cartão de contato.
 const cardBubble = (page: Page, direction: 'Mensagem recebida' | 'Mensagem enviada') =>
@@ -191,14 +205,13 @@ test('cartão recebido copia o telefone pelo teclado e tem nome acessível', asy
     contactName: 'Clara Cliente',
     type: 'contact',
     contactCards: [
-      {
-        name: 'João Silva',
-        organization: 'Prefeitura de Itu',
+      // Este cenário acrescenta o telefone fixo, sem WhatsApp, para conferir os dois botões de copiar.
+      joaoCard({
         phones: [
           { phone: '5511988881234', whatsAppId: '5511988881234' },
           { phone: '551133334444', whatsAppId: null },
         ],
-      },
+      }),
     ],
   })
 
@@ -251,7 +264,21 @@ test('cartão enviado mostra a situação de entrega, falha com o número descon
   await expect(alineCard).toContainText('— Itu')
   const alineBubble = cardBubble(page, 'Mensagem enviada').filter({ has: alineCard })
   await expect(alineBubble).toContainText('Enviada')
-  await expect(alineBubble).not.toContainText(`agent ${id}`)
+  // O cartão sai sem legenda: o nome acima do balão é autoria interna, não texto enviado.
+  const messages = (await (await page.request.get(`/api/tickets/${ticketId}/messages`)).json()) as {
+    direction: string
+    body: string | null
+    contactCards: ContactCard[] | null
+  }[]
+  const sent = messages.filter((message) => message.direction === 'outbound')
+  expect(sent.map((message) => message.body)).toEqual([null])
+  expect(sent[0].contactCards).toEqual([
+    {
+      name: `Aline ${id}`,
+      organization: `${aline.organizationName} — Itu`,
+      phones: [{ phone: `551199${id.slice(-6)}`, whatsAppId: null }],
+    },
+  ])
 
   // A situação de entrega avança com a confirmação do celular do cliente.
   await phone(request, sector.id, 'status', {
@@ -295,13 +322,7 @@ test('o detalhe de Atendimentos mostra o cartão, só para leitura', async ({
     phone: sender,
     contactName: `Rita ${id}`,
     type: 'contact',
-    contactCards: [
-      {
-        name: 'João Silva',
-        organization: 'Prefeitura de Itu',
-        phones: [{ phone: '5511988881234', whatsAppId: '5511988881234' }],
-      },
-    ],
+    contactCards: [joaoCard()],
   })
   const ticketId = await assignTicket(baseURL!, sector.id, agent, `Rita ${id}`)
   const adminContext = await adminApi(baseURL!)
@@ -309,8 +330,7 @@ test('o detalhe de Atendimentos mostra o cartão, só para leitura', async ({
     await adminContext.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Sistema' } }),
   )
   await adminContext.dispose()
-  const api = await apiRequest.newContext({ baseURL })
-  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const api = await agentApi(baseURL!, agent)
   ok(
     await api.post(`/api/tickets/${ticketId}/close`, {
       data: {
@@ -346,13 +366,7 @@ test('integrante do setor que não é o responsável vê o cartão sem as açõe
     phone: sender,
     contactName: 'Clara Cliente',
     type: 'contact',
-    contactCards: [
-      {
-        name: 'João Silva',
-        organization: 'Prefeitura de Itu',
-        phones: [{ phone: '5511988881234', whatsAppId: '5511988881234' }],
-      },
-    ],
+    contactCards: [joaoCard()],
   })
   const ticketId = await assignTicket(baseURL!, sector.id, agent, 'Clara Cliente')
 
