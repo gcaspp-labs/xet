@@ -88,5 +88,5 @@ Configuração do fluxo com agentes, um arquivo por assunto em `docs/agents/`:
 - Rótulos: categoria, triagem, `spec`, `in-progress`, `to-docs` e risco. `docs/agents/labels.md`
 - Domínio e regras das funcionalidades: um contexto só; regras em `docs/features/`, globais em `spec.md`, modelo em `docs/data-model.md`. `docs/agents/domain.md`
 - Design: `design.md` na raiz (GCASPP LAB com shadcn/ui); capturas só em desktop. `docs/agents/design.md`
-- Comandos: main; `make dev`, `make test`, `make lint`, `make check-generated`; uma task por vez; evidência: `journeys`. `docs/agents/commands.md`
+- Comandos: develop; `make dev`, `make test`, `make lint`, `make check-generated`; uma task por vez; evidência: `journeys`. `docs/agents/commands.md`
 - Trava do merge: os 4 jobs do CI verdes; sem a pessoa, só `risk:low` ou `risk:medium` sem área sensível. `docs/agents/merge-gate.md`

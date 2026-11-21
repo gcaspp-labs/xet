@@ -160,7 +160,7 @@ A comparação com CNPJá e ReceitaWS está em [research/cnpj-lookup.md](researc
 
 ## Integração contínua
 
-- GitHub Actions (`.github/workflows/ci.yml`) a cada PR e a cada push na `main`.
+- GitHub Actions (`.github/workflows/ci.yml`) a cada PR e a cada push na `develop` e na `main`.
 - Os jobs chamam os mesmos alvos do `Makefile` usados localmente, para que o CI e a máquina do desenvolvedor rodem a mesma coisa: `make lint`, `make test-backend`, `make test-e2e` e `make check-generated` (código do sqlc e `go mod tidy` em dia com o commit).
 - Os runners Ubuntu já têm Docker, usado pelo testcontainers, pelo golangci-lint, pelo sqlc e pelo banco dos testes ponta a ponta.
 - Cada job tem limite de 15 minutos, para que um passo travado (por exemplo, um mirror lento) falhe logo em vez de prender o runner.

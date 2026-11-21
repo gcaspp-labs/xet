@@ -13,10 +13,10 @@ Os comandos do xet que as skills rodam, a partir da raiz do repositório. Este a
 
 ## Branch principal
 
-A branch em que os PRs entram e de onde as outras partem. As skills e o script da `merge-gate` leem este bloco; mantenha o nome do bloco.
+A branch em que os PRs entram e de onde as outras partem: a `develop`. A `main` é a produção e só recebe a `develop` por um PR aberto pela pessoa. As skills e o script da `merge-gate` leem este bloco; mantenha o nome do bloco.
 
 ```main-branch
-main
+develop
 ```
 
 ## Evidência

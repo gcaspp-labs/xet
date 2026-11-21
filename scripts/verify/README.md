@@ -145,7 +145,7 @@ A evidência fica nesta cópia do repositório: apagar o worktree apaga a evidê
 scripts/verify/scripts/publish-evidence.sh <número-do-PR>
 ```
 
-O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit solto, apontado por `refs/verify-app/<execução>`, e comenta no PR com as imagens. Assim, nada entra na `main` nem em branch: o clone normal não baixa essa referência e o CI não roda nela. Ele não publica os rastros, que guardam requisições e cookies. **O repositório é público:** as imagens abrem para qualquer pessoa, sem login, e apagar a referência depois não garante que sumiram de cópias. Olhe as capturas antes de publicar. Cada execução publicada ocupa alguns megabytes, e a referência continua no repositório até ser apagada. O comando para apagar está no fim do comentário: rode depois do merge.
+O `gh` não envia imagens. Por isso, o script grava imagens e resumos num commit solto, apontado por `refs/verify-app/<execução>`, e comenta no PR com as imagens. Assim, nada entra em nenhuma branch: o clone normal não baixa essa referência e o CI não roda nela. Ele não publica os rastros, que guardam requisições e cookies. **O repositório é público:** as imagens abrem para qualquer pessoa, sem login, e apagar a referência depois não garante que sumiram de cópias. Olhe as capturas antes de publicar. Cada execução publicada ocupa alguns megabytes, e a referência continua no repositório até ser apagada. O comando para apagar está no fim do comentário: rode depois do merge.
 
 ## Cleanup
 
