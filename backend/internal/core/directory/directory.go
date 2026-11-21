@@ -182,12 +182,20 @@ func newSearchPatterns(query string) searchPatterns {
 	if digits := phoneFormatting.Replace(query); isDigits(digits) {
 		p.phone = "%" + digits + "%"
 	}
-	// A CNPJ fragment has at least one digit, so plain words do not match
-	// the letters of alphanumeric CNPJs.
-	if cnpj := strings.ToUpper(cnpjFormatting.Replace(query)); isCNPJFragment(cnpj) {
-		p.cnpj = "%" + cnpj + "%"
-	}
+	p.cnpj = cnpjSearchPattern(query)
 	return p
+}
+
+// cnpjSearchPattern returns the LIKE pattern that matches the word as part of a
+// CNPJ, or an empty string when the word cannot be one. A CNPJ fragment has at
+// least one digit, so plain words do not match the letters of alphanumeric
+// CNPJs.
+func cnpjSearchPattern(word string) string {
+	fragment := strings.ToUpper(cnpjFormatting.Replace(word))
+	if !isCNPJFragment(fragment) {
+		return ""
+	}
+	return "%" + fragment + "%"
 }
 
 func escapeLike(s string) string {
@@ -208,13 +216,7 @@ func newOrganizationSearchPatterns(query string) organizationSearchPatterns {
 	p := organizationSearchPatterns{names: make([]string, 0, len(words)), cnpjs: make([]string, 0, len(words))}
 	for _, word := range words {
 		p.names = append(p.names, "%"+escapeLike(word)+"%")
-		// A CNPJ fragment has at least one digit, so plain words do not match
-		// the letters of alphanumeric CNPJs.
-		cnpj := ""
-		if fragment := strings.ToUpper(cnpjFormatting.Replace(word)); isCNPJFragment(fragment) {
-			cnpj = "%" + fragment + "%"
-		}
-		p.cnpjs = append(p.cnpjs, cnpj)
+		p.cnpjs = append(p.cnpjs, cnpjSearchPattern(word))
 	}
 	return p
 }
