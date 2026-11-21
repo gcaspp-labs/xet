@@ -274,19 +274,22 @@ test('a busca abre em Meu setor, mostra todos com a opção e deixa de fora cont
   await expect(empty(page)).toBeVisible()
 })
 
-test('Voltar na prévia volta à busca, e Cancelar fecha sem enviar nada', async ({
+test('Voltar na prévia devolve à mesma lista, com a busca, os filtros e o foco, e Cancelar fecha sem enviar nada', async ({
   page,
   request,
   baseURL,
 }) => {
   const { sector } = await openOwnTicket(page, request, baseURL!)
   const { id } = unique()
+  const other = await seedSector(baseURL!)
   const name = `Célia ${id} Rocha`
+  // O contato é do outro setor: só aparece com "Todos os setores", o filtro que o Voltar precisa
+  // manter para a comparação continuar na mesma lista.
   await seedContacts(
     baseURL!,
     sector.id,
     [{ name: `Órgão ${id}`, municipality: 'Itu' }],
-    [{ name, phone: `55119${id.slice(-8)}`, organization: 0 }],
+    [{ name, phone: `55119${id.slice(-8)}`, organization: 0, sector: other.sector.id }],
   )
   const ticket = (
     (await (await page.request.get(`/api/sectors/${sector.id}/tickets`)).json()) as {
@@ -295,25 +298,73 @@ test('Voltar na prévia volta à busca, e Cancelar fecha sem enviar nada', async
     }[]
   ).find((item) => item.contact.name === 'Paula Cliente')!.id
   const before = await messages(page, ticket)
+  const sectorFilter = dialog(page).getByRole('combobox', { name: 'Filtrar por setor' })
 
   await openSendContact(page)
-  await search(page).fill(name)
+  await sectorFilter.click()
+  await page.getByRole('option', { name: 'Todos os setores' }).click()
+  await search(page).fill(`Célia ${id}`)
   await row(page, name).click()
-  await expect(
-    dialog(page).getByRole('group', { name: new RegExp(`^Contato: ${name},`) }),
-  ).toBeVisible()
+  const card = dialog(page).getByRole('group', { name: new RegExp(`^Contato: ${name},`) })
+  await expect(card).toBeVisible()
 
-  // Voltar devolve à busca, com o foco nela.
+  // Voltar devolve à mesma lista: a busca e o filtro de setor continuam, e o foco vai para a linha
+  // escolhida, sem precisar digitar de novo.
   await dialog(page).getByRole('button', { name: 'Voltar' }).click()
-  await expect(search(page)).toBeFocused()
-  await search(page).fill(name)
-  await row(page, name).click()
+  await expect(search(page)).toHaveValue(`Célia ${id}`)
+  await expect(sectorFilter).toContainText('Todos os setores')
+  await expect(row(page, name)).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(card).toBeVisible()
 
   // Cancelar fecha sem enviar nada, e o foco volta ao campo de mensagem.
   await dialog(page).getByRole('button', { name: 'Cancelar' }).click()
   await expect(dialog(page)).toHaveCount(0)
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeFocused()
   expect(await messages(page, ticket)).toEqual(before)
+})
+
+test('Voltar preserva a página já carregada da lista', async ({ page, request, baseURL }) => {
+  const { sector } = await openOwnTicket(page, request, baseURL!)
+  const { id } = unique()
+  // Marcador só de letras: a busca não esbarra no telefone de outro teste no banco compartilhado.
+  const marker = Array.from(
+    { length: 4 },
+    () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)],
+  ).join('')
+  const names = Array.from(
+    { length: 21 },
+    (_, index) => `Volta ${marker} ${String(index + 1).padStart(2, '0')}`,
+  )
+  await seedContacts(
+    baseURL!,
+    sector.id,
+    [{ name: `Órgão ${marker}`, municipality: 'Itu' }],
+    names.map((name, index) => ({
+      name,
+      phone: `5511${id.slice(0, 5)}${String(index).padStart(3, '0')}`,
+      organization: 0,
+    })),
+  )
+
+  await openSendContact(page)
+  await search(page).fill(`Volta ${marker}`)
+
+  // A página 1 tem 20 contatos; a rolagem até o fim traz a página 2, com o 21º.
+  const last = row(page, names[20])
+  await results(page).getByRole('button').last().scrollIntoViewIfNeeded()
+  await expect(last).toBeVisible()
+  await expect(results(page).getByRole('button')).toHaveCount(21)
+  await last.click()
+  await expect(
+    dialog(page).getByRole('group', { name: new RegExp(`^Contato: ${names[20]},`) }),
+  ).toBeVisible()
+
+  // Voltar devolve a lista com as duas páginas já carregadas: o 21º continua ali, sem nova busca.
+  await dialog(page).getByRole('button', { name: 'Voltar' }).click()
+  await expect(results(page).getByRole('button')).toHaveCount(21)
+  await expect(last).toBeFocused()
+  await expect(last).toBeVisible()
 })
 
 test('o fluxo inteiro funciona pelo teclado, com nomes acessíveis', async ({

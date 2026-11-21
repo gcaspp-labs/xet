@@ -1,5 +1,5 @@
 import { BookUser } from 'lucide-react'
-import { type FormEvent, useDeferredValue, useEffect, useRef, useState } from 'react'
+import { type FormEvent, type Ref, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { ContactCardItem } from '@/components/ContactCards'
 import { ContactFilters } from '@/components/ContactFilters'
 import { FormDialog } from '@/components/FormDialog'
@@ -21,9 +21,18 @@ function cardOf(contact: Contact): ContactCard {
 }
 
 // Uma linha do resultado: nome, telefone e órgão com o município, para não confundir homônimos.
-function ContactOption({ contact, onChoose }: { contact: Contact; onChoose: () => void }) {
+function ContactOption({
+  contact,
+  onChoose,
+  buttonRef,
+}: {
+  contact: Contact
+  onChoose: () => void
+  buttonRef?: Ref<HTMLButtonElement>
+}) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onChoose}
       className="flex w-full min-w-0 flex-col gap-0.5 rounded-(--radius-7) px-2 py-2 text-left transition-colors hover:bg-muted"
@@ -42,7 +51,16 @@ function ContactOption({ contact, onChoose }: { contact: Contact; onChoose: () =
 
 // Busca no cadastro de Órgãos e contatos, como a do Novo chamado: abre em "Meu setor", com a
 // opção de ver todos, e só mostra contato cadastrado com telefone, o único que o cartão serve.
-function ContactSearch({ onChoose }: { onChoose: (contact: Contact) => void }) {
+function ContactSearch({
+  onChoose,
+  selectedId,
+  selectedRow,
+}: {
+  onChoose: (contact: Contact) => void
+  // A linha escolhida: ao voltar da prévia, o foco de novo nela, no lugar da busca.
+  selectedId?: number
+  selectedRow?: Ref<HTMLButtonElement>
+}) {
   const [query, setQuery] = useState('')
   const contactFilter = useContactFilter()
   const search = useDeferredValue(query)
@@ -88,7 +106,11 @@ function ContactSearch({ onChoose }: { onChoose: (contact: Contact) => void }) {
         <ul aria-label="Contatos" className="flex flex-col divide-y divide-line-soft">
           {contacts.map((contact) => (
             <li key={contact.id}>
-              <ContactOption contact={contact} onChoose={() => onChoose(contact)} />
+              <ContactOption
+                contact={contact}
+                onChoose={() => onChoose(contact)}
+                buttonRef={contact.id === selectedId ? selectedRow : undefined}
+              />
             </li>
           ))}
         </ul>
@@ -135,11 +157,46 @@ export function SendContactDialog({
   const [contact, setContact] = useState<Contact | null>(null)
   // O mesmo identificador numa nova tentativa evita mensagem duplicada; muda quando o contato muda.
   const requestId = useRef<string | null>(null)
+  // A lista continua montada por baixo da prévia: ao Voltar, a busca, os filtros (inclusive "Todos
+  // os setores"), as páginas já carregadas e a rolagem ficam como estavam, com o foco na linha
+  // escolhida. A prévia recebe o foco ao aparecer, como a pergunta da FormDialog.
+  const chosenRow = useRef<HTMLButtonElement>(null)
+  const preview = useRef<HTMLDivElement>(null)
+  const bodyScroll = useRef(0)
+  const returning = useRef(false)
+
+  // O corpo rolável da janela, que a lista e a prévia dividem.
+  const dialogBody = () => document.querySelector<HTMLDivElement>('[data-slot="dialog-body"]')
+
+  useEffect(() => {
+    if (step === 'preview') {
+      preview.current?.focus()
+    }
+  }, [step])
+
+  useEffect(() => {
+    if (step !== 'search' || !returning.current) {
+      return
+    }
+    returning.current = false
+    const body = dialogBody()
+    if (body) {
+      body.scrollTop = bodyScroll.current
+    }
+    chosenRow.current?.focus({ preventScroll: true })
+  }, [step])
 
   const choose = (chosen: Contact) => {
     requestId.current = null
+    // A rolagem da lista fica guardada antes de a prévia tomar o lugar dela.
+    bodyScroll.current = dialogBody()?.scrollTop ?? 0
     setContact(chosen)
     setStep('preview')
+  }
+
+  const back = () => {
+    returning.current = true
+    setStep('search')
   }
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -175,12 +232,16 @@ export function SendContactDialog({
       pending={send.isPending}
       error={send.error?.message}
       onSubmit={submit}
-      back={step === 'preview' ? { label: 'Voltar', onClick: () => setStep('search') } : undefined}
+      back={step === 'preview' ? { label: 'Voltar', onClick: back } : undefined}
     >
-      {step === 'search' ? (
-        <ContactSearch onChoose={choose} />
-      ) : (
-        contact && <ContactPreview contact={contact} />
+      {/* A lista fica montada por baixo da prévia: a busca e os filtros continuam como estavam. */}
+      <div hidden={step === 'preview'}>
+        <ContactSearch onChoose={choose} selectedId={contact?.id} selectedRow={chosenRow} />
+      </div>
+      {step === 'preview' && contact && (
+        <div ref={preview} tabIndex={-1} className="flex flex-col gap-3 outline-none">
+          <ContactPreview contact={contact} />
+        </div>
       )}
     </FormDialog>
   )
