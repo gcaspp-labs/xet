@@ -7,11 +7,14 @@ export function SearchBox({
   onChange,
   label,
   placeholder,
+  autoFocus = false,
 }: {
   value: string
   onChange: (value: string) => void
   label: string
   placeholder: string
+  // A busca recebe o foco ao abrir a janela, como no "Enviar contato".
+  autoFocus?: boolean
 }) {
   return (
     <div className="relative w-full max-w-[260px]">
@@ -25,6 +28,7 @@ export function SearchBox({
         aria-label={label}
         placeholder={placeholder}
         value={value}
+        autoFocus={autoFocus}
         onChange={(event) => onChange(event.target.value)}
         className="pl-[32px] [&::-webkit-search-cancel-button]:appearance-none"
       />
