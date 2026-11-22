@@ -138,6 +138,22 @@ function TicketActions({
   )
 }
 
+// O que, aberto por cima da tela, usa o Esc antes dela: janela, seletor, menu, barra de reações,
+// seletor de emojis e visualizador de imagem. As janelas com bloqueio não fecham nem com Esc
+// (regra 4 de interface.md), e o chamado continua aberto em todos esses casos.
+const openLayers = [
+  '[data-slot="dialog-content"]',
+  '[data-slot="sheet-content"]',
+  '[data-slot="popover-content"]',
+  '[data-slot="dropdown-menu-content"]',
+  '[data-slot="select-content"]',
+  '[data-slot="combobox-content"]',
+  '[data-slot="autocomplete-content"]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+].join(', ')
+
 type SectorTicket = TicketSummary & { sectorId: number }
 // Abaixo de xl só um bloco aparece por vez; a partir de xl, os três ficam lado a lado.
 type Panel = 'mine' | 'conversation' | 'queue'
@@ -223,6 +239,20 @@ export default function ConversasPage() {
       void navigate(`/atendimentos/${ticketId}`, { replace: true })
     }
   }, [closed, action, ticketId, location.pathname, navigate])
+  // Com um chamado aberto e nada por cima, a tecla Esc volta para Chamados sem chamado aberto
+  // (regra 38 de queue.md). O texto digitado não se perde: o rascunho é guardado ao digitar
+  // (regra 43 de conversation.md). O que abriu por cima trata o Esc primeiro, e o que já o tratou
+  // marca o evento como tratado.
+  useEffect(() => {
+    if (ticketId === undefined) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
+      if (document.querySelector(openLayers)) return
+      void navigate('/chamados')
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [ticketId, navigate])
   if (invalidId || isNotFound(ticketError)) return <NotFoundPage />
   if (!user || (closed && action === '')) return null
 
