@@ -83,7 +83,8 @@ export function useVoiceRecorder() {
       media.stop()
     })
 
-  const cancel = () => {
+  // Estável entre renders: é dependência do efeito de troca de chamado no compositor.
+  const cancel = useCallback(() => {
     const media = recorder.current
     if (media) {
       media.ondataavailable = null
@@ -91,7 +92,7 @@ export function useVoiceRecorder() {
       media.stop()
     }
     release()
-  }
+  }, [release])
 
   return { recording, elapsed, error, setError, start, stop, cancel }
 }

@@ -28,6 +28,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -100,6 +101,7 @@ import {
   ticketStatusLabel,
 } from '@/lib/format'
 import { isNotFound } from '@/lib/api'
+import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
@@ -537,6 +539,7 @@ function MessageBubble({
 
 function Composer({
   ticketId,
+  userId,
   quoted,
   onCancelQuote,
   attachRef,
@@ -546,6 +549,7 @@ function Composer({
   onStopEditing,
 }: {
   ticketId: number
+  userId: number
   // A mensagem que o responsável está editando: o campo de edição toma o lugar do compositor, que
   // guarda o rascunho (texto, arquivo, áudio e citação) até a edição terminar.
   editing: Message | null
@@ -559,11 +563,18 @@ function Composer({
   quoted: Message | null
   onCancelQuote: () => void
 }) {
-  const send = useSendMessage(ticketId)
+  const send = useSendMessage()
   const recorder = useVoiceRecorder()
-  const [text, setText] = useState('')
+  // Limpar o erro do gravador na troca de chamado, com uma referência estável para as dependências.
+  const clearRecorderError = recorder.setError
+  // O texto digitado fica guardado no navegador, por usuário e por chamado, até o envio: fechar a
+  // guia, recarregar ou trocar de chamado não perde o que estava escrito.
+  const [text, setText] = useState(() => readDraft(userId, ticketId))
+  const [textTicketId, setTextTicketId] = useState(ticketId)
   const [file, setFile] = useState<File | null>(null)
   const [voice, setVoice] = useState<Recording | null>(null)
+  // O áudio anexado agora, para a troca de chamado liberar a URL fora do render.
+  const voiceRef = useRef<Recording | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   // A janela "Enviar contato" aberta no menu do anexo.
   const [contactOpen, setContactOpen] = useState(false)
@@ -572,6 +583,46 @@ function Composer({
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const messageInput = useRef<HTMLTextAreaElement>(null)
+  // O chamado aberto agora: a confirmação do envio pode chegar depois de a pessoa trocar de chamado.
+  const shownTicketId = useRef(ticketId)
+  useLayoutEffect(() => {
+    shownTicketId.current = ticketId
+  }, [ticketId])
+
+  // Arquivo, áudio e erros do campo de mensagem são do chamado em que apareceram: ao trocar de
+  // chamado saem da tela, senão o arquivo do chamado anterior iria para o cliente do chamado novo e
+  // o aviso de erro de um apareceria no outro. O áudio tem a URL liberada aqui, fora do render. A
+  // gravação em andamento é descartada junto, sem anexar ao chamado novo.
+  const attachedTicketId = useRef(ticketId)
+  useLayoutEffect(() => {
+    if (attachedTicketId.current === ticketId) return
+    attachedTicketId.current = ticketId
+    setFile(null)
+    setFileError(null)
+    clearRecorderError(null)
+    if (voiceRef.current) {
+      URL.revokeObjectURL(voiceRef.current.url)
+      voiceRef.current = null
+    }
+    setVoice(null)
+    if (recorder.recording) recorder.cancel()
+  }, [ticketId, recorder.recording, recorder.cancel, clearRecorderError])
+
+  // Trocar de chamado sem sair da tela troca o texto pelo rascunho do chamado novo, e não mistura
+  // o que foi escrito em cada um.
+  if (textTicketId !== ticketId) {
+    setTextTicketId(ticketId)
+    setText(readDraft(userId, ticketId))
+    requestId.current = null
+  }
+
+  // O rascunho volta com o cursor no fim do texto, pronto para continuar a frase.
+  useEffect(() => {
+    const input = messageInput.current
+    if (input && input.value) {
+      input.setSelectionRange(input.value.length, input.value.length)
+    }
+  }, [ticketId])
 
   // Citar outra mensagem, ou cancelar a citação, muda a mensagem a enviar: um novo identificador de
   // envio. Ao citar, o foco vai para o campo, para escrever a resposta.
@@ -587,6 +638,7 @@ function Composer({
   const changeText = (value: string) => {
     requestId.current = null
     setText(value)
+    saveDraft(userId, ticketId, value)
   }
 
   // A mesma regra para o botão de anexo, a colagem e o soltar.
@@ -621,14 +673,23 @@ function Composer({
 
   const changeVoice = (recording: Recording | null) => {
     requestId.current = null
-    if (voice) {
-      URL.revokeObjectURL(voice.url)
+    if (voiceRef.current) {
+      URL.revokeObjectURL(voiceRef.current.url)
     }
+    voiceRef.current = recording
     setVoice(recording)
   }
 
   const finishRecording = async () => {
+    const at = ticketId
     const recording = await recorder.stop()
+    // A gravação é do chamado em que começou. Na troca de chamado é o `cancel` do efeito acima que
+    // solta o microfone e descarta o áudio; esta checagem cobre o áudio que fecha no mesmo instante
+    // da troca, antes de o efeito rodar, para ele não ser anexado no chamado novo.
+    if (shownTicketId.current !== at) {
+      if (recording) URL.revokeObjectURL(recording.url)
+      return
+    }
     if (recording && recording.blob.size > maxFileSize) {
       URL.revokeObjectURL(recording.url)
       recorder.setError('O áudio passa de 16 MB. Grave um áudio mais curto.')
@@ -681,18 +742,35 @@ function Composer({
     }
     requestId.current ??= newRequestId()
     const quotedMessageId = quoted?.id
+    // O rascunho do chamado sai já no envio, e não só na confirmação: sair do chamado e voltar
+    // enquanto o servidor responde não pode trazer de volta o texto (nem a legenda) que já foi
+    // enviado. Se o envio falhar, o texto volta a ser rascunho (regra no `useSendMessage`).
+    clearDraft(userId, ticketId)
     send.mutate(
       voice
-        ? { requestId: requestId.current, body: '', file: null, voice: voice.blob, quotedMessageId }
-        : { requestId: requestId.current, body, file, quotedMessageId },
+        ? {
+            ticketId,
+            userId,
+            requestId: requestId.current,
+            body: '',
+            file: null,
+            voice: voice.blob,
+            quotedMessageId,
+          }
+        : { ticketId, userId, requestId: requestId.current, body, file, quotedMessageId },
       {
         onSuccess: () => {
           requestId.current = null
+          // A pessoa trocou de chamado antes de o servidor confirmar: o campo agora é do chamado
+          // novo, com o rascunho dele, e não pode ser limpo. O rascunho do enviado saiu no envio,
+          // e o arquivo e o áudio dele saíram na troca.
+          if (shownTicketId.current !== ticketId) return
           onCancelQuote()
           if (voice) {
             changeVoice(null)
           } else {
-            setText('')
+            // Enviar a mensagem limpa o campo daquele chamado.
+            changeText('')
             setFile(null)
           }
         },
@@ -707,7 +785,10 @@ function Composer({
     }
   }
 
-  const error = fileError ?? recorder.error ?? send.error?.message
+  // O erro de um envio fica ligado ao chamado em que ele foi feito: falhou o envio do chamado A
+  // depois de a pessoa abrir o B, o aviso é do A e não aparece no B.
+  const sendError = send.error && send.variables?.ticketId === ticketId ? send.error.message : null
+  const error = fileError ?? recorder.error ?? sendError
 
   return (
     <div className="flex flex-col gap-2 border-t border-line-soft p-3">
@@ -899,6 +980,13 @@ export function ConversationCard({
   const react = useReactToMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
+  // Chamado que não está mais com o usuário (encerrado, transferido, cancelado, devolvido) não
+  // mostra rascunho: o que estava guardado é descartado, para não voltar num chamado futuro.
+  useEffect(() => {
+    if (!canReply) {
+      clearDraft(user.id, ticket.id)
+    }
+  }, [canReply, user.id, ticket.id])
   // A citação em preparo é deste chamado: trocar de chamado a descarta, e perder o direito de
   // responder (transferência, encerramento) também.
   const [quoting, setQuoting] = useState<number | null>(null)
@@ -1072,6 +1160,7 @@ export function ConversationCard({
       {canReply ? (
         <Composer
           ticketId={ticket.id}
+          userId={user.id}
           attachRef={attach}
           quoted={quotedDraft && !isHiddenByXet(quotedDraft) ? quotedDraft : null}
           onCancelQuote={() => setQuoting(null)}
