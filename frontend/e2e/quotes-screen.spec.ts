@@ -849,6 +849,8 @@ test('cartão enviando ou com falha não oferece reação nem Responder', async 
   await seedContact(baseURL!, sector.id, failing, unique().phone)
   const conversation = await openAssigned(page, agent, 'Clara Cita')
   const ticketId = currentTicketId(page)
+  // O endereço do chamado, para conferir que o Esc do menu não leva a tela para Chamados.
+  const ticketUrl = page.url()
   const noActions = async (message: Locator) => {
     await message.hover()
     await expect(message.getByRole('button', { name: 'Reagir', exact: true })).toHaveCount(0)
@@ -857,8 +859,16 @@ test('cartão enviando ou com falha não oferece reação nem Responder', async 
     const menu = message.getByRole('button', { name: 'Ações da mensagem' })
     if ((await menu.count()) > 0) {
       await menu.click()
+      // O menu é montado num portal depois do clique. O Esc só pode vir com ele aberto: sem essa
+      // espera, o Esc podia chegar antes do menu montar e, com nada aberto por cima, voltar para
+      // Chamados (regra 38 de queue.md), levando o resto do teste para a tela errada.
+      const dropdown = page.getByRole('menu')
+      await expect(dropdown).toBeVisible()
       await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toHaveCount(0)
       await page.keyboard.press('Escape')
+      await expect(dropdown).toHaveCount(0)
+      // O Esc fechou só o menu: o chamado continua aberto.
+      await expect(page).toHaveURL(ticketUrl)
     }
   }
 
