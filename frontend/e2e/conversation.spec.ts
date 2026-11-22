@@ -593,3 +593,147 @@ test('sair do chamado antes da confirmação apaga o rascunho enviado', async ({
   await page.reload()
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
 })
+
+// O rascunho sai no próprio envio, e não na confirmação: sair do chamado e voltar antes de o
+// servidor responder não pode trazer de volta o texto já enviado, senão um Enter o manda de novo.
+test('sair e voltar ao chamado antes da confirmação não traz o texto enviado de volta', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Joana Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const drafts = () =>
+    page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')))
+  await field.fill('Mensagem que já saiu')
+
+  // O envio demora: dá tempo de sair do chamado e voltar antes da confirmação.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+    await route.continue()
+  })
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  // O rascunho sai do armazenamento no envio, antes de a resposta chegar.
+  await expect.poll(drafts).toHaveLength(0)
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(field).toHaveValue('')
+  await sent
+  await expect(field).toHaveValue('')
+  await page.reload()
+  await expect(field).toHaveValue('')
+})
+
+// Envio que falha devolve o texto como rascunho: a pessoa sai do chamado e, ao voltar, encontra o
+// que escreveu para reenviar depois de resolver o problema.
+test('envio que falha devolve o texto como rascunho', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Kaique Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const drafts = () =>
+    page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')))
+
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Não foi possível enviar agora.' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await field.fill('Texto que não saiu')
+  await field.press('Enter')
+  await expect(page.getByText('Não foi possível enviar agora.')).toBeVisible()
+  // O texto volta para o armazenamento e, ao sair e voltar ao chamado, está no campo de novo.
+  await expect.poll(drafts).toHaveLength(1)
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(field).toHaveValue('Texto que não saiu')
+})
+
+// A gravação em andamento é do chamado em que começou: ao trocar de chamado ela é descartada, para o
+// áudio não ir para o cliente do chamado novo.
+test('gravação de áudio em andamento não passa para o chamado novo', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Lara Rascunho ${id}`
+  const second = `Murilo Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+  await assume(page, first)
+  await assume(page, second)
+  await open(first)
+  await page.getByRole('button', { name: 'Gravar áudio' }).click()
+  await expect(page.getByRole('status', { name: 'Gravação de áudio' })).toContainText('Gravando')
+
+  // Trocar de chamado com a gravação rolando descarta o áudio, sem anexar nada ao chamado novo.
+  await open(second)
+  await expect(page.getByRole('status', { name: 'Gravação de áudio' })).toHaveCount(0)
+  await expect(page.getByLabel('Áudio gravado')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Gravar áudio' })).toBeVisible()
+
+  // O gravador volta a funcionar no chamado novo, e o áudio gravado fica nele.
+  await page.getByRole('button', { name: 'Gravar áudio' }).click()
+  await page.waitForTimeout(1200)
+  await page.getByRole('button', { name: 'Concluir gravação' }).click()
+  await expect(page.getByLabel('Áudio gravado')).toBeVisible()
+  await page.getByRole('button', { name: 'Descartar áudio' }).click()
+  await expect(page.getByLabel('Áudio gravado')).toHaveCount(0)
+})

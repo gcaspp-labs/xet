@@ -5,7 +5,7 @@ import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
 import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
-import { clearDraft } from '@/lib/message-draft'
+import { readDraft, saveDraft } from '@/lib/message-draft'
 import { type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
@@ -297,10 +297,14 @@ export function useSendMessage() {
       form.append('file', file)
       return api<SentMessage>(`/tickets/${ticketId}/messages`, { method: 'POST', body: form })
     },
-    // O rascunho do chamado enviado é apagado aqui, nas opções do envio, e não no campo de
-    // mensagem: esta confirmação roda mesmo depois de o campo sair da tela (a pessoa abriu outro
-    // chamado ou outra página), e o texto já enviado não volta como rascunho.
-    onSuccess: (_sent, { userId, ticketId }) => clearDraft(userId, ticketId),
+    // O rascunho do chamado sai do armazenamento já no envio, no próprio campo de mensagem: sair do
+    // chamado e voltar antes de o servidor confirmar não pode trazer de volta o texto (nem a legenda)
+    // já enviado, senão um Enter o manda de novo. Aqui a falha devolve o texto como rascunho, para a
+    // pessoa reenviar depois sem perdê-lo; a confirmação não apaga nada de outro chamado.
+    onError: (_error, { userId, ticketId, body }) => {
+      // Se a pessoa já escreveu outra coisa nesse chamado, o texto novo é que vale.
+      if (body && !readDraft(userId, ticketId)) saveDraft(userId, ticketId, body)
+    },
     onSettled: (_sent, _error, { ticketId }) =>
       queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
   })

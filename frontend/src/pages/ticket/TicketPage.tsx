@@ -589,7 +589,8 @@ function Composer({
 
   // Arquivo, áudio e erro do anexo são do chamado em que foram escolhidos: ao trocar de chamado
   // saem do campo, senão o arquivo do chamado anterior iria para o cliente do chamado novo. O
-  // áudio tem a URL liberada aqui, fora do render.
+  // áudio tem a URL liberada aqui, fora do render. A gravação em andamento é descartada junto, sem
+  // anexar ao chamado novo.
   const attachedTicketId = useRef(ticketId)
   useLayoutEffect(() => {
     if (attachedTicketId.current === ticketId) return
@@ -601,7 +602,8 @@ function Composer({
       voiceRef.current = null
     }
     setVoice(null)
-  }, [ticketId])
+    if (recorder.recording) recorder.cancel()
+  }, [ticketId, recorder.recording, recorder.cancel])
 
   // Trocar de chamado sem sair da tela troca o texto pelo rascunho do chamado novo, e não mistura
   // o que foi escrito em cada um.
@@ -676,7 +678,14 @@ function Composer({
   }
 
   const finishRecording = async () => {
+    const at = ticketId
     const recording = await recorder.stop()
+    // A gravação é do chamado em que começou: se a pessoa trocou de chamado enquanto o áudio
+    // fechava, o arquivo sai da memória e não é anexado no chamado novo.
+    if (shownTicketId.current !== at) {
+      if (recording) URL.revokeObjectURL(recording.url)
+      return
+    }
     if (recording && recording.blob.size > maxFileSize) {
       URL.revokeObjectURL(recording.url)
       recorder.setError('O áudio passa de 16 MB. Grave um áudio mais curto.')
@@ -729,6 +738,10 @@ function Composer({
     }
     requestId.current ??= newRequestId()
     const quotedMessageId = quoted?.id
+    // O rascunho do chamado sai já no envio, e não só na confirmação: sair do chamado e voltar
+    // enquanto o servidor responde não pode trazer de volta o texto (nem a legenda) que já foi
+    // enviado. Se o envio falhar, o texto volta a ser rascunho (regra no `useSendMessage`).
+    clearDraft(userId, ticketId)
     send.mutate(
       voice
         ? {
@@ -745,14 +758,14 @@ function Composer({
         onSuccess: () => {
           requestId.current = null
           // A pessoa trocou de chamado antes de o servidor confirmar: o campo agora é do chamado
-          // novo, com o rascunho dele, e não pode ser limpo. O rascunho do enviado saiu na
-          // confirmação do envio, e o arquivo e o áudio dele saíram na troca.
+          // novo, com o rascunho dele, e não pode ser limpo. O rascunho do enviado saiu no envio,
+          // e o arquivo e o áudio dele saíram na troca.
           if (shownTicketId.current !== ticketId) return
           onCancelQuote()
           if (voice) {
             changeVoice(null)
           } else {
-            // Enviar a mensagem limpa o campo e o rascunho daquele chamado.
+            // Enviar a mensagem limpa o campo daquele chamado.
             changeText('')
             setFile(null)
           }
