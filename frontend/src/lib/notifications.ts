@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { type Sector, useSectors } from '@/lib/admin'
-import { alertQueueEntry } from '@/lib/alerts'
+import { alertNewMessage, alertQueueEntry } from '@/lib/alerts'
 import type { User } from '@/lib/auth'
 import { type TicketSummary, ticketsQuery } from '@/lib/tickets'
 
@@ -14,10 +14,37 @@ export type QueuedTicket = TicketSummary & { sectorId: number }
 // primeira: só guarda, sem avisar.
 const knownQueue = new Map<number, Set<number>>()
 
+// Não lidas que o sino já conhecia em cada chamado meu, por setor: `setor:chamado`. Quando a
+// lista recarregada mostra mais (spec #310), chegou mensagem nova. Sem registro, a carga é a
+// primeira e só guarda, sem avisar.
+const knownUnread = new Map<string, number>()
+
+const unreadKey = (sectorId: number, ticketId: number) => `${sectorId}:${ticketId}`
+
+// Chamado aberto em Chamados, informado pela tela. Com a aba visível, a mensagem nova nele não
+// alerta: a pessoa já está vendo a conversa.
+let openTicketId: number | null = null
+
+export function setOpenTicket(ticketId: number | null) {
+  openTicketId = ticketId
+}
+
+function isOpenAndVisible(ticketId: number) {
+  return openTicketId === ticketId && document.visibilityState === 'visible'
+}
+
 // Esquece o que o sino conhecia: a próxima carga de cada setor vira a nova referência e
 // não avisa. Chamado ao reconectar o WebSocket, porque o que chegou durante a queda não é novidade.
-export function resetQueueBaseline() {
+export function resetAlertBaselines() {
   knownQueue.clear()
+  knownUnread.clear()
+}
+
+// Não lidas de um chamado em atendimento do próprio usuário; nulo nos que não são dele.
+function myUnread(ticket: TicketSummary, userId: number) {
+  return ticket.status === 'in_progress' && ticket.assignee?.id === userId
+    ? ticket.unreadCount
+    : undefined
 }
 
 function lastActivity(ticket: TicketSummary) {
@@ -69,6 +96,22 @@ export function useNotifications(user: User) {
 
   const down = useMemo(() => (canConnect ? sectors.filter(isDown) : []), [sectors, canConnect])
 
+  // Não lidas dos meus chamados: somadas ao contador do sino no título da aba (spec #310). O sino
+  // em si continua só com fila e número desconectado.
+  const unread = useMemo(
+    () =>
+      watched.reduce(
+        (total, _, index) =>
+          total +
+          (results[index]?.data ?? []).reduce(
+            (sum, ticket) => sum + (myUnread(ticket, user.id) ?? 0),
+            0,
+          ),
+        0,
+      ),
+    [watched, results, user.id],
+  )
+
   const watchedIds = useRef(new Set<number>())
   useEffect(() => {
     watchedIds.current = new Set(watched.map((s) => s.id))
@@ -82,6 +125,20 @@ export function useNotifications(user: User) {
 
   // Ouve o cache, e não a tela, para comparar cada carga com a anterior sem depender de renderização.
   useEffect(() => {
+    // A carga de uma setor vira a referência: fila e não lidas. Sem referência anterior, é a
+    // primeira depois de abrir a tela (ou de reconectar), e não avisa.
+    const seed = (sectorId: number, tickets: TicketSummary[]) => {
+      knownQueue.set(
+        sectorId,
+        new Set(tickets.filter((t) => t.status === 'queued').map((t) => t.id)),
+      )
+      for (const ticket of tickets) {
+        const count = myUnread(ticket, user.id)
+        if (count !== undefined) {
+          knownUnread.set(unreadKey(sectorId, ticket.id), count)
+        }
+      }
+    }
     // Filas que já estavam no cache ao montar (a tela pode ser remontada com dados em dia):
     // viram a referência, para o primeiro aviso depois delas não ser perdido.
     for (const [key, data] of queryClient.getQueriesData<TicketSummary[]>({
@@ -89,10 +146,7 @@ export function useNotifications(user: User) {
     })) {
       const sectorId = sectorOfTicketsKey(key)
       if (sectorId !== undefined && data) {
-        knownQueue.set(
-          sectorId,
-          new Set(data.filter((t) => t.status === 'queued').map((t) => t.id)),
-        )
+        seed(sectorId, data)
       }
     }
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
@@ -103,14 +157,14 @@ export function useNotifications(user: User) {
       if (sectorId === undefined || !watchedIds.current.has(sectorId)) {
         return
       }
-      const queued = ((event.query.state.data as TicketSummary[] | undefined) ?? []).filter(
-        (t) => t.status === 'queued',
-      )
+      const tickets = (event.query.state.data as TicketSummary[] | undefined) ?? []
+      const queued = tickets.filter((t) => t.status === 'queued')
       const before = knownQueue.get(sectorId)
-      knownQueue.set(sectorId, new Set(queued.map((t) => t.id)))
       if (!before) {
+        seed(sectorId, tickets)
         return
       }
+      knownQueue.set(sectorId, new Set(queued.map((t) => t.id)))
       for (const ticket of queued) {
         if (!before.has(ticket.id)) {
           toast(`Chamado recebido: ${ticket.contact.name}`, { id: `queue-${ticket.id}` })
@@ -119,12 +173,38 @@ export function useNotifications(user: User) {
           })
         }
       }
+      // Mensagem nova num chamado meu: mais não lidas do que na carga anterior. O chamado aberto
+      // com a aba visível não alerta, porque a pessoa está vendo a conversa.
+      const seen = new Set<string>()
+      for (const ticket of tickets) {
+        const count = myUnread(ticket, user.id)
+        if (count === undefined) {
+          continue
+        }
+        const key = unreadKey(sectorId, ticket.id)
+        seen.add(key)
+        const previous = knownUnread.get(key)
+        knownUnread.set(key, count)
+        if (previous !== undefined && count > previous && !isOpenAndVisible(ticket.id)) {
+          alertNewMessage(ticket.id, count, ticket.contact.name, () => {
+            void navigateRef.current(`/chamados/${ticket.id}`)
+          })
+        }
+      }
+      // Chamado que saiu de "Meus chamados" (encerrado, devolvido ou transferido) não guarda mais
+      // não lidas: se voltar, recomeça como na primeira carga.
+      for (const key of knownUnread.keys()) {
+        if (key.startsWith(`${sectorId}:`) && !seen.has(key)) {
+          knownUnread.delete(key)
+        }
+      }
     })
     return () => {
       unsubscribe()
       knownQueue.clear()
+      knownUnread.clear()
     }
-  }, [queryClient])
+  }, [queryClient, user.id])
 
-  return { queue, down, count: queue.length + down.length }
+  return { queue, down, count: queue.length + down.length, unread }
 }
