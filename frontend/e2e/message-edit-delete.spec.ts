@@ -637,6 +637,89 @@ test('alterações do cliente e do celular do setor mostram o conteúdo conhecid
   await expect(bubble).toContainText('Excluída')
 })
 
+test('exclusão para todos pelo celular do setor amplia a exclusão para mim e mantém o aviso em Chamados', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone: sender } = unique()
+  const nara = await seedContact(baseURL!, sector.id, `Nara ${id}`, sender)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-375-${id}`,
+    phone: sender,
+    contactName: `Nara ${id}`,
+    body: 'Preciso do boleto',
+  })
+  await signIn(page, agent, userPassword)
+  await openQueued(page, `Nara ${id}`)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  const ticketId = ticketIdOf(page)
+  const { bubble, externalId } = await sendText(page, conversation, 'Boleto de setembro')
+
+  // O responsável exclui a mensagem só para o setor.
+  await chooseInMenu(bubble, 'Excluir')
+  await page
+    .getByRole('dialog', { name: 'Excluir mensagem' })
+    .getByRole('button', { name: 'Excluir para mim' })
+    .click()
+  await expect(bubble).toContainText('Mensagem excluída no XET')
+
+  // O celular do setor exclui a mesma mensagem para todos: o alcance passa a "para todos".
+  await phone(request, sector.id, 'revoke', {
+    targetExternalMessageId: externalId,
+    phone: sender,
+    fromSector: true,
+  })
+  await expect
+    .poll(async () => (await agentMessages(page, ticketId))[0].deletion)
+    .toMatchObject({ scope: 'everyone', origin: 'agent' })
+  // Em Chamados continua o aviso do XET, sem o conteúdo, e a prévia da lista também o mantém.
+  await expect(bubble).toContainText('Mensagem excluída no XET')
+  await expect(conversation).not.toContainText('Boleto de setembro')
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Meus chamados' })
+      .getByRole('link', { name: new RegExp(`Nara ${id}`) }),
+  ).toContainText('Mensagem excluída no XET')
+
+  // Em Atendimentos, o conteúdo preservado aparece com as duas exclusões e o alcance "para todos".
+  const admins = await adminApi(baseURL!)
+  const module = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${sector.id}/modules`, { data: { name: `Sistema ${id}` } }),
+  )
+  await admins.dispose()
+  ok(
+    await page.request.post(`/api/tickets/${ticketId}/close`, {
+      data: {
+        subject: 'Boleto',
+        resolution: 'Boleto enviado.',
+        moduleIds: [module.id],
+        organizationId: nara.organizationId,
+      },
+    }),
+  )
+  await page.goto(`/atendimentos/${ticketId}`)
+  const sent = page.getByRole('listitem', { name: 'Mensagem enviada' })
+  await expect(sent).toContainText('Boleto de setembro')
+  await expect(sent).toContainText('Excluída')
+  await sent.getByRole('button', { name: 'Ver exclusão' }).click()
+  const changes = page.getByRole('dialog', { name: 'Mensagem excluída' })
+  const deletions = changes.getByTestId('message-deletion')
+  await expect(deletions).toHaveCount(2)
+  await expect(deletions.nth(0)).toContainText('Para mim (oculta no XET)')
+  await expect(deletions.nth(0)).toContainText('pelo XET')
+  await expect(deletions.nth(1)).toContainText('Para todos (também no WhatsApp)')
+  await expect(deletions.nth(1)).toContainText('pelo celular do setor')
+  await expect(changes.getByTestId('deleted-content')).toContainText('Excluída para todos')
+  await expect(
+    changes.getByRole('button', { name: /Editar|Excluir|Reenviar|Restaurar/ }),
+  ).toHaveCount(0)
+})
+
 test('teclado e foco: menu, edição e janela de exclusão funcionam sem o mouse e devolvem o foco', async ({
   page,
   request,
