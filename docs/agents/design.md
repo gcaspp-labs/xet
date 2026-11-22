@@ -13,7 +13,7 @@ Como as skills tratam a interface do xet.
 
 O Designer usa a branch de interface da `prototype` para entregar o **resultado esperado** de um ticket com tela nova ou mudança de layout.
 
-- **Onde:** na branch `prototype/<número da issue>`, a partir da main. Ela guarda só a decisão validada.
+- **Onde:** na branch `prototype/<número da issue>`, a partir da develop. Ela guarda só a decisão validada.
 - **Capturas:** salvas na própria branch, em `prototype-captures/`, e linkadas no ticket. Tamanho: **só desktop**.
 - **Aprovação:** a pessoa aprova a tela antes de o ticket virar `ready-for-agent`.
 - **Mudanças depois:** volte à mesma branch, edite e tire novas capturas.

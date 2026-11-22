@@ -16,7 +16,7 @@ Issues, specs e PRs do xet ficam no GitHub, em `gcaspp-labs/xet`. Use o `gh` em 
 
 ## Pull requests
 
-- **Abrir**: `gh pr create --base main --title "..." --body "..."`, com `Closes #<ticket>` na primeira linha do corpo, e só esse.
+- **Abrir**: `gh pr create --base develop --title "..." --body "..."`, com `Closes #<ticket>` na primeira linha do corpo, e só esse. Nenhum agente abre PR para a `main`.
 - **Ler**: `gh pr view <número> --json number,title,body,state,isDraft,headRefOid,mergeable`, `gh pr diff <número>` e `gh pr checks <número>`.
 - **Comentar**: `gh pr comment <número> --body "..."`.
 - **Merge**: só pela `merge-gate`. Nenhum agente roda `gh pr merge` direto.
