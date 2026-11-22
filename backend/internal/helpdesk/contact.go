@@ -18,12 +18,15 @@ import (
 // such as the ticket of an unknown number (spec.md, Órgãos e contatos).
 // Tickets that already have an organization keep it. The open tickets are
 // locked before the contact, in the same order as the closing, so the two
-// never wait on each other. Every open ticket is announced, because each one
-// shows the contact.
+// never wait on each other, and the pending ones after them. Every open and
+// pending ticket is announced, because each one shows the contact; the
+// pending ones only get the announcement: a pending ticket takes the
+// organization of the contact when it is resumed.
 func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactID int64, in directory.ContactInput) (directory.Contact, error) {
 	var (
 		contact directory.Contact
 		open    []db.Ticket
+		pending []db.Ticket
 	)
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
@@ -31,6 +34,10 @@ func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactI
 		open, err = db.AsTickets(q.GetOpenTicketsOfContactForUpdate(ctx, contactID))
 		if err != nil {
 			return fmt.Errorf("lock open tickets: %w", err)
+		}
+		pending, err = db.AsTickets(q.GetPendingTicketsOfContactForUpdate(ctx, contactID))
+		if err != nil {
+			return fmt.Errorf("lock pending tickets: %w", err)
 		}
 		contact, err = directory.UpdateContact(ctx, q, actor, contactID, in)
 		if err != nil {
@@ -58,16 +65,20 @@ func (s *Service) RegisterContact(ctx context.Context, actor auth.User, contactI
 	for _, t := range open {
 		s.hub.Publish(realtime.TicketChanged(t.SectorID, t.ID))
 	}
+	for _, t := range pending {
+		s.hub.Publish(realtime.TicketChanged(t.SectorID, t.ID))
+	}
 	return contact, nil
 }
 
 // SaveContactName saves only the name of an unregistered contact and announces
-// its open tickets, which show the name. The open tickets are locked before the
-// contact, as in RegisterContact.
+// its open and pending tickets, which show the name. The open tickets are
+// locked before the contact, as in RegisterContact.
 func (s *Service) SaveContactName(ctx context.Context, contactID int64, name string) (directory.Contact, error) {
 	var (
 		contact directory.Contact
 		open    []db.Ticket
+		pending []db.Ticket
 	)
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
@@ -76,6 +87,10 @@ func (s *Service) SaveContactName(ctx context.Context, contactID int64, name str
 		if err != nil {
 			return fmt.Errorf("lock open tickets: %w", err)
 		}
+		pending, err = db.AsTickets(q.GetPendingTicketsOfContactForUpdate(ctx, contactID))
+		if err != nil {
+			return fmt.Errorf("lock pending tickets: %w", err)
+		}
 		contact, err = directory.SetContactName(ctx, q, contactID, name)
 		return err
 	})
@@ -83,6 +98,9 @@ func (s *Service) SaveContactName(ctx context.Context, contactID int64, name str
 		return directory.Contact{}, err
 	}
 	for _, t := range open {
+		s.hub.Publish(realtime.TicketChanged(t.SectorID, t.ID))
+	}
+	for _, t := range pending {
 		s.hub.Publish(realtime.TicketChanged(t.SectorID, t.ID))
 	}
 	return contact, nil
