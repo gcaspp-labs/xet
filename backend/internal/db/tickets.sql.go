@@ -52,7 +52,7 @@ func (q *Queries) AddTicketModules(ctx context.Context, arg AddTicketModulesPara
 
 const assignTicket = `-- name: AssignTicket :one
 update tickets
-set assignee_id = $1, status = 'in_progress', assigned_at = coalesce(assigned_at, now()), assignee_read_at = now()
+set assignee_id = $1, status = 'in_progress', assigned_at = coalesce(assigned_at, now()), assignee_read_at = clock_timestamp()
 where id = $2 and status = 'queued'
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at
 `
@@ -64,7 +64,10 @@ type AssignTicketParams struct {
 
 // Conditional update: only a queued ticket is assigned, so among concurrent
 // attempts only one returns a row. The reading of the assignee starts now: the
-// messages of the queue are already seen when it is taken.
+// messages of the queue are already seen when it is taken. The moment is
+// clock_timestamp(), the instant of the update, to compare with the moment the
+// message was recorded (messages.created_at, also clock_timestamp()), not with
+// the start of the transactions.
 func (q *Queries) AssignTicket(ctx context.Context, arg AssignTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, assignTicket, arg.AssigneeID, arg.ID)
 	var i Ticket
@@ -521,7 +524,7 @@ func (q *Queries) CreateQueuedTicket(ctx context.Context, arg CreateQueuedTicket
 
 const createStartedTicket = `-- name: CreateStartedTicket :one
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, created_by_id, arrived_at, assigned_at, started_at, assignee_read_at)
-values ($1, $2, $3, $4, 'in_progress', $5, $5, now(), now(), now(), now())
+values ($1, $2, $3, $4, 'in_progress', $5, $5, now(), now(), now(), clock_timestamp())
 on conflict (sector_id, contact_id) where status in ('queued', 'in_progress') do nothing
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at
 `
@@ -535,9 +538,9 @@ type CreateStartedTicketParams struct {
 }
 
 // Conversation started by an agent: the ticket is born assigned to them, with
-// the reading already at now: the conversation's own messages are not unread.
-// A ticket opened meanwhile for the contact in the sector wins; then no row is
-// returned and the caller directs the agent to it.
+// the reading already at the moment of the start: the conversation's own
+// messages are not unread. A ticket opened meanwhile for the contact in the
+// sector wins; then no row is returned and the caller directs the agent to it.
 func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTicketParams) (Ticket, error) {
 	row := q.db.QueryRow(ctx, createStartedTicket,
 		arg.Protocol,
@@ -1256,8 +1259,10 @@ type ListOpenTicketsRow struct {
 // Open tickets of the sector with the contact and the assignee, oldest first,
 // and the unread count of each one: messages received from the customer
 // recorded after the assignee's reading. The queue has no assignee, so its
-// count is 0. The comparison uses messages.created_at, the server clock, not
-// sent_at, which comes from the phone.
+// count is 0. The comparison uses messages.created_at, the instant the server
+// recorded the message, not sent_at, which comes from the phone. Both sides are
+// clock_timestamp(), so a message inserted by a transaction that was already
+// open when the reading was written is still newer than the reading.
 func (q *Queries) ListOpenTickets(ctx context.Context, sectorID int64) ([]ListOpenTicketsRow, error) {
 	rows, err := q.db.Query(ctx, listOpenTickets, sectorID)
 	if err != nil {
@@ -1548,9 +1553,9 @@ func (q *Queries) MarkTicketPending(ctx context.Context, arg MarkTicketPendingPa
 
 const markTicketRead = `-- name: MarkTicketRead :execrows
 update tickets
-set assignee_read_at = now()
+set assignee_read_at = clock_timestamp()
 where id = $1 and status = 'in_progress' and assignee_id = $2
-  and (assignee_read_at is null or assignee_read_at < now())
+  and (assignee_read_at is null or assignee_read_at < clock_timestamp())
 `
 
 type MarkTicketReadParams struct {
@@ -1561,7 +1566,8 @@ type MarkTicketReadParams struct {
 // Marks the ticket as read for the current assignee (#313, spec #310). It only
 // applies to a ticket in progress and only moves the moment forward: a reading
 // with an earlier time does not move the value back nor change anything. The
-// value is the server's (now()), never the one of the screen clock.
+// value is the server's (clock_timestamp(), the instant of the update), never
+// the one of the screen clock.
 func (q *Queries) MarkTicketRead(ctx context.Context, arg MarkTicketReadParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markTicketRead, arg.ID, arg.AssigneeID)
 	if err != nil {
@@ -1697,7 +1703,7 @@ func (q *Queries) SetTicketOrganization(ctx context.Context, arg SetTicketOrgani
 
 const transferTicket = `-- name: TransferTicket :one
 update tickets
-set assignee_id = $1, assignee_read_at = now()
+set assignee_id = $1, assignee_read_at = clock_timestamp()
 where id = $2
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at
 `

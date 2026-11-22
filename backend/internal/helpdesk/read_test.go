@@ -293,6 +293,47 @@ func TestUnreadUsesTheServerTimeAndOnlyMovesForward(t *testing.T) {
 	}
 }
 
+// A mensagem gravada por uma transação que já estava aberta quando a leitura
+// foi feita, mas que só gravou depois dela, conta como não lida: o marco é o
+// instante da gravação (clock_timestamp()), não o início da transação.
+func TestUnreadCountsTheMessageRecordedAfterTheRead(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	ctx := t.Context()
+
+	tx, err := e.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// A transação do recebimento já começou, com o now() dela anterior à leitura.
+	var started time.Time
+	if err := tx.QueryRow(ctx, "select now()").Scan(&started); err != nil {
+		t.Fatal(err)
+	}
+	if resp := e.markRead(c.ticket.ID, c.anaToken); resp.Status != http.StatusNoContent {
+		t.Fatalf("mark read: status %d", resp.Status)
+	}
+	// A mensagem só é gravada depois da leitura.
+	if _, err := tx.Exec(ctx, `
+		insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, body, status, sent_at)
+		values ($1, $2, $3, 'inbound', 'customer', 'text', 'Oi', 'sent', clock_timestamp())`,
+		c.ticket.ID, c.sector.ID, c.ticket.ContactID); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if read := e.readAt(c.ticket.ID); read == nil || read.Before(started) {
+		t.Fatalf("reading = %v, transaction started at %v", read, started)
+	}
+	if got := e.unreadOf(c.sector.ID, c.ticket.ID, c.biaToken); got != 1 {
+		t.Fatalf("unread of the message recorded after the read = %d", got)
+	}
+}
+
 // Marcar como lido avisa o setor, para as outras abas do mesmo usuário recarregarem.
 func TestMarkReadPublishesTheTicketEvent(t *testing.T) {
 	t.Parallel()

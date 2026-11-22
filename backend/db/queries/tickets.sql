@@ -25,9 +25,12 @@ where id = @id;
 -- name: AssignTicket :one
 -- Conditional update: only a queued ticket is assigned, so among concurrent
 -- attempts only one returns a row. The reading of the assignee starts now: the
--- messages of the queue are already seen when it is taken.
+-- messages of the queue are already seen when it is taken. The moment is
+-- clock_timestamp(), the instant of the update, to compare with the moment the
+-- message was recorded (messages.created_at, also clock_timestamp()), not with
+-- the start of the transactions.
 update tickets
-set assignee_id = @assignee_id, status = 'in_progress', assigned_at = coalesce(assigned_at, now()), assignee_read_at = now()
+set assignee_id = @assignee_id, status = 'in_progress', assigned_at = coalesce(assigned_at, now()), assignee_read_at = clock_timestamp()
 where id = @id and status = 'queued'
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
 
@@ -35,8 +38,10 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 -- Open tickets of the sector with the contact and the assignee, oldest first,
 -- and the unread count of each one: messages received from the customer
 -- recorded after the assignee's reading. The queue has no assignee, so its
--- count is 0. The comparison uses messages.created_at, the server clock, not
--- sent_at, which comes from the phone.
+-- count is 0. The comparison uses messages.created_at, the instant the server
+-- recorded the message, not sent_at, which comes from the phone. Both sides are
+-- clock_timestamp(), so a message inserted by a transaction that was already
+-- open when the reading was written is still newer than the reading.
 select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
@@ -198,11 +203,11 @@ where sector_id = @sector_id and contact_id = @contact_id and status in ('queued
 
 -- name: CreateStartedTicket :one
 -- Conversation started by an agent: the ticket is born assigned to them, with
--- the reading already at now: the conversation's own messages are not unread.
--- A ticket opened meanwhile for the contact in the sector wins; then no row is
--- returned and the caller directs the agent to it.
+-- the reading already at the moment of the start: the conversation's own
+-- messages are not unread. A ticket opened meanwhile for the contact in the
+-- sector wins; then no row is returned and the caller directs the agent to it.
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, created_by_id, arrived_at, assigned_at, started_at, assignee_read_at)
-values (@protocol, @sector_id, @contact_id, @organization_id, 'in_progress', @assignee_id, @assignee_id, now(), now(), now(), now())
+values (@protocol, @sector_id, @contact_id, @organization_id, 'in_progress', @assignee_id, @assignee_id, now(), now(), now(), clock_timestamp())
 on conflict (sector_id, contact_id) where status in ('queued', 'in_progress') do nothing
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
 
@@ -210,7 +215,7 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 -- The caller holds the lock of the ticket and checked it is in progress. The
 -- reading restarts for the new assignee: the count starts from the transfer.
 update tickets
-set assignee_id = @assignee_id, assignee_read_at = now()
+set assignee_id = @assignee_id, assignee_read_at = clock_timestamp()
 where id = @id
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
 
@@ -362,8 +367,9 @@ where client_request_id = @client_request_id;
 -- Marks the ticket as read for the current assignee (#313, spec #310). It only
 -- applies to a ticket in progress and only moves the moment forward: a reading
 -- with an earlier time does not move the value back nor change anything. The
--- value is the server's (now()), never the one of the screen clock.
+-- value is the server's (clock_timestamp(), the instant of the update), never
+-- the one of the screen clock.
 update tickets
-set assignee_read_at = now()
+set assignee_read_at = clock_timestamp()
 where id = @id and status = 'in_progress' and assignee_id = @assignee_id
-  and (assignee_read_at is null or assignee_read_at < now());
+  and (assignee_read_at is null or assignee_read_at < clock_timestamp());
