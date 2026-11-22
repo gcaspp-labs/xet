@@ -54,7 +54,7 @@ const assignTicket = `-- name: AssignTicket :one
 update tickets
 set assignee_id = $1, status = 'in_progress', assigned_at = coalesce(assigned_at, now())
 where id = $2 and status = 'queued'
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type AssignTicketParams struct {
@@ -91,6 +91,10 @@ func (q *Queries) AssignTicket(ctx context.Context, arg AssignTicketParams) (Tic
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -100,7 +104,7 @@ update tickets
 set status = 'closed', closure_type = 'cancelled', closed_at = now(), closed_by_id = $1::bigint,
     assignee_id = coalesce(assignee_id, $1::bigint), ended_at = greatest(now(), started_at)
 where id = $2
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CancelTicketParams struct {
@@ -139,6 +143,10 @@ func (q *Queries) CancelTicket(ctx context.Context, arg CancelTicketParams) (Tic
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -149,7 +157,7 @@ set status = 'closed', closure_type = $1::closure_type, closed_at = now(), close
     subject = $2, resolution = $3, organization_id = $4,
     started_at = $5, ended_at = coalesce($6, now())
 where id = $7
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CloseTicketParams struct {
@@ -198,6 +206,10 @@ func (q *Queries) CloseTicket(ctx context.Context, arg CloseTicketParams) (Ticke
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -207,7 +219,7 @@ update tickets
 set status = 'closed', closure_type = 'transferred', closed_at = now(), closed_by_id = assignee_id,
     started_at = least(started_at, now()), ended_at = now(), transfer_reason = $1
 where id = $2
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CloseTransferredTicketParams struct {
@@ -248,6 +260,10 @@ func (q *Queries) CloseTransferredTicket(ctx context.Context, arg CloseTransferr
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -257,7 +273,7 @@ update tickets
 set subject = $1, resolution = $2, organization_id = $3,
     started_at = $4, ended_at = $5
 where id = $6
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CorrectTicketParams struct {
@@ -305,6 +321,10 @@ func (q *Queries) CorrectTicket(ctx context.Context, arg CorrectTicketParams) (T
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -367,7 +387,7 @@ values (
     $6, $6, 'resolved', $7, $8,
     $9, $9, $9, $10, now())
 on conflict (client_request_id) where client_request_id is not null do nothing
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CreatePhoneTicketParams struct {
@@ -425,6 +445,10 @@ func (q *Queries) CreatePhoneTicket(ctx context.Context, arg CreatePhoneTicketPa
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -432,8 +456,8 @@ func (q *Queries) CreatePhoneTicket(ctx context.Context, arg CreatePhoneTicketPa
 const createQueuedTicket = `-- name: CreateQueuedTicket :one
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, arrived_at, started_at)
 values ($1, $2, $3, $4, 'queued', $5, $5)
-on conflict (sector_id, contact_id) where status <> 'closed' do nothing
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+on conflict (sector_id, contact_id) where status in ('queued', 'in_progress') do nothing
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CreateQueuedTicketParams struct {
@@ -479,6 +503,10 @@ func (q *Queries) CreateQueuedTicket(ctx context.Context, arg CreateQueuedTicket
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -486,8 +514,8 @@ func (q *Queries) CreateQueuedTicket(ctx context.Context, arg CreateQueuedTicket
 const createStartedTicket = `-- name: CreateStartedTicket :one
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, created_by_id, arrived_at, assigned_at, started_at)
 values ($1, $2, $3, $4, 'in_progress', $5, $5, now(), now(), now())
-on conflict (sector_id, contact_id) where status <> 'closed' do nothing
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+on conflict (sector_id, contact_id) where status in ('queued', 'in_progress') do nothing
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CreateStartedTicketParams struct {
@@ -534,6 +562,10 @@ func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTick
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -541,8 +573,8 @@ func (q *Queries) CreateStartedTicket(ctx context.Context, arg CreateStartedTick
 const createTransferredTicket = `-- name: CreateTransferredTicket :one
 insert into tickets (protocol, sector_id, contact_id, organization_id, status, previous_ticket_id, arrived_at, started_at)
 values ($1, $2, $3, $4, 'queued', $5, now(), now())
-on conflict (sector_id, contact_id) where status <> 'closed' do nothing
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+on conflict (sector_id, contact_id) where status in ('queued', 'in_progress') do nothing
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type CreateTransferredTicketParams struct {
@@ -589,13 +621,17 @@ func (q *Queries) CreateTransferredTicket(ctx context.Context, arg CreateTransfe
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
 
 const getOpenTicketForUpdate = `-- name: GetOpenTicketForUpdate :one
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
-where sector_id = $1 and contact_id = $2 and status <> 'closed'
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id from tickets
+where sector_id = $1 and contact_id = $2 and status in ('queued', 'in_progress')
 for update
 `
 
@@ -631,13 +667,17 @@ func (q *Queries) GetOpenTicketForUpdate(ctx context.Context, arg GetOpenTicketF
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
 
 const getOpenTicketID = `-- name: GetOpenTicketID :one
 select id from tickets
-where sector_id = $1 and contact_id = $2 and status <> 'closed'
+where sector_id = $1 and contact_id = $2 and status in ('queued', 'in_progress')
 `
 
 type GetOpenTicketIDParams struct {
@@ -653,8 +693,8 @@ func (q *Queries) GetOpenTicketID(ctx context.Context, arg GetOpenTicketIDParams
 }
 
 const getOpenTicketsOfContactForUpdate = `-- name: GetOpenTicketsOfContactForUpdate :many
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
-where contact_id = $1 and status <> 'closed'
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id from tickets
+where contact_id = $1 and status in ('queued', 'in_progress')
 order by id
 for update
 `
@@ -694,6 +734,10 @@ func (q *Queries) GetOpenTicketsOfContactForUpdate(ctx context.Context, contactI
 			&i.TransferReason,
 			&i.Channel,
 			&i.ClientRequestID,
+			&i.PendingReason,
+			&i.PendingByID,
+			&i.PendingAt,
+			&i.MergedIntoTicketID,
 		); err != nil {
 			return nil, err
 		}
@@ -706,7 +750,7 @@ func (q *Queries) GetOpenTicketsOfContactForUpdate(ctx context.Context, contactI
 }
 
 const getTicket = `-- name: GetTicket :one
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id from tickets
 where id = $1
 `
 
@@ -737,12 +781,16 @@ func (q *Queries) GetTicket(ctx context.Context, id int64) (Ticket, error) {
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
 
 const getTicketByClientRequestID = `-- name: GetTicketByClientRequestID :one
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id from tickets
 where client_request_id = $1
 `
 
@@ -773,6 +821,10 @@ func (q *Queries) GetTicketByClientRequestID(ctx context.Context, clientRequestI
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -891,7 +943,7 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 }
 
 const getTicketForUpdate = `-- name: GetTicketForUpdate :one
-select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id from tickets
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id from tickets
 where id = $1
 for update
 `
@@ -923,6 +975,10 @@ func (q *Queries) GetTicketForUpdate(ctx context.Context, id int64) (Ticket, err
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -1035,7 +1091,7 @@ join sectors s on s.id = t.sector_id
 left join organizations o on o.id = t.organization_id
 left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
-where t.status <> 'closed'
+where t.status in ('queued', 'in_progress')
   and ($1::bigint is null or t.sector_id = $1)
   and ($2::bigint is null or t.organization_id = $2)
   and (t.status = 'queued' or $3::bigint is null or t.assignee_id = $3)
@@ -1146,7 +1202,7 @@ join contacts c on c.id = t.contact_id
 left join organizations o on o.id = t.organization_id
 left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
-where t.sector_id = $1 and t.status <> 'closed'
+where t.sector_id = $1 and t.status in ('queued', 'in_progress')
 order by t.arrived_at, t.id
 `
 
@@ -1433,7 +1489,7 @@ const returnTicketToQueue = `-- name: ReturnTicketToQueue :one
 update tickets
 set status = 'queued', assignee_id = null
 where id = $1
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 // The caller holds the lock of the ticket and checked it is in progress.
@@ -1465,6 +1521,10 @@ func (q *Queries) ReturnTicketToQueue(ctx context.Context, id int64) (Ticket, er
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -1473,7 +1533,7 @@ const setTicketOrganization = `-- name: SetTicketOrganization :one
 update tickets
 set organization_id = $1
 where id = $2
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type SetTicketOrganizationParams struct {
@@ -1508,6 +1568,10 @@ func (q *Queries) SetTicketOrganization(ctx context.Context, arg SetTicketOrgani
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
@@ -1516,7 +1580,7 @@ const transferTicket = `-- name: TransferTicket :one
 update tickets
 set assignee_id = $1
 where id = $2
-returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
 `
 
 type TransferTicketParams struct {
@@ -1552,6 +1616,10 @@ func (q *Queries) TransferTicket(ctx context.Context, arg TransferTicketParams) 
 		&i.TransferReason,
 		&i.Channel,
 		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
 	)
 	return i, err
 }
