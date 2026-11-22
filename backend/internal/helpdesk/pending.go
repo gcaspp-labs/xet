@@ -189,7 +189,9 @@ func (s *Service) Resume(ctx context.Context, actor auth.User, ticketID int64) (
 }
 
 // openTicketOfContact explains a resume refused by the ticket the contact has
-// in the sector, opened by a message that won the dispute.
+// in the sector, opened by a message that won the dispute. The winner may have
+// been closed before this reading; then there is no ticket to name, and the
+// resume answers that it changed meanwhile, so trying again goes through.
 func (s *Service) openTicketOfContact(ctx context.Context, ticketID int64) error {
 	t, err := db.AsTicket(s.q.GetTicket(ctx, ticketID))
 	if err != nil {
@@ -198,6 +200,9 @@ func (s *Service) openTicketOfContact(ctx context.Context, ticketID int64) error
 	open, err := s.q.GetOpenTicketOfContactInSector(ctx, db.GetOpenTicketOfContactInSectorParams{
 		SectorID: t.SectorID, ContactID: t.ContactID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrResumeRaced
+	}
 	if err != nil {
 		return fmt.Errorf("get open ticket of the contact: %w", err)
 	}

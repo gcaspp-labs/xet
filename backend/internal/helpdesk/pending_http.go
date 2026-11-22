@@ -13,7 +13,6 @@ import (
 type pendingTicketResponse struct {
 	ID               int64                 `json:"id"`
 	Protocol         string                `json:"protocol"`
-	Status           db.TicketStatus       `json:"status"`
 	Contact          ticketContactResponse `json:"contact"`
 	OrganizationName *string               `json:"organizationName"`
 	MunicipalityName *string               `json:"municipalityName"`
@@ -45,7 +44,6 @@ func (h *Handler) listPendingTickets(w http.ResponseWriter, r *http.Request) {
 		out[i] = pendingTicketResponse{
 			ID:               t.ID,
 			Protocol:         t.Protocol,
-			Status:           t.Status,
 			Contact:          ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},
 			OrganizationName: organization,
 			MunicipalityName: municipality,
@@ -79,6 +77,8 @@ func (h *Handler) resumeTicket(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi assumido por outro atendente.")
 	case errors.Is(err, ErrClosed):
 		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi encerrado.")
+	case errors.Is(err, ErrResumeRaced):
+		httpx.WriteError(w, http.StatusConflict, "O chamado mudou durante a retomada. Tente novamente.")
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Chamado não encontrado.")
 	case errors.Is(err, ErrForbidden):

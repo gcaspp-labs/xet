@@ -1490,7 +1490,7 @@ func (q *Queries) ListOrganizationTickets(ctx context.Context, arg ListOrganizat
 
 const listPendingTickets = `-- name: ListPendingTickets :many
 select
-    t.id, t.protocol, t.status, t.pending_reason, t.pending_at,
+    t.id, t.protocol, t.pending_reason, t.pending_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     o.name as organization_name, m.name as municipality_name,
     co.name as contact_organization_name, cm.name as contact_municipality_name,
@@ -1511,7 +1511,6 @@ order by t.pending_at, t.id
 type ListPendingTicketsRow struct {
 	ID                      int64
 	Protocol                string
-	Status                  TicketStatus
 	PendingReason           *string
 	PendingAt               *time.Time
 	ContactID               int64
@@ -1546,7 +1545,6 @@ func (q *Queries) ListPendingTickets(ctx context.Context, sectorID int64) ([]Lis
 		if err := rows.Scan(
 			&i.ID,
 			&i.Protocol,
-			&i.Status,
 			&i.PendingReason,
 			&i.PendingAt,
 			&i.ContactID,

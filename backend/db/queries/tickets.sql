@@ -249,7 +249,7 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 -- ticket has none: a contact registered while the ticket was pending already
 -- shows there.
 select
-    t.id, t.protocol, t.status, t.pending_reason, t.pending_at,
+    t.id, t.protocol, t.pending_reason, t.pending_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     o.name as organization_name, m.name as municipality_name,
     co.name as contact_organization_name, cm.name as contact_municipality_name,

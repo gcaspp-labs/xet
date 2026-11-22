@@ -1,6 +1,7 @@
 package helpdesk_test
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 )
 
 func (e *testEnv) resume(ticketID int64, token string) response {
@@ -87,7 +89,7 @@ func TestPendingListShowsOnlyPendingOldestFirst(t *testing.T) {
 		contact, _ := row["contact"].(map[string]any)
 		markedBy, _ := row["pendingBy"].(map[string]any)
 		sector, _ := row["sector"].(map[string]any)
-		if row["protocol"] != third.Protocol || row["status"] != "pending" ||
+		if row["protocol"] != third.Protocol ||
 			row["reason"] != "Aguardando a nota fiscal" || row["organizationName"] != nil || row["pendingAt"] == nil ||
 			contact["name"] != "5511966665555" || contact["phone"] != "5511966665555" || contact["registered"] != false ||
 			markedBy["name"] != "ana@exemplo.com" || sector["id"] != float64(c.sector.ID) || sector["name"] != c.sector.Name {
@@ -316,33 +318,37 @@ func TestOnlyOneAgentResumesConcurrently(t *testing.T) {
 		ids[tokens[i]] = u.ID
 	}
 
-	statuses := make([]int, agents)
+	responses := make([]response, agents)
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for i, token := range tokens {
 		wg.Go(func() {
 			<-start
-			statuses[i] = e.resume(c.ticket.ID, token).Status
+			responses[i] = e.resume(c.ticket.ID, token)
 		})
 	}
 	close(start)
 	wg.Wait()
 
 	var winner int64
-	for i, status := range statuses {
-		switch status {
+	for i, resp := range responses {
+		switch resp.Status {
 		case http.StatusOK:
 			if winner != 0 {
-				t.Fatalf("two agents resumed the ticket: statuses %v", statuses)
+				t.Fatalf("two agents resumed the ticket: responses %v", responses)
 			}
 			winner = ids[tokens[i]]
 		case http.StatusConflict:
+			// Quem perdeu recebe o aviso de que outro assumiu, não só o 409.
+			if resp.Body["error"] != "Este chamado já foi assumido por outro atendente." {
+				t.Fatalf("agent %d: conflict with %v", i, resp.Body)
+			}
 		default:
-			t.Fatalf("agent %d: status %d", i, status)
+			t.Fatalf("agent %d: status %d, body %v", i, resp.Status, resp.Body)
 		}
 	}
 	if winner == 0 {
-		t.Fatalf("no agent resumed the ticket: statuses %v", statuses)
+		t.Fatalf("no agent resumed the ticket: responses %v", responses)
 	}
 	got := e.pendingState(c.ticket.ID)
 	if got.Status != "in_progress" || got.AssigneeID == nil || *got.AssigneeID != winner {
@@ -416,6 +422,50 @@ func TestConcurrentMessagesAndResume(t *testing.T) {
 				t.Fatalf("resume: status %d, body %v", resumed.Status, resumed.Body)
 			}
 		})
+	}
+}
+
+// Uma retomada recusada pelo índice único consulta o chamado vencedor. Se ele
+// foi encerrado antes dessa nova consulta — raro —, a resposta é o aviso de
+// tentar novamente, não um erro 500.
+func TestResumeNoticeWhenTheWinningTicketIsGone(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	org := e.Organization(c.supToken, "Prefeitura de Campinas", "")
+	c.assign()
+	c.markPending("Aguardando ajuste")
+
+	// A mensagem do mesmo contato abre um chamado na fila, o que venceria a
+	// retomada.
+	e.receive(c.sector.ID, text("MSG-2", "5511988887777@s.whatsapp.net", "5511988887777", "Outro assunto"))
+	var queued ticketRow
+	for _, tk := range e.tickets(c.sector.ID) {
+		if tk.ContactID == c.ticket.ContactID && tk.Status == "queued" {
+			queued = tk
+		}
+	}
+	if queued.ID == 0 {
+		t.Fatal("no queued ticket for the contact")
+	}
+
+	// Com o vencedor aberto, o aviso nomeia o protocolo dele.
+	err := helpdesk.OpenTicketOfContact(e.TicketService, t.Context(), c.ticket.ID)
+	var open *helpdesk.OpenTicketError
+	if !errors.As(err, &open) || open.Protocol != queued.Protocol {
+		t.Fatalf("open ticket of the contact = %v, want %s", err, queued.Protocol)
+	}
+
+	// Encerrado antes da nova consulta, não há chamado aberto para nomear: a
+	// retomada pede para tentar de novo.
+	e.closeTicket(queued.ID, c.ana.ID, org)
+	if err := helpdesk.OpenTicketOfContact(e.TicketService, t.Context(), c.ticket.ID); !errors.Is(err, helpdesk.ErrResumeRaced) {
+		t.Fatalf("open ticket of the contact after the closing = %v, want ErrResumeRaced", err)
+	}
+
+	// Fora do caminho o vencedor encerrado, a retomada pela API funciona.
+	if resp := e.resume(c.ticket.ID, c.biaToken); resp.Status != http.StatusOK {
+		t.Fatalf("resume after the winning ticket closed: status %d, body %v", resp.Status, resp.Body)
 	}
 }
 

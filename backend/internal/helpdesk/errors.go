@@ -11,6 +11,10 @@ var (
 	ErrPending = errors.New("ticket pending")
 	// ErrNotPending refuses resuming a ticket that is not pending.
 	ErrNotPending = errors.New("ticket not pending")
+	// ErrResumeRaced refuses a resume when the ticket that won the dispute of
+	// the contact is no longer open at the new reading: it is rare, and trying
+	// again resumes the pending ticket.
+	ErrResumeRaced = errors.New("ticket that won the resume is no longer open")
 )
 
 // OpenTicketError refuses resuming a pending ticket while the contact has a
