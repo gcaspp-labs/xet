@@ -20,6 +20,8 @@ Cadastro de usuários, setores e módulos. O administrador cadastra usuários e 
 14. O administrador não pode desativar a própria conta nem alterar o próprio papel, para não perder o acesso à administração.
 15. A desativação ou a troca de setor de um usuário é recusada enquanto ele tiver chamados em atendimento, informando quantos são; os chamados precisam ser transferidos antes.
 16. A tela de usuários é exclusiva do administrador, que a abre pelo menu Configurações.
+17. A lista de usuários é paginada em 20 e ordena por Usuário (padrão), Papel, Setor ou Situação, como em [interface.md](interface.md); a coluna de ações não ordena. A busca procura por nome, apelido ou e-mail, sem diferenciar maiúsculas nem acentos, no servidor, antes de contar e paginar, e fica no endereço junto da página e da ordem (`?busca=`). Sem resultado, "Nenhum usuário encontrado."; sem usuários cadastrados, "Nenhum usuário cadastrado.".
+18. Papel ordena por Administrador, Atendente e Supervisor; quem não tem setor aparece como "Todos" e fica por último por setor nas duas direções; a ordem por Situação põe os ativos primeiro na crescente e os inativos primeiro na decrescente. Ativos e inativos ficam na mesma lista, sem filtro separado, e no celular Papel e Setor viram a legenda "Atendente · Tributos Municipais" embaixo do nome.
 
 ## Fora do escopo / limites conhecidos
 
@@ -32,3 +34,4 @@ Cadastro de usuários, setores e módulos. O administrador cadastra usuários e 
 ## Histórico
 
 - 2026-11-11: regras migradas do `spec.md` (Usuários e acesso › Administração).
+- 2026-11-22: regras 17 e 18 acrescentadas (lista de usuários paginada, ordenável e com busca por nome, apelido ou e-mail); spec [#125](https://github.com/gcaspp-labs/xet/issues/125), ticket [#130](https://github.com/gcaspp-labs/xet/issues/130), PR [#330](https://github.com/gcaspp-labs/xet/pull/330).
