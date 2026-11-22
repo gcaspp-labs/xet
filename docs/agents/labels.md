@@ -40,7 +40,7 @@ As issues fechadas até a #103 com `ready-for-agent` eram tasks do fluxo antigo 
 |---|---|---|
 | `risk:low` | `risk:low` | pode entrar sem a pessoa quando a trava passa |
 | `risk:medium` | `risk:medium` | pode entrar sem a pessoa quando a trava passa (o Chief of Staff decide) |
-| `risk:high` | `risk:high` | a pessoa aprova o merge, a não ser no modo comando (janela com fim ligada pela pessoa); revisão aprofundada |
+| `risk:high` | `risk:high` | a pessoa aprova o merge, a não ser no modo comando (janela com fim ligada pela pessoa); revisão aprofundada, feita pela Ciely (@vera) |
 
 Substitui o antigo campo `**Verificação:**`: `automática` equivale a `risk:low`, e `humana` a `risk:high`; `risk:medium` entra pela trava. `risk:high` também entra sem a pessoa só enquanto a janela do modo comando estiver aberta, e mesmo assim nunca em `docs/agents/` ou `.github/`. Como classificar o risco: ver `merge-gate.md`.
 
