@@ -134,6 +134,8 @@ func (h *Handler) assignTicket(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi assumido por outro atendente.")
 	case errors.Is(err, ErrClosed):
 		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi encerrado.")
+	case errors.Is(err, ErrPending):
+		httpx.WriteError(w, http.StatusConflict, "Este chamado está pendente. Retome o chamado para continuar.")
 	default:
 		httpx.InternalError(h.logger, w, r, err)
 	}

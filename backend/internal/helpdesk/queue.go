@@ -102,6 +102,8 @@ func (s *Service) notQueued(ctx context.Context, actor auth.User, ticketID int64
 	switch {
 	case ticket.Status == db.TicketStatusClosed:
 		return db.Ticket{}, ErrClosed
+	case ticket.Status == db.TicketStatusPending:
+		return db.Ticket{}, ErrPending
 	case ticket.AssigneeID != nil && *ticket.AssigneeID == actor.ID:
 		return ticket, nil
 	default:

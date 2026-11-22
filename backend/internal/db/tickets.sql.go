@@ -841,7 +841,8 @@ select
     p.subject as previous_subject, p.resolution as previous_resolution, pb.name as previous_closed_by_name,
     p.transfer_reason as previous_transfer_reason,
     n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name,
-    t.transfer_reason as next_transfer_reason
+    t.transfer_reason as next_transfer_reason,
+    t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
@@ -854,6 +855,7 @@ left join sectors ps on ps.id = p.sector_id
 left join users pb on pb.id = p.closed_by_id
 left join tickets n on n.previous_ticket_id = t.id
 left join sectors ns on ns.id = n.sector_id
+left join users pu on pu.id = t.pending_by_id
 where t.id = $1
 `
 
@@ -895,6 +897,10 @@ type GetTicketDetailRow struct {
 	NextProtocol           *string
 	NextSectorName         *string
 	NextTransferReason     *string
+	PendingReason          *string
+	PendingAt              *time.Time
+	PendingByID            *int64
+	PendingByName          *string
 }
 
 func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetailRow, error) {
@@ -938,6 +944,10 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.NextProtocol,
 		&i.NextSectorName,
 		&i.NextTransferReason,
+		&i.PendingReason,
+		&i.PendingAt,
+		&i.PendingByID,
+		&i.PendingByName,
 	)
 	return i, err
 }
@@ -1453,6 +1463,58 @@ func (q *Queries) ListTicketModules(ctx context.Context, ticketID int64) ([]List
 		return nil, err
 	}
 	return items, nil
+}
+
+const markTicketPending = `-- name: MarkTicketPending :one
+update tickets
+set status = 'pending', assignee_id = null,
+    pending_reason = $1, pending_by_id = $2, pending_at = now()
+where id = $3
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id
+`
+
+type MarkTicketPendingParams struct {
+	PendingReason *string
+	PendingByID   *int64
+	ID            int64
+}
+
+// The caller holds the lock of the ticket and checked it is in progress with
+// the actor as assignee. The ticket leaves the assignee, who is kept as who
+// marked it; assigned_at stays: it is the first time someone took the ticket.
+func (q *Queries) MarkTicketPending(ctx context.Context, arg MarkTicketPendingParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, markTicketPending, arg.PendingReason, arg.PendingByID, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TransferReason,
+		&i.Channel,
+		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
+	)
+	return i, err
 }
 
 const nextProtocolNumber = `-- name: NextProtocolNumber :one
