@@ -80,7 +80,16 @@ merge
 
 ## Parecer do revisor
 
-A `code-review` publica no PR um comentário que começa com este marcador, seguido das linhas `Verdict: approve | request-changes`, `Commit: <sha>` e `Round: <n>/2`. A trava só aceita um parecer `approve` sobre o último commit do PR.
+A `code-review` publica no PR um comentário que começa com este marcador, seguido das linhas `Verdict: approve | request-changes`, `Commit: <sha>` (o sha completo, de 40 caracteres) e `Round: <n>/2`. A trava só aceita um parecer `approve` sobre o último commit do PR.
+
+O revisor depende de quem implementou o ticket:
+
+| Implementador | Tickets | Revisor |
+|---|---|---|
+| Franco (@franco) | bugs e `risk:high` | Ciely (@vera) |
+| Jorge (@dev) | `risk:low` e `risk:medium` | Gean (@dev-reviewer) |
+
+Os dois usam o mesmo marcador e o mesmo formato, e o parecer de um vale tanto quanto o do outro no PR que é dele. O script não confere quem escreveu o comentário (todos os agentes comentam pela mesma conta); quem manda o PR ao revisor certo é o Chief. O resto da trava não muda: CI verde, nenhum teste removido, um único ticket, áreas sensíveis e a regra do `risk:high` (sem a pessoa só no modo comando, e nunca em `docs/agents/` ou `.github/`).
 
 ```marker
 <!-- REVIEWER-VERDICT -->
