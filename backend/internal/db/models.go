@@ -1111,6 +1111,7 @@ type Ticket struct {
 	PendingByID        *int64
 	PendingAt          *time.Time
 	MergedIntoTicketID *int64
+	AssigneeReadAt     *time.Time
 }
 
 type TicketModule struct {

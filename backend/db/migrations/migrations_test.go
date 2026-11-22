@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gcaspp-labs/xet/backend/db/migrations"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
@@ -784,5 +785,56 @@ func TestTicketPendingKeepsExistingTickets(t *testing.T) {
 	}
 	if _, err := p.UpTo(ctx, 36); err != nil {
 		t.Fatalf("up again: %v", err)
+	}
+}
+
+// A migração 37 cria assignee_read_at e marca a leitura dos chamados em
+// atendimento ganham o instante da migração e começam sem não lidas. A fila
+// continua sem leitura.
+func TestAssigneeReadStartsWithoutUnread(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 36); err != nil {
+		t.Fatalf("up to 36: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into contacts (name, registered) values ('Maria', false), ('João', false);
+		insert into users (name, nickname, email, password_hash, role, sector_id) values ('Ana', 'Ana', 'ana@exemplo.com', 'x', 'agent', 1);
+		insert into tickets (protocol, sector_id, contact_id, status, assignee_id, arrived_at, started_at, assigned_at)
+		values ('2026-000001', 1, 1, 'in_progress', 1, now(), now(), now());
+		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000002', 1, 2, 'queued', now(), now());`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	start := time.Now()
+	if _, err := p.UpTo(ctx, 37); err != nil {
+		t.Fatalf("up to 37: %v", err)
+	}
+
+	var inProgress, queued *time.Time
+	if err := db.QueryRowContext(ctx, `
+		select assignee_read_at from tickets where protocol = '2026-000001'`).Scan(&inProgress); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `
+		select assignee_read_at from tickets where protocol = '2026-000002'`).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if inProgress == nil || inProgress.Before(start.Truncate(time.Second)) {
+		t.Fatalf("reading of the ticket in progress = %v, migration at %v", inProgress, start)
+	}
+	if queued != nil {
+		t.Fatalf("reading of the queued ticket = %v", queued)
 	}
 }

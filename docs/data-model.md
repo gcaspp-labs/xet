@@ -242,6 +242,7 @@ Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-l
 | `pending_by_id` | bigint → `users` | Quem marcou como pendente da última vez; sobrescrito como o motivo |
 | `pending_at` | timestamptz | Quando foi marcado como pendente da última vez; sobrescrito como o motivo |
 | `merged_into_ticket_id` | bigint → `tickets` | Pendente em que o chamado foi mesclado (`closure_type = 'merged'`); vínculo próprio, sem relação com `previous_ticket_id`, que carrega o acesso da cadeia de transferências. Não é desfeito |
+| `assignee_read_at` | timestamptz | Momento até onde o responsável atual leu o chamado (#313, spec #310); vazio na fila e no pendente. É o marco das não lidas: contam as mensagens recebidas do cliente no chamado gravadas depois dele. Gravado ao assumir, ao receber por transferência entre atendentes e ao criar o chamado pelo atendente; limpo ao devolver à fila. O momento é o do servidor e só avança: marcar como lido com um horário anterior não volta o valor |
 
 Restrições:
 
@@ -258,6 +259,8 @@ Restrições:
 - Índice único parcial `tickets_open_contact_key` em `(sector_id, contact_id) where status in ('queued', 'in_progress')`: um chamado na fila ou em atendimento por contato e setor. Os pendentes ficam fora: um contato pode ter vários pendentes no setor e, ao mesmo tempo, um chamado na fila ou em atendimento. Neste documento e no código, "chamado aberto" quer dizer na fila ou em atendimento.
 - Encerrar exige ao menos um registro em `ticket_modules` (validado na transação de encerramento), exceto na transferência entre setores.
 - O contato do chamado precisa estar com `registered = true` para encerrar, exceto na transferência entre setores.
+
+Não lidas (#313, spec #310). A quantidade é calculada na consulta da lista, sem contador guardado: `count(*)` das mensagens do chamado com `direction = 'inbound'` e `origin = 'customer'` gravadas depois de `assignee_read_at`. A comparação usa `messages.created_at`, o horário em que o servidor gravou a mensagem, e não `messages.sent_at`, que vem do relógio do celular: assim um relógio adiantado não esconde uma mensagem. Reações, edições e exclusões não criam mensagem e não entram na contagem (as duas últimas só atualizam `updated_at`). A mensagem enviada pelo XET ou pelo celular do setor é `outbound`, e a nota e o aviso do sistema não são mensagens, então também não contam. Os chamados em atendimento na migração receberam o momento dela, para começarem sem não lidas.
 
 Índices: `(sector_id, status)` para a fila; `(assignee_id) where status = 'in_progress'` para a contagem por atendente; `(contact_id)` e `(organization_id)` para o histórico; `(sector_id, closed_at) where status = 'closed'` para os realizados do dia.
 
