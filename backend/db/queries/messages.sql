@@ -150,7 +150,7 @@ select pg_advisory_xact_lock(hashtextextended('message:' || @sector_id::bigint |
 -- name: GetMessageForChange :one
 -- Message of the sector with the provider ID, with its contact, to apply a
 -- change received from the provider.
-select m.id, m.ticket_id, m.origin, m.body, m.edited_at, m.deleted_at,
+select m.id, m.ticket_id, m.origin, m.body, m.edited_at, m.deleted_at, m.deletion_scope,
        c.external_contact_id as contact_external_id, c.phone as contact_phone
 from messages m
 join contacts c on c.id = m.contact_id
@@ -214,12 +214,15 @@ where m.id = @id;
 
 -- name: MarkMessageDeleted :execrows
 -- Deletion is a state of its own, apart from the delivery status, and keeps
--- the content and the file. The first deletion recorded holds, except that a
--- deletion for everyone widens one only in the system: the provider took a
--- deletion for everyone (late, from an uncertain action), and the contact no
--- longer sees the message either.
+-- the content and the file. The first deletion recorded holds: the time and
+-- the author stay the ones of it, because the content is hidden since then.
+-- The only exception is the alcance: a deletion for everyone widens one only
+-- in the system, whether the provider took it (late, from an uncertain action)
+-- or the sector's phone made it, and the contact no longer sees the message.
 update messages
-set deleted_at = @deleted_at, deletion_scope = @deletion_scope, deletion_origin = @deletion_origin
+set deleted_at = coalesce(deleted_at, @deleted_at),
+    deletion_scope = @deletion_scope,
+    deletion_origin = coalesce(deletion_origin, @deletion_origin)
 where id = @id and (deleted_at is null or (deletion_scope = 'local' and @deletion_scope::message_deletion_scope = 'everyone'));
 
 -- name: ListPendingMessageChanges :many

@@ -505,7 +505,7 @@ func (q *Queries) GetMessageByClientRequestID(ctx context.Context, clientRequest
 }
 
 const getMessageForChange = `-- name: GetMessageForChange :one
-select m.id, m.ticket_id, m.origin, m.body, m.edited_at, m.deleted_at,
+select m.id, m.ticket_id, m.origin, m.body, m.edited_at, m.deleted_at, m.deletion_scope,
        c.external_contact_id as contact_external_id, c.phone as contact_phone
 from messages m
 join contacts c on c.id = m.contact_id
@@ -524,6 +524,7 @@ type GetMessageForChangeRow struct {
 	Body              *string
 	EditedAt          *time.Time
 	DeletedAt         *time.Time
+	DeletionScope     NullMessageDeletionScope
 	ContactExternalID *string
 	ContactPhone      *string
 }
@@ -540,6 +541,7 @@ func (q *Queries) GetMessageForChange(ctx context.Context, arg GetMessageForChan
 		&i.Body,
 		&i.EditedAt,
 		&i.DeletedAt,
+		&i.DeletionScope,
 		&i.ContactExternalID,
 		&i.ContactPhone,
 	)
@@ -839,7 +841,9 @@ func (q *Queries) LockMessageExternalID(ctx context.Context, arg LockMessageExte
 
 const markMessageDeleted = `-- name: MarkMessageDeleted :execrows
 update messages
-set deleted_at = $1, deletion_scope = $2, deletion_origin = $3
+set deleted_at = coalesce(deleted_at, $1),
+    deletion_scope = $2,
+    deletion_origin = coalesce(deletion_origin, $3)
 where id = $4 and (deleted_at is null or (deletion_scope = 'local' and $2::message_deletion_scope = 'everyone'))
 `
 
@@ -851,10 +855,11 @@ type MarkMessageDeletedParams struct {
 }
 
 // Deletion is a state of its own, apart from the delivery status, and keeps
-// the content and the file. The first deletion recorded holds, except that a
-// deletion for everyone widens one only in the system: the provider took a
-// deletion for everyone (late, from an uncertain action), and the contact no
-// longer sees the message either.
+// the content and the file. The first deletion recorded holds: the time and
+// the author stay the ones of it, because the content is hidden since then.
+// The only exception is the alcance: a deletion for everyone widens one only
+// in the system, whether the provider took it (late, from an uncertain action)
+// or the sector's phone made it, and the contact no longer sees the message.
 func (q *Queries) MarkMessageDeleted(ctx context.Context, arg MarkMessageDeletedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markMessageDeleted,
 		arg.DeletedAt,
