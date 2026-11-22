@@ -7,7 +7,17 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test'
-import { admin, json, ok, openQueued, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  json,
+  ok,
+  openQueued,
+  seedDirectory,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 // Botão de ir à última mensagem na tela Chamados, com o contador de mensagens novas (regra 44 de
 // conversation.md). As conferências usam papéis, nomes acessíveis e a posição da rolagem, nunca
@@ -253,5 +263,74 @@ test('abrir outro chamado abre no fim, sem botão e sem contador herdado', async
       .getByRole('region', { name: 'Conversa', exact: true })
       .getByText('Mensagem 30 da conversa'),
   ).toBeVisible()
+  await expect(goToEndButton(page)).toHaveCount(0)
+})
+
+test('o botão é alcançável pelo teclado e o Enter leva à última mensagem', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const chat = await openLongChat(page, request, baseURL!, 'Cliente Teclado', 12)
+  await chat.scroller.evaluate((element) => element.scrollTo({ top: 0 }))
+  const button = page.getByRole('button', { name: 'Ir para a última mensagem', exact: true })
+  await expect(button).toBeVisible()
+
+  await button.focus()
+  await expect(button).toBeFocused()
+  await page.keyboard.press('Enter')
+
+  await expect(button).toHaveCount(0)
+  expect((await position(chat.scroller)).distance).toBeLessThanOrEqual(48)
+})
+
+test('Atendimentos abre no fim e não tem o botão', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone } = unique()
+  const [organization] = await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: `Rita ${id}`, phone, organization: 0, sector: sector.id }],
+  )
+  const api = await apiRequest.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } }))
+  ok(await api.post(`/api/sectors/${sector.id}/connection`))
+  ok(await api.post(`/api/test/messaging/sectors/${sector.id}/pair`))
+  const module = await json<{ id: number }>(
+    await api.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
+  for (let i = 1; i <= 30; i++) {
+    await messaging(request, sector.id, 'receive', {
+      externalMessageId: `E2E-CLOSED-${id}-${i}`,
+      phone,
+      contactName: `Rita ${id}`,
+      body: `Mensagem ${i} do atendimento`,
+    })
+  }
+  await api.dispose()
+
+  const agentApi = await apiRequest.newContext({ baseURL })
+  ok(await agentApi.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const [ticket] = await json<Ticket[]>(await agentApi.get(`/api/sectors/${sector.id}/tickets`))
+  ok(await agentApi.post(`/api/tickets/${ticket.id}/assign`))
+  ok(
+    await agentApi.post(`/api/tickets/${ticket.id}/close`, {
+      data: {
+        subject: 'Contracheque',
+        resolution: 'Enviada a segunda via.',
+        moduleIds: [module.id],
+        organizationId: organization.id,
+      },
+    }),
+  )
+  await agentApi.dispose()
+
+  await signIn(page, agent, userPassword)
+  await page.goto(`/atendimentos/${ticket.id}`)
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  const last = conversation.getByText('Mensagem 30 do atendimento')
+  await expect(last).toBeVisible()
+  // No fim, como a tela abre hoje, e sem o botão: ele é só de Chamados.
+  await expect(last).toBeInViewport()
   await expect(goToEndButton(page)).toHaveCount(0)
 })
