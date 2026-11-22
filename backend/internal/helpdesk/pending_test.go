@@ -79,12 +79,15 @@ func TestAssigneeMarksTicketAsPending(t *testing.T) {
 	}
 
 	// Pendente, sem responsável, com motivo, quem marcou e quando; o horário
-	// em que foi assumido não muda.
+	// em que foi assumido não muda e a leitura é limpa, como na volta à fila.
 	got := e.pendingState(c.ticket.ID)
 	if got.Status != "pending" || got.AssigneeID != nil || !got.AssignedAt.Equal(*before.AssignedAt) ||
 		got.Reason == nil || *got.Reason != "Aguardando ajuste no sistema de folha" ||
 		got.ByID == nil || *got.ByID != c.ana.ID || got.At == nil || time.Since(*got.At) > time.Minute {
 		t.Fatalf("pending ticket = %+v (before %+v)", got, before)
+	}
+	if at := e.readAt(c.ticket.ID); at != nil {
+		t.Fatalf("reading of the pending ticket = %v, want null", at)
 	}
 
 	// Nada é enviado ao cliente.

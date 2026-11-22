@@ -228,8 +228,10 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 -- The caller holds the lock of the ticket and checked it is in progress with
 -- the actor as assignee. The ticket leaves the assignee, who is kept as who
 -- marked it; assigned_at stays: it is the first time someone took the ticket.
+-- The reading is cleared, as in the return to the queue: there is no assignee
+-- in pending, and whoever resumes it starts without unread messages.
 update tickets
-set status = 'pending', assignee_id = null,
+set status = 'pending', assignee_id = null, assignee_read_at = null,
     pending_reason = @pending_reason, pending_by_id = @pending_by_id, pending_at = now()
 where id = @id
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
@@ -357,10 +359,10 @@ select id, protocol, sector_id, contact_id, organization_id, assignee_id, status
 where client_request_id = @client_request_id;
 
 -- name: MarkTicketRead :execrows
--- Marca o chamado como lido para o responsável atual (#313, spec #310). Só
--- vale em chamado em atendimento e só avança o momento: uma leitura com
--- horário anterior ao gravado não volta o valor nem muda nada. No banco o
--- valor é o do servidor (now()), nunca o do relógio da tela.
+-- Marks the ticket as read for the current assignee (#313, spec #310). It only
+-- applies to a ticket in progress and only moves the moment forward: a reading
+-- with an earlier time does not move the value back nor change anything. The
+-- value is the server's (now()), never the one of the screen clock.
 update tickets
 set assignee_read_at = now()
 where id = @id and status = 'in_progress' and assignee_id = @assignee_id

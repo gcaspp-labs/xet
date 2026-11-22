@@ -242,7 +242,7 @@ Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-l
 | `pending_by_id` | bigint → `users` | Quem marcou como pendente da última vez; sobrescrito como o motivo |
 | `pending_at` | timestamptz | Quando foi marcado como pendente da última vez; sobrescrito como o motivo |
 | `merged_into_ticket_id` | bigint → `tickets` | Pendente em que o chamado foi mesclado (`closure_type = 'merged'`); vínculo próprio, sem relação com `previous_ticket_id`, que carrega o acesso da cadeia de transferências. Não é desfeito |
-| `assignee_read_at` | timestamptz | Momento até onde o responsável atual leu o chamado (#313, spec #310); vazio na fila e no pendente. É o marco das não lidas: contam as mensagens recebidas do cliente no chamado gravadas depois dele. Gravado ao assumir, ao receber por transferência entre atendentes e ao criar o chamado pelo atendente; limpo ao devolver à fila. O momento é o do servidor e só avança: marcar como lido com um horário anterior não volta o valor |
+| `assignee_read_at` | timestamptz | Momento até onde o responsável atual leu o chamado (#313, spec #310); vazio na fila e no pendente. É o marco das não lidas: contam as mensagens recebidas do cliente no chamado gravadas depois dele. Gravado ao assumir, ao receber por transferência entre atendentes e ao criar o chamado pelo atendente; limpo ao devolver à fila e ao deixar em pendente, que não têm responsável. O momento é o do servidor e só avança: marcar como lido com um horário anterior não volta o valor |
 
 Restrições:
 

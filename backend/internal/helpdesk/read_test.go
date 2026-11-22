@@ -263,10 +263,15 @@ func TestUnreadUsesTheServerTimeAndOnlyMovesForward(t *testing.T) {
 		t.Fatalf("unread = %d", got)
 	}
 
-	// O relógio do celular não interfere: a mensagem foi gravada antes da
-	// leitura, mesmo que o horário do WhatsApp seja agora.
-	capturedAt := time.Now()
-	e.backdateCreatedAt(e.messages(c.ticket.ID)[1].ID, time.Hour)
+	// O relógio do celular não interfere: a mensagem foi gravada no servidor
+	// antes da leitura, mesmo com o horário do WhatsApp no futuro.
+	received := e.messages(c.ticket.ID)
+	message := received[len(received)-1]
+	e.backdateCreatedAt(message.ID, time.Hour)
+	if _, err := e.Pool.Exec(t.Context(),
+		"update messages set sent_at = now() + interval '1 hour' where id = $1", message.ID); err != nil {
+		t.Fatal(err)
+	}
 	if got := e.unreadOf(c.sector.ID, c.ticket.ID, c.biaToken); got != 0 {
 		t.Fatalf("unread of a message recorded before the reading = %d", got)
 	}
@@ -284,7 +289,7 @@ func TestUnreadUsesTheServerTimeAndOnlyMovesForward(t *testing.T) {
 		t.Fatalf("mark read: status %d", resp.Status)
 	}
 	if got := e.readAt(c.ticket.ID); got == nil || !got.Equal(future) {
-		t.Fatalf("reading moved back from %v to %v (%v)", future, got, capturedAt)
+		t.Fatalf("reading moved back from %v to %v", future, got)
 	}
 }
 

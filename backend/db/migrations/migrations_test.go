@@ -789,7 +789,7 @@ func TestTicketPendingKeepsExistingTickets(t *testing.T) {
 }
 
 // A migração 37 cria assignee_read_at e marca a leitura dos chamados em
-// atendimento ganham o instante da migração e começam sem não lidas. A fila
+// atendimento com o instante da migração, que começam sem não lidas. A fila
 // continua sem leitura.
 func TestAssigneeReadStartsWithoutUnread(t *testing.T) {
 	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))

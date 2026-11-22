@@ -13,7 +13,7 @@ import (
 // #310), which is the mark of the unread messages of the list, and notifies
 // the sector so the other tabs and computers of the user reload it. Only the
 // current assignee of a ticket in progress changes anything: for anyone else,
-// or any other state, it succeeds without changing nothing, so a screen
+// or any other state, it succeeds without changing anything, so a screen
 // opened by another user never fails. The moment is the server's and only
 // moves forward; repeating it is harmless.
 func (s *Service) MarkRead(ctx context.Context, actor auth.User, ticketID int64) error {
