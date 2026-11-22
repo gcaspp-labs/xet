@@ -1077,18 +1077,50 @@ export function ConversationCard({
     ticket: ticket.id,
     newest: null,
   })
+  // A rolagem do botão é suave: ele some já no clique, e os eventos de rolagem do meio do caminho
+  // não são a pessoa saindo do fim, então não podem trazê-lo de volta nem contar a mensagem que
+  // chegue enquanto a tela desce. O temporizador é a rede de segurança, se a rolagem não chegar.
+  const settling = useRef(false)
+  const settleTimer = useRef<number | null>(null)
+  const stopSettling = () => {
+    settling.current = false
+    if (settleTimer.current !== null) {
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = null
+    }
+  }
+  useEffect(() => stopSettling, [])
   const scrollToEnd = (smooth: boolean) => {
     const element = list.current
     if (!element) return
-    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    element.scrollTo({ top: element.scrollHeight, behavior: smooth && !still ? 'smooth' : 'auto' })
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    stopSettling()
+    settling.current = smooth && !reducedMotion
+    if (settling.current) {
+      settleTimer.current = window.setTimeout(() => {
+        stopSettling()
+        const current = list.current
+        if (current && current.scrollHeight - current.scrollTop - current.clientHeight > 48) {
+          setFollowing(false)
+        }
+      }, 1000)
+    }
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior: settling.current ? 'smooth' : 'auto',
+    })
   }
   // O botão aparece fora do fim, e o contador zera ao chegar nele por qualquer caminho.
   const onScroll = () => {
     const element = list.current
     const end = !element || element.scrollHeight - element.scrollTop - element.clientHeight <= 48
-    setFollowing(end)
-    if (end) setMissed(0)
+    if (end) stopSettling()
+    if (end || settling.current) {
+      setFollowing(true)
+      setMissed(0)
+    } else {
+      setFollowing(false)
+    }
   }
   // Uma mensagem nova: no fim, desce junto; fora do fim, fica onde está e conta. Edição, exclusão,
   // reação e mudança de situação de entrega não mudam o id da mensagem e não contam.
