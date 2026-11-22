@@ -411,6 +411,12 @@ test('resposta do atendente entre as recargas não duplica o alerta da mesma men
   await backToList(page)
   await assume(page, probeName)
   await backToList(page)
+  // As duas abas já viram os dois chamados em "Meus chamados": a referência de não lidas está
+  // assentada antes da mensagem que o teste manda.
+  for (const tab of [page, other]) {
+    await expect(mineItem(tab, answeredName)).toBeVisible()
+    await expect(mineItem(tab, probeName)).toBeVisible()
+  }
   await allowSound(page)
   await allowSound(other)
   await setHidden(page, true)
