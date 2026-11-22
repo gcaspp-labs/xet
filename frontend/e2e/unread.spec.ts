@@ -184,9 +184,12 @@ test('supervisor abrindo o chamado não zera o contador da atendente', async ({
   const context = await browser.newContext()
   const supervisorPage = await context.newPage()
   await signIn(supervisorPage, supervisor, userPassword)
+  // A supervisão chama a leitura ao abrir o chamado e o servidor responde sucesso sem mudar nada;
+  // esperar a resposta prova que a chamada aconteceu, sem o sono fixo que deixava o teste instável.
+  const ignoredRead = readCall(supervisorPage, ticketId)
   await supervisorPage.goto(`/chamados/${ticketId}`)
   await expect(supervisorPage.getByRole('heading', { name: contactName })).toBeVisible()
-  await supervisorPage.waitForTimeout(500)
+  expect((await ignoredRead).status()).toBe(204)
   await expect(item.getByTestId('unread-count')).toHaveText('1')
   await context.close()
 })

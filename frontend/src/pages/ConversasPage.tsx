@@ -57,6 +57,7 @@ import {
   useMarkTicketRead,
   type TicketSummary,
 } from '@/lib/tickets'
+import { useDocumentVisible } from '@/lib/visibility'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import {
   canCancel,
@@ -163,18 +164,6 @@ const openLayers = [
 type SectorTicket = TicketSummary & { sectorId: number }
 // Abaixo de xl só um bloco aparece por vez; a partir de xl, os três ficam lado a lado.
 type Panel = 'mine' | 'conversation' | 'queue'
-
-// A tela só marca o chamado como lido com a aba visível: com ela em segundo plano, a mensagem
-// nova conta como não lida até a pessoa voltar (spec #310).
-function useDocumentVisible() {
-  const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
-  useEffect(() => {
-    const update = () => setVisible(document.visibilityState === 'visible')
-    document.addEventListener('visibilitychange', update)
-    return () => document.removeEventListener('visibilitychange', update)
-  }, [])
-  return visible
-}
 
 // Contador de não lidas do item, junto do horário: a pílula do sino, "99+" acima de 99. O número
 // visível fica fora da leitura do leitor de tela, que recebe o texto com a quantidade real.
