@@ -563,7 +563,7 @@ function Composer({
   quoted: Message | null
   onCancelQuote: () => void
 }) {
-  const send = useSendMessage(ticketId)
+  const send = useSendMessage()
   const recorder = useVoiceRecorder()
   // O texto digitado fica guardado no navegador, por usuário e por chamado, até o envio: fechar a
   // guia, recarregar ou trocar de chamado não perde o que estava escrito.
@@ -571,6 +571,8 @@ function Composer({
   const [textTicketId, setTextTicketId] = useState(ticketId)
   const [file, setFile] = useState<File | null>(null)
   const [voice, setVoice] = useState<Recording | null>(null)
+  // O áudio anexado agora, para a troca de chamado liberar a URL fora do render.
+  const voiceRef = useRef<Recording | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   // A janela "Enviar contato" aberta no menu do anexo.
   const [contactOpen, setContactOpen] = useState(false)
@@ -583,6 +585,22 @@ function Composer({
   const shownTicketId = useRef(ticketId)
   useLayoutEffect(() => {
     shownTicketId.current = ticketId
+  }, [ticketId])
+
+  // Arquivo, áudio e erro do anexo são do chamado em que foram escolhidos: ao trocar de chamado
+  // saem do campo, senão o arquivo do chamado anterior iria para o cliente do chamado novo. O
+  // áudio tem a URL liberada aqui, fora do render.
+  const attachedTicketId = useRef(ticketId)
+  useLayoutEffect(() => {
+    if (attachedTicketId.current === ticketId) return
+    attachedTicketId.current = ticketId
+    setFile(null)
+    setFileError(null)
+    if (voiceRef.current) {
+      URL.revokeObjectURL(voiceRef.current.url)
+      voiceRef.current = null
+    }
+    setVoice(null)
   }, [ticketId])
 
   // Trocar de chamado sem sair da tela troca o texto pelo rascunho do chamado novo, e não mistura
@@ -650,9 +668,10 @@ function Composer({
 
   const changeVoice = (recording: Recording | null) => {
     requestId.current = null
-    if (voice) {
-      URL.revokeObjectURL(voice.url)
+    if (voiceRef.current) {
+      URL.revokeObjectURL(voiceRef.current.url)
     }
+    voiceRef.current = recording
     setVoice(recording)
   }
 
@@ -712,22 +731,28 @@ function Composer({
     const quotedMessageId = quoted?.id
     send.mutate(
       voice
-        ? { requestId: requestId.current, body: '', file: null, voice: voice.blob, quotedMessageId }
-        : { requestId: requestId.current, body, file, quotedMessageId },
+        ? {
+            ticketId,
+            userId,
+            requestId: requestId.current,
+            body: '',
+            file: null,
+            voice: voice.blob,
+            quotedMessageId,
+          }
+        : { ticketId, userId, requestId: requestId.current, body, file, quotedMessageId },
       {
         onSuccess: () => {
           requestId.current = null
           // A pessoa trocou de chamado antes de o servidor confirmar: o campo agora é do chamado
-          // novo, com o rascunho dele, e não pode ser limpo. Só o rascunho do enviado é apagado.
-          if (shownTicketId.current !== ticketId) {
-            clearDraft(userId, ticketId)
-            return
-          }
+          // novo, com o rascunho dele, e não pode ser limpo. O rascunho do enviado saiu na
+          // confirmação do envio, e o arquivo e o áudio dele saíram na troca.
+          if (shownTicketId.current !== ticketId) return
           onCancelQuote()
           if (voice) {
             changeVoice(null)
           } else {
-            // Enviar a mensagem apaga o rascunho daquele chamado.
+            // Enviar a mensagem limpa o campo e o rascunho daquele chamado.
             changeText('')
             setFile(null)
           }

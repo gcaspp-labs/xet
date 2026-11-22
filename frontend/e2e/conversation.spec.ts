@@ -468,3 +468,128 @@ test('rascunho do outro chamado continua ao enviar e trocar de chamado em seguid
   await open(first)
   await expect(field).toHaveValue('')
 })
+
+// O arquivo anexado é do chamado em que foi escolhido: ao enviar e trocar de chamado em seguida, ele
+// não pode ficar no campo do chamado novo, senão um Enter o mandaria para o cliente errado.
+test('arquivo anexado não passa para o chamado novo ao enviar e trocar em seguida', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Gil Rascunho ${id}`
+  const second = `Hana Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+  const fileName = `balancete-${id}.pdf`
+
+  await assume(page, first)
+  await assume(page, second)
+  await open(first)
+  await page.getByLabel('Arquivo para enviar').setInputFiles({
+    name: fileName,
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.7 rascunho'),
+  })
+  await expect(page.getByRole('textbox', { name: 'Legenda do arquivo' })).toBeVisible()
+
+  // O envio demora: dá tempo de abrir o outro chamado antes de o servidor confirmar.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    await route.continue()
+  })
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await page.getByRole('textbox', { name: 'Legenda do arquivo' }).press('Enter')
+  await open(second)
+  await sent
+
+  // O chamado novo abre sem o arquivo do anterior, pronto para uma mensagem própria.
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Legenda do arquivo' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Remover arquivo' })).toHaveCount(0)
+
+  // O arquivo foi para o cliente do chamado em que foi anexado, e o campo de lá ficou vazio.
+  await open(first)
+  await expect(
+    page.getByRole('listitem', { name: 'Mensagem enviada' }).filter({ hasText: fileName }),
+  ).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+})
+
+// Sair da conversa antes de o servidor confirmar o envio: o texto já enviado não pode voltar como
+// rascunho, senão um Enter manda a mesma mensagem de novo.
+test('sair do chamado antes da confirmação apaga o rascunho enviado', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Iara Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  await field.fill('Mensagem que sai da tela')
+
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    await route.continue()
+  })
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  // A pessoa deixa a conversa com o envio ainda em andamento.
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await sent
+
+  // O rascunho sai do armazenamento mesmo com o campo fora da tela.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+      ),
+    )
+    .toHaveLength(0)
+
+  // De volta ao chamado, o campo está vazio, inclusive depois de recarregar.
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Meus chamados' })
+    .getByRole('link', { name: new RegExp(contactName) })
+    .click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+  await page.reload()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+})
