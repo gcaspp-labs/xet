@@ -9,7 +9,33 @@ var (
 	ErrClosed          = errors.New("ticket closed")
 	// ErrPending refuses acting on a pending ticket: it is resumed first.
 	ErrPending = errors.New("ticket pending")
+	// ErrNotPending refuses resuming a ticket that is not pending.
+	ErrNotPending = errors.New("ticket not pending")
 )
+
+// OpenTicketError refuses resuming a pending ticket while the contact has a
+// ticket in the queue or in progress in the sector (#334). It carries the
+// protocol and, when someone holds it, the assignee, for the notice.
+type OpenTicketError struct {
+	Protocol     string
+	AssigneeName *string
+}
+
+func (e *OpenTicketError) Error() string {
+	if e.AssigneeName != nil {
+		return "contact has the open ticket " + e.Protocol + " with " + *e.AssigneeName
+	}
+	return "contact has the open ticket " + e.Protocol + " in the queue"
+}
+
+// Message is the notice shown on the screen.
+func (e *OpenTicketError) Message() string {
+	if e.AssigneeName != nil {
+		return "Este contato tem o chamado " + e.Protocol + " aberto com " + *e.AssigneeName +
+			". Encerre esse chamado ou use Retomar chamado a partir dele."
+	}
+	return "Este contato tem o chamado " + e.Protocol + " na fila. Encerre esse chamado ou use Retomar chamado a partir dele."
+}
 
 var (
 	ErrNotAssignee     = errors.New("user is not the assignee of the ticket")

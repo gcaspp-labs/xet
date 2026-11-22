@@ -707,6 +707,44 @@ func (q *Queries) GetOpenTicketID(ctx context.Context, arg GetOpenTicketIDParams
 	return id, err
 }
 
+const getOpenTicketOfContactInSector = `-- name: GetOpenTicketOfContactInSector :one
+select t.id, t.protocol, t.status, t.assignee_id, u.name as assignee_name
+from tickets t
+left join users u on u.id = t.assignee_id
+where t.sector_id = $1 and t.contact_id = $2 and t.status in ('queued', 'in_progress')
+order by t.id
+limit 1
+`
+
+type GetOpenTicketOfContactInSectorParams struct {
+	SectorID  int64
+	ContactID int64
+}
+
+type GetOpenTicketOfContactInSectorRow struct {
+	ID           int64
+	Protocol     string
+	Status       TicketStatus
+	AssigneeID   *int64
+	AssigneeName *string
+}
+
+// The ticket of the contact in the queue or in progress in the sector, if any,
+// with its protocol and assignee: a pending ticket is resumed only when the
+// contact has none, so a new message never falls in a pending one (#334).
+func (q *Queries) GetOpenTicketOfContactInSector(ctx context.Context, arg GetOpenTicketOfContactInSectorParams) (GetOpenTicketOfContactInSectorRow, error) {
+	row := q.db.QueryRow(ctx, getOpenTicketOfContactInSector, arg.SectorID, arg.ContactID)
+	var i GetOpenTicketOfContactInSectorRow
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.Status,
+		&i.AssigneeID,
+		&i.AssigneeName,
+	)
+	return i, err
+}
+
 const getOpenTicketsOfContactForUpdate = `-- name: GetOpenTicketsOfContactForUpdate :many
 select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at from tickets
 where contact_id = $1 and status in ('queued', 'in_progress')
@@ -718,6 +756,64 @@ for update
 // tickets before the contact keeps the order used by the closing.
 func (q *Queries) GetOpenTicketsOfContactForUpdate(ctx context.Context, contactID int64) ([]Ticket, error) {
 	rows, err := q.db.Query(ctx, getOpenTicketsOfContactForUpdate, contactID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Ticket
+	for rows.Next() {
+		var i Ticket
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.SectorID,
+			&i.ContactID,
+			&i.OrganizationID,
+			&i.AssigneeID,
+			&i.Status,
+			&i.PreviousTicketID,
+			&i.CreatedByID,
+			&i.ArrivedAt,
+			&i.AssignedAt,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.ClosedAt,
+			&i.ClosedByID,
+			&i.ClosureType,
+			&i.Subject,
+			&i.Resolution,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TransferReason,
+			&i.Channel,
+			&i.ClientRequestID,
+			&i.PendingReason,
+			&i.PendingByID,
+			&i.PendingAt,
+			&i.MergedIntoTicketID,
+			&i.AssigneeReadAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPendingTicketsOfContactForUpdate = `-- name: GetPendingTicketsOfContactForUpdate :many
+select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at from tickets
+where contact_id = $1 and status = 'pending'
+order by id
+for update
+`
+
+// Pending tickets of the contact in every sector, locked in id order after the
+// open ones, so the registration of the contact announces them (#334).
+func (q *Queries) GetPendingTicketsOfContactForUpdate(ctx context.Context, contactID int64) ([]Ticket, error) {
+	rows, err := q.db.Query(ctx, getPendingTicketsOfContactForUpdate, contactID)
 	if err != nil {
 		return nil, err
 	}
@@ -1392,6 +1488,90 @@ func (q *Queries) ListOrganizationTickets(ctx context.Context, arg ListOrganizat
 	return items, nil
 }
 
+const listPendingTickets = `-- name: ListPendingTickets :many
+select
+    t.id, t.protocol, t.status, t.pending_reason, t.pending_at,
+    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    o.name as organization_name, m.name as municipality_name,
+    co.name as contact_organization_name, cm.name as contact_municipality_name,
+    t.pending_by_id, pu.name as pending_by_name,
+    t.sector_id, s.name as sector_name
+from tickets t
+join contacts c on c.id = t.contact_id
+join sectors s on s.id = t.sector_id
+left join organizations o on o.id = t.organization_id
+left join municipalities m on m.id = o.municipality_id
+left join organizations co on co.id = c.organization_id
+left join municipalities cm on cm.id = co.municipality_id
+left join users pu on pu.id = t.pending_by_id
+where t.sector_id = $1 and t.status = 'pending'
+order by t.pending_at, t.id
+`
+
+type ListPendingTicketsRow struct {
+	ID                      int64
+	Protocol                string
+	Status                  TicketStatus
+	PendingReason           *string
+	PendingAt               *time.Time
+	ContactID               int64
+	ContactName             string
+	ContactPhone            *string
+	ContactRegistered       bool
+	OrganizationName        *string
+	MunicipalityName        *string
+	ContactOrganizationName *string
+	ContactMunicipalityName *string
+	PendingByID             *int64
+	PendingByName           *string
+	SectorID                int64
+	SectorName              string
+}
+
+// Pending tickets of the sector, the ones pending for longer first, with the
+// contact, the organization and who marked it (spec #332, #334). Everyone of
+// the sector sees them; the admin, in the sectors the panel asks for. The
+// organization is the one of the ticket, or the one of the contact while the
+// ticket has none: a contact registered while the ticket was pending already
+// shows there.
+func (q *Queries) ListPendingTickets(ctx context.Context, sectorID int64) ([]ListPendingTicketsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingTickets, sectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingTicketsRow
+	for rows.Next() {
+		var i ListPendingTicketsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.Status,
+			&i.PendingReason,
+			&i.PendingAt,
+			&i.ContactID,
+			&i.ContactName,
+			&i.ContactPhone,
+			&i.ContactRegistered,
+			&i.OrganizationName,
+			&i.MunicipalityName,
+			&i.ContactOrganizationName,
+			&i.ContactMunicipalityName,
+			&i.PendingByID,
+			&i.PendingByName,
+			&i.SectorID,
+			&i.SectorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSectorWorkload = `-- name: ListSectorWorkload :many
 select u.id, u.name, u.role, u.active, count(t.id)::integer as active_tickets
 from users u
@@ -1604,6 +1784,58 @@ type RemoveTicketModulesParams struct {
 func (q *Queries) RemoveTicketModules(ctx context.Context, arg RemoveTicketModulesParams) error {
 	_, err := q.db.Exec(ctx, removeTicketModules, arg.TicketID, arg.ModuleIds)
 	return err
+}
+
+const resumeTicket = `-- name: ResumeTicket :one
+update tickets
+set status = 'in_progress', assignee_id = $1, assignee_read_at = clock_timestamp()
+where id = $2
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at
+`
+
+type ResumeTicketParams struct {
+	AssigneeID *int64
+	ID         int64
+}
+
+// The caller holds the lock of the ticket and checked it is pending. The
+// reading starts now, as when a ticket of the queue is taken. assigned_at
+// stays: it is the first time someone took the ticket. The fields of the
+// pending stay as they are; the history is in the audit.
+func (q *Queries) ResumeTicket(ctx context.Context, arg ResumeTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, resumeTicket, arg.AssigneeID, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TransferReason,
+		&i.Channel,
+		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
+		&i.AssigneeReadAt,
+	)
+	return i, err
 }
 
 const returnTicketToQueue = `-- name: ReturnTicketToQueue :one

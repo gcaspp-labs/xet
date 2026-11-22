@@ -11,7 +11,7 @@ where entity_type = @entity_type and entity_id = @entity_id
 order by id;
 
 -- name: ListTicketAssignmentLogs :many
--- Start, assignment, transfers, return to the queue, closing, cancellation and corrections of the ticket, oldest first, with the names of
+-- Start, assignment, transfers, return to the queue, pending and resuming, closing, cancellation and corrections of the ticket, oldest first, with the names of
 -- the actor, of the previous and new assignees and of the target of a transfer between sectors. The
 -- transfer between sectors that opened this ticket (written on the origin) comes too, with the sector
 -- it came from, so the destination sees it among its messages.
@@ -30,7 +30,7 @@ left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::b
 left join sectors to_sector on to_sector.id = (a.changes -> 'sector_id' ->> 'to')::bigint
 left join sectors from_sector on a.ticket_id <> @ticket_id and from_sector.id = (a.changes -> 'sector_id' ->> 'from')::bigint
 where (
-    a.ticket_id = @ticket_id and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_returned', 'ticket_closed', 'ticket_transferred_sector', 'ticket_cancelled', 'ticket_corrected')
+    a.ticket_id = @ticket_id and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_returned', 'ticket_pending', 'ticket_resumed', 'ticket_closed', 'ticket_transferred_sector', 'ticket_cancelled', 'ticket_corrected')
 ) or (
     a.action = 'ticket_transferred_sector' and a.ticket_id = (select t.previous_ticket_id from tickets t where t.id = @ticket_id)
 )
