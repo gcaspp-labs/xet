@@ -371,7 +371,7 @@ Chamados não são reabertos: o pendente não foi encerrado, e o mesclado não �
 | `quoted_body` | text | Texto do trecho citado: o texto, a legenda (imagem e vídeo) ou o nome do arquivo (documento; a legenda, se não houver nome); vazio em áudio e quando o provedor não entrega |
 | `edited_at` | timestamptz | Horário da versão atual segundo o provedor; vazio quando a mensagem nunca foi editada por fora do sistema (#291) |
 | `deleted_at` | timestamptz | Horário da exclusão segundo o provedor; vazio quando a mensagem não foi excluída. É um estado à parte de `status` (a situação de entrega não muda) |
-| `deletion_scope` | message_deletion_scope | `everyone` ou `local`; preenchido junto com `deleted_at`. Uma exclusão para todos vinda de fora amplia um `local` já gravado para `everyone` |
+| `deletion_scope` | message_deletion_scope | `everyone` ou `local`; preenchido junto com `deleted_at`. Uma exclusão para todos — vinda de fora ou do próprio XET — amplia um `local` já gravado para `everyone` |
 | `deletion_origin` | message_origin | Quem excluiu (cliente, celular do setor ou atendente); preenchido junto com `deleted_at` |
 | `contact_cards` | jsonb | Cartões da mensagem `contact`, em ordem: lista não vazia de `{"name", "organization", "phones": [{"phone", "wa_id"}]}`; vazio (`null`) nos demais tipos |
 
@@ -394,7 +394,9 @@ Mensagens enviadas pelo sistema são gravadas como `pending` (com `sent_at` no m
 
 Mensagens não são apagadas nem sobrescritas sem registro (#291, spec #290). Edições e exclusões para todos feitas pelo cliente ou pelo celular do setor são gravadas na própria mensagem, sem criar mensagem nem chamado, inclusive em chamado encerrado. `body` mostra a versão atual e `edited_at` o horário dela; a exclusão marca `deleted_at`, `deletion_scope` e `deletion_origin`, e o conteúdo, o arquivo e a situação de entrega continuam gravados. O histórico fica em `message_changes` (abaixo). A API de mensagens devolve `editedAt` e `deletion` (`at`, `scope`, `origin`), de forma aditiva; a ocultação do conteúdo excluído é da tela, não da API.
 
-Uma exclusão para todos recebida do provedor **amplia** uma exclusão `local` já gravada (#375): `MarkMessageDeleted` só aceita essa troca, e o alcance passa a `everyone` mantendo `deleted_at` e `deletion_origin` da primeira exclusão, porque o conteúdo está oculto desde então e por aquela origem. O histórico guarda as duas exclusões, em ordem, cada uma com a origem e o horário. Em Chamados, por isso, o conteúdo continua oculto pela origem da primeira exclusão, e a prévia da lista de chamados continua sem ele.
+Uma exclusão para todos **amplia** uma exclusão `local` já gravada (#375): `MarkMessageDeleted` só aceita essa troca, e o alcance passa a `everyone` mantendo `deleted_at` e `deletion_origin` da primeira exclusão, porque o conteúdo está oculto desde então e por aquela origem. O histórico guarda as duas exclusões, em ordem, cada uma com a origem e o horário. Em Chamados, por isso, o conteúdo continua oculto pela origem da primeira exclusão, e a prévia da lista de chamados continua sem ele.
+
+A mesma regra vale quando a ampliação de `local` para `everyone` é feita pelo próprio XET, não só pelo celular: a exclusão para todos pedida no sistema sobre uma mensagem já excluída "para mim" (por exemplo, quando o provedor confirma tarde uma ação que ficou incerta e o eco chega depois) também passa o alcance a `everyone` e mantém `deleted_at` e `deletion_origin` da primeira exclusão. Aí a origem é `agent` nas duas.
 
 A imutabilidade da mensagem foi revista pela spec #290: o texto e a legenda podem ser revistos, pelo WhatsApp e pelo XET, e o que cai é a regra antiga de que a mensagem nunca é editada ou excluída. Nada é apagado nem sobrescrito sem registro: cada versão anterior fica em `message_changes`, o conteúdo excluído continua gravado em `body` e em `media_id`, e `status` segue a situação de entrega sem representar a exclusão.
 

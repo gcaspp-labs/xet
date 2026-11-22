@@ -857,7 +857,7 @@ type MarkMessageDeletedParams struct {
 // Deletion is a state of its own, apart from the delivery status, and keeps
 // the content and the file. The first deletion recorded holds: the time and
 // the author stay the ones of it, because the content is hidden since then.
-// The only exception is the alcance: a deletion for everyone widens one only
+// The only exception is the scope: a deletion for everyone widens one only
 // in the system, whether the provider took it (late, from an uncertain action)
 // or the sector's phone made it, and the contact no longer sees the message.
 func (q *Queries) MarkMessageDeleted(ctx context.Context, arg MarkMessageDeletedParams) (int64, error) {
