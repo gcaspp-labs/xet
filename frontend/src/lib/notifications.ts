@@ -51,8 +51,7 @@ function lastActivity(ticket: TicketSummary) {
   return new Date(lastMessageAt(ticket)).getTime()
 }
 
-// Horário da última mensagem, como veio do servidor: identifica cada mensagem nova na reserva
-// do alerta, então a mesma quantidade de não lidas depois de uma leitura ainda alerta.
+// Horário da última mensagem, como veio do servidor, para ordenar a fila e "Meus chamados".
 function lastMessageAt(ticket: TicketSummary) {
   return ticket.lastMessage?.sentAt ?? ticket.arrivedAt
 }
@@ -192,7 +191,7 @@ export function useNotifications(user: User) {
         const previous = knownUnread.get(key)
         knownUnread.set(key, count)
         if (previous !== undefined && count > previous && !isOpenAndVisible(ticket.id)) {
-          alertNewMessage(ticket.id, lastMessageAt(ticket), ticket.contact.name, () => {
+          alertNewMessage(ticket.id, count, ticket.contact.name, () => {
             void navigateRef.current(`/chamados/${ticket.id}`)
           })
         }

@@ -110,12 +110,41 @@ export function useAlertSettings() {
 // não apagam a reserva uma da outra.
 const queueClaimKey = (ticketId: number) => `${claimsKey}.${ticketId}`
 
-// Cada mensagem nova no mesmo chamado tem a própria chave, com o horário da última mensagem (spec
-// #310): duas mensagens seguidas alertam duas vezes, e uma mensagem que chega depois de a pessoa
-// ler o chamado alerta mesmo com a mesma quantidade de não lidas, porque a mensagem é outra. O
-// prefixo separa estas reservas das da fila.
-const messageClaimKey = (ticketId: number, sentAt: string) =>
-  `${claimsKey}.message.${ticketId}.${sentAt}`
+// A leitura do chamado muda a chave das reservas de mensagem: as não lidas voltam a contar do
+// zero, e a mensagem que chega logo depois de a pessoa ler o chamado alerta mesmo dentro dos 10 s
+// da reserva anterior (spec #310). Fica no navegador, compartilhada pelas abas.
+const readKey = 'alerts.read'
+
+const readGenerationKey = (ticketId: number) => `${readKey}.${ticketId}`
+
+function readGeneration(ticketId: number) {
+  try {
+    return localStorage.getItem(readGenerationKey(ticketId)) ?? '0'
+  } catch {
+    return '0'
+  }
+}
+
+// Chamado quando o servidor confirma a leitura do chamado aberto pelo responsável.
+export function noteTicketRead(ticketId: number) {
+  try {
+    const next = Number(readGeneration(ticketId)) + 1
+    localStorage.setItem(readGenerationKey(ticketId), String(next))
+  } catch {
+    // Sem armazenamento, a reserva anterior pode segurar só o alerta dentro dos 10 s.
+  }
+}
+
+// Cada mensagem nova no mesmo chamado tem a própria chave: a quantidade de não lidas separa as
+// mensagens seguidas, e a leitura separa a que chega depois de a pessoa ler o chamado. A
+// quantidade entra na chave, e não o horário da última mensagem, para as abas que viram a lista em
+// momentos diferentes usarem a mesma reserva quando uma resposta do atendente chega no meio (spec
+// #310). O prefixo separa estas reservas das da fila.
+const messageKey = (ticketId: number, count: number) =>
+  `${ticketId}.${readGeneration(ticketId)}.${count}`
+
+const messageClaimKey = (ticketId: number, count: number) =>
+  `${claimsKey}.message.${messageKey(ticketId, count)}`
 
 function reserve(key: string) {
   try {
@@ -265,18 +294,19 @@ export function alertQueueEntry(ticketId: number, contactName: string, onOpen: (
 
 // Alerta a mensagem nova do cliente num chamado de que a pessoa é responsável (spec #310). Quem
 // compara as não lidas é o sino, que já ignora a primeira carga, a reconexão e o chamado aberto
-// com a aba visível. `sentAt` (a da última mensagem) entra na chave da reserva: cada mensagem
-// alerta uma vez, inclusive a que chega logo depois de a pessoa ler o chamado.
+// com a aba visível. A quantidade de não lidas e a leitura entram na chave da reserva: cada
+// mensagem alerta uma vez em todas as abas, inclusive a que chega logo depois de a pessoa ler o
+// chamado.
 export function alertNewMessage(
   ticketId: number,
-  sentAt: string,
+  count: number,
   contactName: string,
   onOpen: () => void,
 ) {
   raiseAlert(
     'Mensagem nova',
-    messageClaimKey(ticketId, sentAt),
-    `message-${ticketId}-${sentAt}`,
+    messageClaimKey(ticketId, count),
+    `message-${messageKey(ticketId, count)}`,
     contactName,
     onOpen,
   )

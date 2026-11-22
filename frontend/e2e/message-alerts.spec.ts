@@ -157,6 +157,16 @@ const readCall = (page: Page, ticketId: number) =>
       new URL(response.url()).pathname === `/api/tickets/${ticketId}/read`,
   )
 
+// Instante em que cada reserva de mensagem do chamado foi criada. A chave muda com a leitura e com
+// a quantidade de não lidas; o valor é o momento da reserva, que vale 10 s.
+const messageClaims = (page: Page, ticketId: number) =>
+  page.evaluate((id) => {
+    const prefix = `alerts.claims.message.${id}.`
+    return Object.keys(localStorage)
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => Number(localStorage.getItem(key)))
+  }, ticketId)
+
 // A interação com a página é o que libera o som no navegador.
 async function allowSound(page: Page) {
   await page.locator('body').click({ position: { x: 1, y: 1 } })
@@ -323,13 +333,15 @@ test('mensagem que chega logo depois de ler o chamado ainda alerta', async ({
   await allowSound(page)
   await setHidden(page, true)
 
-  // A primeira mensagem alerta e deixa a reserva do chamado guardada por 10 s.
+  // A primeira mensagem alerta e deixa a reserva guardada por 10 s. O instante lido é o da
+  // reserva, não o de depois do alerta: é dele que os 10 s contam.
   await receive(request, sector.id, phone, contactName, 'Mensagem que alerta')
   await expect.poll(() => beeps(page)).toBe(1)
   await expect.poll(() => notified(page)).toEqual([contactName])
+  const [firstClaim] = await messageClaims(page, ticketId)
+  expect(firstClaim).toBeGreaterThan(0)
 
   // A pessoa volta à aba, lê o chamado (as não lidas voltam a zero) e a aba fica em segundo plano.
-  const startedAt = Date.now()
   await setHidden(page, false)
   const read = readCall(page, ticketId)
   await mineItem(page, contactName).click()
@@ -338,13 +350,107 @@ test('mensagem que chega logo depois de ler o chamado ainda alerta', async ({
   await expect(mineItem(page, contactName).getByTestId('unread-count')).toHaveCount(0)
   await setHidden(page, true)
 
-  // Outra mensagem chega dentro da reserva, com a mesma quantidade de não lidas (1). A mensagem é
-  // outra: precisa alertar de novo, e não ser confundida com a que a pessoa já leu.
+  // Outra mensagem chega dentro da reserva, com a mesma quantidade de não lidas (1). A leitura
+  // muda a chave: a mensagem é outra e alerta de novo, sem ser confundida com a que a pessoa leu.
   await receive(request, sector.id, phone, contactName, 'Chegou depois da leitura')
   await expect.poll(() => beeps(page)).toBe(2)
   await expect.poll(async () => (await notified(page)).length).toBe(2)
-  // Se o caminho todo passasse de 10 s, a reserva teria vencido e o teste não provaria o caso.
-  expect(Date.now() - startedAt).toBeLessThan(10_000)
+
+  // As duas reservas são de mensagens diferentes, e a segunda foi criada menos de 10 s depois da
+  // primeira: o alerta não dependeu de a reserva anterior vencer.
+  const claims = (await messageClaims(page, ticketId)).sort((a, b) => a - b)
+  expect(claims).toHaveLength(2)
+  expect(claims[0]).toBe(firstClaim)
+  expect(claims[1] - claims[0]).toBeLessThan(10_000)
+})
+
+test('resposta do atendente entre as recargas não duplica o alerta da mesma mensagem', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  const answeredName = 'Cliente que recebe resposta'
+  const probeName = 'Cliente da sonda'
+  const answeredPhone = unique().phone
+  const probePhone = unique().phone
+  await receive(request, sector.id, answeredPhone, answeredName, 'Primeira mensagem')
+  await receive(request, sector.id, probePhone, probeName, 'Primeira mensagem')
+  await context.grantPermissions(['notifications'])
+  await context.addInitScript(() => {
+    localStorage.setItem('alerts.browser', 'on')
+    localStorage.setItem('alerts.sound', 'on')
+  })
+  await spyOnAlerts(page)
+  await trackSocket(page)
+  await signIn(page, agent, userPassword)
+  const other = await context.newPage()
+
+  // A segunda aba perde os avisos de mudança do chamado até a resposta do atendente: ela só
+  // recarrega a lista depois da resposta, então vê a mensagem nova com a resposta como última
+  // mensagem, como acontece quando a resposta chega entre duas recargas.
+  let droppingAnswered = false
+  let answeredId = 0
+  await other.routeWebSocket(/\/api\/ws$/, (ws) => {
+    const server = ws.connectToServer()
+    server.onMessage((message) => {
+      const event = JSON.parse(String(message)) as { type: string; ticketId?: number }
+      if (droppingAnswered && event.type === 'ticket' && event.ticketId === answeredId) {
+        return
+      }
+      ws.send(message)
+    })
+  })
+  await spyOnAlerts(other)
+  await trackSocket(other)
+  await openWhenLive(page, sector.id, '/chamados')
+  await openWhenLive(other, sector.id, '/chamados')
+
+  answeredId = await assume(page, answeredName)
+  await backToList(page)
+  await assume(page, probeName)
+  await backToList(page)
+  await allowSound(page)
+  await allowSound(other)
+  await setHidden(page, true)
+  await setHidden(other, true)
+
+  const allBeeps = async () => (await beeps(page)) + (await beeps(other))
+  const allNotified = async () => [...(await notified(page)), ...(await notified(other))]
+
+  // A primeira aba alerta; a segunda ainda não viu a lista e não tem o que comparar.
+  droppingAnswered = true
+  await receive(request, sector.id, answeredPhone, answeredName, 'Mensagem que alerta')
+  await expect.poll(() => beeps(page)).toBe(1)
+  expect(await beeps(other)).toBe(0)
+
+  // O atendente responde antes de a segunda aba recarregar.
+  droppingAnswered = false
+  const api = await apiRequest.newContext({ baseURL })
+  expect(
+    (await api.post('/api/auth/login', { data: { email: agent, password: userPassword } })).ok(),
+  ).toBeTruthy()
+  const sent = await api.post(`/api/tickets/${answeredId}/messages`, {
+    data: { clientRequestId: crypto.randomUUID(), body: 'Resposta do atendente' },
+  })
+  expect(sent.ok()).toBeTruthy()
+  await api.dispose()
+
+  // A segunda aba recarrega com a resposta no fim da lista e não alerta de novo pela mesma
+  // mensagem do cliente: a reserva depende das não lidas, não da última mensagem.
+  await expect
+    .poll(async () => (await mineItem(other, answeredName).textContent()) ?? '')
+    .toContain('Resposta do atendente')
+
+  // Uma mensagem no outro chamado prova que a segunda aba alerta a mensagem seguinte. O alerta
+  // dela vem depois da tentativa da resposta, então a contagem já inclui o que veio antes.
+  await receive(request, sector.id, probePhone, probeName, 'Mensagem da sonda')
+  await expect
+    .poll(async () => (await allNotified()).filter((body) => body === probeName).length)
+    .toBe(1)
+  expect(await allBeeps()).toBe(2)
+  expect((await allNotified()).sort()).toEqual([answeredName, probeName].sort())
 })
 
 test('recarregar e reconectar não alertam das não lidas que já existiam', async ({
