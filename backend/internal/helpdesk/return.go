@@ -33,6 +33,8 @@ func (s *Service) ReturnToQueue(ctx context.Context, actor auth.User, ticketID i
 		switch t.Status {
 		case db.TicketStatusClosed:
 			return ErrClosed
+		case db.TicketStatusPending:
+			return ErrPending
 		case db.TicketStatusQueued:
 			return ErrNotInProgress
 		}

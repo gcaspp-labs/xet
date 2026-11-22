@@ -36,8 +36,11 @@ func (s *Service) Cancel(ctx context.Context, actor auth.User, ticketID int64, r
 		if err != nil {
 			return fmt.Errorf("lock ticket: %w", err)
 		}
-		if t.Status == db.TicketStatusClosed {
+		switch t.Status {
+		case db.TicketStatusClosed:
 			return ErrClosed
+		case db.TicketStatusPending:
+			return ErrPending
 		}
 		if t.Status == db.TicketStatusInProgress && *t.AssigneeID != actor.ID && !actor.HasRole(db.UserRoleSupervisor, db.UserRoleAdmin) {
 			return ErrCannotCancel

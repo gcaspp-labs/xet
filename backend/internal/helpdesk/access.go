@@ -52,11 +52,14 @@ func (s *Service) viewable(ctx context.Context, actor auth.User, ticketID int64)
 }
 
 // conducts checks, on the locked ticket, that the user may conduct the
-// conversation: the ticket is open and the user is its assignee. Admins and
-// supervisors are no exception (spec.md).
+// conversation: the ticket is neither closed nor pending and the user is its
+// assignee. Admins and supervisors are no exception (spec.md).
 func conducts(t db.Ticket, actor auth.User) error {
-	if t.Status == db.TicketStatusClosed {
+	switch t.Status {
+	case db.TicketStatusClosed:
 		return ErrClosed
+	case db.TicketStatusPending:
+		return ErrPending
 	}
 	if t.AssigneeID == nil || *t.AssigneeID != actor.ID {
 		return ErrNotAssignee

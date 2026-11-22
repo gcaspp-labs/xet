@@ -18,6 +18,7 @@ const (
 	ClosureTypeResolved    ClosureType = "resolved"
 	ClosureTypeTransferred ClosureType = "transferred"
 	ClosureTypeCancelled   ClosureType = "cancelled"
+	ClosureTypeMerged      ClosureType = "merged"
 )
 
 func (e *ClosureType) Scan(src interface{}) error {
@@ -59,7 +60,8 @@ func (e ClosureType) Valid() bool {
 	switch e {
 	case ClosureTypeResolved,
 		ClosureTypeTransferred,
-		ClosureTypeCancelled:
+		ClosureTypeCancelled,
+		ClosureTypeMerged:
 		return true
 	}
 	return false
@@ -70,6 +72,7 @@ func AllClosureTypeValues() []ClosureType {
 		ClosureTypeResolved,
 		ClosureTypeTransferred,
 		ClosureTypeCancelled,
+		ClosureTypeMerged,
 	}
 }
 
@@ -764,6 +767,7 @@ type TicketStatus string
 const (
 	TicketStatusQueued     TicketStatus = "queued"
 	TicketStatusInProgress TicketStatus = "in_progress"
+	TicketStatusPending    TicketStatus = "pending"
 	TicketStatusClosed     TicketStatus = "closed"
 )
 
@@ -806,6 +810,7 @@ func (e TicketStatus) Valid() bool {
 	switch e {
 	case TicketStatusQueued,
 		TicketStatusInProgress,
+		TicketStatusPending,
 		TicketStatusClosed:
 		return true
 	}
@@ -816,6 +821,7 @@ func AllTicketStatusValues() []TicketStatus {
 	return []TicketStatus{
 		TicketStatusQueued,
 		TicketStatusInProgress,
+		TicketStatusPending,
 		TicketStatusClosed,
 	}
 }
@@ -1078,29 +1084,33 @@ type SubjectSolution struct {
 }
 
 type Ticket struct {
-	ID               int64
-	Protocol         string
-	SectorID         int64
-	ContactID        int64
-	OrganizationID   *int64
-	AssigneeID       *int64
-	Status           TicketStatus
-	PreviousTicketID *int64
-	CreatedByID      *int64
-	ArrivedAt        time.Time
-	AssignedAt       *time.Time
-	StartedAt        time.Time
-	EndedAt          *time.Time
-	ClosedAt         *time.Time
-	ClosedByID       *int64
-	ClosureType      NullClosureType
-	Subject          *string
-	Resolution       *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	TransferReason   *string
-	Channel          TicketChannel
-	ClientRequestID  pgtype.UUID
+	ID                 int64
+	Protocol           string
+	SectorID           int64
+	ContactID          int64
+	OrganizationID     *int64
+	AssigneeID         *int64
+	Status             TicketStatus
+	PreviousTicketID   *int64
+	CreatedByID        *int64
+	ArrivedAt          time.Time
+	AssignedAt         *time.Time
+	StartedAt          time.Time
+	EndedAt            *time.Time
+	ClosedAt           *time.Time
+	ClosedByID         *int64
+	ClosureType        NullClosureType
+	Subject            *string
+	Resolution         *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	TransferReason     *string
+	Channel            TicketChannel
+	ClientRequestID    pgtype.UUID
+	PendingReason      *string
+	PendingByID        *int64
+	PendingAt          *time.Time
+	MergedIntoTicketID *int64
 }
 
 type TicketModule struct {

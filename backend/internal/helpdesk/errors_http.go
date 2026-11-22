@@ -37,6 +37,8 @@ func (h *Handler) ticketError(w http.ResponseWriter, r *http.Request, err error)
 		httpx.WriteError(w, http.StatusForbidden, "Apenas o responsável pelo chamado pode responder. Assuma o chamado ou peça a transferência.")
 	case errors.Is(err, ErrClosed):
 		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi encerrado.")
+	case errors.Is(err, ErrPending):
+		httpx.WriteError(w, http.StatusConflict, "Este chamado está pendente. Retome o chamado para continuar.")
 	case errors.Is(err, ErrRequestReused):
 		httpx.WriteError(w, http.StatusConflict, "Este envio já foi usado em outra mensagem. Tente novamente.")
 	case errors.Is(err, ErrNotFailed):

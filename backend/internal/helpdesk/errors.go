@@ -7,6 +7,8 @@ var (
 	ErrForbidden       = errors.New("ticket of a sector the user cannot access")
 	ErrAlreadyAssigned = errors.New("ticket already assigned to another user")
 	ErrClosed          = errors.New("ticket closed")
+	// ErrPending refuses acting on a pending ticket: it is resumed first.
+	ErrPending = errors.New("ticket pending")
 )
 
 var (

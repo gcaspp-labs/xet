@@ -39,6 +39,8 @@ func (s *Service) Transfer(ctx context.Context, actor auth.User, ticketID, targe
 		switch t.Status {
 		case db.TicketStatusClosed:
 			return ErrClosed
+		case db.TicketStatusPending:
+			return ErrPending
 		case db.TicketStatusQueued:
 			return ErrNotInProgress
 		}
