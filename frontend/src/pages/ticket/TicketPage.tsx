@@ -100,6 +100,7 @@ import {
   ticketStatusLabel,
 } from '@/lib/format'
 import { isNotFound } from '@/lib/api'
+import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
@@ -537,6 +538,7 @@ function MessageBubble({
 
 function Composer({
   ticketId,
+  userId,
   quoted,
   onCancelQuote,
   attachRef,
@@ -546,6 +548,7 @@ function Composer({
   onStopEditing,
 }: {
   ticketId: number
+  userId: number
   // A mensagem que o responsável está editando: o campo de edição toma o lugar do compositor, que
   // guarda o rascunho (texto, arquivo, áudio e citação) até a edição terminar.
   editing: Message | null
@@ -561,7 +564,10 @@ function Composer({
 }) {
   const send = useSendMessage(ticketId)
   const recorder = useVoiceRecorder()
-  const [text, setText] = useState('')
+  // O texto digitado fica guardado no navegador, por usuário e por chamado, até o envio: fechar a
+  // guia, recarregar ou trocar de chamado não perde o que estava escrito.
+  const [text, setText] = useState(() => readDraft(userId, ticketId))
+  const [textTicketId, setTextTicketId] = useState(ticketId)
   const [file, setFile] = useState<File | null>(null)
   const [voice, setVoice] = useState<Recording | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
@@ -572,6 +578,22 @@ function Composer({
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const messageInput = useRef<HTMLTextAreaElement>(null)
+
+  // Trocar de chamado sem sair da tela troca o texto pelo rascunho do chamado novo, e não mistura
+  // o que foi escrito em cada um.
+  if (textTicketId !== ticketId) {
+    setTextTicketId(ticketId)
+    setText(readDraft(userId, ticketId))
+    requestId.current = null
+  }
+
+  // O rascunho volta com o cursor no fim do texto, pronto para continuar a frase.
+  useEffect(() => {
+    const input = messageInput.current
+    if (input && input.value) {
+      input.setSelectionRange(input.value.length, input.value.length)
+    }
+  }, [ticketId])
 
   // Citar outra mensagem, ou cancelar a citação, muda a mensagem a enviar: um novo identificador de
   // envio. Ao citar, o foco vai para o campo, para escrever a resposta.
@@ -587,6 +609,7 @@ function Composer({
   const changeText = (value: string) => {
     requestId.current = null
     setText(value)
+    saveDraft(userId, ticketId, value)
   }
 
   // A mesma regra para o botão de anexo, a colagem e o soltar.
@@ -692,7 +715,8 @@ function Composer({
           if (voice) {
             changeVoice(null)
           } else {
-            setText('')
+            // Enviar a mensagem apaga o rascunho daquele chamado.
+            changeText('')
             setFile(null)
           }
         },
@@ -899,6 +923,13 @@ export function ConversationCard({
   const react = useReactToMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
+  // Chamado que não está mais com o usuário (encerrado, transferido, cancelado, devolvido) não
+  // mostra rascunho: o que estava guardado é descartado, para não voltar num chamado futuro.
+  useEffect(() => {
+    if (!canReply) {
+      clearDraft(user.id, ticket.id)
+    }
+  }, [canReply, user.id, ticket.id])
   // A citação em preparo é deste chamado: trocar de chamado a descarta, e perder o direito de
   // responder (transferência, encerramento) também.
   const [quoting, setQuoting] = useState<number | null>(null)
@@ -1072,6 +1103,7 @@ export function ConversationCard({
       {canReply ? (
         <Composer
           ticketId={ticket.id}
+          userId={user.id}
           attachRef={attach}
           quoted={quotedDraft && !isHiddenByXet(quotedDraft) ? quotedDraft : null}
           onCancelQuote={() => setQuoting(null)}
