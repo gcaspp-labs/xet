@@ -35,6 +35,9 @@ type ticketSummaryResponse struct {
 	MunicipalityName *string               `json:"municipalityName"`
 	Assignee         *httpx.Ref            `json:"assignee"`
 	LastMessage      *lastMessageResponse  `json:"lastMessage"`
+	// UnreadCount is the number of messages received from the customer after
+	// the assignee's reading; 0 in the queue (#313, spec #310).
+	UnreadCount int32 `json:"unreadCount"`
 }
 
 func toTicketSummaryResponse(t Summary) ticketSummaryResponse {
@@ -49,6 +52,7 @@ func toTicketSummaryResponse(t Summary) ticketSummaryResponse {
 		},
 		OrganizationName: t.OrganizationName,
 		MunicipalityName: t.MunicipalityName,
+		UnreadCount:      t.UnreadCount,
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {
 		out.Assignee = &httpx.Ref{ID: *t.AssigneeID, Name: *t.AssigneeName}
