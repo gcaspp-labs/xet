@@ -23,6 +23,8 @@ export type TicketSummary = {
   organizationName: string | null
   municipalityName: string | null
   assignee: { id: number; name: string } | null
+  // Mensagens recebidas do cliente depois da última leitura do responsável; 0 na fila e no pendente.
+  unreadCount: number
   lastMessage: {
     type: MessageType
     body: string | null
@@ -59,6 +61,16 @@ export const ticketsQuery = (sectorId: number) => ({
   queryKey: ticketsKey(sectorId),
   queryFn: () => api<TicketSummary[]>(`/sectors/${sectorId}/tickets`),
 })
+
+// Marca como lido o chamado aberto pelo responsável (spec #310). Para os demais, o servidor
+// responde sucesso sem mudar nada, então a tela chama sem conferir quem é o responsável.
+export function useMarkTicketRead() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ticketId: number) => api<void>(`/tickets/${ticketId}/read`, { method: 'POST' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sectors'] }),
+  })
+}
 
 // Chamados abertos do setor (fila e em atendimento), atualizados pelo WebSocket.
 export function useTickets(sectorId: number | undefined) {
