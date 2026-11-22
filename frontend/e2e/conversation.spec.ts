@@ -689,6 +689,74 @@ test('envio que falha devolve o texto como rascunho', async ({ page, request, ba
   await expect(field).toHaveValue('Texto que não saiu')
 })
 
+// O erro de um envio é do chamado em que ele foi feito: se o envio do chamado A falhar depois de a
+// pessoa abrir o chamado B, o aviso não pode aparecer no B.
+test('falha de envio de outro chamado não aparece no chamado aberto', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Nara Rascunho ${id}`
+  const second = `Otavio Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const drafts = () =>
+    page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')))
+
+  await assume(page, first)
+  await assume(page, second)
+  await open(first)
+  await field.fill('Mensagem do chamado que falha')
+
+  // O envio do chamado A demora e falha, e a pessoa já está no chamado B quando o aviso chega.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Não foi possível enviar agora.' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+  const failed = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  await open(second)
+  await failed
+
+  // O texto voltou a ser rascunho do chamado A, mas o aviso do erro não aparece no B.
+  await expect.poll(drafts).toHaveLength(1)
+  await expect(page.getByText('Não foi possível enviar agora.')).toHaveCount(0)
+  await expect(field).toHaveValue('')
+
+  // No chamado A, o aviso e o texto para reenviar estão lá.
+  await open(first)
+  await expect(page.getByText('Não foi possível enviar agora.')).toBeVisible()
+  await expect(field).toHaveValue('Mensagem do chamado que falha')
+})
+
 // A gravação em andamento é do chamado em que começou: ao trocar de chamado ela é descartada, para o
 // áudio não ir para o cliente do chamado novo.
 test('gravação de áudio em andamento não passa para o chamado novo', async ({

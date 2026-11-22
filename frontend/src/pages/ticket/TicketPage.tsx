@@ -565,6 +565,8 @@ function Composer({
 }) {
   const send = useSendMessage()
   const recorder = useVoiceRecorder()
+  // Limpar o erro do gravador na troca de chamado, com uma referência estável para as dependências.
+  const clearRecorderError = recorder.setError
   // O texto digitado fica guardado no navegador, por usuário e por chamado, até o envio: fechar a
   // guia, recarregar ou trocar de chamado não perde o que estava escrito.
   const [text, setText] = useState(() => readDraft(userId, ticketId))
@@ -587,23 +589,24 @@ function Composer({
     shownTicketId.current = ticketId
   }, [ticketId])
 
-  // Arquivo, áudio e erro do anexo são do chamado em que foram escolhidos: ao trocar de chamado
-  // saem do campo, senão o arquivo do chamado anterior iria para o cliente do chamado novo. O
-  // áudio tem a URL liberada aqui, fora do render. A gravação em andamento é descartada junto, sem
-  // anexar ao chamado novo.
+  // Arquivo, áudio e erros do campo de mensagem são do chamado em que apareceram: ao trocar de
+  // chamado saem da tela, senão o arquivo do chamado anterior iria para o cliente do chamado novo e
+  // o aviso de erro de um apareceria no outro. O áudio tem a URL liberada aqui, fora do render. A
+  // gravação em andamento é descartada junto, sem anexar ao chamado novo.
   const attachedTicketId = useRef(ticketId)
   useLayoutEffect(() => {
     if (attachedTicketId.current === ticketId) return
     attachedTicketId.current = ticketId
     setFile(null)
     setFileError(null)
+    clearRecorderError(null)
     if (voiceRef.current) {
       URL.revokeObjectURL(voiceRef.current.url)
       voiceRef.current = null
     }
     setVoice(null)
     if (recorder.recording) recorder.cancel()
-  }, [ticketId, recorder.recording, recorder.cancel])
+  }, [ticketId, recorder.recording, recorder.cancel, clearRecorderError])
 
   // Trocar de chamado sem sair da tela troca o texto pelo rascunho do chamado novo, e não mistura
   // o que foi escrito em cada um.
@@ -680,8 +683,9 @@ function Composer({
   const finishRecording = async () => {
     const at = ticketId
     const recording = await recorder.stop()
-    // A gravação é do chamado em que começou: se a pessoa trocou de chamado enquanto o áudio
-    // fechava, o arquivo sai da memória e não é anexado no chamado novo.
+    // A gravação é do chamado em que começou. Na troca de chamado é o `cancel` do efeito acima que
+    // solta o microfone e descarta o áudio; esta checagem cobre o áudio que fecha no mesmo instante
+    // da troca, antes de o efeito rodar, para ele não ser anexado no chamado novo.
     if (shownTicketId.current !== at) {
       if (recording) URL.revokeObjectURL(recording.url)
       return
@@ -781,7 +785,10 @@ function Composer({
     }
   }
 
-  const error = fileError ?? recorder.error ?? send.error?.message
+  // O erro de um envio fica ligado ao chamado em que ele foi feito: falhou o envio do chamado A
+  // depois de a pessoa abrir o B, o aviso é do A e não aparece no B.
+  const sendError = send.error && send.variables?.ticketId === ticketId ? send.error.message : null
+  const error = fileError ?? recorder.error ?? sendError
 
   return (
     <div className="flex flex-col gap-2 border-t border-line-soft p-3">
