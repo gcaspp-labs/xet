@@ -1,4 +1,10 @@
-import { expect, request as apiRequest, test, type APIRequestContext } from '@playwright/test'
+import {
+  expect,
+  request as apiRequest,
+  test,
+  type APIRequestContext,
+  type Page,
+} from '@playwright/test'
 import { admin, seedSector, signIn, unique, userPassword, openQueued } from './fixtures'
 
 // Liga o número do setor pelo adaptador falso: conectar e o celular ler o QR code.
@@ -223,4 +229,170 @@ test('mensagem que falhou é reenviada pelo responsável', async ({ page, reques
   await expect(message).toContainText('Enviada')
   await expect(message).not.toContainText('Falhou')
   await expect(page.getByRole('listitem', { name: 'Mensagem enviada' })).toHaveCount(1)
+})
+
+// Abre o chamado de um contato que está na fila e o assume, deixando o compositor à vista.
+async function assume(page: Page, contactName: string) {
+  await openQueued(page, contactName)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByText('Chamado assumido')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+}
+
+test('rascunho da mensagem volta ao recarregar e ao trocar de chamado, e some ao enviar', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Ana Rascunho ${id}`
+  const second = `Bia Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  await assume(page, first)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const typed = 'Segue o balancete de outubro, com a planilha.'
+  await field.fill(typed)
+
+  // Recarregar devolve o texto, com o cursor no fim, pronto para continuar.
+  await page.reload()
+  await expect(field).toHaveValue(typed)
+  expect(
+    await field.evaluate((element) => {
+      const input = element as HTMLTextAreaElement
+      return (
+        input.selectionStart === input.value.length && input.selectionEnd === input.value.length
+      )
+    }),
+  ).toBe(true)
+
+  // Outro chamado começa vazio; o rascunho de cada um volta ao trocar pela lista de Meus chamados.
+  await page.goto('/chamados')
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  await queue.getByRole('button', { name: `Assumir chamado de ${second}` }).click()
+  await expect(page.getByRole('heading', { name: second })).toBeVisible()
+  await expect(field).toHaveValue('')
+  await field.fill('Rascunho da Bia')
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  await mine.getByRole('link', { name: new RegExp(first) }).click()
+  await expect(page.getByRole('heading', { name: first })).toBeVisible()
+  await expect(field).toHaveValue(typed)
+  await mine.getByRole('link', { name: new RegExp(second) }).click()
+  await expect(page.getByRole('heading', { name: second })).toBeVisible()
+  await expect(field).toHaveValue('Rascunho da Bia')
+
+  // Enviar limpa o rascunho daquele chamado, e recarregar mostra o campo vazio.
+  await field.press('Enter')
+  await expect(
+    page.getByRole('listitem', { name: 'Mensagem enviada' }).filter({ hasText: 'Rascunho da Bia' }),
+  ).toContainText('Enviada')
+  await expect(field).toHaveValue('')
+  await page.reload()
+  await expect(field).toHaveValue('')
+
+  // Apagar todo o texto também limpa, e o rascunho do outro chamado continua onde estava.
+  await mine.getByRole('link', { name: new RegExp(first) }).click()
+  await expect(field).toHaveValue(typed)
+  await field.fill('')
+  await page.reload()
+  await expect(field).toHaveValue('')
+  await mine.getByRole('link', { name: new RegExp(second) }).click()
+  await expect(field).toHaveValue('')
+})
+
+test('sair da conta apaga os rascunhos do usuário', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Carla Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  await page.getByRole('textbox', { name: 'Mensagem' }).fill('Texto que não vai ao cliente')
+  // O rascunho fica no armazenamento do navegador, como a pessoa digitou.
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+    ),
+  ).toHaveLength(1)
+
+  // Computador compartilhado: sair da conta leva junto o que estava escrito.
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await page.getByRole('menuitem', { name: 'Sair' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+    ),
+  ).toHaveLength(0)
+
+  // Ao entrar de novo no mesmo navegador, o campo volta vazio.
+  await signIn(page, agent, userPassword)
+  await page
+    .getByRole('navigation', { name: 'Meus chamados' })
+    .getByRole('link', { name: contactName })
+    .click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+})
+
+test('sem acesso ao armazenamento do navegador, a tela funciona e não há rascunho', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Duda Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  // Armazenamento bloqueado (por política do navegador ou cheio): toda leitura e escrita falha.
+  await page.addInitScript(() => {
+    const blocked = () => {
+      throw new DOMException('Armazenamento bloqueado', 'SecurityError')
+    }
+    Storage.prototype.getItem = blocked
+    Storage.prototype.setItem = blocked
+    Storage.prototype.removeItem = blocked
+    Storage.prototype.clear = blocked
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  await field.fill('Mensagem sem rascunho')
+  await field.press('Enter')
+  await expect(
+    page
+      .getByRole('listitem', { name: 'Mensagem enviada' })
+      .filter({ hasText: 'Mensagem sem rascunho' }),
+  ).toContainText('Enviada')
+  await expect(page.getByText('Não foi possível')).toHaveCount(0)
+
+  // Sem armazenamento, não há o que restaurar: o campo volta vazio, sem erro na tela.
+  await page.reload()
+  await expect(field).toHaveValue('')
 })
