@@ -171,6 +171,37 @@ test('Esc durante a edição de uma mensagem cancela a edição e não sai do ch
   await expect(page).toHaveURL(ticketUrl)
 })
 
+test('Esc com o menu da mensagem aberto fecha só o menu e o chamado continua aberto', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const message = await openTicket(page, request, baseURL!, 'Cliente Menu Esc')
+  const ticketUrl = page.url()
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+
+  // Envia uma mensagem e abre o menu dela pelo mouse.
+  await message.fill('Mensagem com menu')
+  await message.press('Enter')
+  const bubble = conversation.getByRole('listitem', { name: 'Mensagem enviada' }).last()
+  await expect(bubble).toContainText('Mensagem com menu')
+  await bubble.hover()
+  await bubble.getByRole('button', { name: 'Ações da mensagem' }).click()
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole('menuitem', { name: 'Responder', exact: true })).toBeVisible()
+
+  // O Esc fecha só o menu: o chamado continua aberto, com a conversa na tela.
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(page).toHaveURL(ticketUrl)
+  await expect(conversation).toBeVisible()
+
+  // Sem nada por cima, o Esc seguinte volta.
+  await page.keyboard.press('Escape')
+  await expect(page).toHaveURL(/\/chamados$/)
+})
+
 test('Esc com uma janela com bloqueio aberta não fecha a janela nem volta para Chamados', async ({
   page,
   request,

@@ -857,8 +857,14 @@ test('cartão enviando ou com falha não oferece reação nem Responder', async 
     const menu = message.getByRole('button', { name: 'Ações da mensagem' })
     if ((await menu.count()) > 0) {
       await menu.click()
+      // O menu só existe depois de abrir: sem esperar por ele, o Esc cairia na regra da tela
+      // (com nada por cima, volta para Chamados) e o chamado fecharia no meio do teste.
+      await expect(page.getByRole('menu')).toBeVisible()
       await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toHaveCount(0)
       await page.keyboard.press('Escape')
+      await expect(page.getByRole('menu')).toHaveCount(0)
+      // O chamado continua aberto: o menu fechou, e não foi a tela que saiu daqui.
+      await expect(page).toHaveURL(/\/chamados\/\d+$/)
     }
   }
 
