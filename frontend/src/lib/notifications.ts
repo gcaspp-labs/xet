@@ -48,7 +48,13 @@ function myUnread(ticket: TicketSummary, userId: number) {
 }
 
 function lastActivity(ticket: TicketSummary) {
-  return new Date(ticket.lastMessage?.sentAt ?? ticket.arrivedAt).getTime()
+  return new Date(lastMessageAt(ticket)).getTime()
+}
+
+// Horário da última mensagem, como veio do servidor: identifica cada mensagem nova na reserva
+// do alerta, então a mesma quantidade de não lidas depois de uma leitura ainda alerta.
+function lastMessageAt(ticket: TicketSummary) {
+  return ticket.lastMessage?.sentAt ?? ticket.arrivedAt
 }
 
 // Número que não está conectado, inclusive enquanto a conexão está em andamento.
@@ -125,7 +131,7 @@ export function useNotifications(user: User) {
 
   // Ouve o cache, e não a tela, para comparar cada carga com a anterior sem depender de renderização.
   useEffect(() => {
-    // A carga de uma setor vira a referência: fila e não lidas. Sem referência anterior, é a
+    // A carga de um setor vira a referência: fila e não lidas. Sem referência anterior, é a
     // primeira depois de abrir a tela (ou de reconectar), e não avisa.
     const seed = (sectorId: number, tickets: TicketSummary[]) => {
       knownQueue.set(
@@ -186,7 +192,7 @@ export function useNotifications(user: User) {
         const previous = knownUnread.get(key)
         knownUnread.set(key, count)
         if (previous !== undefined && count > previous && !isOpenAndVisible(ticket.id)) {
-          alertNewMessage(ticket.id, count, ticket.contact.name, () => {
+          alertNewMessage(ticket.id, lastMessageAt(ticket), ticket.contact.name, () => {
             void navigateRef.current(`/chamados/${ticket.id}`)
           })
         }

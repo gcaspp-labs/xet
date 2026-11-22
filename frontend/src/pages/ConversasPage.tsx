@@ -50,6 +50,7 @@ import { isNotFound } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
 import { ticketKey, useAssignTicket, useTicket } from '@/lib/conversation'
 import { formatMessageTime, organizationLabel } from '@/lib/format'
+import { setOpenTicket } from '@/lib/notifications'
 import {
   lastMessagePreview,
   parseTicketId,
@@ -57,7 +58,6 @@ import {
   useMarkTicketRead,
   type TicketSummary,
 } from '@/lib/tickets'
-import { setOpenTicket } from '@/lib/notifications'
 import { useDocumentVisible } from '@/lib/visibility'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import {

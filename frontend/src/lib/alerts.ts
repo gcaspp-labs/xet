@@ -110,11 +110,12 @@ export function useAlertSettings() {
 // não apagam a reserva uma da outra.
 const queueClaimKey = (ticketId: number) => `${claimsKey}.${ticketId}`
 
-// Cada mensagem nova no mesmo chamado tem a própria chave, com a quantidade de não lidas (spec
-// #310): duas mensagens seguidas alertam duas vezes, e um alerta do mesmo chamado não bloqueia o
-// seguinte. O prefixo separa estas reservas das da fila.
-const messageClaimKey = (ticketId: number, unread: number) =>
-  `${claimsKey}.message.${ticketId}.${unread}`
+// Cada mensagem nova no mesmo chamado tem a própria chave, com o horário da última mensagem (spec
+// #310): duas mensagens seguidas alertam duas vezes, e uma mensagem que chega depois de a pessoa
+// ler o chamado alerta mesmo com a mesma quantidade de não lidas, porque a mensagem é outra. O
+// prefixo separa estas reservas das da fila.
+const messageClaimKey = (ticketId: number, sentAt: string) =>
+  `${claimsKey}.message.${ticketId}.${sentAt}`
 
 function reserve(key: string) {
   try {
@@ -264,17 +265,18 @@ export function alertQueueEntry(ticketId: number, contactName: string, onOpen: (
 
 // Alerta a mensagem nova do cliente num chamado de que a pessoa é responsável (spec #310). Quem
 // compara as não lidas é o sino, que já ignora a primeira carga, a reconexão e o chamado aberto
-// com a aba visível. `unread` entra na chave da reserva: cada mensagem alerta uma vez.
+// com a aba visível. `sentAt` (a da última mensagem) entra na chave da reserva: cada mensagem
+// alerta uma vez, inclusive a que chega logo depois de a pessoa ler o chamado.
 export function alertNewMessage(
   ticketId: number,
-  unread: number,
+  sentAt: string,
   contactName: string,
   onOpen: () => void,
 ) {
   raiseAlert(
     'Mensagem nova',
-    messageClaimKey(ticketId, unread),
-    `message-${ticketId}-${unread}`,
+    messageClaimKey(ticketId, sentAt),
+    `message-${ticketId}-${sentAt}`,
     contactName,
     onOpen,
   )

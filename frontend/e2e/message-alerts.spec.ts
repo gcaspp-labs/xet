@@ -301,6 +301,52 @@ test('duas abas dão um só som e uma só notificação, e mensagens seguidas al
   expect(await allNotified()).toEqual([contactName, contactName])
 })
 
+test('mensagem que chega logo depois de ler o chamado ainda alerta', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  const contactName = 'Cliente logo depois da leitura'
+  const phone = unique().phone
+  await receive(request, sector.id, phone, contactName, 'Primeira mensagem')
+  await context.grantPermissions(['notifications'])
+  await context.addInitScript(() => {
+    localStorage.setItem('alerts.browser', 'on')
+    localStorage.setItem('alerts.sound', 'on')
+  })
+  await spyOnAlerts(page)
+  await signInWhenLive(page, agent, userPassword, sector.id)
+  const ticketId = await assume(page, contactName)
+  await backToList(page)
+  await allowSound(page)
+  await setHidden(page, true)
+
+  // A primeira mensagem alerta e deixa a reserva do chamado guardada por 10 s.
+  await receive(request, sector.id, phone, contactName, 'Mensagem que alerta')
+  await expect.poll(() => beeps(page)).toBe(1)
+  await expect.poll(() => notified(page)).toEqual([contactName])
+
+  // A pessoa volta à aba, lê o chamado (as não lidas voltam a zero) e a aba fica em segundo plano.
+  const startedAt = Date.now()
+  await setHidden(page, false)
+  const read = readCall(page, ticketId)
+  await mineItem(page, contactName).click()
+  await read
+  await backToList(page)
+  await expect(mineItem(page, contactName).getByTestId('unread-count')).toHaveCount(0)
+  await setHidden(page, true)
+
+  // Outra mensagem chega dentro da reserva, com a mesma quantidade de não lidas (1). A mensagem é
+  // outra: precisa alertar de novo, e não ser confundida com a que a pessoa já leu.
+  await receive(request, sector.id, phone, contactName, 'Chegou depois da leitura')
+  await expect.poll(() => beeps(page)).toBe(2)
+  await expect.poll(async () => (await notified(page)).length).toBe(2)
+  // Se o caminho todo passasse de 10 s, a reserva teria vencido e o teste não provaria o caso.
+  expect(Date.now() - startedAt).toBeLessThan(10_000)
+})
+
 test('recarregar e reconectar não alertam das não lidas que já existiam', async ({
   page,
   context,
