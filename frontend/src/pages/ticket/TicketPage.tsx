@@ -1,4 +1,5 @@
 import {
+  ArrowDown,
   ArrowRightLeft,
   Ban,
   Check,
@@ -547,9 +548,12 @@ function Composer({
   beginEditRef,
   onStartEditing,
   onStopEditing,
+  onSent,
 }: {
   ticketId: number
   userId: number
+  // Avisa a área da conversa que a mensagem saiu daqui: ela sempre desce ao fim.
+  onSent: () => void
   // A mensagem que o responsável está editando: o campo de edição toma o lugar do compositor, que
   // guarda o rascunho (texto, arquivo, áudio e citação) até a edição terminar.
   editing: Message | null
@@ -746,6 +750,8 @@ function Composer({
     // enquanto o servidor responde não pode trazer de volta o texto (nem a legenda) que já foi
     // enviado. Se o envio falhar, o texto volta a ser rascunho (regra no `useSendMessage`).
     clearDraft(userId, ticketId)
+    // Mensagem enviada por aqui sempre desce ao fim, esteja a conversa onde estiver.
+    onSent()
     send.mutate(
       voice
         ? {
@@ -933,7 +939,10 @@ function Composer({
         <SendContactDialog
           ticketId={ticketId}
           quotedMessageId={quoted?.id}
-          onSent={onCancelQuote}
+          onSent={() => {
+            onCancelQuote()
+            onSent()
+          }}
           onClose={() => setContactOpen(false)}
         />
       )}
@@ -1057,10 +1066,82 @@ export function ConversationCard({
     },
   }
 
-  // Mostra sempre a mensagem mais recente.
+  // A conversa segue a mensagem mais recente enquanto a pessoa está no fim; rolada para cima, ela
+  // fica onde está, e as mensagens que chegam contam no botão de ir ao fim (regra 44 de
+  // conversation.md). "No fim" tem 48 px de tolerância, para arredondamento e zoom não fazerem o
+  // botão piscar. O contador é só da tela: não vai à API nem ao banco.
+  const [following, setFollowing] = useState(true)
+  const [missed, setMissed] = useState(0)
+  // O maior id de mensagem já visto neste chamado: null até a primeira carga, que abre no fim.
+  const seen = useRef<{ ticket: number; newest: number | null }>({
+    ticket: ticket.id,
+    newest: null,
+  })
+  const scrollToEnd = (smooth: boolean) => {
+    const element = list.current
+    if (!element) return
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    element.scrollTo({ top: element.scrollHeight, behavior: smooth && !still ? 'smooth' : 'auto' })
+  }
+  // O botão aparece fora do fim, e o contador zera ao chegar nele por qualquer caminho.
+  const onScroll = () => {
+    const element = list.current
+    const end = !element || element.scrollHeight - element.scrollTop - element.clientHeight <= 48
+    setFollowing(end)
+    if (end) setMissed(0)
+  }
+  // Uma mensagem nova: no fim, desce junto; fora do fim, fica onde está e conta. Edição, exclusão,
+  // reação e mudança de situação de entrega não mudam o id da mensagem e não contam.
   useEffect(() => {
-    list.current?.scrollTo({ top: list.current.scrollHeight })
-  }, [messages.length, logs.length])
+    const element = list.current
+    const newest = messages.reduce((max, message) => Math.max(max, message.id), 0)
+    if (seen.current.ticket !== ticket.id) {
+      // Trocar de chamado abre no fim, sem botão e sem contador herdado.
+      seen.current = { ticket: ticket.id, newest: null }
+      setFollowing(true)
+      setMissed(0)
+    }
+    const before = seen.current.newest
+    if (before === null) {
+      // Primeira carga deste chamado: abre no fim, sem contar o que já estava lá.
+      seen.current.newest = newest || null
+      if (newest > 0) element?.scrollTo({ top: element.scrollHeight })
+      return
+    }
+    seen.current.newest = newest
+    if (newest <= before) return
+    if (following) {
+      element?.scrollTo({ top: element.scrollHeight })
+    } else {
+      setMissed((count) => count + messages.filter((message) => message.id > before).length)
+    }
+  }, [messages, ticket.id, following])
+  // Avisos do sistema não contam, mas também não puxam a conversa para baixo; no fim, continuam
+  // descendo junto com o resto.
+  useEffect(() => {
+    if (following) list.current?.scrollTo({ top: list.current.scrollHeight })
+  }, [logs.length, following])
+  // A altura do conteúdo muda sozinha depois de rolar (a largura e as fontes assentam, um aviso
+  // entra): quem estava no fim continua no fim, e quem estava lendo mais acima fica onde está. Sem
+  // isso, abrir o chamado podia deixar a última mensagem por baixo do fim.
+  const contentHeight = useRef<number | null>(null)
+  useEffect(() => {
+    const element = list.current
+    const content = element?.firstElementChild
+    if (!element || !content) return
+    contentHeight.current ??= element.scrollHeight
+    const observer = new ResizeObserver(() => {
+      const before = contentHeight.current ?? element.scrollHeight
+      contentHeight.current = element.scrollHeight
+      if (element.scrollTop + element.clientHeight >= before - 48) {
+        element.scrollTop = element.scrollHeight
+        setFollowing(true)
+        setMissed(0)
+      }
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [ticket.id, messages.length, logs.length])
 
   let notice: string | null = null
   if (ticket.status === 'closed') {
@@ -1094,51 +1175,86 @@ export function ConversationCard({
           </Alert>
         </div>
       )}
-      <div
-        ref={list}
-        className={cn(
-          'flex-1 overflow-y-auto px-4 py-4',
-          modern && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
-        )}
-      >
-        {messages.length > 0 || logs.length > 0 ? (
-          <ol className="flex flex-col gap-2">
-            {timeline(messages, logs).map((item) =>
-              item.kind === 'message' ? (
-                <MessageBubble
-                  key={`message-${item.message.id}`}
-                  message={item.message}
-                  quoted={quotedOf(item.message, byId)}
-                  modern={modern}
-                  canRetry={canReply}
-                  retrying={retry.isPending}
-                  onRetry={() => retry.mutate(item.message.id)}
-                  onReact={
-                    canReply
-                      ? (emoji) => react.mutate({ messageId: item.message.id, emoji, actor: user })
-                      : undefined
-                  }
-                  onReply={canReply ? () => setQuoting(item.message.id) : undefined}
-                  onEdit={
-                    canReply
-                      ? () => (beginEdit.current ?? setEditingId)(item.message.id)
-                      : undefined
-                  }
-                  onDelete={canReply ? () => setDeletingId(item.message.id) : undefined}
-                  hideDeleted
-                />
-              ) : (
-                <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
-              ),
-            )}
-          </ol>
-        ) : (
-          <Empty>
-            <EmptyMedia>
-              <MessagesSquare strokeWidth={1.7} aria-hidden />
-            </EmptyMedia>
-            <EmptyDescription>Nenhuma mensagem.</EmptyDescription>
-          </Empty>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={list}
+          onScroll={onScroll}
+          className={cn(
+            'flex-1 overflow-y-auto px-4 py-4',
+            modern && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
+          )}
+        >
+          {messages.length > 0 || logs.length > 0 ? (
+            <ol className="flex flex-col gap-2">
+              {timeline(messages, logs).map((item) =>
+                item.kind === 'message' ? (
+                  <MessageBubble
+                    key={`message-${item.message.id}`}
+                    message={item.message}
+                    quoted={quotedOf(item.message, byId)}
+                    modern={modern}
+                    canRetry={canReply}
+                    retrying={retry.isPending}
+                    onRetry={() => retry.mutate(item.message.id)}
+                    onReact={
+                      canReply
+                        ? (emoji) =>
+                            react.mutate({ messageId: item.message.id, emoji, actor: user })
+                        : undefined
+                    }
+                    onReply={canReply ? () => setQuoting(item.message.id) : undefined}
+                    onEdit={
+                      canReply
+                        ? () => (beginEdit.current ?? setEditingId)(item.message.id)
+                        : undefined
+                    }
+                    onDelete={canReply ? () => setDeletingId(item.message.id) : undefined}
+                    hideDeleted
+                  />
+                ) : (
+                  <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
+                ),
+              )}
+            </ol>
+          ) : (
+            <Empty>
+              <EmptyMedia>
+                <MessagesSquare strokeWidth={1.7} aria-hidden />
+              </EmptyMedia>
+              <EmptyDescription>Nenhuma mensagem.</EmptyDescription>
+            </Empty>
+          )}
+        </div>
+        {!following && (
+          // Por cima do último balão, sem cobrir o campo de mensagem (que fica fora desta área).
+          <div className="pointer-events-none absolute right-4 bottom-4 z-10">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={
+                missed > 0
+                  ? `Ir para a última mensagem, ${missed} ${missed === 1 ? 'nova' : 'novas'}`
+                  : 'Ir para a última mensagem'
+              }
+              title="Ir para a última mensagem"
+              onClick={() => {
+                scrollToEnd(true)
+                setFollowing(true)
+                setMissed(0)
+              }}
+              className="pointer-events-auto size-9 rounded-full border-line bg-card shadow-(--shadow) hover:border-ink-faint"
+            >
+              <ArrowDown strokeWidth={1.7} className="size-[17px]" aria-hidden />
+              {missed > 0 && (
+                <span
+                  aria-hidden
+                  className="mono-num absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-card bg-primary px-1 text-[calc(10px*var(--text-scale))] leading-none font-medium text-primary-foreground"
+                >
+                  {missed > 99 ? '99+' : missed}
+                </span>
+              )}
+            </Button>
+          </div>
         )}
       </div>
       {retry.error && (
@@ -1168,6 +1284,11 @@ export function ConversationCard({
           beginEditRef={beginEdit}
           onStartEditing={setEditingId}
           onStopEditing={() => setEditingId(null)}
+          onSent={() => {
+            setFollowing(true)
+            setMissed(0)
+            scrollToEnd(false)
+          }}
         />
       ) : (
         notice && (
