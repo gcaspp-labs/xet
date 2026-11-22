@@ -2,7 +2,7 @@
 
 Domínios, entidades, ligações e regras de integridade. As regras de negócio estão em [features/](features/), as globais em [spec.md](../spec.md) e as decisões técnicas em [architecture.md](architecture.md).
 
-Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as tabelas usam `id bigint generated always as identity` como chave primária e registram `created_at timestamptz not null default now()`; tabelas editáveis também têm `updated_at`. Horários são sempre `timestamptz`.
+Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as tabelas usam `id bigint generated always as identity` como chave primária e registram `created_at timestamptz not null default now()`; a exceção é `messages.created_at`, que usa `clock_timestamp()` para gravar o instante da mensagem e não o início da transação, senão uma mensagem gravada por uma transação já aberta ficaria com horário anterior à leitura e nunca contaria como não lida. Tabelas editáveis também têm `updated_at`. Horários são sempre `timestamptz`.
 
 ## Domínios
 
