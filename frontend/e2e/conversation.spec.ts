@@ -396,3 +396,75 @@ test('sem acesso ao armazenamento do navegador, a tela funciona e não há rascu
   await page.reload()
   await expect(field).toHaveValue('')
 })
+
+// Enviar e trocar de chamado na sequência: a resposta do servidor chega com o outro chamado aberto, e
+// o campo dele não pode ser limpo nem perder o rascunho guardado.
+test('rascunho do outro chamado continua ao enviar e trocar de chamado em seguida', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Elis Rascunho ${id}`
+  const second = `Fabio Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+
+  // Cada chamado ganha o seu rascunho.
+  await assume(page, first)
+  await field.fill('Rascunho da Elis')
+  await page.goto('/chamados')
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  await queue.getByRole('button', { name: `Assumir chamado de ${second}` }).click()
+  await expect(page.getByRole('heading', { name: second })).toBeVisible()
+  await field.fill('Rascunho do Fabio')
+
+  // O envio demora: dá tempo de trocar de chamado antes de o servidor confirmar.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    await route.continue()
+  })
+  await open(first)
+  await expect(field).toHaveValue('Rascunho da Elis')
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  await open(second)
+  await sent
+
+  // O campo do chamado novo abre com o rascunho dele e continua assim depois da confirmação: só o
+  // rascunho do chamado enviado sai do armazenamento, o do chamado aberto fica.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+      ),
+    )
+    .toHaveLength(1)
+  await expect(field).toHaveValue('Rascunho do Fabio')
+  await page.reload()
+  await expect(field).toHaveValue('Rascunho do Fabio')
+  // O chamado enviado fica sem rascunho.
+  await open(first)
+  await expect(field).toHaveValue('')
+})

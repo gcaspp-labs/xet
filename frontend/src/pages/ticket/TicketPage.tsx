@@ -28,6 +28,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -578,6 +579,11 @@ function Composer({
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const messageInput = useRef<HTMLTextAreaElement>(null)
+  // O chamado aberto agora: a confirmação do envio pode chegar depois de a pessoa trocar de chamado.
+  const shownTicketId = useRef(ticketId)
+  useLayoutEffect(() => {
+    shownTicketId.current = ticketId
+  }, [ticketId])
 
   // Trocar de chamado sem sair da tela troca o texto pelo rascunho do chamado novo, e não mistura
   // o que foi escrito em cada um.
@@ -711,6 +717,12 @@ function Composer({
       {
         onSuccess: () => {
           requestId.current = null
+          // A pessoa trocou de chamado antes de o servidor confirmar: o campo agora é do chamado
+          // novo, com o rascunho dele, e não pode ser limpo. Só o rascunho do enviado é apagado.
+          if (shownTicketId.current !== ticketId) {
+            clearDraft(userId, ticketId)
+            return
+          }
           onCancelQuote()
           if (voice) {
             changeVoice(null)

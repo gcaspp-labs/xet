@@ -27,12 +27,13 @@ export function saveDraft(userId: number, ticketId: number, text: string) {
   }
 }
 
-// Sair da conta apaga os rascunhos do usuário, para um computador compartilhado não guardar
-// o que a pessoa estava escrevendo.
+// Apaga o rascunho de um chamado, sem passar pelo campo de mensagem.
 export function clearDraft(userId: number, ticketId: number) {
   saveDraft(userId, ticketId, '')
 }
 
+// Sair da conta apaga os rascunhos do usuário, para um computador compartilhado não guardar
+// o que a pessoa estava escrevendo.
 export function clearUserDrafts(userId: number) {
   try {
     const start = `${prefix}.${userId}.`
