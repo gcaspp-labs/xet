@@ -59,8 +59,12 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   const url = page.url()
   await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Mais ações' }).click()
+  // O menu abre depois do clique: esperar por ele evita que o Esc caia na regra da tela
+  // (com nada por cima, volta para Chamados) antes de o menu existir.
+  await expect(page.getByRole('menu')).toBeVisible()
   await expect(page.getByRole('menuitem', { name: 'Devolver à fila' })).toHaveCount(0)
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   const ticketPath = `/api/tickets/${url.split('/').pop()}`
