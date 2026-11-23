@@ -200,45 +200,38 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 
 	applied := false
 	var ticketID int64
-	for attempt := 0; ; attempt++ {
+	err = s.withMovedTicketRetry(ctx, func(q *db.Queries) error {
 		applied, ticketID = false, 0
-		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			q := s.q.WithTx(tx)
-			// The same order of locks as a change received from the provider, so
-			// its echo waits for this one, or this one for it.
-			if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: target.SectorID, ExternalMessageID: *target.ExternalMessageID}); err != nil {
-				return fmt.Errorf("lock message: %w", err)
-			}
-			// The ticket the message is in now: a merge may have moved it while
-			// the provider answered.
-			t, err := lockTicketOfMessage(ctx, q, target.ID)
-			if err != nil {
-				return err
-			}
-			ticketID = t.ID
-			finished, err := q.FinishMessageAction(ctx, db.FinishMessageActionParams{
-				ID: action.ID, Status: status, FailureReason: reason, ExternalEventID: optional(eventID),
-			})
-			if errors.Is(err, pgx.ErrNoRows) {
-				// The echo of the provider already settled it.
-				return nil
-			}
-			if err != nil {
-				return fmt.Errorf("finish message action: %w", err)
-			}
-			if status != db.MessageActionStatusAccepted {
-				return nil
-			}
-			// What the provider just took is applied even if the ticket was closed
-			// or transferred meanwhile: it is what the contact has now.
-			applied = true
-			return applyAction(ctx, q, finished, finished.ExternalEventID, time.Now(), true)
-		})
-		if errors.Is(err, errMessageMoved) && attempt < messageTicketAttempts-1 {
-			continue
+		// The same order of locks as a change received from the provider, so
+		// its echo waits for this one, or this one for it.
+		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: target.SectorID, ExternalMessageID: *target.ExternalMessageID}); err != nil {
+			return fmt.Errorf("lock message: %w", err)
 		}
-		break
-	}
+		// The ticket the message is in now: a merge may have moved it while
+		// the provider answered.
+		t, err := lockTicketOfMessage(ctx, q, target.ID)
+		if err != nil {
+			return err
+		}
+		ticketID = t.ID
+		finished, err := q.FinishMessageAction(ctx, db.FinishMessageActionParams{
+			ID: action.ID, Status: status, FailureReason: reason, ExternalEventID: optional(eventID),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			// The echo of the provider already settled it.
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("finish message action: %w", err)
+		}
+		if status != db.MessageActionStatusAccepted {
+			return nil
+		}
+		// What the provider just took is applied even if the ticket was closed
+		// or transferred meanwhile: it is what the contact has now.
+		applied = true
+		return applyAction(ctx, q, finished, finished.ExternalEventID, time.Now(), true)
+	})
 	if err != nil {
 		// The provider answered but the result could not be recorded: the
 		// action stays pending, to be marked uncertain on restart, and its

@@ -85,64 +85,57 @@ func (s *Service) recordChange(ctx context.Context, c externalChange) error {
 		changed  bool
 		err      error
 	)
-	for attempt := 0; ; attempt++ {
+	err = s.withMovedTicketRetry(ctx, func(q *db.Queries) error {
 		ticketID, changed = 0, false
-		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			q := s.q.WithTx(tx)
-			if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: c.sectorID, ExternalMessageID: c.target}); err != nil {
-				return fmt.Errorf("lock message: %w", err)
+		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: c.sectorID, ExternalMessageID: c.target}); err != nil {
+			return fmt.Errorf("lock message: %w", err)
+		}
+		seen := false
+		if c.eventID != "" {
+			var err error
+			seen, err = q.MessageChangeEventExists(ctx, db.MessageChangeEventExistsParams{SectorID: c.sectorID, ExternalEventID: &c.eventID})
+			if err != nil {
+				return fmt.Errorf("check message change: %w", err)
 			}
-			seen := false
-			if c.eventID != "" {
-				var err error
-				seen, err = q.MessageChangeEventExists(ctx, db.MessageChangeEventExistsParams{SectorID: c.sectorID, ExternalEventID: &c.eventID})
-				if err != nil {
-					return fmt.Errorf("check message change: %w", err)
-				}
-			}
+		}
 
-			msg, err := q.GetMessageForChange(ctx, db.GetMessageForChangeParams{SectorID: c.sectorID, ExternalMessageID: &c.target})
-			if errors.Is(err, pgx.ErrNoRows) {
-				if seen {
-					return nil
-				}
-				return savePendingChange(ctx, q, c)
-			}
-			if err != nil {
-				return fmt.Errorf("get changed message: %w", err)
-			}
-			// Every change of a ticket takes its lock, as the other actions do:
-			// the ticket the message is in now, as a merge may have moved it while
-			// this change waited for its provider ID.
-			ticket, err := lockTicketOfMessage(ctx, q, msg.ID)
-			if err != nil {
-				return err
-			}
-			ticketID = ticket.ID
-			if changed, err = linkPendingChanges(ctx, q, c.sectorID, &msg, c.target); err != nil {
-				return err
-			}
-			if seen || !changeAllowed(msg.Origin, c.origin(), msg.ContactExternalID, msg.ContactPhone, c.contactID, c.phone) {
+		msg, err := q.GetMessageForChange(ctx, db.GetMessageForChangeParams{SectorID: c.sectorID, ExternalMessageID: &c.target})
+		if errors.Is(err, pgx.ErrNoRows) {
+			if seen {
 				return nil
 			}
-			// The echo of an edit or deletion asked in the panel settles that
-			// action instead of becoming a change made from the phone.
-			if c.fromSector && msg.Origin == db.MessageOriginAgent {
-				echoed, err := acceptEchoedAction(ctx, q, msg.ID, c)
-				if err != nil || echoed {
-					changed = changed || echoed
-					return err
-				}
-			}
-			recorded, err := recordKnownChange(ctx, q, &msg, c)
-			changed = changed || recorded
-			return err
-		})
-		if errors.Is(err, errMessageMoved) && attempt < messageTicketAttempts-1 {
-			continue
+			return savePendingChange(ctx, q, c)
 		}
-		break
-	}
+		if err != nil {
+			return fmt.Errorf("get changed message: %w", err)
+		}
+		// Every change of a ticket takes its lock, as the other actions do:
+		// the ticket the message is in now, as a merge may have moved it while
+		// this change waited for its provider ID.
+		ticket, err := lockTicketOfMessage(ctx, q, msg.ID)
+		if err != nil {
+			return err
+		}
+		ticketID = ticket.ID
+		if changed, err = linkPendingChanges(ctx, q, c.sectorID, &msg, c.target); err != nil {
+			return err
+		}
+		if seen || !changeAllowed(msg.Origin, c.origin(), msg.ContactExternalID, msg.ContactPhone, c.contactID, c.phone) {
+			return nil
+		}
+		// The echo of an edit or deletion asked in the panel settles that
+		// action instead of becoming a change made from the phone.
+		if c.fromSector && msg.Origin == db.MessageOriginAgent {
+			echoed, err := acceptEchoedAction(ctx, q, msg.ID, c)
+			if err != nil || echoed {
+				changed = changed || echoed
+				return err
+			}
+		}
+		recorded, err := recordKnownChange(ctx, q, &msg, c)
+		changed = changed || recorded
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -320,42 +313,36 @@ func deref(s *string) string {
 // same key. It returns the message as recorded.
 func (s *Service) markSent(ctx context.Context, msg db.Message, externalID string) (db.Message, error) {
 	var updated db.Message
-	for attempt := 0; ; attempt++ {
-		err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			q := s.q.WithTx(tx)
-			if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: msg.SectorID, ExternalMessageID: externalID}); err != nil {
-				return fmt.Errorf("lock message: %w", err)
-			}
-			// Almost always nothing waits: the ticket is not locked for nothing.
-			// It is the ticket the message is in now, as a merge may have moved
-			// it while the answer of the provider was on its way.
-			pending, err := q.ListPendingMessageChanges(ctx, db.ListPendingMessageChangesParams{SectorID: msg.SectorID, TargetExternalMessageID: &externalID})
-			if err != nil {
-				return fmt.Errorf("list pending message changes: %w", err)
-			}
-			if len(pending) > 0 {
-				if _, err := lockTicketOfMessage(ctx, q, msg.ID); err != nil {
-					return err
-				}
-			}
-			updated, err = q.MarkMessageSent(ctx, db.MarkMessageSentParams{ID: msg.ID, ExternalMessageID: &externalID})
-			if err != nil || len(pending) == 0 {
-				return err
-			}
-			target, err := q.GetMessageForChange(ctx, db.GetMessageForChangeParams{SectorID: msg.SectorID, ExternalMessageID: &externalID})
-			if err != nil {
-				return fmt.Errorf("get sent message: %w", err)
-			}
-			linked, err := linkPendingChanges(ctx, q, msg.SectorID, &target, externalID)
-			if err != nil || !linked {
-				return err
-			}
-			updated, err = q.GetMessage(ctx, msg.ID)
-			return err
-		})
-		if errors.Is(err, errMessageMoved) && attempt < messageTicketAttempts-1 {
-			continue
+	err := s.withMovedTicketRetry(ctx, func(q *db.Queries) error {
+		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: msg.SectorID, ExternalMessageID: externalID}); err != nil {
+			return fmt.Errorf("lock message: %w", err)
 		}
-		return updated, err
-	}
+		// Almost always nothing waits: the ticket is not locked for nothing.
+		// It is the ticket the message is in now, as a merge may have moved
+		// it while the answer of the provider was on its way.
+		pending, err := q.ListPendingMessageChanges(ctx, db.ListPendingMessageChangesParams{SectorID: msg.SectorID, TargetExternalMessageID: &externalID})
+		if err != nil {
+			return fmt.Errorf("list pending message changes: %w", err)
+		}
+		if len(pending) > 0 {
+			if _, err := lockTicketOfMessage(ctx, q, msg.ID); err != nil {
+				return err
+			}
+		}
+		updated, err = q.MarkMessageSent(ctx, db.MarkMessageSentParams{ID: msg.ID, ExternalMessageID: &externalID})
+		if err != nil || len(pending) == 0 {
+			return err
+		}
+		target, err := q.GetMessageForChange(ctx, db.GetMessageForChangeParams{SectorID: msg.SectorID, ExternalMessageID: &externalID})
+		if err != nil {
+			return fmt.Errorf("get sent message: %w", err)
+		}
+		linked, err := linkPendingChanges(ctx, q, msg.SectorID, &target, externalID)
+		if err != nil || !linked {
+			return err
+		}
+		updated, err = q.GetMessage(ctx, msg.ID)
+		return err
+	})
+	return updated, err
 }

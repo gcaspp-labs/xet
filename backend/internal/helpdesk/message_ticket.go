@@ -20,38 +20,36 @@ const messageTicketAttempts = 3
 // action starts over, with the ticket it is in now.
 var errMessageMoved = errors.New("message moved to another ticket")
 
-// withMessageTicket runs fn with the ticket the message is in locked, starting
-// over when a merge moves the message while the lock waits. Every action that
-// reads the ticket of a message and then locks it goes through here: the merge
-// runs with both tickets locked, so the action must not act on the ticket it
-// read before the merge.
-func (s *Service) withMessageTicket(ctx context.Context, messageID int64, fn func(q *db.Queries, ticket db.Ticket) error) error {
-	return s.withLockedMessageTicket(ctx, messageID, nil, fn)
+// withMovedTicketRetry runs fn in a transaction, starting it over when a merge
+// moves the message to another ticket while fn waits for the lock of its
+// ticket. Every action on a message that may be in a different ticket after
+// the merge goes through here: fn locks the message first, in the order of the
+// changes received from the provider, and the ticket after, and must not act
+// on the ticket it read before the merge.
+func (s *Service) withMovedTicketRetry(ctx context.Context, fn func(q *db.Queries) error) error {
+	var err error
+	for attempt := 0; attempt < messageTicketAttempts; attempt++ {
+		err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+			return fn(s.q.WithTx(tx))
+		})
+		if !errors.Is(err, errMessageMoved) {
+			return err
+		}
+	}
+	return err
 }
 
-// withLockedMessageTicket is withMessageTicket with a step before the lock of
-// the ticket, for the actions that take an advisory lock of the message first,
-// in the order of the changes received from the provider.
-func (s *Service) withLockedMessageTicket(ctx context.Context, messageID int64, before func(q *db.Queries) error, fn func(q *db.Queries, ticket db.Ticket) error) error {
-	for attempt := 0; ; attempt++ {
-		err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			q := s.q.WithTx(tx)
-			if before != nil {
-				if err := before(q); err != nil {
-					return err
-				}
-			}
-			ticket, err := lockTicketOfMessage(ctx, q, messageID)
-			if err != nil {
-				return err
-			}
-			return fn(q, ticket)
-		})
-		if errors.Is(err, errMessageMoved) && attempt < messageTicketAttempts-1 {
-			continue
+// withMessageTicket runs fn with the ticket the message is in locked. The
+// merge runs with both tickets locked, so the action must not act on the
+// ticket it read before the merge.
+func (s *Service) withMessageTicket(ctx context.Context, messageID int64, fn func(q *db.Queries, ticket db.Ticket) error) error {
+	return s.withMovedTicketRetry(ctx, func(q *db.Queries) error {
+		ticket, err := lockTicketOfMessage(ctx, q, messageID)
+		if err != nil {
+			return err
 		}
-		return err
-	}
+		return fn(q, ticket)
+	})
 }
 
 // lockTicketOfMessage locks the ticket the message is in and confirms the
