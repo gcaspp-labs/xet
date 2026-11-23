@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { noteTicketRead } from '@/lib/alerts'
 import { api } from '@/lib/api'
 import type { Role } from '@/lib/auth'
 
@@ -68,7 +69,12 @@ export function useMarkTicketRead() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (ticketId: number) => api<void>(`/tickets/${ticketId}/read`, { method: 'POST' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sectors'] }),
+    onSuccess: (_data, ticketId) => {
+      // A leitura muda a chave da reserva das mensagens: a mensagem que chega em seguida alerta
+      // mesmo dentro dos 10 s do alerta anterior (spec #310).
+      noteTicketRead(ticketId)
+      return queryClient.invalidateQueries({ queryKey: ['sectors'] })
+    },
   })
 }
 

@@ -19,19 +19,23 @@ const appTitle = 'Central de Atendimento'
 // chamados na fila. O contador soma os dois; fica em alerta enquanto houver número caído.
 export function NotificationBell({ user }: { user: User }) {
   const [open, setOpen] = useState(false)
-  const { queue, down, count } = useNotifications(user)
+  const { queue, down, count, unread } = useNotifications(user)
   const assign = useAssignTicket()
   const { reset } = assign
   const label =
     count > 0 ? `Notificações, ${count} ${count === 1 ? 'pendente' : 'pendentes'}` : 'Notificações'
+  // O título da aba soma as não lidas dos meus chamados ao contador do sino (spec #310). O
+  // administrador não recebe notificação de chamados: o título dele fica só com o número
+  // desconectado, como o contador do sino.
+  const titleCount = user.role === 'admin' ? count : count + unread
 
   // O título da aba mostra o contador para quem está em outra aba.
   useEffect(() => {
-    document.title = count > 0 ? `(${count}) ${appTitle}` : appTitle
+    document.title = titleCount > 0 ? `(${titleCount}) ${appTitle}` : appTitle
     return () => {
       document.title = appTitle
     }
-  }, [count])
+  }, [titleCount])
 
   return (
     <Popover

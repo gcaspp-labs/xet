@@ -5,7 +5,7 @@ import { connectionKey } from '@/lib/connection'
 import { historyKey, ticketKey } from '@/lib/conversation'
 import { dashboardAssigneesKey, dashboardKey } from '@/lib/dashboard'
 import { contactsKey } from '@/lib/directory'
-import { resetQueueBaseline } from '@/lib/notifications'
+import { resetAlertBaselines } from '@/lib/notifications'
 import { ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Avisos do backend (docs/architecture.md, Tempo real): dizem o que mudou, e os dados
@@ -62,8 +62,8 @@ export function useRealtime() {
         delay = minDelay
         setOnline(true)
         if (reconnecting) {
-          // O que entrou na fila durante a queda não é novidade para o sino: não avisa.
-          resetQueueBaseline()
+          // O que entrou na fila ou nas não lidas durante a queda não é novidade para o sino: não avisa.
+          resetAlertBaselines()
           void queryClient.invalidateQueries()
         }
       }
@@ -81,8 +81,8 @@ export function useRealtime() {
         }
         reconnecting = true
         setOnline(false)
-        // A fila pode mudar sem o sino ver: a próxima carga vira a referência, não novidade.
-        resetQueueBaseline()
+        // A lista pode mudar sem o sino ver: a próxima carga vira a referência, não novidade.
+        resetAlertBaselines()
         timer = setTimeout(connect, delay)
         delay = Math.min(delay * 2, maxDelay)
       }
@@ -90,12 +90,12 @@ export function useRealtime() {
 
     // A rede pode cair antes de o WebSocket perceber, e o TanStack Query recarrega a fila
     // assim que ela volta, antes de o WebSocket reabrir. A referência vale desde a queda.
-    window.addEventListener('offline', resetQueueBaseline)
+    window.addEventListener('offline', resetAlertBaselines)
 
     connect()
     return () => {
       stopped = true
-      window.removeEventListener('offline', resetQueueBaseline)
+      window.removeEventListener('offline', resetAlertBaselines)
       clearTimeout(timer)
       socket?.close()
     }

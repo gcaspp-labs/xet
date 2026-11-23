@@ -50,6 +50,7 @@ import { isNotFound } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
 import { ticketKey, useAssignTicket, useTicket } from '@/lib/conversation'
 import { formatMessageTime, organizationLabel } from '@/lib/format'
+import { setOpenTicket } from '@/lib/notifications'
 import {
   lastMessagePreview,
   parseTicketId,
@@ -249,6 +250,12 @@ export default function ConversasPage() {
   const [query, setQuery] = useConversasSearch(ticketId ?? 0)
   const [action, setAction] = useState('')
   const [closingKey, setClosingKey] = useState(0)
+  // O sino sabe qual chamado está aberto para não alertar mensagem nova com a aba visível
+  // (spec #310): a conversa aberta já é o aviso.
+  useEffect(() => {
+    setOpenTicket(ticketId ?? null)
+    return () => setOpenTicket(null)
+  }, [ticketId])
   const tickets: SectorTicket[] = visible.flatMap((sector, i) =>
     (results[i]?.data ?? []).map((item) => ({ ...item, sectorId: sector.id })),
   )
