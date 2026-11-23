@@ -4,6 +4,7 @@ import { type Role, useCurrentUser } from '@/lib/auth'
 import DashboardPage from '@/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import Prototype395 from '@/pages/Prototype395'
 import AtendimentosPage from '@/pages/AtendimentosPage'
 import ConversasPage from '@/pages/ConversasPage'
 import ModulesPage from '@/pages/admin/ModulesPage'
@@ -42,6 +43,14 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #395: o X de cancelar na fila, na aba Fila de /chamados e na lista
+  // Fila do Dashboard, e a janela com o motivo opcional.
+  if (
+    import.meta.env.DEV &&
+    (window.location.pathname === '/chamados' || window.location.pathname === '/dashboard') &&
+    new URLSearchParams(window.location.search).get('prototype') === '395'
+  )
+    return <Prototype395 />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
