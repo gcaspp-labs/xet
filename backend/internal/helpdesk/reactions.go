@@ -53,12 +53,9 @@ func (s *Service) HandleReaction(ctx context.Context, ev messaging.ReactionRecei
 	emoji := strings.TrimSpace(ev.Emoji)
 
 	changed := false
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		ticket, err := q.GetTicketForUpdate(ctx, target.TicketID)
-		if err != nil {
-			return fmt.Errorf("get ticket: %w", err)
-		}
+	var ticketID int64
+	err = s.withMessageTicket(ctx, target.ID, func(q *db.Queries, ticket db.Ticket) error {
+		ticketID = ticket.ID
 		if ticket.Status == db.TicketStatusClosed {
 			return nil
 		}
@@ -89,7 +86,7 @@ func (s *Service) HandleReaction(ctx context.Context, ev messaging.ReactionRecei
 		return err
 	}
 	if changed {
-		s.hub.Publish(realtime.TicketChanged(ev.SectorID, target.TicketID))
+		s.hub.Publish(realtime.TicketChanged(ev.SectorID, ticketID))
 	}
 	return nil
 }

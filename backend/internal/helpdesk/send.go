@@ -308,15 +308,11 @@ func (s *Service) Retry(ctx context.Context, provider messaging.Provider, actor 
 	}
 
 	var msg db.Message
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, current.TicketID))
-		if err != nil {
-			return fmt.Errorf("lock ticket: %w", err)
-		}
+	err = s.withMessageTicket(ctx, messageID, func(q *db.Queries, t db.Ticket) error {
 		if err := conducts(t, actor); err != nil {
 			return err
 		}
+		var err error
 		msg, err = q.RetryMessage(ctx, messageID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFailed
@@ -359,8 +355,18 @@ func (s *Service) deliver(ctx context.Context, provider messaging.Provider, msg 
 			updated = msg
 		}
 	}
-	s.hub.Publish(realtime.TicketChanged(msg.SectorID, msg.TicketID))
+	s.hub.Publish(realtime.TicketChanged(msg.SectorID, ticketIDOf(msg, updated)))
 	return updated
+}
+
+// ticketIDOf is the ticket the message is in after recording: a merge may have
+// moved it while the answer of the provider was on its way, and the panels of
+// the current ticket are the ones to notify.
+func ticketIDOf(before, after db.Message) int64 {
+	if after.TicketID != 0 {
+		return after.TicketID
+	}
+	return before.TicketID
 }
 
 func (s *Service) send(ctx context.Context, provider messaging.Provider, msg db.Message) (string, error) {
