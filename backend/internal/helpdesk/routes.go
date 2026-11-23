@@ -80,6 +80,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/tickets/{ticketID}/pending", h.markPending)
 	r.Post("/tickets/{ticketID}/resume", h.resumeTicket)
 	r.Post("/tickets/{ticketID}/resume-pending", h.resumePending)
+	r.Post("/tickets/{ticketID}/merge-into-pending", h.mergeIntoPending)
 	r.Get("/tickets/{ticketID}/assignments", h.listAssignments)
 	r.Get("/tickets/{ticketID}/closing-form", h.closingForm)
 	r.Post("/tickets/{ticketID}/close", h.closeTicket)

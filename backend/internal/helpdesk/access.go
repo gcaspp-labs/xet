@@ -66,3 +66,16 @@ func conducts(t db.Ticket, actor auth.User) error {
 	}
 	return nil
 }
+
+// mayCorrect tells whether the user may correct the data of a closed ticket:
+// whoever closed it, supervisors of the sector and admins. The correction and
+// the merge of a closed ticket into a pending one ask the same (closing.md,
+// rule 14).
+func mayCorrect(t db.Ticket, actor auth.User) bool {
+	return mayCorrectCloser(t.ClosedByID, actor)
+}
+
+// mayCorrectCloser is mayCorrect for who closed the ticket.
+func mayCorrectCloser(closedByID *int64, actor auth.User) bool {
+	return (closedByID != nil && *closedByID == actor.ID) || actor.HasRole(db.UserRoleSupervisor, db.UserRoleAdmin)
+}
