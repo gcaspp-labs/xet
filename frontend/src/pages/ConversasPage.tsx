@@ -12,7 +12,7 @@ import {
   UserCheck,
   UserRoundCog,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { CancelSheet } from '@/components/CancelSheet'
@@ -50,7 +50,15 @@ import { isNotFound } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
 import { ticketKey, useAssignTicket, useTicket } from '@/lib/conversation'
 import { formatMessageTime, organizationLabel } from '@/lib/format'
-import { lastMessagePreview, parseTicketId, ticketsQuery, type TicketSummary } from '@/lib/tickets'
+import { setOpenTicket } from '@/lib/notifications'
+import {
+  lastMessagePreview,
+  parseTicketId,
+  ticketsQuery,
+  useMarkTicketRead,
+  type TicketSummary,
+} from '@/lib/tickets'
+import { useDocumentVisible } from '@/lib/visibility'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import {
   canCancel,
@@ -138,22 +146,75 @@ function TicketActions({
   )
 }
 
+// O que, aberto por cima da tela, usa o Esc antes dela: janela, seletor, menu, barra de reações,
+// seletor de emojis e visualizador de imagem. As janelas com bloqueio não fecham nem com Esc
+// (regra 4 de interface.md), e o chamado continua aberto em todos esses casos.
+const openLayers = [
+  '[data-slot="dialog-content"]',
+  '[data-slot="sheet-content"]',
+  '[data-slot="popover-content"]',
+  '[data-slot="dropdown-menu-content"]',
+  '[data-slot="select-content"]',
+  '[data-slot="combobox-content"]',
+  '[data-slot="autocomplete-content"]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+].join(', ')
+
 type SectorTicket = TicketSummary & { sectorId: number }
 // Abaixo de xl só um bloco aparece por vez; a partir de xl, os três ficam lado a lado.
 type Panel = 'mine' | 'conversation' | 'queue'
 
-function TicketLine({ ticket }: { ticket: TicketSummary }) {
+// Contador de não lidas do item, junto do horário: a pílula do sino, "99+" acima de 99. O número
+// visível fica fora da leitura do leitor de tela, que recebe o texto com a quantidade real.
+function UnreadCount({ count }: { count: number }) {
+  return (
+    <span className="mono-num flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[calc(10.5px*var(--text-scale))] leading-none font-medium text-primary-foreground">
+      <span data-testid="unread-count" aria-hidden>
+        {count > 99 ? '99+' : count}
+      </span>
+      <span className="sr-only">
+        {count} {count === 1 ? 'mensagem não lida' : 'mensagens não lidas'}
+      </span>
+    </span>
+  )
+}
+
+// `hideUnread` esconde o contador do chamado aberto com a aba visível, que a tela já marcou como
+// lido; o negrito acompanha o contador.
+function TicketLine({
+  ticket,
+  hideUnread = false,
+}: {
+  ticket: TicketSummary
+  hideUnread?: boolean
+}) {
+  const unread = hideUnread ? 0 : ticket.unreadCount
+  const hasUnread = unread > 0
   return (
     <>
       <span className="flex items-center gap-2">
-        <span className="body-strong min-w-0 flex-1 truncate">{ticket.contact.name}</span>
+        <span
+          className={cn(
+            'body-strong min-w-0 flex-1 truncate',
+            hasUnread && 'font-semibold text-ink',
+          )}
+        >
+          {ticket.contact.name}
+        </span>
+        {hasUnread && <UnreadCount count={unread} />}
         {ticket.lastMessage && (
           <span className="mono-num caption text-ink-soft">
             {formatMessageTime(ticket.lastMessage.sentAt)}
           </span>
         )}
       </span>
-      <span className="caption truncate text-ink-soft">{lastMessagePreview(ticket)}</span>
+      <span
+        className={cn('caption truncate', hasUnread ? 'font-semibold text-ink' : 'text-ink-soft')}
+      >
+        {lastMessagePreview(ticket)}
+      </span>
       <span className="mono-num caption text-ink-faint">{ticket.protocol}</span>
     </>
   )
@@ -189,9 +250,27 @@ export default function ConversasPage() {
   const [query, setQuery] = useConversasSearch(ticketId ?? 0)
   const [action, setAction] = useState('')
   const [closingKey, setClosingKey] = useState(0)
+  // O sino sabe qual chamado está aberto para não alertar mensagem nova com a aba visível
+  // (spec #310): a conversa aberta já é o aviso.
+  useEffect(() => {
+    setOpenTicket(ticketId ?? null)
+    return () => setOpenTicket(null)
+  }, [ticketId])
   const tickets: SectorTicket[] = visible.flatMap((sector, i) =>
     (results[i]?.data ?? []).map((item) => ({ ...item, sectorId: sector.id })),
   )
+  // O chamado aberto com a aba visível é marcado como lido: ao abrir, ao voltar à aba e ao chegar
+  // mensagem nova. O servidor ignora quem não é o responsável (spec #310).
+  const tabVisible = useDocumentVisible()
+  const { mutate: markRead } = useMarkTicketRead()
+  const openUnread = tickets.find((item) => item.id === ticketId)?.unreadCount ?? 0
+  const readOpened = useRef<number | null>(null)
+  useEffect(() => {
+    if (ticketId === undefined || !tabVisible || ticket?.id !== ticketId) return
+    if (readOpened.current === ticketId && openUnread === 0) return
+    readOpened.current = ticketId
+    markRead(ticketId)
+  }, [ticketId, tabVisible, ticket?.id, openUnread, markRead])
   const mine = tickets
     .filter((item) => item.status === 'in_progress' && item.assignee?.id === user?.id)
     .sort(
@@ -223,6 +302,20 @@ export default function ConversasPage() {
       void navigate(`/atendimentos/${ticketId}`, { replace: true })
     }
   }, [closed, action, ticketId, location.pathname, navigate])
+  // Com um chamado aberto e nada por cima, a tecla Esc volta para Chamados sem chamado aberto
+  // (regra 38 de queue.md). O texto digitado não se perde: o rascunho é guardado ao digitar
+  // (regra 43 de conversation.md). O que abriu por cima trata o Esc primeiro, e o que já o tratou
+  // marca o evento como tratado.
+  useEffect(() => {
+    if (ticketId === undefined) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
+      if (document.querySelector(openLayers)) return
+      void navigate('/chamados')
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [ticketId, navigate])
   if (invalidId || isNotFound(ticketError)) return <NotFoundPage />
   if (!user || (closed && action === '')) return null
 
@@ -374,7 +467,7 @@ export default function ConversasPage() {
                         onClick={() => setPanel('conversation')}
                         className="flex flex-col gap-1 border-l-3 border-transparent px-4 py-2.5 hover:bg-muted aria-[current=page]:border-primary aria-[current=page]:bg-accent-soft"
                       >
-                        <TicketLine ticket={item} />
+                        <TicketLine ticket={item} hideUnread={item.id === ticketId && tabVisible} />
                       </NavLink>
                     </li>
                   ))}

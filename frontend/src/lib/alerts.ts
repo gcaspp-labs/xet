@@ -108,15 +108,51 @@ export function useAlertSettings() {
 
 // Cada chamado tem a própria chave: duas abas que reservam chamados diferentes ao mesmo tempo
 // não apagam a reserva uma da outra.
-const claimKey = (ticketId: number) => `${claimsKey}.${ticketId}`
+const queueClaimKey = (ticketId: number) => `${claimsKey}.${ticketId}`
 
-function reserve(ticketId: number) {
+// A leitura do chamado muda a chave das reservas de mensagem: as não lidas voltam a contar do
+// zero, e a mensagem que chega logo depois de a pessoa ler o chamado alerta mesmo dentro dos 10 s
+// da reserva anterior (spec #310). Fica no navegador, compartilhada pelas abas.
+const readKey = 'alerts.read'
+
+const readGenerationKey = (ticketId: number) => `${readKey}.${ticketId}`
+
+function readGeneration(ticketId: number) {
+  try {
+    return localStorage.getItem(readGenerationKey(ticketId)) ?? '0'
+  } catch {
+    return '0'
+  }
+}
+
+// Chamado quando o servidor confirma a leitura do chamado aberto pelo responsável.
+export function noteTicketRead(ticketId: number) {
+  try {
+    const next = Number(readGeneration(ticketId)) + 1
+    localStorage.setItem(readGenerationKey(ticketId), String(next))
+  } catch {
+    // Sem armazenamento, a reserva anterior pode segurar só o alerta dentro dos 10 s.
+  }
+}
+
+// Cada mensagem nova no mesmo chamado tem a própria chave: a quantidade de não lidas separa as
+// mensagens seguidas, e a leitura separa a que chega depois de a pessoa ler o chamado. A
+// quantidade entra na chave, e não o horário da última mensagem, para as abas que viram a lista em
+// momentos diferentes usarem a mesma reserva quando uma resposta do atendente chega no meio (spec
+// #310). O prefixo separa estas reservas das da fila.
+const messageKey = (ticketId: number, count: number) =>
+  `${ticketId}.${readGeneration(ticketId)}.${count}`
+
+const messageClaimKey = (ticketId: number, count: number) =>
+  `${claimsKey}.message.${messageKey(ticketId, count)}`
+
+function reserve(key: string) {
   try {
     const now = Date.now()
-    if (now - Number(localStorage.getItem(claimKey(ticketId)) ?? 0) < claimDuration) {
+    if (now - Number(localStorage.getItem(key) ?? 0) < claimDuration) {
       return false
     }
-    localStorage.setItem(claimKey(ticketId), String(now))
+    localStorage.setItem(key, String(now))
     return true
   } catch {
     // Sem armazenamento, a etiqueta da notificação ainda evita repeti-la.
@@ -154,16 +190,16 @@ function dropExpiredClaims() {
 
 // Só uma aba alerta cada chamado. A trava existe em HTTPS e localhost, os mesmos endereços em
 // que há notificação; sem ela, só o som pode repetir, se duas abas reservarem ao mesmo tempo.
-// A aba que ganha segura a trava do chamado durante a reserva: o navegador garante que só uma
+// A aba que ganha segura a trava da chave durante a reserva: o navegador garante que só uma
 // aba a tem, e a gravação no localStorage, que chega às outras com atraso, já chegou quando a
 // trava for solta. A gravação guarda a reserva se a aba que alertou fechar antes do fim.
-function claim(ticketId: number): Promise<boolean> {
+function claim(key: string): Promise<boolean> {
   if (!('locks' in navigator)) {
-    return Promise.resolve(reserve(ticketId))
+    return Promise.resolve(reserve(key))
   }
   return new Promise((resolve) => {
-    void navigator.locks.request(claimKey(ticketId), { ifAvailable: true }, (lock) => {
-      const won = lock !== null && reserve(ticketId)
+    void navigator.locks.request(key, { ifAvailable: true }, (lock) => {
+      const won = lock !== null && reserve(key)
       resolve(won)
       return won ? new Promise((release) => setTimeout(release, claimDuration)) : undefined
     })
@@ -200,13 +236,10 @@ async function someTabVisible() {
   return held?.some((lock) => lock.name === visibleTabKey) ?? false
 }
 
-function notify(ticketId: number, contactName: string, onOpen: () => void) {
+function notify(title: string, tag: string, contactName: string, onOpen: () => void) {
   try {
     // Só o nome do contato: o texto da mensagem não sai da tela do sistema.
-    const notification = new Notification('Chamado recebido', {
-      body: contactName,
-      tag: `ticket-${ticketId}`,
-    })
+    const notification = new Notification(title, { body: contactName, tag })
     notification.onclick = () => {
       window.focus()
       notification.close()
@@ -256,20 +289,50 @@ function playSound() {
 // Alerta a entrada de um chamado na fila. Quem decide o que entrou é a comparação do sino, que
 // já ignora a primeira carga e a reconexão.
 export function alertQueueEntry(ticketId: number, contactName: string, onOpen: () => void) {
+  raiseAlert('Chamado recebido', queueClaimKey(ticketId), `ticket-${ticketId}`, contactName, onOpen)
+}
+
+// Alerta a mensagem nova do cliente num chamado de que a pessoa é responsável (spec #310). Quem
+// compara as não lidas é o sino, que já ignora a primeira carga, a reconexão e o chamado aberto
+// com a aba visível. A quantidade de não lidas e a leitura entram na chave da reserva: cada
+// mensagem alerta uma vez em todas as abas, inclusive a que chega logo depois de a pessoa ler o
+// chamado.
+export function alertNewMessage(
+  ticketId: number,
+  count: number,
+  contactName: string,
+  onOpen: () => void,
+) {
+  raiseAlert(
+    'Mensagem nova',
+    messageClaimKey(ticketId, count),
+    `message-${messageKey(ticketId, count)}`,
+    contactName,
+    onOpen,
+  )
+}
+
+function raiseAlert(
+  title: string,
+  key: string,
+  tag: string,
+  contactName: string,
+  onOpen: () => void,
+) {
   if (!browserEnabled() && !soundWanted) {
     return
   }
   const isHidden = () => document.visibilityState !== 'visible'
   const hiddenOnArrival = isHidden()
   const run = async () => {
-    if (!(await claim(ticketId))) {
+    if (!(await claim(key))) {
       return
     }
     dropExpiredClaims()
     // Só notifica quem não viu o aviso na tela: a aba estava fora ao chegar e continua fora agora,
     // e nenhuma outra aba do sistema está à vista. A pessoa pode ter voltado durante a espera.
     if (hiddenOnArrival && isHidden() && browserEnabled() && !(await someTabVisible())) {
-      notify(ticketId, contactName, onOpen)
+      notify(title, tag, contactName, onOpen)
     }
     if (soundWanted) {
       playSound()

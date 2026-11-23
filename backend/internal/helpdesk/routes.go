@@ -72,8 +72,11 @@ func (h *Handler) Routes(r chi.Router) {
 	r.With(auth.RequireSector("sectorID")).Post("/sectors/{sectorID}/phone-tickets", h.registerPhoneTicket)
 	// O serviço confere o setor do chamado e, para responder, o responsável.
 	r.Post("/tickets/{ticketID}/assign", h.assignTicket)
+	// Marcar como lido: só o responsável atual muda algo; para os demais responde sucesso sem mudar nada.
+	r.Post("/tickets/{ticketID}/read", h.markRead)
 	r.Post("/tickets/{ticketID}/transfer", h.transferTicket)
 	r.Post("/tickets/{ticketID}/return", h.returnTicket)
+	r.Post("/tickets/{ticketID}/pending", h.markPending)
 	r.Get("/tickets/{ticketID}/assignments", h.listAssignments)
 	r.Get("/tickets/{ticketID}/closing-form", h.closingForm)
 	r.Post("/tickets/{ticketID}/close", h.closeTicket)

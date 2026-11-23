@@ -2,7 +2,7 @@
 
 Domínios, entidades, ligações e regras de integridade. As regras de negócio estão em [features/](features/), as globais em [spec.md](../spec.md) e as decisões técnicas em [architecture.md](architecture.md).
 
-Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as tabelas usam `id bigint generated always as identity` como chave primária e registram `created_at timestamptz not null default now()`; tabelas editáveis também têm `updated_at`. Horários são sempre `timestamptz`.
+Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as tabelas usam `id bigint generated always as identity` como chave primária e registram `created_at timestamptz not null default now()`; a exceção é `messages.created_at`, que usa `clock_timestamp()` para gravar o instante da mensagem e não o início da transação, senão uma mensagem gravada por uma transação já aberta ficaria com horário anterior à leitura e nunca contaria como não lida. Tabelas editáveis também têm `updated_at`. Horários são sempre `timestamptz`.
 
 ## Domínios
 
@@ -40,6 +40,8 @@ erDiagram
     organizations ||--o{ tickets : "órgão do chamado"
     users ||--o{ tickets : "responsável"
     tickets ||--o| tickets : "chamado anterior (transferência entre setores)"
+    tickets ||--o{ tickets : "mesclado em (pendente retomado)"
+    users ||--o{ tickets : "quem marcou como pendente"
     tickets ||--o{ ticket_modules : ""
     modules ||--o{ ticket_modules : ""
     tickets ||--o{ messages : contém
@@ -59,9 +61,9 @@ erDiagram
 | --- | --- | --- |
 | `user_role` | `agent`, `supervisor`, `admin` | Atendente, supervisor do setor, administrador (supervisor global) |
 | `connection_status` | `disconnected`, `connecting`, `connected`, `logged_out` | Estado da conexão do número do setor; `logged_out` exige novo QR code |
-| `ticket_status` | `queued`, `in_progress`, `closed` | Na fila sem responsável, com responsável, encerrado |
+| `ticket_status` | `queued`, `in_progress`, `pending`, `closed` | Na fila sem responsável, com responsável, pendente (parado com motivo, sem responsável, à espera de ser retomado; spec [#332](https://github.com/gcaspp-labs/xet/issues/332)), encerrado |
 | `ticket_channel` | `whatsapp`, `phone` | Canal do chamado: WhatsApp (mensagem recebida, enviada pelo celular ou Novo chamado) ou Telefone (registro por telefone, que já nasce encerrado) |
-| `closure_type` | `resolved`, `transferred`, `cancelled` | Encerrado normalmente, etapa encerrada por transferência entre setores ou cancelado sem lançar o atendimento |
+| `closure_type` | `resolved`, `transferred`, `cancelled`, `merged` | Encerrado normalmente, etapa encerrada por transferência entre setores, cancelado sem lançar o atendimento ou mesclado num pendente (as mensagens passaram para o chamado de `merged_into_ticket_id`; não conta como encerrado) |
 | `message_direction` | `inbound`, `outbound` | Recebida do cliente ou enviada pelo setor |
 | `message_origin` | `customer`, `agent`, `phone` | Enviada pelo cliente, por um atendente no sistema ou pelo celular fora do sistema |
 | `message_change_kind` | `original`, `edit`, `deletion` | Linha de `message_changes` |
@@ -220,7 +222,7 @@ Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-l
 | `sector_id` | bigint → `sectors` | Obrigatório |
 | `contact_id` | bigint → `contacts` | Obrigatório |
 | `organization_id` | bigint → `organizations` | Copiado do órgão principal do contato; editável no encerramento; obrigatório para encerrar, exceto no cancelamento e na transferência entre setores |
-| `assignee_id` | bigint → `users` | Responsável atual |
+| `assignee_id` | bigint → `users` | Responsável atual; vazio na fila e no pendente (quem marcou fica em `pending_by_id`) |
 | `status` | ticket_status | Obrigatório |
 | `previous_ticket_id` | bigint → `tickets` | Chamado de origem em transferência entre setores; único |
 | `created_by_id` | bigint → `users` | Preenchido quando o atendente iniciou a conversa |
@@ -236,19 +238,29 @@ Nota interna e "Falou com" saíram do modelo ([#173](https://github.com/gcaspp-l
 | `transfer_reason` | text | Motivo da transferência entre setores, texto livre e opcional, na etapa de origem; vazio quando não informado (nunca em branco) |
 | `channel` | ticket_channel | Obrigatório; padrão `whatsapp`. Os chamados anteriores à coluna ficaram `whatsapp` |
 | `client_request_id` | uuid | Chave de idempotência do registro por telefone, gerada pela tela; único quando preenchido; vazio nos chamados do WhatsApp |
+| `pending_reason` | text | Motivo da última vez em que o chamado ficou pendente, texto livre; não em branco quando preenchido. Sobrescrito a cada nova vez pendente (o histórico fica na auditoria e na conversa); continua preenchido depois de retomado |
+| `pending_by_id` | bigint → `users` | Quem marcou como pendente da última vez; sobrescrito como o motivo |
+| `pending_at` | timestamptz | Quando foi marcado como pendente da última vez; sobrescrito como o motivo |
+| `merged_into_ticket_id` | bigint → `tickets` | Pendente em que o chamado foi mesclado (`closure_type = 'merged'`); vínculo próprio, sem relação com `previous_ticket_id`, que carrega o acesso da cadeia de transferências. Não é desfeito |
+| `assignee_read_at` | timestamptz | Momento até onde o responsável atual leu o chamado (#313, spec #310); vazio na fila e no pendente. É o marco das não lidas: contam as mensagens recebidas do cliente no chamado gravadas depois dele. Gravado ao assumir, ao receber por transferência entre atendentes e ao criar o chamado pelo atendente; limpo ao devolver à fila e ao deixar em pendente, que não têm responsável. O momento é o do servidor (`clock_timestamp()`, o instante da gravação, não o início da transação) e só avança: marcar como lido com um horário anterior não volta o valor |
 
 Restrições:
 
-- `status = 'queued'` ⇒ `assignee_id` vazio.
-- `status in ('in_progress', 'closed')` ⇒ `assignee_id` preenchido.
-- `status = 'closed'` ⇒ `ended_at`, `closed_at`, `closed_by_id` e `closure_type` preenchidos e, exceto em `closure_type = 'cancelled'` e `closure_type = 'transferred'`, também `organization_id`, `subject` e `resolution`. As transferências feitas com o formulário de encerramento, antes de [#243](https://github.com/gcaspp-labs/xet/issues/243), têm esses campos e continuam válidas.
+- `status in ('queued', 'pending')` ⇒ `assignee_id` vazio (`tickets_queued_unassigned`).
+- `status in ('in_progress', 'closed')` ⇒ `assignee_id` preenchido (`tickets_assigned`).
+- `status = 'pending'` ⇒ `pending_reason`, `pending_by_id` e `pending_at` preenchidos (`tickets_pending_fields`).
+- `pending_reason` preenchido ⇒ não em branco (`tickets_pending_reason_not_blank`).
+- `status = 'closed'` ⇒ `ended_at`, `closed_at`, `closed_by_id` e `closure_type` preenchidos e, exceto em `closure_type in ('cancelled', 'transferred', 'merged')`, também `organization_id`, `subject` e `resolution`. As transferências feitas com o formulário de encerramento, antes de [#243](https://github.com/gcaspp-labs/xet/issues/243), têm esses campos e continuam válidas.
 - `transfer_reason` preenchido ⇒ não em branco.
+- `closure_type = 'merged'` ⇔ `merged_into_ticket_id` preenchido; o mesclado não tem `subject` nem `resolution` (`tickets_merged_fields`). `merged_into_ticket_id` nunca é o próprio chamado (`tickets_merged_into_other`).
 - `ended_at >= started_at`.
 - `channel = 'phone'` ⇒ `status = 'closed'` e `closure_type = 'resolved'` (`tickets_phone_closed`): o registro por telefone nasce e fica encerrado.
 - `client_request_id` único quando preenchido (`tickets_client_request_id_key`).
-- Índice único parcial em `(sector_id, contact_id) where status <> 'closed'`: um chamado aberto por contato e setor.
+- Índice único parcial `tickets_open_contact_key` em `(sector_id, contact_id) where status in ('queued', 'in_progress')`: um chamado na fila ou em atendimento por contato e setor. Os pendentes ficam fora: um contato pode ter vários pendentes no setor e, ao mesmo tempo, um chamado na fila ou em atendimento. Neste documento e no código, "chamado aberto" quer dizer na fila ou em atendimento.
 - Encerrar exige ao menos um registro em `ticket_modules` (validado na transação de encerramento), exceto na transferência entre setores.
 - O contato do chamado precisa estar com `registered = true` para encerrar, exceto na transferência entre setores.
+
+Não lidas (#313, spec #310). A quantidade é calculada na consulta da lista, sem contador guardado: `count(*)` das mensagens do chamado com `direction = 'inbound'` e `origin = 'customer'` gravadas depois de `assignee_read_at`. A comparação usa `messages.created_at`, o horário em que o servidor gravou a mensagem, e não `messages.sent_at`, que vem do relógio do celular: assim um relógio adiantado não esconde uma mensagem. Os dois lados usam `clock_timestamp()`, o instante da gravação, e não `now()`, o início da transação: uma mensagem gravada por uma transação que já estava aberta quando a leitura foi gravada continua depois dela e conta como não lida. Reações, edições e exclusões não criam mensagem e não entram na contagem (as duas últimas só atualizam `updated_at`). A mensagem enviada pelo XET ou pelo celular do setor é `outbound`, e a nota e o aviso do sistema não são mensagens, então também não contam. Os chamados em atendimento na migração receberam o momento dela, para começarem sem não lidas.
 
 Índices: `(sector_id, status)` para a fila; `(assignee_id) where status = 'in_progress'` para a contagem por atendente; `(contact_id)` e `(organization_id)` para o histórico; `(sector_id, closed_at) where status = 'closed'` para os realizados do dia.
 
@@ -303,14 +315,21 @@ stateDiagram-v2
     in_progress --> queued: devolver à fila
     queued --> closed: cancelamento (cancelled)
     in_progress --> closed: cancelamento (cancelled)
+    in_progress --> pending: colocar como pendente
+    pending --> in_progress: retomar pela lista
+    pending --> in_progress: retomar a partir de um chamado novo (o novo fica merged)
+    in_progress --> closed: mesclado num pendente (merged)
+    pending --> closed: mesclagem de um atendimento encerrado (#341)
+    closed --> closed: atendimento encerrado mesclado num pendente (merged, #341)
     closed --> [*]
 ```
 
 | Evento | Efeito |
 | --- | --- |
-| Mensagem do cliente sem chamado aberto no setor | Cria chamado `queued` com `arrived_at` = horário da mensagem |
-| Mensagem do cliente com chamado aberto | Entra no chamado existente |
-| Mensagem enviada pelo celular sem chamado aberto | Cria chamado `queued`; mensagem com origem `phone` |
+| Mensagem do cliente sem chamado aberto no setor | Cria chamado `queued` com `arrived_at` = horário da mensagem, mesmo que o contato tenha pendentes no setor |
+| Mensagem do cliente com chamado aberto | Entra no chamado existente (`queued` ou `in_progress`); um pendente nunca recebe mensagem nova |
+| Mensagem enviada pelo celular sem chamado aberto | Cria chamado `queued`; mensagem com origem `phone`, com a mesma regra dos pendentes |
+| Edição, exclusão ou reação recebida sobre mensagem de um pendente | Atualiza a mensagem no próprio pendente, sem abrir chamado novo |
 | Atendente inicia conversa | Cria chamado `in_progress` com `assignee_id` e `created_by_id` = atendente e `arrived_at` = envio; auditoria `ticket_started` na mesma transação |
 | Registro por telefone | Numa só transação, sem passar pela fila e sem mensagens: protocolo da mesma sequência, chamado `closed` com `channel = 'phone'`, `closure_type = 'resolved'`, `assignee_id` e `closed_by_id` = quem registrou (`created_by_id` fica vazio: é de quem iniciou conversa), `arrived_at`, `assigned_at` e `started_at` = início informado, `ended_at` = fim informado, `closed_at = now()`, órgão, assunto, resolução e `client_request_id`; grava `ticket_modules` (módulos ativos do setor), os itens "adicionar à lista" e a auditoria `ticket_phone_registered`. O contato é travado para leitura (`for share`) e precisa estar cadastrado. O índice parcial de chamado aberto não o alcança, então um chamado aberto do contato no setor continua como está. O mesmo `client_request_id` devolve o mesmo chamado; com outro autor, é recusado. O aviso de chamado é publicado depois do commit |
 | Assumir | `update ... set assignee_id = :user, status = 'in_progress', assigned_at = coalesce(assigned_at, now()) where id = :id and status = 'queued'`; nenhuma linha afetada significa que outro atendente assumiu antes |
@@ -322,8 +341,12 @@ stateDiagram-v2
 | Devolver à fila | Com o chamado travado (`for update`) e `in_progress`, pelo responsável, supervisor do setor ou administrador: `status = 'queued'`, `assignee_id` vazio, `assigned_at` mantido; auditoria `ticket_returned` na mesma transação |
 | Cancelamento | Com o chamado travado (`for update`) e aberto, conforme as permissões: `closure_type = 'cancelled'`, `closed_at` e `ended_at` = agora (`ended_at` nunca antes de `started_at`, que vem do relógio do celular), `closed_by_id` = quem cancelou; vindo da fila, `assignee_id` = quem cancelou, porque chamado encerrado exige responsável (`assigned_at` fica vazio). Não exige contato cadastrado nem `ticket_modules`; auditoria `ticket_cancelled` com `reason` na mesma transação. Chamado cancelado não é corrigido |
 | Mensagem após encerramento | Cria novo chamado (não reabre) |
+| Colocar como pendente | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável (supervisor e administrador também precisam ser o responsável), e o contato travado para leitura (`for share`), com motivo não em branco: `status = 'pending'`, `assignee_id` vazio, `pending_reason`, `pending_by_id` = responsável e `pending_at = now()` (sobrescritos a cada vez), `assigned_at` mantido; nada é enviado ao cliente; auditoria `ticket_pending` na mesma transação. A trava do chamado é a mesma que a mensagem recebida espera: depois do commit, a mensagem não o encontra como aberto e cria um chamado `queued`. O aviso de chamado é publicado depois do commit |
+| Retomar pela lista ([#334](https://github.com/gcaspp-labs/xet/issues/334)) | Com o pendente e o contato travados: se o contato tiver chamado `queued` ou `in_progress` no setor, recusa sem mudar nada; senão `status = 'in_progress'`, `assignee_id` = quem retomou, `assigned_at` e os campos do pendente mantidos; auditoria `ticket_resumed` |
+| Retomar a partir de um chamado novo ([#335](https://github.com/gcaspp-labs/xet/issues/335)) | Com A (pendente), B (`in_progress`, do usuário) e o contato travados, numa transação: as mensagens de B passam para A; B fica `closed` com `closure_type = 'merged'`, `merged_into_ticket_id` = A, `closed_at` e `ended_at` = agora e `closed_by_id` = quem mesclou, sem assunto, resolução nem módulos; A volta a `in_progress` com `assignee_id` = quem mesclou; auditoria `ticket_merged` em B e `ticket_resumed_by_merge` em A |
+| Mesclar um atendimento encerrado num pendente ([#341](https://github.com/gcaspp-labs/xet/issues/341)) | Com A (pendente), B (`closed`, `resolved` ou `cancelled`) e o contato travados: as mensagens de B passam para A; A vai de `pending` a `closed` com o `closure_type` e os dados de encerramento de B; B passa a `closure_type = 'merged'` com `merged_into_ticket_id` = A, sem assunto, resolução nem módulos; auditoria `ticket_merged` em B e `ticket_closed_by_merge` em A. É a única saída de `pending` direto para `closed` |
 
-Chamados não são reabertos. O destino de uma transferência entre setores vê o histórico seguindo a cadeia de `previous_ticket_id`: quem tem acesso ao setor de um chamado lê também todos os chamados anteriores da cadeia (detalhe, mensagens, arquivos, módulos e correções), sem poder agir neles. A origem vê o setor e o protocolo do chamado seguinte, sem acesso a ele; o motivo da transferência (`transfer_reason`) fica registrado no próprio chamado de origem.
+Chamados não são reabertos: o pendente não foi encerrado, e o mesclado não é reaberto. Encerrar, cancelar, devolver à fila e transferir (para outro atendente ou setor) não valem para `pending`; o pendente é retomado antes, a não ser na mesclagem de um atendimento encerrado. O destino de uma transferência entre setores vê o histórico seguindo a cadeia de `previous_ticket_id`: quem tem acesso ao setor de um chamado lê também todos os chamados anteriores da cadeia (detalhe, mensagens, arquivos, módulos e correções), sem poder agir neles. A origem vê o setor e o protocolo do chamado seguinte, sem acesso a ele; o motivo da transferência (`transfer_reason`) fica registrado no próprio chamado de origem.
 
 ## Mensagens
 
@@ -351,7 +374,7 @@ Chamados não são reabertos. O destino de uma transferência entre setores vê 
 | `quoted_body` | text | Texto do trecho citado: o texto, a legenda (imagem e vídeo) ou o nome do arquivo (documento; a legenda, se não houver nome); vazio em áudio e quando o provedor não entrega |
 | `edited_at` | timestamptz | Horário da versão atual segundo o provedor; vazio quando a mensagem nunca foi editada por fora do sistema (#291) |
 | `deleted_at` | timestamptz | Horário da exclusão segundo o provedor; vazio quando a mensagem não foi excluída. É um estado à parte de `status` (a situação de entrega não muda) |
-| `deletion_scope` | message_deletion_scope | `everyone` ou `local`; preenchido junto com `deleted_at` |
+| `deletion_scope` | message_deletion_scope | `everyone` ou `local`; preenchido junto com `deleted_at`. Uma exclusão para todos — vinda de fora ou do próprio XET — amplia um `local` já gravado para `everyone` |
 | `deletion_origin` | message_origin | Quem excluiu (cliente, celular do setor ou atendente); preenchido junto com `deleted_at` |
 | `contact_cards` | jsonb | Cartões da mensagem `contact`, em ordem: lista não vazia de `{"name", "organization", "phones": [{"phone", "wa_id"}]}`; vazio (`null`) nos demais tipos |
 
@@ -373,6 +396,10 @@ Mensagens enviadas pelo celular fora do sistema (`origin = 'phone'`) são gravad
 Mensagens enviadas pelo sistema são gravadas como `pending` (com `sent_at` no momento do registro) e passam a `sent` com o `external_message_id` quando o provedor aceita, ou a `failed` com `failure_reason`. As confirmações do provedor só avançam a situação (`sent` → `delivered` → `read`); uma falha informada pelo provedor só vale para mensagens `pending` ou `sent`, e uma entrega confirmada vale também sobre `failed`. O reenvio pelo responsável volta a mensagem de `failed` para `pending` com a mesma chave de idempotência (`client_request_id`).
 
 Mensagens não são apagadas nem sobrescritas sem registro (#291, spec #290). Edições e exclusões para todos feitas pelo cliente ou pelo celular do setor são gravadas na própria mensagem, sem criar mensagem nem chamado, inclusive em chamado encerrado. `body` mostra a versão atual e `edited_at` o horário dela; a exclusão marca `deleted_at`, `deletion_scope` e `deletion_origin`, e o conteúdo, o arquivo e a situação de entrega continuam gravados. O histórico fica em `message_changes` (abaixo). A API de mensagens devolve `editedAt` e `deletion` (`at`, `scope`, `origin`), de forma aditiva; a ocultação do conteúdo excluído é da tela, não da API.
+
+Uma exclusão para todos **amplia** uma exclusão `local` já gravada (#375): `MarkMessageDeleted` só aceita essa troca, e o alcance passa a `everyone` mantendo `deleted_at` e `deletion_origin` da primeira exclusão, porque o conteúdo está oculto desde então e por aquela origem. O histórico guarda as duas exclusões, em ordem, cada uma com a origem e o horário. Em Chamados, por isso, o conteúdo continua oculto pela origem da primeira exclusão, e a prévia da lista de chamados continua sem ele.
+
+A mesma regra vale quando a ampliação de `local` para `everyone` é feita pelo próprio XET, não só pelo celular: a exclusão para todos pedida no sistema sobre uma mensagem já excluída "para mim" (por exemplo, quando o provedor confirma tarde uma ação que ficou incerta e o eco chega depois) também passa o alcance a `everyone` e mantém `deleted_at` e `deletion_origin` da primeira exclusão. Aí a origem é `agent` nas duas.
 
 A imutabilidade da mensagem foi revista pela spec #290: o texto e a legenda podem ser revistos, pelo WhatsApp e pelo XET, e o que cai é a regra antiga de que a mensagem nunca é editada ou excluída. Nada é apagado nem sobrescrito sem registro: cada versão anterior fica em `message_changes`, o conteúdo excluído continua gravado em `body` e em `media_id`, e `status` segue a situação de entrega sem representar a exclusão.
 
@@ -407,7 +434,7 @@ Cada linha é uma versão (a original ou uma edição) ou uma exclusão. A origi
 
 Restrições: único `(sector_id, external_event_id)` quando preenchido (reentrega e eco do mesmo evento não gravam de novo); uma só original por mensagem; `original` exige `message_id` e não tem `external_event_id`.
 
-Regras de gravação (`helpdesk`, `recordChange`): trava `(setor, identificador externo)`, depois o contato e o chamado, sempre nessa ordem. Evento já visto não grava nada. Mensagem ainda desconhecida: a alteração fica pendente e é ligada quando a original é gravada (recebida, enviada pelo celular ou enviada pelo XET); a reentrega do mesmo evento repara uma ligação que faltou. Mensagem conhecida: a primeira edição guarda a original; `body` só muda se a edição for a mais nova (horário, depois ordem de chegada); uma edição mais antiga vira versão no histórico sem mudar o texto, e texto igual a um anterior é versão nova, não eco. Exclusão de mensagem já excluída não grava nada (a primeira vale). Autor impossível (cliente editando mensagem do setor, celular editando mensagem do cliente, outro contato) é descartado. O aviso do chamado vai pelo WebSocket depois do commit; alteração pendente não avisa.
+Regras de gravação (`helpdesk`, `recordChange`): trava `(setor, identificador externo)`, depois o contato e o chamado, sempre nessa ordem. Evento já visto não grava nada. Mensagem ainda desconhecida: a alteração fica pendente e é ligada quando a original é gravada (recebida, enviada pelo celular ou enviada pelo XET); a reentrega do mesmo evento repara uma ligação que faltou. Mensagem conhecida: a primeira edição guarda a original; `body` só muda se a edição for a mais nova (horário, depois ordem de chegada); uma edição mais antiga vira versão no histórico sem mudar o texto, e texto igual a um anterior é versão nova, não eco. Uma exclusão para todos sobre uma exclusão para mim já gravada amplia o alcance para `everyone` e entra no histórico, mantendo `deleted_at` e `deletion_origin` da primeira; sobre uma mensagem já excluída para todos, não grava nada. Autor impossível (cliente editando mensagem do setor, celular editando mensagem do cliente, outro contato) é descartado. O aviso do chamado vai pelo WebSocket depois do commit; alteração pendente não avisa.
 
 Reverter a migração (`down`) remove as colunas e a tabela: as mensagens ficam, mas o histórico de versões e o estado de exclusão se perdem, e `body` fica com a última versão.
 
@@ -491,12 +518,12 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 | `entity_id` | bigint | Obrigatório |
 | `action` | text | Ver tabela abaixo |
 | `actor_id` | bigint → `users` | Quem fez; vazio para ações do sistema |
-| `reason` | text | Obrigatório em correções e cancelamentos |
+| `reason` | text | Obrigatório em correções, cancelamentos e ao colocar como pendente |
 | `changes` | jsonb | Valores anteriores e novos: `{"campo": {"from": ..., "to": ...}}` |
 
 Índices: `(ticket_id, created_at)` e `(entity_type, entity_id)`.
 
-Restrição: `action in ('ticket_corrected', 'ticket_cancelled')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o cancelamento).
+Restrição: `action in ('ticket_corrected', 'ticket_cancelled', 'ticket_pending')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o cancelamento e para o pendente).
 
 A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabela, na migração que cria `tickets`.
 
@@ -512,6 +539,11 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at` e `ended_at` |
 | `ticket_cancelled` | Cancelamento (exige `reason`): `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
 | `ticket_returned` | Devolver à fila: `changes` com `status` e `assignee_id` |
+| `ticket_pending` | Colocar como pendente: `reason` com o motivo; `changes` com `status` (de `in_progress` para `pending`) e `assignee_id` (do responsável para vazio) |
+| `ticket_resumed` | Retomar pela lista ([#334](https://github.com/gcaspp-labs/xet/issues/334)): `changes` com `status` e `assignee_id` |
+| `ticket_merged` | No chamado mesclado (B, [#335](https://github.com/gcaspp-labs/xet/issues/335) e [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `closure_type`, `merged_into_ticket_id` e os ids das mensagens que passaram para o pendente; na mesclagem de um atendimento encerrado, também os dados de encerramento que B deixou |
+| `ticket_resumed_by_merge` | No pendente retomado a partir de um chamado novo (A, [#335](https://github.com/gcaspp-labs/xet/issues/335)): `changes` com `status`, `assignee_id` e o chamado mesclado |
+| `ticket_closed_by_merge` | No pendente que recebeu um atendimento encerrado (A, [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `status`, o chamado mesclado e os dados de encerramento herdados de B |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
 | `user_password_changed` | O próprio usuário troca a senha em Configurações: `actor_id` é o próprio usuário; sem `changes` |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |

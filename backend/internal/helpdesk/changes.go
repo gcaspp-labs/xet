@@ -189,14 +189,22 @@ func recordKnownChange(ctx context.Context, q *db.Queries, msg *db.GetMessageFor
 
 // changeApplies tells whether a new change, received now or waiting for the
 // message, still applies to it. Every edit is a version, even one with a text
-// the message had before; a message is deleted only once.
+// the message had before; a message is deleted only once, except that a
+// deletion for everyone widens one made only in the system: the content was
+// already hidden from the sector, and the contact no longer sees it either.
 func changeApplies(msg *db.GetMessageForChangeRow, kind db.MessageChangeKind) bool {
-	return kind != db.MessageChangeKindDeletion || msg.DeletedAt == nil
+	if kind != db.MessageChangeKindDeletion {
+		return true
+	}
+	return msg.DeletedAt == nil ||
+		(msg.DeletionScope.Valid && msg.DeletionScope.MessageDeletionScope == db.MessageDeletionScopeLocal)
 }
 
 // applyMessageChange applies a change just recorded to the message: after
 // an edit, the original is kept and the newest edit becomes the content; a
-// deletion marks the message, keeping its content.
+// deletion marks the message, keeping its content. A deletion for everyone
+// widens a deletion made only in the system, keeping the time and the author
+// of the first one.
 func applyMessageChange(ctx context.Context, q *db.Queries, msg *db.GetMessageForChangeRow, kind db.MessageChangeKind, origin db.MessageOrigin, at time.Time) error {
 	switch kind {
 	case db.MessageChangeKindEdit:
@@ -207,15 +215,18 @@ func applyMessageChange(ctx context.Context, q *db.Queries, msg *db.GetMessageFo
 			return fmt.Errorf("set message version: %w", err)
 		}
 	case db.MessageChangeKindDeletion:
+		scope := db.NullMessageDeletionScope{MessageDeletionScope: db.MessageDeletionScopeEveryone, Valid: true}
 		_, err := q.MarkMessageDeleted(ctx, db.MarkMessageDeletedParams{
-			ID: msg.ID, DeletedAt: &at,
-			DeletionScope:  db.NullMessageDeletionScope{MessageDeletionScope: db.MessageDeletionScopeEveryone, Valid: true},
+			ID: msg.ID, DeletedAt: &at, DeletionScope: scope,
 			DeletionOrigin: db.NullMessageOrigin{MessageOrigin: origin, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("mark message deleted: %w", err)
 		}
-		msg.DeletedAt = &at
+		if msg.DeletedAt == nil {
+			msg.DeletedAt = &at
+		}
+		msg.DeletionScope = scope
 	}
 	return nil
 }

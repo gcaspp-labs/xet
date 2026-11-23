@@ -14,7 +14,7 @@ select
     count(*) filter (where t.status = 'in_progress'
         and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))) as in_progress
 from tickets t
-where t.status <> 'closed'
+where t.status in ('queued', 'in_progress')
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id));
 

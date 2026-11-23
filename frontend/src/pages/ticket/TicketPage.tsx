@@ -1,4 +1,5 @@
 import {
+  ArrowDown,
   ArrowRightLeft,
   Ban,
   Check,
@@ -28,6 +29,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -100,6 +102,7 @@ import {
   ticketStatusLabel,
 } from '@/lib/format'
 import { isNotFound } from '@/lib/api'
+import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
@@ -537,6 +540,7 @@ function MessageBubble({
 
 function Composer({
   ticketId,
+  userId,
   quoted,
   onCancelQuote,
   attachRef,
@@ -544,8 +548,12 @@ function Composer({
   beginEditRef,
   onStartEditing,
   onStopEditing,
+  onSent,
 }: {
   ticketId: number
+  userId: number
+  // Avisa a área da conversa que a mensagem saiu daqui: ela sempre desce ao fim.
+  onSent: () => void
   // A mensagem que o responsável está editando: o campo de edição toma o lugar do compositor, que
   // guarda o rascunho (texto, arquivo, áudio e citação) até a edição terminar.
   editing: Message | null
@@ -559,11 +567,18 @@ function Composer({
   quoted: Message | null
   onCancelQuote: () => void
 }) {
-  const send = useSendMessage(ticketId)
+  const send = useSendMessage()
   const recorder = useVoiceRecorder()
-  const [text, setText] = useState('')
+  // Limpar o erro do gravador na troca de chamado, com uma referência estável para as dependências.
+  const clearRecorderError = recorder.setError
+  // O texto digitado fica guardado no navegador, por usuário e por chamado, até o envio: fechar a
+  // guia, recarregar ou trocar de chamado não perde o que estava escrito.
+  const [text, setText] = useState(() => readDraft(userId, ticketId))
+  const [textTicketId, setTextTicketId] = useState(ticketId)
   const [file, setFile] = useState<File | null>(null)
   const [voice, setVoice] = useState<Recording | null>(null)
+  // O áudio anexado agora, para a troca de chamado liberar a URL fora do render.
+  const voiceRef = useRef<Recording | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   // A janela "Enviar contato" aberta no menu do anexo.
   const [contactOpen, setContactOpen] = useState(false)
@@ -572,6 +587,46 @@ function Composer({
   const requestId = useRef<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const messageInput = useRef<HTMLTextAreaElement>(null)
+  // O chamado aberto agora: a confirmação do envio pode chegar depois de a pessoa trocar de chamado.
+  const shownTicketId = useRef(ticketId)
+  useLayoutEffect(() => {
+    shownTicketId.current = ticketId
+  }, [ticketId])
+
+  // Arquivo, áudio e erros do campo de mensagem são do chamado em que apareceram: ao trocar de
+  // chamado saem da tela, senão o arquivo do chamado anterior iria para o cliente do chamado novo e
+  // o aviso de erro de um apareceria no outro. O áudio tem a URL liberada aqui, fora do render. A
+  // gravação em andamento é descartada junto, sem anexar ao chamado novo.
+  const attachedTicketId = useRef(ticketId)
+  useLayoutEffect(() => {
+    if (attachedTicketId.current === ticketId) return
+    attachedTicketId.current = ticketId
+    setFile(null)
+    setFileError(null)
+    clearRecorderError(null)
+    if (voiceRef.current) {
+      URL.revokeObjectURL(voiceRef.current.url)
+      voiceRef.current = null
+    }
+    setVoice(null)
+    if (recorder.recording) recorder.cancel()
+  }, [ticketId, recorder.recording, recorder.cancel, clearRecorderError])
+
+  // Trocar de chamado sem sair da tela troca o texto pelo rascunho do chamado novo, e não mistura
+  // o que foi escrito em cada um.
+  if (textTicketId !== ticketId) {
+    setTextTicketId(ticketId)
+    setText(readDraft(userId, ticketId))
+    requestId.current = null
+  }
+
+  // O rascunho volta com o cursor no fim do texto, pronto para continuar a frase.
+  useEffect(() => {
+    const input = messageInput.current
+    if (input && input.value) {
+      input.setSelectionRange(input.value.length, input.value.length)
+    }
+  }, [ticketId])
 
   // Citar outra mensagem, ou cancelar a citação, muda a mensagem a enviar: um novo identificador de
   // envio. Ao citar, o foco vai para o campo, para escrever a resposta.
@@ -587,6 +642,7 @@ function Composer({
   const changeText = (value: string) => {
     requestId.current = null
     setText(value)
+    saveDraft(userId, ticketId, value)
   }
 
   // A mesma regra para o botão de anexo, a colagem e o soltar.
@@ -621,14 +677,23 @@ function Composer({
 
   const changeVoice = (recording: Recording | null) => {
     requestId.current = null
-    if (voice) {
-      URL.revokeObjectURL(voice.url)
+    if (voiceRef.current) {
+      URL.revokeObjectURL(voiceRef.current.url)
     }
+    voiceRef.current = recording
     setVoice(recording)
   }
 
   const finishRecording = async () => {
+    const at = ticketId
     const recording = await recorder.stop()
+    // A gravação é do chamado em que começou. Na troca de chamado é o `cancel` do efeito acima que
+    // solta o microfone e descarta o áudio; esta checagem cobre o áudio que fecha no mesmo instante
+    // da troca, antes de o efeito rodar, para ele não ser anexado no chamado novo.
+    if (shownTicketId.current !== at) {
+      if (recording) URL.revokeObjectURL(recording.url)
+      return
+    }
     if (recording && recording.blob.size > maxFileSize) {
       URL.revokeObjectURL(recording.url)
       recorder.setError('O áudio passa de 16 MB. Grave um áudio mais curto.')
@@ -681,18 +746,37 @@ function Composer({
     }
     requestId.current ??= newRequestId()
     const quotedMessageId = quoted?.id
+    // O rascunho do chamado sai já no envio, e não só na confirmação: sair do chamado e voltar
+    // enquanto o servidor responde não pode trazer de volta o texto (nem a legenda) que já foi
+    // enviado. Se o envio falhar, o texto volta a ser rascunho (regra no `useSendMessage`).
+    clearDraft(userId, ticketId)
+    // Mensagem enviada por aqui sempre desce ao fim, esteja a conversa onde estiver.
+    onSent()
     send.mutate(
       voice
-        ? { requestId: requestId.current, body: '', file: null, voice: voice.blob, quotedMessageId }
-        : { requestId: requestId.current, body, file, quotedMessageId },
+        ? {
+            ticketId,
+            userId,
+            requestId: requestId.current,
+            body: '',
+            file: null,
+            voice: voice.blob,
+            quotedMessageId,
+          }
+        : { ticketId, userId, requestId: requestId.current, body, file, quotedMessageId },
       {
         onSuccess: () => {
           requestId.current = null
+          // A pessoa trocou de chamado antes de o servidor confirmar: o campo agora é do chamado
+          // novo, com o rascunho dele, e não pode ser limpo. O rascunho do enviado saiu no envio,
+          // e o arquivo e o áudio dele saíram na troca.
+          if (shownTicketId.current !== ticketId) return
           onCancelQuote()
           if (voice) {
             changeVoice(null)
           } else {
-            setText('')
+            // Enviar a mensagem limpa o campo daquele chamado.
+            changeText('')
             setFile(null)
           }
         },
@@ -707,7 +791,10 @@ function Composer({
     }
   }
 
-  const error = fileError ?? recorder.error ?? send.error?.message
+  // O erro de um envio fica ligado ao chamado em que ele foi feito: falhou o envio do chamado A
+  // depois de a pessoa abrir o B, o aviso é do A e não aparece no B.
+  const sendError = send.error && send.variables?.ticketId === ticketId ? send.error.message : null
+  const error = fileError ?? recorder.error ?? sendError
 
   return (
     <div className="flex flex-col gap-2 border-t border-line-soft p-3">
@@ -852,7 +939,10 @@ function Composer({
         <SendContactDialog
           ticketId={ticketId}
           quotedMessageId={quoted?.id}
-          onSent={onCancelQuote}
+          onSent={() => {
+            onCancelQuote()
+            onSent()
+          }}
           onClose={() => setContactOpen(false)}
         />
       )}
@@ -899,6 +989,13 @@ export function ConversationCard({
   const react = useReactToMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
+  // Chamado que não está mais com o usuário (encerrado, transferido, cancelado, devolvido) não
+  // mostra rascunho: o que estava guardado é descartado, para não voltar num chamado futuro.
+  useEffect(() => {
+    if (!canReply) {
+      clearDraft(user.id, ticket.id)
+    }
+  }, [canReply, user.id, ticket.id])
   // A citação em preparo é deste chamado: trocar de chamado a descarta, e perder o direito de
   // responder (transferência, encerramento) também.
   const [quoting, setQuoting] = useState<number | null>(null)
@@ -969,10 +1066,114 @@ export function ConversationCard({
     },
   }
 
-  // Mostra sempre a mensagem mais recente.
+  // A conversa segue a mensagem mais recente enquanto a pessoa está no fim; rolada para cima, ela
+  // fica onde está, e as mensagens que chegam contam no botão de ir ao fim (regra 44 de
+  // conversation.md). "No fim" tem 48 px de tolerância, para arredondamento e zoom não fazerem o
+  // botão piscar. O contador é só da tela: não vai à API nem ao banco.
+  const [following, setFollowing] = useState(true)
+  const [missed, setMissed] = useState(0)
+  // O maior id de mensagem já visto neste chamado: null até a primeira carga, que abre no fim.
+  const seen = useRef<{ ticket: number; newest: number | null }>({
+    ticket: ticket.id,
+    newest: null,
+  })
+  // A rolagem do botão é suave: ele some já no clique, e os eventos de rolagem do meio do caminho
+  // não são a pessoa saindo do fim, então não podem trazê-lo de volta nem contar a mensagem que
+  // chegue enquanto a tela desce. O temporizador é a rede de segurança, se a rolagem não chegar.
+  const settling = useRef(false)
+  const settleTimer = useRef<number | null>(null)
+  const stopSettling = () => {
+    settling.current = false
+    if (settleTimer.current !== null) {
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = null
+    }
+  }
+  useEffect(() => stopSettling, [])
+  const scrollToEnd = (smooth: boolean) => {
+    const element = list.current
+    if (!element) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    stopSettling()
+    settling.current = smooth && !reducedMotion
+    if (settling.current) {
+      settleTimer.current = window.setTimeout(() => {
+        stopSettling()
+        const current = list.current
+        if (current && current.scrollHeight - current.scrollTop - current.clientHeight > 48) {
+          setFollowing(false)
+        }
+      }, 1000)
+    }
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior: settling.current ? 'smooth' : 'auto',
+    })
+  }
+  // O botão aparece fora do fim, e o contador zera ao chegar nele por qualquer caminho.
+  const onScroll = () => {
+    const element = list.current
+    const end = !element || element.scrollHeight - element.scrollTop - element.clientHeight <= 48
+    if (end) stopSettling()
+    if (end || settling.current) {
+      setFollowing(true)
+      setMissed(0)
+    } else {
+      setFollowing(false)
+    }
+  }
+  // Uma mensagem nova: no fim, desce junto; fora do fim, fica onde está e conta. Edição, exclusão,
+  // reação e mudança de situação de entrega não mudam o id da mensagem e não contam.
   useEffect(() => {
-    list.current?.scrollTo({ top: list.current.scrollHeight })
-  }, [messages.length, logs.length])
+    const element = list.current
+    const newest = messages.reduce((max, message) => Math.max(max, message.id), 0)
+    if (seen.current.ticket !== ticket.id) {
+      // Trocar de chamado abre no fim, sem botão e sem contador herdado.
+      seen.current = { ticket: ticket.id, newest: null }
+      setFollowing(true)
+      setMissed(0)
+    }
+    const before = seen.current.newest
+    if (before === null) {
+      // Primeira carga deste chamado: abre no fim, sem contar o que já estava lá.
+      seen.current.newest = newest || null
+      if (newest > 0) element?.scrollTo({ top: element.scrollHeight })
+      return
+    }
+    seen.current.newest = newest
+    if (newest <= before) return
+    if (following) {
+      element?.scrollTo({ top: element.scrollHeight })
+    } else {
+      setMissed((count) => count + messages.filter((message) => message.id > before).length)
+    }
+  }, [messages, ticket.id, following])
+  // Avisos do sistema não contam, mas também não puxam a conversa para baixo; no fim, continuam
+  // descendo junto com o resto.
+  useEffect(() => {
+    if (following) list.current?.scrollTo({ top: list.current.scrollHeight })
+  }, [logs.length, following])
+  // A altura do conteúdo muda sozinha depois de rolar (a largura e as fontes assentam, um aviso
+  // entra): quem estava no fim continua no fim, e quem estava lendo mais acima fica onde está. Sem
+  // isso, abrir o chamado podia deixar a última mensagem por baixo do fim.
+  const contentHeight = useRef<number | null>(null)
+  useEffect(() => {
+    const element = list.current
+    const content = element?.firstElementChild
+    if (!element || !content) return
+    contentHeight.current ??= element.scrollHeight
+    const observer = new ResizeObserver(() => {
+      const before = contentHeight.current ?? element.scrollHeight
+      contentHeight.current = element.scrollHeight
+      if (element.scrollTop + element.clientHeight >= before - 48) {
+        element.scrollTop = element.scrollHeight
+        setFollowing(true)
+        setMissed(0)
+      }
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [ticket.id, messages.length, logs.length])
 
   let notice: string | null = null
   if (ticket.status === 'closed') {
@@ -1006,51 +1207,86 @@ export function ConversationCard({
           </Alert>
         </div>
       )}
-      <div
-        ref={list}
-        className={cn(
-          'flex-1 overflow-y-auto px-4 py-4',
-          modern && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
-        )}
-      >
-        {messages.length > 0 || logs.length > 0 ? (
-          <ol className="flex flex-col gap-2">
-            {timeline(messages, logs).map((item) =>
-              item.kind === 'message' ? (
-                <MessageBubble
-                  key={`message-${item.message.id}`}
-                  message={item.message}
-                  quoted={quotedOf(item.message, byId)}
-                  modern={modern}
-                  canRetry={canReply}
-                  retrying={retry.isPending}
-                  onRetry={() => retry.mutate(item.message.id)}
-                  onReact={
-                    canReply
-                      ? (emoji) => react.mutate({ messageId: item.message.id, emoji, actor: user })
-                      : undefined
-                  }
-                  onReply={canReply ? () => setQuoting(item.message.id) : undefined}
-                  onEdit={
-                    canReply
-                      ? () => (beginEdit.current ?? setEditingId)(item.message.id)
-                      : undefined
-                  }
-                  onDelete={canReply ? () => setDeletingId(item.message.id) : undefined}
-                  hideDeleted
-                />
-              ) : (
-                <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
-              ),
-            )}
-          </ol>
-        ) : (
-          <Empty>
-            <EmptyMedia>
-              <MessagesSquare strokeWidth={1.7} aria-hidden />
-            </EmptyMedia>
-            <EmptyDescription>Nenhuma mensagem.</EmptyDescription>
-          </Empty>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={list}
+          onScroll={onScroll}
+          className={cn(
+            'flex-1 overflow-y-auto px-4 py-4',
+            modern && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
+          )}
+        >
+          {messages.length > 0 || logs.length > 0 ? (
+            <ol className="flex flex-col gap-2">
+              {timeline(messages, logs).map((item) =>
+                item.kind === 'message' ? (
+                  <MessageBubble
+                    key={`message-${item.message.id}`}
+                    message={item.message}
+                    quoted={quotedOf(item.message, byId)}
+                    modern={modern}
+                    canRetry={canReply}
+                    retrying={retry.isPending}
+                    onRetry={() => retry.mutate(item.message.id)}
+                    onReact={
+                      canReply
+                        ? (emoji) =>
+                            react.mutate({ messageId: item.message.id, emoji, actor: user })
+                        : undefined
+                    }
+                    onReply={canReply ? () => setQuoting(item.message.id) : undefined}
+                    onEdit={
+                      canReply
+                        ? () => (beginEdit.current ?? setEditingId)(item.message.id)
+                        : undefined
+                    }
+                    onDelete={canReply ? () => setDeletingId(item.message.id) : undefined}
+                    hideDeleted
+                  />
+                ) : (
+                  <AssignmentEntry key={`log-${item.log.id}`} log={item.log} modern={modern} />
+                ),
+              )}
+            </ol>
+          ) : (
+            <Empty>
+              <EmptyMedia>
+                <MessagesSquare strokeWidth={1.7} aria-hidden />
+              </EmptyMedia>
+              <EmptyDescription>Nenhuma mensagem.</EmptyDescription>
+            </Empty>
+          )}
+        </div>
+        {!following && (
+          // Por cima do último balão, sem cobrir o campo de mensagem (que fica fora desta área).
+          <div className="pointer-events-none absolute right-4 bottom-4 z-10">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={
+                missed > 0
+                  ? `Ir para a última mensagem, ${missed} ${missed === 1 ? 'nova' : 'novas'}`
+                  : 'Ir para a última mensagem'
+              }
+              title="Ir para a última mensagem"
+              onClick={() => {
+                scrollToEnd(true)
+                setFollowing(true)
+                setMissed(0)
+              }}
+              className="pointer-events-auto size-9 rounded-full border-line bg-card shadow-(--shadow) hover:border-ink-faint"
+            >
+              <ArrowDown strokeWidth={1.7} className="size-[17px]" aria-hidden />
+              {missed > 0 && (
+                <span
+                  aria-hidden
+                  className="mono-num absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-card bg-primary px-1 text-[calc(10px*var(--text-scale))] leading-none font-medium text-primary-foreground"
+                >
+                  {missed > 99 ? '99+' : missed}
+                </span>
+              )}
+            </Button>
+          </div>
         )}
       </div>
       {retry.error && (
@@ -1072,6 +1308,7 @@ export function ConversationCard({
       {canReply ? (
         <Composer
           ticketId={ticket.id}
+          userId={user.id}
           attachRef={attach}
           quoted={quotedDraft && !isHiddenByXet(quotedDraft) ? quotedDraft : null}
           onCancelQuote={() => setQuoting(null)}
@@ -1079,6 +1316,11 @@ export function ConversationCard({
           beginEditRef={beginEdit}
           onStartEditing={setEditingId}
           onStopEditing={() => setEditingId(null)}
+          onSent={() => {
+            setFollowing(true)
+            setMissed(0)
+            scrollToEnd(false)
+          }}
         />
       ) : (
         notice && (

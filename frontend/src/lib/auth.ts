@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { api, ApiError } from '@/lib/api'
+import { clearUserDrafts } from '@/lib/message-draft'
 import { clearTicketViews } from '@/pages/ticket/useTicketView'
 
 export type Role = 'agent' | 'supervisor' | 'admin'
@@ -48,6 +49,11 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api<void>('/auth/logout', { method: 'POST' }),
     onSuccess: () => {
+      // O computador pode ser compartilhado: o que a pessoa escreveu e não enviou não fica no navegador.
+      const user = queryClient.getQueryData<User | null>(meKey)
+      if (user) {
+        clearUserDrafts(user.id)
+      }
       clearTicketViews()
       queryClient.clear()
       queryClient.setQueryData(meKey, null)

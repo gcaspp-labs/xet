@@ -5,6 +5,7 @@ import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
 import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
+import { readDraft, saveDraft } from '@/lib/message-draft'
 import { type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
@@ -251,6 +252,10 @@ export function useOrganizationHistory(
 type SentMessage = { id: number; status: MessageStatus; failureReason: string | null }
 
 export type Outgoing = {
+  // O chamado do envio e quem envia: a confirmação apaga o rascunho guardado desse chamado, mesmo
+  // quando o campo de mensagem já saiu da tela.
+  ticketId: number
+  userId: number
   requestId: string
   body: string
   file: File | null
@@ -268,10 +273,10 @@ function recordingName(blob: Blob) {
 // Envia texto, arquivo ou áudio gravado (como mensagem de voz, sem legenda).
 // O mesmo requestId numa nova tentativa devolve a mensagem já registrada, sem
 // enviar de novo; o backend confere o responsável.
-export function useSendMessage(ticketId: number) {
+export function useSendMessage() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ requestId, body, file, voice, quotedMessageId }: Outgoing) => {
+    mutationFn: ({ ticketId, requestId, body, file, voice, quotedMessageId }: Outgoing) => {
       if (voice) {
         const form = new FormData()
         form.append('clientRequestId', requestId)
@@ -292,7 +297,16 @@ export function useSendMessage(ticketId: number) {
       form.append('file', file)
       return api<SentMessage>(`/tickets/${ticketId}/messages`, { method: 'POST', body: form })
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
+    // O rascunho do chamado sai do armazenamento já no envio, no próprio campo de mensagem: sair do
+    // chamado e voltar antes de o servidor confirmar não pode trazer de volta o texto (nem a legenda)
+    // já enviado, senão um Enter o manda de novo. Aqui a falha devolve o texto como rascunho, para a
+    // pessoa reenviar depois sem perdê-lo; a confirmação não apaga nada de outro chamado.
+    onError: (_error, { userId, ticketId, body }) => {
+      // Se a pessoa já escreveu outra coisa nesse chamado, o texto novo é que vale.
+      if (body && !readDraft(userId, ticketId)) saveDraft(userId, ticketId, body)
+    },
+    onSettled: (_sent, _error, { ticketId }) =>
+      queryClient.invalidateQueries({ queryKey: messagesKey(ticketId) }),
   })
 }
 

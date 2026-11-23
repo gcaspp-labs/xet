@@ -1,4 +1,10 @@
-import { expect, request as apiRequest, test, type APIRequestContext } from '@playwright/test'
+import {
+  expect,
+  request as apiRequest,
+  test,
+  type APIRequestContext,
+  type Page,
+} from '@playwright/test'
 import { admin, seedSector, signIn, unique, userPassword, openQueued } from './fixtures'
 
 // Liga o número do setor pelo adaptador falso: conectar e o celular ler o QR code.
@@ -223,4 +229,579 @@ test('mensagem que falhou é reenviada pelo responsável', async ({ page, reques
   await expect(message).toContainText('Enviada')
   await expect(message).not.toContainText('Falhou')
   await expect(page.getByRole('listitem', { name: 'Mensagem enviada' })).toHaveCount(1)
+})
+
+// Abre o chamado de um contato que está na fila e o assume, deixando o compositor à vista.
+async function assume(page: Page, contactName: string) {
+  await openQueued(page, contactName)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByText('Chamado assumido')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+}
+
+test('rascunho da mensagem volta ao recarregar e ao trocar de chamado, e some ao enviar', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Ana Rascunho ${id}`
+  const second = `Bia Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  await assume(page, first)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const typed = 'Segue o balancete de outubro, com a planilha.'
+  await field.fill(typed)
+
+  // Recarregar devolve o texto, com o cursor no fim, pronto para continuar.
+  await page.reload()
+  await expect(field).toHaveValue(typed)
+  expect(
+    await field.evaluate((element) => {
+      const input = element as HTMLTextAreaElement
+      return (
+        input.selectionStart === input.value.length && input.selectionEnd === input.value.length
+      )
+    }),
+  ).toBe(true)
+
+  // Outro chamado começa vazio; o rascunho de cada um volta ao trocar pela lista de Meus chamados.
+  await page.goto('/chamados')
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  await queue.getByRole('button', { name: `Assumir chamado de ${second}` }).click()
+  await expect(page.getByRole('heading', { name: second })).toBeVisible()
+  await expect(field).toHaveValue('')
+  await field.fill('Rascunho da Bia')
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  await mine.getByRole('link', { name: new RegExp(first) }).click()
+  await expect(page.getByRole('heading', { name: first })).toBeVisible()
+  await expect(field).toHaveValue(typed)
+  await mine.getByRole('link', { name: new RegExp(second) }).click()
+  await expect(page.getByRole('heading', { name: second })).toBeVisible()
+  await expect(field).toHaveValue('Rascunho da Bia')
+
+  // Enviar limpa o rascunho daquele chamado, e recarregar mostra o campo vazio.
+  await field.press('Enter')
+  await expect(
+    page.getByRole('listitem', { name: 'Mensagem enviada' }).filter({ hasText: 'Rascunho da Bia' }),
+  ).toContainText('Enviada')
+  await expect(field).toHaveValue('')
+  await page.reload()
+  await expect(field).toHaveValue('')
+
+  // Apagar todo o texto também limpa, e o rascunho do outro chamado continua onde estava.
+  await mine.getByRole('link', { name: new RegExp(first) }).click()
+  await expect(field).toHaveValue(typed)
+  await field.fill('')
+  await page.reload()
+  await expect(field).toHaveValue('')
+  await mine.getByRole('link', { name: new RegExp(second) }).click()
+  await expect(field).toHaveValue('')
+})
+
+test('sair da conta apaga os rascunhos do usuário', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Carla Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  await page.getByRole('textbox', { name: 'Mensagem' }).fill('Texto que não vai ao cliente')
+  // O rascunho fica no armazenamento do navegador, como a pessoa digitou.
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+    ),
+  ).toHaveLength(1)
+
+  // Computador compartilhado: sair da conta leva junto o que estava escrito.
+  await page.getByRole('button', { name: 'Configurações' }).click()
+  await page.getByRole('menuitem', { name: 'Sair' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+    ),
+  ).toHaveLength(0)
+
+  // Ao entrar de novo no mesmo navegador, o campo volta vazio.
+  await signIn(page, agent, userPassword)
+  await page
+    .getByRole('navigation', { name: 'Meus chamados' })
+    .getByRole('link', { name: contactName })
+    .click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+})
+
+test('sem acesso ao armazenamento do navegador, a tela funciona e não há rascunho', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Duda Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  // Armazenamento bloqueado (por política do navegador ou cheio): toda leitura e escrita falha.
+  await page.addInitScript(() => {
+    const blocked = () => {
+      throw new DOMException('Armazenamento bloqueado', 'SecurityError')
+    }
+    Storage.prototype.getItem = blocked
+    Storage.prototype.setItem = blocked
+    Storage.prototype.removeItem = blocked
+    Storage.prototype.clear = blocked
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  await field.fill('Mensagem sem rascunho')
+  await field.press('Enter')
+  await expect(
+    page
+      .getByRole('listitem', { name: 'Mensagem enviada' })
+      .filter({ hasText: 'Mensagem sem rascunho' }),
+  ).toContainText('Enviada')
+  await expect(page.getByText('Não foi possível')).toHaveCount(0)
+
+  // Sem armazenamento, não há o que restaurar: o campo volta vazio, sem erro na tela.
+  await page.reload()
+  await expect(field).toHaveValue('')
+})
+
+// Enviar e trocar de chamado na sequência: a resposta do servidor chega com o outro chamado aberto, e
+// o campo dele não pode ser limpo nem perder o rascunho guardado.
+test('rascunho do outro chamado continua ao enviar e trocar de chamado em seguida', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Elis Rascunho ${id}`
+  const second = `Fabio Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+
+  // Cada chamado ganha o seu rascunho.
+  await assume(page, first)
+  await field.fill('Rascunho da Elis')
+  await page.goto('/chamados')
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  await queue.getByRole('button', { name: `Assumir chamado de ${second}` }).click()
+  await expect(page.getByRole('heading', { name: second })).toBeVisible()
+  await field.fill('Rascunho do Fabio')
+
+  // O envio demora: dá tempo de trocar de chamado antes de o servidor confirmar.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    await route.continue()
+  })
+  await open(first)
+  await expect(field).toHaveValue('Rascunho da Elis')
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  await open(second)
+  await sent
+
+  // O campo do chamado novo abre com o rascunho dele e continua assim depois da confirmação: só o
+  // rascunho do chamado enviado sai do armazenamento, o do chamado aberto fica.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+      ),
+    )
+    .toHaveLength(1)
+  await expect(field).toHaveValue('Rascunho do Fabio')
+  await page.reload()
+  await expect(field).toHaveValue('Rascunho do Fabio')
+  // O chamado enviado fica sem rascunho.
+  await open(first)
+  await expect(field).toHaveValue('')
+})
+
+// O arquivo anexado é do chamado em que foi escolhido: ao enviar e trocar de chamado em seguida, ele
+// não pode ficar no campo do chamado novo, senão um Enter o mandaria para o cliente errado.
+test('arquivo anexado não passa para o chamado novo ao enviar e trocar em seguida', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Gil Rascunho ${id}`
+  const second = `Hana Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+  const fileName = `balancete-${id}.pdf`
+
+  await assume(page, first)
+  await assume(page, second)
+  await open(first)
+  await page.getByLabel('Arquivo para enviar').setInputFiles({
+    name: fileName,
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.7 rascunho'),
+  })
+  await expect(page.getByRole('textbox', { name: 'Legenda do arquivo' })).toBeVisible()
+
+  // O envio demora: dá tempo de abrir o outro chamado antes de o servidor confirmar.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    await route.continue()
+  })
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await page.getByRole('textbox', { name: 'Legenda do arquivo' }).press('Enter')
+  await open(second)
+  await sent
+
+  // O chamado novo abre sem o arquivo do anterior, pronto para uma mensagem própria.
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Legenda do arquivo' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Remover arquivo' })).toHaveCount(0)
+
+  // O arquivo foi para o cliente do chamado em que foi anexado, e o campo de lá ficou vazio.
+  await open(first)
+  await expect(
+    page.getByRole('listitem', { name: 'Mensagem enviada' }).filter({ hasText: fileName }),
+  ).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+})
+
+// Sair da conversa antes de o servidor confirmar o envio: o texto já enviado não pode voltar como
+// rascunho, senão um Enter manda a mesma mensagem de novo.
+test('sair do chamado antes da confirmação apaga o rascunho enviado', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Iara Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  await field.fill('Mensagem que sai da tela')
+
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    await route.continue()
+  })
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  // A pessoa deixa a conversa com o envio ainda em andamento.
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await sent
+
+  // O rascunho sai do armazenamento mesmo com o campo fora da tela.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')),
+      ),
+    )
+    .toHaveLength(0)
+
+  // De volta ao chamado, o campo está vazio, inclusive depois de recarregar.
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Meus chamados' })
+    .getByRole('link', { name: new RegExp(contactName) })
+    .click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+  await page.reload()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('')
+})
+
+// O rascunho sai no próprio envio, e não na confirmação: sair do chamado e voltar antes de o
+// servidor responder não pode trazer de volta o texto já enviado, senão um Enter o manda de novo.
+test('sair e voltar ao chamado antes da confirmação não traz o texto enviado de volta', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Joana Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const drafts = () =>
+    page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')))
+  await field.fill('Mensagem que já saiu')
+
+  // O envio demora: dá tempo de sair do chamado e voltar antes da confirmação.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+    await route.continue()
+  })
+  const sent = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  // O rascunho sai do armazenamento no envio, antes de a resposta chegar.
+  await expect.poll(drafts).toHaveLength(0)
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(field).toHaveValue('')
+  await sent
+  await expect(field).toHaveValue('')
+  await page.reload()
+  await expect(field).toHaveValue('')
+})
+
+// Envio que falha devolve o texto como rascunho: a pessoa sai do chamado e, ao voltar, encontra o
+// que escreveu para reenviar depois de resolver o problema.
+test('envio que falha devolve o texto como rascunho', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const contactName = `Kaique Rascunho ${unique().id}`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: unique().phone,
+    contactName,
+    body: 'Olá',
+  })
+
+  await signIn(page, agent, userPassword)
+  await assume(page, contactName)
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const drafts = () =>
+    page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')))
+
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Não foi possível enviar agora.' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await field.fill('Texto que não saiu')
+  await field.press('Enter')
+  await expect(page.getByText('Não foi possível enviar agora.')).toBeVisible()
+  // O texto volta para o armazenamento e, ao sair e voltar ao chamado, está no campo de novo.
+  await expect.poll(drafts).toHaveLength(1)
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+  await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  await expect(field).toHaveValue('Texto que não saiu')
+})
+
+// O erro de um envio é do chamado em que ele foi feito: se o envio do chamado A falhar depois de a
+// pessoa abrir o chamado B, o aviso não pode aparecer no B.
+test('falha de envio de outro chamado não aparece no chamado aberto', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Nara Rascunho ${id}`
+  const second = `Otavio Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+  const field = page.getByRole('textbox', { name: 'Mensagem' })
+  const drafts = () =>
+    page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('message-draft.')))
+
+  await assume(page, first)
+  await assume(page, second)
+  await open(first)
+  await field.fill('Mensagem do chamado que falha')
+
+  // O envio do chamado A demora e falha, e a pessoa já está no chamado B quando o aviso chega.
+  await page.route('**/api/tickets/*/messages', async (route) => {
+    if (route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Não foi possível enviar agora.' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+  const failed = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/messages'),
+  )
+  await field.press('Enter')
+  await open(second)
+  await failed
+
+  // O texto voltou a ser rascunho do chamado A, mas o aviso do erro não aparece no B.
+  await expect.poll(drafts).toHaveLength(1)
+  await expect(page.getByText('Não foi possível enviar agora.')).toHaveCount(0)
+  await expect(field).toHaveValue('')
+
+  // No chamado A, o aviso e o texto para reenviar estão lá.
+  await open(first)
+  await expect(page.getByText('Não foi possível enviar agora.')).toBeVisible()
+  await expect(field).toHaveValue('Mensagem do chamado que falha')
+})
+
+// A gravação em andamento é do chamado em que começou: ao trocar de chamado ela é descartada, para o
+// áudio não ir para o cliente do chamado novo.
+test('gravação de áudio em andamento não passa para o chamado novo', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { id } = unique()
+  const first = `Lara Rascunho ${id}`
+  const second = `Murilo Rascunho ${id}`
+  for (const contactName of [first, second]) {
+    await phone(request, sector.id, 'receive', {
+      externalMessageId: `E2E-${unique().id}`,
+      phone: unique().phone,
+      contactName,
+      body: 'Olá',
+    })
+  }
+
+  await signIn(page, agent, userPassword)
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const open = async (contactName: string) => {
+    await mine.getByRole('link', { name: new RegExp(contactName) }).click()
+    await expect(page.getByRole('heading', { name: contactName })).toBeVisible()
+  }
+  await assume(page, first)
+  await assume(page, second)
+  await open(first)
+  await page.getByRole('button', { name: 'Gravar áudio' }).click()
+  await expect(page.getByRole('status', { name: 'Gravação de áudio' })).toContainText('Gravando')
+
+  // Trocar de chamado com a gravação rolando descarta o áudio, sem anexar nada ao chamado novo.
+  await open(second)
+  await expect(page.getByRole('status', { name: 'Gravação de áudio' })).toHaveCount(0)
+  await expect(page.getByLabel('Áudio gravado')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Gravar áudio' })).toBeVisible()
+
+  // O gravador volta a funcionar no chamado novo, e o áudio gravado fica nele.
+  await page.getByRole('button', { name: 'Gravar áudio' }).click()
+  await page.waitForTimeout(1200)
+  await page.getByRole('button', { name: 'Concluir gravação' }).click()
+  await expect(page.getByLabel('Áudio gravado')).toBeVisible()
+  await page.getByRole('button', { name: 'Descartar áudio' }).click()
+  await expect(page.getByLabel('Áudio gravado')).toHaveCount(0)
 })

@@ -4,7 +4,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 
 ## Regras
 
-1. Ao clicar em finalizar, abre-se o formulário de registro. O chamado só é encerrado depois de salvar os dados necessários.
+1. Ao clicar em finalizar, abre-se o formulário de registro. O chamado só é encerrado depois de salvar os dados necessários. O registro por telefone é a exceção: a janela "Registrar atendimento por telefone" (ver [queue.md](queue.md)) tem os mesmos campos, com o contato escolhido na busca, e já cria o chamado encerrado ao salvar.
 2. Encerra o chamado em atendimento somente o responsável; supervisores e administradores também precisam ser o responsável. Na ausência dele, o supervisor transfere o chamado para si e encerra.
 3. Chamado na fila não é encerrado: é assumido.
 4. O formulário tem os campos da tabela abaixo. Assunto, resolução e ao menos um módulo são obrigatórios.
@@ -16,7 +16,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 10. O momento em que o chamado foi assumido é registrado à parte, para medir o tempo de espera na fila.
 11. Alterações nos horários ficam registradas na auditoria. O intervalo entre início e fim é o tempo decorrido do atendimento; como há atendimentos simultâneos, não representa necessariamente trabalho exclusivo naquele cliente.
 12. Os assuntos e as soluções do formulário vêm das listas dos módulos marcados no chamado (ver [subjects.md](subjects.md)).
-13. Chamados encerrados não são reabertos. Uma mensagem nova depois do encerramento cria outro chamado (ver [queue.md](queue.md)).
+13. Chamados encerrados não são reabertos, nem o registro por telefone. Uma mensagem nova depois do encerramento cria outro chamado (ver [queue.md](queue.md)).
 14. Os dados de um atendimento encerrado são corrigidos pelo atendente que o encerrou e pelos supervisores e administradores do setor. Os demais atendentes não corrigem. Atendimento transferido para outro setor não é corrigido, nem o antigo, feito com o formulário.
 15. A correção altera os dados do formulário (assunto, resolução, módulos, órgão, início e fim), com as mesmas regras do encerramento.
 16. Módulos que já estavam no chamado podem continuar nele mesmo que tenham sido desativados depois; módulos acrescentados na correção precisam estar ativos no setor.
@@ -35,7 +35,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 | Órgão | Automático, com base no órgão principal do contato; editável |
 | Atendente | Automático, com base no responsável |
 | Setor | Automático |
-| Início | Automático: chegada da primeira mensagem do cliente ou, em chamado aberto pelo atendente, envio da primeira mensagem; editável |
+| Início | Automático: chegada da primeira mensagem do cliente ou, em chamado aberto pelo atendente, envio da primeira mensagem; editável. No registro por telefone, informado, vindo com o horário de agora |
 | Fim | Preenchido automaticamente e editável |
 
 ## Fora do escopo / limites conhecidos
@@ -44,7 +44,7 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 
 ## Relacionado
 
-- Dados: `tickets`, `ticket_modules`, `audit_logs` (`ticket_closed`, `ticket_corrected`).
+- Dados: `tickets`, `ticket_modules`, `audit_logs` (`ticket_closed`, `ticket_corrected`, `ticket_phone_registered`).
 
 ## Histórico
 
@@ -53,3 +53,4 @@ O formulário que registra cada atendimento ao finalizar e a correção posterio
 - 2026-11-15: regra 15 alterada, sem o "falou com"; spec [#173](https://github.com/gcaspp-labs/xet/issues/173), PRs [#189](https://github.com/gcaspp-labs/xet/pull/189), [#190](https://github.com/gcaspp-labs/xet/pull/190). Dizia "A correção altera os dados do formulário (assunto, resolução, módulos, órgão, início e fim) e o "falou com", com as mesmas regras do encerramento.". O histórico de alterações antigo também deixa de mostrar o "falou com" (regra 18 sem mudança).
 - 2026-11-18: regra 14 alterada; spec [#243](https://github.com/gcaspp-labs/xet/issues/243), PR [#252](https://github.com/gcaspp-labs/xet/pull/252). Terminava em "Os demais atendentes não corrigem.".
 - 2026-11-18: regra 12 alterada e campo Módulos/sistemas passa a vir antes de Assunto na tabela; spec [#149](https://github.com/gcaspp-labs/xet/issues/149), PR [#156](https://github.com/gcaspp-labs/xet/pull/156). A regra dizia "vêm das listas do setor".
+- 2026-11-22: regras 1 e 13 alteradas e o campo Início da tabela (o registro por telefone já nasce encerrado, e o início é informado nele); spec [#311](https://github.com/gcaspp-labs/xet/issues/311), PRs [#349](https://github.com/gcaspp-labs/xet/pull/349) e [#354](https://github.com/gcaspp-labs/xet/pull/354). A regra 1 terminava em "O chamado só é encerrado depois de salvar os dados necessários."; a 13 dizia "Chamados encerrados não são reabertos."; o campo Início dizia "Automático: chegada da primeira mensagem do cliente ou, em chamado aberto pelo atendente, envio da primeira mensagem; editável".

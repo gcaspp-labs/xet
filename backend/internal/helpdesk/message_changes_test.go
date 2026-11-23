@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/realtime"
+	"github.com/gcaspp-labs/xet/backend/internal/db"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
 
@@ -269,6 +270,182 @@ func TestExternalDeletionKeepsContentFileAndDeliveryStatus(t *testing.T) {
 	out := c.apiMessage(c.ticket.ID, c.token, "OUT-1")
 	if bodyOf(t, out) != "Bom dia" || out["status"] != "sent" || deletionOf(t, out)["origin"] != "phone" {
 		t.Fatalf("message from the phone = %v", out)
+	}
+}
+
+// A exclusão para todos feita pelo celular do setor amplia a exclusão "para
+// mim" do XET: a mensagem passa a ser excluída para todos, o histórico guarda
+// as duas exclusões, em ordem, com origem e horário, e em Chamados o conteúdo
+// continua oculto, porque a origem da exclusão segue a do XET.
+func TestDeletionFromThePhoneWidensTheLocalDeletion(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	resp := e.sendFile(c.ticket.ID, c.anaToken, requestB, "foto.png", "image/png", png, "Comprovante")
+	if resp.Status != http.StatusOK {
+		t.Fatalf("send image: status %d, body %v", resp.Status, resp.Body)
+	}
+	externalID := "fake-msg-" + requestB
+	msgID := int64(resp.Body["id"].(float64))
+	if r := e.deleteMessage(msgID, c.anaToken, requestE1, "local"); r.Status != http.StatusOK {
+		t.Fatalf("local delete: status %d, body %v", r.Status, r.Body)
+	}
+	before := e.changesOf(msgID)
+	if len(before) != 1 || before[0].Kind != "deletion" || before[0].Origin != "agent" {
+		t.Fatalf("changes after the local deletion = %+v", before)
+	}
+	events := e.subscribe(c.biaToken)
+
+	at := time.Now().Truncate(time.Microsecond).Add(time.Minute)
+	e.revoke(c.sector.ID, "RV-WIDEN", externalID, true, at)
+
+	// O aviso chega depois do commit: quando ele chega, a API já mostra a
+	// exclusão para todos.
+	if ev := e.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
+		t.Fatalf("event = %+v", ev)
+	}
+	m := e.apiMessage(c.ticket.ID, c.biaToken, externalID)
+	if bodyOf(t, m) != anaPrefix+"\nComprovante" {
+		t.Fatalf("content after the widening = %v", m["body"])
+	}
+	d := deletionOf(t, m)
+	if d["scope"] != "everyone" || d["origin"] != "agent" {
+		t.Fatalf("deletion = %v", d)
+	}
+	want := []version{
+		{Kind: "deletion", Origin: "agent", At: before[0].At},
+		{Kind: "deletion", Origin: "phone", At: at},
+	}
+	if got := e.changesOf(msgID); !versionsEqual(got, want) {
+		t.Fatalf("changes = %+v\nwant %+v", got, want)
+	}
+	// Em Chamados a prévia continua sem o conteúdo, e o arquivo segue
+	// guardado para Atendimentos (o aviso da conversa é da tela, pela origem).
+	if last := c.lastMessageOfList(c.biaToken); last["hidden"] != true || last["body"] != nil {
+		t.Fatalf("preview of the list = %v", last)
+	}
+	media := m["media"].(map[string]any)
+	if status, _, body := e.get(fmt.Sprintf("/api/media/%d", int64(media["id"].(float64))), c.biaToken); status != http.StatusOK || string(body) != string(png) {
+		t.Fatalf("file = %d %q", status, body)
+	}
+}
+
+// A ampliação acontece uma vez: a reentrega do mesmo evento, uma segunda
+// exclusão para todos e a exclusão "para mim" depois dela não gravam nada.
+func TestWidenedDeletionIsFinal(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+	externalID := "fake-msg-" + requestA
+
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE1, "local"); r.Status != http.StatusOK {
+		t.Fatalf("local delete: status %d, body %v", r.Status, r.Body)
+	}
+	at := time.Now().Truncate(time.Microsecond).Add(time.Minute)
+	e.revoke(c.sector.ID, "RV-1", externalID, true, at)
+	// A reentrega do mesmo evento e uma segunda exclusão para todos.
+	e.revoke(c.sector.ID, "RV-1", externalID, true, at)
+	e.revoke(c.sector.ID, "RV-2", externalID, true, at.Add(time.Second))
+
+	if got := e.changesOf(c.sent); len(got) != 2 {
+		t.Fatalf("changes = %+v, want the two deletions", got)
+	}
+	d := deletionOf(t, e.apiMessage(c.ticket.ID, c.biaToken, externalID))
+	if d["scope"] != "everyone" || d["origin"] != "agent" {
+		t.Fatalf("deletion = %v", d)
+	}
+	// O inverso não vale: "para mim" depois de "para todos" continua recusada.
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE2, "local"); r.Status != http.StatusConflict ||
+		r.Body["error"] != "Esta mensagem já foi excluída." {
+		t.Fatalf("local delete after delete for everyone: status %d, body %v", r.Status, r.Body)
+	}
+	if d := deletionOf(t, e.apiMessage(c.ticket.ID, c.biaToken, externalID)); d["scope"] != "everyone" {
+		t.Fatalf("deletion after the refused one = %v", d)
+	}
+}
+
+// A exclusão para todos de uma mensagem já excluída para todos, pelo cliente
+// ou pelo celular do setor, não muda nada nem duplica o registro.
+func TestDeletionForEveryoneOfADeletedMessageChangesNothing(t *testing.T) {
+	t.Parallel()
+	c := newReactionCase(t)
+	at := time.Now().Truncate(time.Microsecond).Add(time.Minute)
+
+	c.revoke(c.sector.ID, "RV-1", "OUT-1", true, at)
+	c.revoke(c.sector.ID, "RV-2", "OUT-1", true, at.Add(time.Second))
+	c.revoke(c.sector.ID, "RV-3", "OUT-1", true, at.Add(2*time.Second))
+
+	if got := c.changesOf(c.messageID(c.ticket.ID, "OUT-1")); len(got) != 1 || got[0].Origin != "phone" {
+		t.Fatalf("changes = %+v", got)
+	}
+	if d := deletionOf(t, c.apiMessage(c.ticket.ID, c.token, "OUT-1")); d["scope"] != "everyone" || d["origin"] != "phone" {
+		t.Fatalf("deletion = %v", d)
+	}
+}
+
+// A ampliação vale em chamado encerrado: a alteração externa entra no próprio
+// chamado, sem abrir outro.
+func TestWideningAppliesToClosedTickets(t *testing.T) {
+	t.Parallel()
+	c := newSentConversation(t)
+	e := c.e
+	externalID := "fake-msg-" + requestA
+	if r := e.deleteMessage(c.sent, c.anaToken, requestE1, "local"); r.Status != http.StatusOK {
+		t.Fatalf("local delete: status %d, body %v", r.Status, r.Body)
+	}
+	org, err := e.Q.CreateOrganization(e.T.Context(), db.CreateOrganizationParams{Name: "Prefeitura", MunicipalityID: e.Municipality("Itu")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.closeTicket(c.ticket.ID, c.ana.ID, org.ID)
+
+	at := time.Now().Truncate(time.Microsecond).Add(time.Minute)
+	e.revoke(c.sector.ID, "RV-CLOSED", externalID, true, at)
+
+	if tickets := e.tickets(c.sector.ID); len(tickets) != 1 || tickets[0].Status != "closed" {
+		t.Fatalf("tickets = %+v", tickets)
+	}
+	if d := deletionOf(t, e.apiMessage(c.ticket.ID, c.anaToken, externalID)); d["scope"] != "everyone" || d["origin"] != "agent" {
+		t.Fatalf("deletion = %v", d)
+	}
+	if got := e.changesOf(c.sent); len(got) != 2 || got[1].Origin != "phone" {
+		t.Fatalf("changes = %+v", got)
+	}
+}
+
+// A exclusão para todos que chega antes da mensagem enviada pelo XET espera
+// sem criar nada e é ligada quando o envio é gravado, já valendo para todos.
+func TestDeletionBeforeTheSystemSendIsLinkedWhenItArrives(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	const request = "9c4e9061-4a3d-4c8e-af41-3d4e5f607182"
+	externalID := "fake-msg-" + request
+	at := time.Now().Truncate(time.Microsecond).Add(time.Minute)
+
+	e.revoke(c.sector.ID, "RV-S", externalID, true, at)
+	if n := e.Count("message_changes"); n != 1 {
+		t.Fatalf("message_changes = %d, want the pending one", n)
+	}
+	if r := e.sendText(c.ticket.ID, c.anaToken, request, "texto"); r.Status != http.StatusOK {
+		t.Fatalf("send = %d %s", r.Status, r.Body)
+	}
+
+	m := e.apiMessage(c.ticket.ID, c.anaToken, externalID)
+	if d := deletionOf(t, m); d["scope"] != "everyone" || d["origin"] != "phone" {
+		t.Fatalf("deletion = %v", d)
+	}
+	got := e.changesOf(e.messageID(c.ticket.ID, externalID))
+	if len(got) != 1 || got[0].Kind != "deletion" || got[0].Origin != "phone" || !got[0].At.Equal(at) {
+		t.Fatalf("changes = %+v", got)
+	}
+	// A exclusão veio do celular do setor, que o XET conhece: em Chamados o
+	// conteúdo continua à vista, como em qualquer exclusão externa.
+	last := c.e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", c.sector.ID), c.anaToken)[0]["lastMessage"].(map[string]any)
+	if last["hidden"] != false || last["body"] == nil {
+		t.Fatalf("preview of the list = %v", last)
 	}
 }
 

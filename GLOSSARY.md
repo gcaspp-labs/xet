@@ -7,7 +7,7 @@ O xet é a central de atendimento da GCASPP LAB, onde cada setor atende pelo seu
 ### Chamados
 
 **Chamado** (`ticket`):
-O pedido de atendimento de um contato com um setor, da primeira mensagem até o encerramento. Chamados são os que estão na fila ou em atendimento.
+O pedido de atendimento de um contato com um setor, da primeira mensagem até o encerramento. Chamados são os que estão na fila, em atendimento ou pendentes.
 _Evite_: conversa, atendimento, ticket
 
 **Atendimentos** (`ticket` com `status = 'closed'`, rota `/atendimentos`):
@@ -20,7 +20,15 @@ _Evite_: origem, meio, tipo de chamado
 
 **Fila** (`ticket_status = 'queued'`):
 Os chamados do setor que ainda não têm responsável, à espera de alguém assumir.
-_Evite_: pendentes, abertos
+_Evite_: abertos
+
+**Pendente** (`ticket_status = 'pending'`):
+O chamado que o responsável deixou parado, com um motivo, porque depende de outra coisa para ser concluído. Fica sem responsável, na lista Pendentes do setor, não recebe mensagens novas e libera o contato para um chamado novo na fila; qualquer integrante do setor pode retomá-lo.
+_Evite_: em espera, aguardando, pausado
+
+**Mesclado** (`closure_type = 'merged'`):
+O chamado cujas mensagens passaram para um pendente do mesmo contato e setor, que foi retomado a partir dele (`merged_into_ticket_id`). Fica em Atendimentos com o link para o chamado de destino e não conta como encerrado.
+_Evite_: unido, juntado, duplicado
 
 **Responsável** (`assignee_id`):
 O atendente que conduz o chamado naquele momento; só ele responde e encerra. Cada chamado tem um responsável por vez.

@@ -29,6 +29,15 @@ type ticketDetailResponse struct {
 	Channel      db.TicketChannel        `json:"channel"`
 	Previous     *previousTicketResponse `json:"previous"`
 	Next         *nextTicketResponse     `json:"next"`
+	Pending      *pendingDetailResponse  `json:"pending"`
+}
+
+// pendingDetailResponse is why the ticket is pending, who marked it and
+// when; only while the ticket is pending.
+type pendingDetailResponse struct {
+	Reason string    `json:"reason"`
+	By     httpx.Ref `json:"by"`
+	At     time.Time `json:"at"`
 }
 
 // previousTicketResponse is the ticket of the origin sector, read by the
@@ -94,6 +103,11 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	if t.NextProtocol != nil && t.NextSectorName != nil {
 		out.Next = &nextTicketResponse{Protocol: *t.NextProtocol, SectorName: *t.NextSectorName, Reason: t.NextTransferReason}
+	}
+	if t.Status == db.TicketStatusPending && t.PendingReason != nil && t.PendingByID != nil && t.PendingByName != nil && t.PendingAt != nil {
+		out.Pending = &pendingDetailResponse{
+			Reason: *t.PendingReason, By: httpx.Ref{ID: *t.PendingByID, Name: *t.PendingByName}, At: *t.PendingAt,
+		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }

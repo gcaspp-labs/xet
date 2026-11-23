@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gcaspp-labs/xet/backend/db/migrations"
 	"github.com/gcaspp-labs/xet/backend/internal/testdb"
@@ -650,5 +651,231 @@ func TestContactCardsKeepExistingMessages(t *testing.T) {
 	}
 	if _, err := p.DownTo(ctx, 32); err == nil {
 		t.Fatal("down with a contact message: accepted")
+	}
+}
+
+// O chamado pendente e o mesclado (#333) chegam sem mudar os chamados
+// existentes. Depois, um contato pode ter vários pendentes e um chamado na
+// fila ou em atendimento no setor; o pendente fica sem responsável, com
+// motivo, quem marcou e quando, e o mesclado aponta para outro chamado, sem
+// assunto nem resolução. A volta desfaz tudo, e é recusada com um pendente.
+func TestTicketPendingKeepsExistingTickets(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 34); err != nil {
+		t.Fatalf("up to 34: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into organizations (name, municipality_id) select 'Prefeitura', min(id) from municipalities;
+		insert into contacts (name, phone, registered, organization_id) select 'Maria', '5511988887777', true, id from organizations;
+		insert into contacts (name, registered) values ('João', false), ('Rita', false);
+		insert into users (name, nickname, email, password_hash, role, sector_id) values ('Ana', 'Ana', 'ana@exemplo.com', 'x', 'agent', 1);
+		insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at, subject, resolution)
+		select '2026-000001', 1, 1, id, 'closed', 1, 1, 'resolved', now(), now(), now() - interval '1 hour', now() - interval '1 hour', 'Contracheque', 'Segunda via' from organizations;
+		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000002', 1, 2, 'queued', now(), now());
+		insert into tickets (protocol, sector_id, contact_id, status, assignee_id, arrived_at, assigned_at, started_at)
+		values ('2026-000003', 1, 3, 'in_progress', 1, now(), now(), now());`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	const snapshot = `select string_agg(row_to_json(t)::text, '|' order by id) from (
+		select id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id,
+		    arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution,
+		    created_at, updated_at, transfer_reason, channel, client_request_id from tickets) t`
+	var before, after string
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 36); err != nil {
+		t.Fatalf("up to 36: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("tickets changed:\nbefore %s\nafter  %s", before, after)
+	}
+	var filled int
+	if err := db.QueryRowContext(ctx, `select count(*) from tickets
+		where pending_reason is not null or pending_by_id is not null or pending_at is not null or merged_into_ticket_id is not null`).Scan(&filled); err != nil {
+		t.Fatal(err)
+	}
+	if filled != 0 {
+		t.Fatalf("existing tickets with pending or merged fields: %d", filled)
+	}
+
+	// O chamado em atendimento fica pendente; o contato passa a ter outro na
+	// fila e, ao mesmo tempo, mais um pendente.
+	const pending = `update tickets set status = 'pending', assignee_id = null,
+		pending_reason = 'Aguardando ajuste', pending_by_id = 1, pending_at = now() where protocol = $1`
+	if _, err := db.ExecContext(ctx, pending, "2026-000003"); err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `insert into tickets (protocol, sector_id, contact_id, status, assignee_id, arrived_at, assigned_at, started_at)
+		values ('2026-000004', 1, 3, 'in_progress', 1, now(), now(), now())`); err != nil {
+		t.Fatalf("in progress beside a pending: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, pending, "2026-000004"); err != nil {
+		t.Fatalf("second pending: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000005', 1, 3, 'queued', now(), now())`); err != nil {
+		t.Fatalf("queued beside two pending: %v", err)
+	}
+	// O mesclado aponta para o pendente, sem órgão, assunto nem resolução.
+	if _, err := db.ExecContext(ctx, `insert into tickets (protocol, sector_id, contact_id, status, assignee_id, closed_by_id, closure_type, merged_into_ticket_id, closed_at, ended_at, arrived_at, started_at)
+		values ('2026-000006', 1, 2, 'closed', 1, 1, 'merged', 3, now(), now(), now(), now())`); err != nil {
+		t.Fatalf("merged: %v", err)
+	}
+
+	for name, stmt := range map[string]string{
+		"second open ticket": `insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+			values ('2026-000007', 1, 3, 'queued', now(), now())`,
+		"pending without reason": `insert into tickets (protocol, sector_id, contact_id, status, pending_by_id, pending_at, arrived_at, started_at)
+			values ('2026-000007', 1, 2, 'pending', 1, now(), now(), now())`,
+		"pending with blank reason": `insert into tickets (protocol, sector_id, contact_id, status, pending_reason, pending_by_id, pending_at, arrived_at, started_at)
+			values ('2026-000007', 1, 2, 'pending', '  ', 1, now(), now(), now())`,
+		"pending without who marked": `insert into tickets (protocol, sector_id, contact_id, status, pending_reason, pending_at, arrived_at, started_at)
+			values ('2026-000007', 1, 2, 'pending', 'Aguardando', now(), now(), now())`,
+		"pending assigned": `insert into tickets (protocol, sector_id, contact_id, status, assignee_id, pending_reason, pending_by_id, pending_at, arrived_at, started_at)
+			values ('2026-000007', 1, 2, 'pending', 1, 'Aguardando', 1, now(), now(), now())`,
+		"merged without target": `insert into tickets (protocol, sector_id, contact_id, status, assignee_id, closed_by_id, closure_type, closed_at, ended_at, arrived_at, started_at)
+			values ('2026-000007', 1, 2, 'closed', 1, 1, 'merged', now(), now(), now(), now())`,
+		"merged with subject": `insert into tickets (protocol, sector_id, contact_id, status, assignee_id, closed_by_id, closure_type, merged_into_ticket_id, closed_at, ended_at, arrived_at, started_at, subject, resolution)
+			values ('2026-000007', 1, 2, 'closed', 1, 1, 'merged', 3, now(), now(), now(), now(), 'A', 'B')`,
+		"target without merged": `update tickets set merged_into_ticket_id = 3 where protocol = '2026-000001'`,
+		"merged into itself":    `update tickets set merged_into_ticket_id = id where protocol = '2026-000006'`,
+		"pending audit without reason": `insert into audit_logs (ticket_id, entity_type, entity_id, action, actor_id, changes)
+			values (3, 'ticket', 3, 'ticket_pending', 1, '{}')`,
+	} {
+		if _, err := db.ExecContext(ctx, stmt); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+
+	// Com pendente ou mesclado, a volta é recusada; depois de removidos, desfaz tudo.
+	if _, err := p.DownTo(ctx, 34); err == nil {
+		t.Fatal("down with pending tickets: accepted")
+	}
+	if _, err := db.ExecContext(ctx, `delete from tickets where protocol in ('2026-000004', '2026-000005', '2026-000006');
+		update tickets set status = 'in_progress', assignee_id = 1, pending_reason = null, pending_by_id = null, pending_at = null
+		where protocol = '2026-000003'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 34); err != nil {
+		t.Fatalf("down to 34: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("tickets changed by down:\nbefore %s\nafter  %s", before, after)
+	}
+	if _, err := p.UpTo(ctx, 36); err != nil {
+		t.Fatalf("up again: %v", err)
+	}
+}
+
+// A migração 37 cria assignee_read_at e marca a leitura dos chamados em
+// atendimento com o instante da migração, que começam sem não lidas. A fila
+// continua sem leitura.
+func TestAssigneeReadStartsWithoutUnread(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 36); err != nil {
+		t.Fatalf("up to 36: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into contacts (name, registered) values ('Maria', false), ('João', false);
+		insert into users (name, nickname, email, password_hash, role, sector_id) values ('Ana', 'Ana', 'ana@exemplo.com', 'x', 'agent', 1);
+		insert into tickets (protocol, sector_id, contact_id, status, assignee_id, arrived_at, started_at, assigned_at)
+		values ('2026-000001', 1, 1, 'in_progress', 1, now(), now(), now());
+		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000002', 1, 2, 'queued', now(), now());`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	start := time.Now()
+	if _, err := p.UpTo(ctx, 37); err != nil {
+		t.Fatalf("up to 37: %v", err)
+	}
+
+	var inProgress, queued *time.Time
+	if err := db.QueryRowContext(ctx, `
+		select assignee_read_at from tickets where protocol = '2026-000001'`).Scan(&inProgress); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `
+		select assignee_read_at from tickets where protocol = '2026-000002'`).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if inProgress == nil || inProgress.Before(start.Truncate(time.Second)) {
+		t.Fatalf("reading of the ticket in progress = %v, migration at %v", inProgress, start)
+	}
+	if queued != nil {
+		t.Fatalf("reading of the queued ticket = %v", queued)
+	}
+}
+
+// A migração 38 faz o horário de gravação da mensagem ser o do insert
+// (clock_timestamp()), não o do início da transação, para a comparação com a
+// leitura do responsável não esconder uma mensagem gravada por uma transação
+// que já estava aberta. O down volta ao padrão anterior.
+func TestMessageCreatedAtUsesTheInstantOfTheInsert(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 38); err != nil {
+		t.Fatalf("up to 38: %v", err)
+	}
+
+	defaultOfCreatedAt := func() string {
+		var def string
+		if err := db.QueryRowContext(ctx, `
+			select column_default from information_schema.columns
+			where table_schema = 'public' and table_name = 'messages' and column_name = 'created_at'`).Scan(&def); err != nil {
+			t.Fatal(err)
+		}
+		return def
+	}
+	if got := defaultOfCreatedAt(); got != "clock_timestamp()" {
+		t.Fatalf("default of messages.created_at = %q", got)
+	}
+
+	if _, err := p.DownTo(ctx, 37); err != nil {
+		t.Fatalf("down to 37: %v", err)
+	}
+	if got := defaultOfCreatedAt(); got != "now()" {
+		t.Fatalf("default of messages.created_at after down = %q", got)
 	}
 }
