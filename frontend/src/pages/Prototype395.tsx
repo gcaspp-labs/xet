@@ -1,12 +1,11 @@
 // PROTÓTIPO #395 — descartável, não vai para a main.
-// Plano: o X de cancelar direto no item da fila, em três versões trocáveis por
-// ?variante=A|B|C (A sempre visível e cancela na hora; B só no hover/focus e
-// cancela na hora; C sempre visível e pede confirmação no próprio item), nas duas
-// listas que mostram a fila — a aba Fila de /chamados (tela=chamados) e a lista
-// Fila do Dashboard (tela=dashboard) — mais a janela "Cancelar chamado" com o
+// Plano: versão C aprovada por Laboratório em 23/11/2026 — o X de cancelar fica
+// sempre visível no item da fila e pede confirmação no próprio item, nas duas
+// listas que mostram a fila: a aba Fila de /chamados (tela=chamados) e a lista
+// Fila do Dashboard (tela=dashboard). Mais a janela "Cancelar chamado" com o
 // motivo opcional e o registro do cancelamento na conversa (tela=registro).
 // Dados fictícios.
-// Parâmetros: ?prototype=395&tela=chamados|dashboard|registro&variante=A|B|C
+// Parâmetros: ?prototype=395&tela=chamados|dashboard|registro
 //             &estado=normal|confirmar|janela|janela-preenchida|cancelado|com-motivo
 //             &tema=claro|escuro|contraste&captura=1
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react'
@@ -158,7 +157,6 @@ const conversaCanceladaComMotivo: Entrada[] = [
 
 const params = new URLSearchParams(window.location.search)
 const telaParam = (params.get('tela') ?? 'chamados') as 'chamados' | 'dashboard' | 'registro'
-const varianteParam = (params.get('variante') ?? 'A') as 'A' | 'B' | 'C'
 const estadoParam = params.get('estado') ?? 'normal'
 const temaParam = (params.get('tema') ?? 'claro') as 'claro' | 'escuro' | 'contraste'
 const captura = params.get('captura') === '1'
@@ -177,15 +175,13 @@ function Contagem({ n }: { n: number }) {
 }
 
 // O X. É a ação destrutiva: ícone sem borda, cinza em repouso e vermelho no hover,
-// longe do Assumir (à direita do item) e acima da área clicável da linha no Dashboard.
+// sempre visível, longe do Assumir (à direita do item) e acima da área clicável da
+// linha no Dashboard. O clique não cancela: pede confirmação no próprio item.
 function BotaoX({
   contato,
-  visivel,
   aoClicar,
 }: {
   contato: string
-  // false na versão B: só aparece no hover ou no foco dentro do item.
-  visivel: boolean
   aoClicar: () => void
 }) {
   return (
@@ -194,10 +190,7 @@ function BotaoX({
       size="icon"
       aria-label={`Cancelar chamado de ${contato}`}
       title="Cancelar chamado"
-      className={cn(
-        'relative z-10 text-ink-soft hover:bg-danger-soft hover:text-destructive',
-        !visivel && 'opacity-0 group-hover/item:opacity-100 group-focus-within/item:opacity-100',
-      )}
+      className="relative z-10 text-ink-soft hover:bg-danger-soft hover:text-destructive"
       onClick={aoClicar}
     >
       <X strokeWidth={1.7} aria-hidden />
@@ -205,7 +198,7 @@ function BotaoX({
   )
 }
 
-// A confirmação no próprio item (versão C): sem janela, o item troca as ações por
+// A confirmação no próprio item: sem janela, o item troca as ações por
 // esta faixa. Voltar é o primeiro foco, e o Cancelar chamado é texto em danger.
 function ConfirmarNoItem({
   contato,
@@ -348,14 +341,12 @@ function Conversa({
 
 function LinhaDaFila({
   chamado,
-  variante,
   confirmando,
   aoPedirConfirmacao,
   aoVoltar,
   aoCancelar,
 }: {
   chamado: Chamado
-  variante: 'A' | 'B' | 'C'
   confirmando: boolean
   aoPedirConfirmacao: () => void
   aoVoltar: () => void
@@ -381,11 +372,7 @@ function LinhaDaFila({
             Assumir
           </Button>
           <span className="flex-1" />
-          <BotaoX
-            contato={chamado.contato}
-            visivel={variante !== 'B'}
-            aoClicar={variante === 'C' ? aoPedirConfirmacao : aoCancelar}
-          />
+          <BotaoX contato={chamado.contato} aoClicar={aoPedirConfirmacao} />
         </div>
       )}
     </li>
@@ -396,7 +383,6 @@ function LinhaDaFila({
 
 function LinhaDoDashboard({
   chamado,
-  variante,
   confirmando,
   aoPedirConfirmacao,
   aoVoltar,
@@ -405,7 +391,6 @@ function LinhaDoDashboard({
   acoes,
 }: {
   chamado: Chamado
-  variante: 'A' | 'B' | 'C'
   confirmando: boolean
   aoPedirConfirmacao: () => void
   aoVoltar: () => void
@@ -449,11 +434,7 @@ function LinhaDoDashboard({
               <UserCheck strokeWidth={1.7} aria-hidden />
               Assumir
             </Button>
-            <BotaoX
-              contato={chamado.contato}
-              visivel={variante !== 'B'}
-              aoClicar={variante === 'C' ? aoPedirConfirmacao : aoCancelar}
-            />
+            <BotaoX contato={chamado.contato} aoClicar={aoPedirConfirmacao} />
           </div>
         </TableCell>
       )}
@@ -483,7 +464,6 @@ function ListaDoDashboard({
   titulo,
   id,
   lista,
-  variante,
   confirmando,
   aoPedirConfirmacao,
   aoVoltar,
@@ -495,7 +475,6 @@ function ListaDoDashboard({
   titulo: string
   id: string
   lista: Chamado[]
-  variante: 'A' | 'B' | 'C'
   confirmando: number | null
   aoPedirConfirmacao: (id: number) => void
   aoVoltar: () => void
@@ -520,7 +499,6 @@ function ListaDoDashboard({
                 <LinhaDoDashboard
                   key={chamado.id}
                   chamado={chamado}
-                  variante={variante}
                   confirmando={confirmando === chamado.id}
                   aoPedirConfirmacao={() => aoPedirConfirmacao(chamado.id)}
                   aoVoltar={aoVoltar}
@@ -658,7 +636,6 @@ function Shell({
 }
 
 function TelaChamados({
-  variante,
   cancelados,
   aoCancelar,
   confirmando,
@@ -667,7 +644,6 @@ function TelaChamados({
   janelaPreenchida,
   setJanela,
 }: {
-  variante: 'A' | 'B' | 'C'
   cancelados: number[]
   aoCancelar: (id: number) => void
   confirmando: number | null
@@ -771,7 +747,6 @@ function TelaChamados({
                       <LinhaDaFila
                         key={chamado.id}
                         chamado={chamado}
-                        variante={variante}
                         confirmando={confirmando === chamado.id}
                         aoPedirConfirmacao={() => setConfirmando(chamado.id)}
                         aoVoltar={() => setConfirmando(null)}
@@ -810,13 +785,11 @@ function TelaChamados({
 }
 
 function TelaDashboard({
-  variante,
   cancelados,
   aoCancelar,
   confirmando,
   setConfirmando,
 }: {
-  variante: 'A' | 'B' | 'C'
   cancelados: number[]
   aoCancelar: (id: number) => void
   confirmando: number | null
@@ -862,7 +835,6 @@ function TelaDashboard({
                 id="board-queue-title"
                 titulo="Fila"
                 lista={lista}
-                variante={variante}
                 confirmando={confirmando}
                 aoPedirConfirmacao={setConfirmando}
                 aoVoltar={() => setConfirmando(null)}
@@ -885,7 +857,6 @@ function TelaDashboard({
                 id="board-progress-title"
                 titulo="Em atendimento"
                 lista={emAtendimento}
-                variante={variante}
                 confirmando={null}
                 aoPedirConfirmacao={() => {}}
                 aoVoltar={() => {}}
@@ -952,7 +923,7 @@ function TelaRegistro({ comMotivo }: { comMotivo: boolean }) {
 
 const titulos: Record<string, string> = {
   normal: 'Item da fila',
-  confirmar: 'Confirmação no item (só a C)',
+  confirmar: 'Confirmação no item',
   janela: 'Janela Cancelar chamado, motivo vazio',
   'janela-preenchida': 'Janela com motivo',
   cancelado: 'Chamado cancelado pelo X',
@@ -961,7 +932,6 @@ const titulos: Record<string, string> = {
 
 export default function Prototype395() {
   const [tela, setTela] = useState(telaParam)
-  const [variante, setVariante] = useState(varianteParam)
   const [estado, setEstado] = useState(estadoParam)
   const [tema, setTema] = useState(temaParam)
   const [cancelados, setCancelados] = useState<number[]>([])
@@ -993,7 +963,6 @@ export default function Prototype395() {
       >
         {tela === 'dashboard' ? (
           <TelaDashboard
-            variante={variante}
             cancelados={cancelados}
             aoCancelar={cancelar}
             confirmando={confirmando}
@@ -1003,7 +972,6 @@ export default function Prototype395() {
           <TelaRegistro comMotivo={estado === 'com-motivo'} />
         ) : (
           <TelaChamados
-            variante={variante}
             cancelados={cancelados}
             aoCancelar={cancelar}
             confirmando={confirmando}
@@ -1031,19 +999,9 @@ export default function Prototype395() {
               <option value="registro">Registro na conversa</option>
             </select>
           </label>
-          <label className="flex items-center gap-1">
-            Versão
-            <select
-              aria-label="Versão"
-              className="rounded-(--radius-7) border border-line bg-card px-1.5 py-1"
-              value={variante}
-              onChange={(event) => setVariante(event.target.value as typeof variante)}
-            >
-              <option value="A">A (X sempre visível)</option>
-              <option value="B">B (X no hover)</option>
-              <option value="C">C (confirmação no item)</option>
-            </select>
-          </label>
+          <span className="rounded-(--radius-7) bg-muted px-1.5 py-1 font-medium">
+            Versão C (aprovada): confirmação no item
+          </span>
           <label className="flex items-center gap-1">
             Estado
             <select

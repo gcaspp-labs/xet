@@ -1,7 +1,9 @@
 import { chromium } from 'playwright'
 
 // Capturas do protótipo #395 (X de cancelar na fila e motivo opcional).
-// Só desktop: 1360x900, como as telas do helpdesk no design.md.
+// Versão C aprovada por Laboratório em 23/11/2026: X sempre visível com
+// confirmação no próprio item. Só desktop: 1360x900, como as telas do helpdesk
+// no design.md.
 const out = process.argv[2] ?? '../prototype-captures'
 const base = 'http://localhost:5395'
 
@@ -39,33 +41,26 @@ const chamados = '/chamados?prototype=395&tela=chamados&captura=1'
 const dashboard = '/dashboard?prototype=395&tela=dashboard&captura=1'
 const registro = '/chamados?prototype=395&tela=registro&captura=1'
 
-await capturar('395-chamados-A', `${chamados}&variante=A`)
-await capturar('395-chamados-B-hover', `${chamados}&variante=B`, (page) =>
-  page.getByRole('button', { name: 'Cancelar chamado de Maria Oliveira' }).hover(),
-)
-await capturar('395-chamados-B-foco', `${chamados}&variante=B`, (page) =>
-  page.getByRole('button', { name: 'Cancelar chamado de Maria Oliveira' }).focus(),
-)
-await capturar('395-chamados-C-confirmar', `${chamados}&variante=C&estado=confirmar`)
-await capturar('395-chamados-janela', `${chamados}&variante=A&estado=janela`)
-await capturar('395-chamados-janela-motivo', `${chamados}&variante=A&estado=janela-preenchida`)
-await capturar('395-chamados-cancelado', `${chamados}&variante=A`, async (page) => {
+await capturar('395-chamados-C', chamados)
+await capturar('395-chamados-C-confirmar', `${chamados}&estado=confirmar`)
+await capturar('395-chamados-janela', `${chamados}&estado=janela`)
+await capturar('395-chamados-janela-motivo', `${chamados}&estado=janela-preenchida`)
+await capturar('395-chamados-cancelado', chamados, async (page) => {
   await page.getByRole('button', { name: 'Cancelar chamado de Maria Oliveira' }).click()
+  await page.getByRole('button', { name: 'Cancelar chamado', exact: true }).click()
   await page.waitForTimeout(250)
 })
-await capturar('395-dashboard-A', `${dashboard}&variante=A`)
-await capturar('395-dashboard-B-hover', `${dashboard}&variante=B`, (page) =>
-  page.getByRole('button', { name: 'Cancelar chamado de Maria Oliveira' }).hover(),
-)
-await capturar('395-dashboard-C-confirmar', `${dashboard}&variante=C&estado=confirmar`)
-await capturar('395-dashboard-cancelado', `${dashboard}&variante=A`, async (page) => {
+await capturar('395-dashboard-C', dashboard)
+await capturar('395-dashboard-C-confirmar', `${dashboard}&estado=confirmar`)
+await capturar('395-dashboard-cancelado', dashboard, async (page) => {
   await page.getByRole('button', { name: 'Cancelar chamado de Maria Oliveira' }).click()
+  await page.getByRole('button', { name: 'Cancelar chamado', exact: true }).click()
   await page.waitForTimeout(250)
 })
 await capturar('395-registro-sem-motivo', registro)
 await capturar('395-registro-com-motivo', `${registro}&estado=com-motivo`)
-await capturar('395-chamados-escuro', `${chamados}&variante=C&estado=confirmar&tema=escuro`)
-await capturar('395-chamados-contraste', `${chamados}&variante=A&tema=contraste`)
-await capturar('395-dashboard-escuro', `${dashboard}&variante=A&tema=escuro`)
+await capturar('395-chamados-escuro', `${chamados}&estado=confirmar&tema=escuro`)
+await capturar('395-chamados-contraste', `${chamados}&tema=contraste`)
+await capturar('395-dashboard-escuro', `${dashboard}&tema=escuro`)
 
 await browser.close()
