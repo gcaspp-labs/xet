@@ -5,6 +5,8 @@ import {
   Check,
   CircleAlert,
   CircleCheck,
+  CirclePause,
+  CirclePlay,
   Contact,
   FileText,
   History,
@@ -186,13 +188,19 @@ function MessageMedia({ message }: { message: Message }) {
 }
 
 // O aviso de cadastro vale para quem abre o chamado, mesmo na fila (spec.md, Órgãos e contatos).
+// O pendente é só leitura: o cadastro fica para quem o retomar.
 function needsRegistration(ticket: TicketDetail) {
-  return ticket.status !== 'closed' && !ticket.contact.registered
+  return ticket.status !== 'closed' && ticket.status !== 'pending' && !ticket.contact.registered
 }
 
-// Só o responsável conduz a conversa, com o chamado aberto; o backend confere de novo.
+// Só o responsável conduz a conversa, com o chamado em atendimento; o backend confere de novo.
 function conducts(ticket: TicketDetail, user: User) {
-  return ticket.status !== 'closed' && ticket.assignee?.id === user.id
+  return ticket.status === 'in_progress' && ticket.assignee?.id === user.id
+}
+
+// Só o responsável pelo chamado em atendimento o coloca como pendente (spec #332).
+export function canMarkPending(ticket: TicketDetail, user: User) {
+  return ticket.status === 'in_progress' && conducts(ticket, user)
 }
 
 // O responsável transfere o próprio chamado em atendimento; supervisão e
@@ -256,6 +264,12 @@ function assignmentText(log: AssignmentLog) {
       ? `${log.fromName} devolveu o chamado à fila`
       : `${log.actor?.name ?? 'Sistema'} devolveu à fila o chamado de ${log.fromName}`
   }
+  if (log.action === 'ticket_pending') {
+    return `${log.actor?.name ?? 'Sistema'} colocou o chamado como pendente`
+  }
+  if (log.action === 'ticket_resumed') {
+    return `${log.actor?.name ?? 'Sistema'} retomou o chamado`
+  }
   if (log.action === 'ticket_closed') {
     return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
   }
@@ -291,6 +305,10 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
         <Ban strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : log.action === 'ticket_closed' ? (
         <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : log.action === 'ticket_pending' ? (
+        <CirclePause strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+      ) : log.action === 'ticket_resumed' ? (
+        <CirclePlay strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : log.action === 'ticket_transferred_sector' ? (
         <ArrowRightLeft strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       ) : log.action === 'ticket_corrected' ? (
@@ -303,6 +321,7 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
       <span className="min-w-0">
         {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
         {(log.action === 'ticket_cancelled' ||
+          log.action === 'ticket_pending' ||
           (log.action === 'ticket_transferred_sector' && log.reason)) && (
           <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
         )}
@@ -1252,7 +1271,10 @@ export function ConversationCard({
   }, [ticket.id, messages.length, logs.length])
 
   let notice: string | null = null
-  if (ticket.status === 'closed') {
+  if (ticket.status === 'pending') {
+    // O pendente é só leitura; a explicação fica no rodapé, com o Retomar no topo da tela.
+    notice = null
+  } else if (ticket.status === 'closed') {
     notice = ticket.closureType === 'cancelled' ? 'Chamado cancelado.' : 'Chamado encerrado.'
   } else if (!ticket.assignee) {
     notice = ticket.previous
@@ -1404,6 +1426,18 @@ export function ConversationCard({
             scrollToEnd(false)
           }}
         />
+      ) : ticket.status === 'pending' ? (
+        <div
+          role="status"
+          aria-label="Somente leitura"
+          className="caption flex items-center gap-2 border-t border-line-soft bg-muted px-4 py-3 text-ink-soft"
+        >
+          <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+          <span>
+            <span className="font-medium text-foreground">Somente leitura.</span> Retome o chamado
+            para responder ao contato.
+          </span>
+        </div>
       ) : (
         notice && (
           <div className="border-t border-line-soft p-3">

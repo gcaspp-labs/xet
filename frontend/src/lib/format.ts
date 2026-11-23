@@ -1,4 +1,5 @@
-import { format, isToday } from 'date-fns'
+import { format, formatDistanceToNow, isToday } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import type { Sector } from '@/lib/admin'
 import type { Role } from '@/lib/auth'
 
@@ -105,12 +106,18 @@ export function formatMessageTime(value: string) {
   return format(date, isToday(date) ? 'HH:mm' : 'dd/MM HH:mm')
 }
 
+// Há quanto tempo um chamado está pendente, em pt-BR: "há 3 dias", "há 9 horas", "há 1 minuto".
+export function formatElapsed(value: string) {
+  return formatDistanceToNow(new Date(value), { locale: ptBR, addSuffix: true })
+}
+
 export const ticketStatusLabels: Record<
-  'queued' | 'in_progress' | 'closed',
+  'queued' | 'in_progress' | 'pending' | 'closed',
   { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }
 > = {
   queued: { label: 'Na fila', tone: 'warning' },
   in_progress: { label: 'Em atendimento', tone: 'success' },
+  pending: { label: 'Pendente', tone: 'warning' },
   closed: { label: 'Encerrado', tone: 'neutral' },
 }
 
