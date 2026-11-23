@@ -1105,6 +1105,17 @@ export function ConversationCard({
   const scrollHeight = useRef(0)
   // A pessoa pediu para subir pela roda, pelo teclado ou pelo dedo: só isso tira a conversa do fim.
   const manualUp = useRef(false)
+  // A primeira comparação parte do que a lista já mostra, e não de zero (posição e altura): sem
+  // isso, o primeiro evento de rolagem veria a altura mudar e a posição subir sem ninguém ter
+  // tocado na tela. Trocar de chamado semeia de novo.
+  const seededTicket = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    const element = list.current
+    if (!element || seededTicket.current === ticket.id) return
+    seededTicket.current = ticket.id
+    lastTop.current = element.scrollTop
+    scrollHeight.current = element.scrollHeight
+  }, [ticket.id])
   const stopSettling = () => {
     settling.current = false
     if (settleTimer.current !== null) {
