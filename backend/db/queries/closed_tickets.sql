@@ -38,6 +38,7 @@ select
     t.sector_id, s.name as sector_name,
     t.assignee_id, u.name as assignee_name,
     ns.id as transferred_sector_id, ns.name as transferred_sector_name,
+    mt.id as merged_into_id, mt.protocol as merged_into_protocol,
     coalesce((select array_agg(md.name order by lower(md.name), md.id)
         from ticket_modules tm join modules md on md.id = tm.module_id where tm.ticket_id = t.id), '{}')::text[] as module_names
 from tickets t
@@ -48,6 +49,7 @@ left join municipalities m on m.id = o.municipality_id
 left join users u on u.id = t.assignee_id
 left join tickets n on n.previous_ticket_id = t.id
 left join sectors ns on ns.id = n.sector_id
+left join tickets mt on mt.id = t.merged_into_ticket_id
 where t.status = 'closed'
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
@@ -80,8 +82,8 @@ order by
     case when @sort::text = 'assignee' and @direction::text = 'desc' then lower(unaccent(u.name)) end desc nulls last,
     case when @sort::text = 'subject' and @direction::text = 'asc' then lower(unaccent(t.subject)) end asc nulls last,
     case when @sort::text = 'subject' and @direction::text = 'desc' then lower(unaccent(t.subject)) end desc nulls last,
-    case when @sort::text = 'situation' and @direction::text = 'asc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' else 'encerrado' end end asc nulls last,
-    case when @sort::text = 'situation' and @direction::text = 'desc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' else 'encerrado' end end desc nulls last,
+    case when @sort::text = 'situation' and @direction::text = 'asc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' when 'merged' then 'mesclado' else 'encerrado' end end asc nulls last,
+    case when @sort::text = 'situation' and @direction::text = 'desc' then case t.closure_type when 'cancelled' then 'cancelado' when 'transferred' then 'transferido' when 'merged' then 'mesclado' else 'encerrado' end end desc nulls last,
     case when @direction::text = 'asc' then t.id end asc,
     case when @direction::text = 'desc' then t.id end desc
 limit 20 offset @page_offset;

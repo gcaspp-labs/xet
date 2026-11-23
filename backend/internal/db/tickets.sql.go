@@ -956,7 +956,8 @@ select
     p.transfer_reason as previous_transfer_reason,
     n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name,
     t.transfer_reason as next_transfer_reason,
-    t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name
+    t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name,
+    t.merged_into_ticket_id as merged_into_id, mt.protocol as merged_into_protocol
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
@@ -970,6 +971,7 @@ left join users pb on pb.id = p.closed_by_id
 left join tickets n on n.previous_ticket_id = t.id
 left join sectors ns on ns.id = n.sector_id
 left join users pu on pu.id = t.pending_by_id
+left join tickets mt on mt.id = t.merged_into_ticket_id
 where t.id = $1
 `
 
@@ -1015,6 +1017,8 @@ type GetTicketDetailRow struct {
 	PendingAt              *time.Time
 	PendingByID            *int64
 	PendingByName          *string
+	MergedIntoID           *int64
+	MergedIntoProtocol     *string
 }
 
 func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetailRow, error) {
@@ -1062,6 +1066,8 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.PendingAt,
 		&i.PendingByID,
 		&i.PendingByName,
+		&i.MergedIntoID,
+		&i.MergedIntoProtocol,
 	)
 	return i, err
 }
@@ -1570,6 +1576,57 @@ func (q *Queries) ListPendingTickets(ctx context.Context, sectorID int64) ([]Lis
 	return items, nil
 }
 
+const listPendingTicketsOfContactInSector = `-- name: ListPendingTicketsOfContactInSector :many
+select t.id, t.protocol, t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name
+from tickets t
+join users pu on pu.id = t.pending_by_id
+where t.contact_id = $1 and t.sector_id = $2 and t.status = 'pending'
+order by t.pending_at, t.id
+`
+
+type ListPendingTicketsOfContactInSectorParams struct {
+	ContactID int64
+	SectorID  int64
+}
+
+type ListPendingTicketsOfContactInSectorRow struct {
+	ID            int64
+	Protocol      string
+	PendingReason *string
+	PendingAt     *time.Time
+	PendingByID   *int64
+	PendingByName string
+}
+
+// Pending tickets of the contact in the sector, the ones pending for longer
+// first: the choices of resuming a pending ticket from a new ticket (#335).
+func (q *Queries) ListPendingTicketsOfContactInSector(ctx context.Context, arg ListPendingTicketsOfContactInSectorParams) ([]ListPendingTicketsOfContactInSectorRow, error) {
+	rows, err := q.db.Query(ctx, listPendingTicketsOfContactInSector, arg.ContactID, arg.SectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingTicketsOfContactInSectorRow
+	for rows.Next() {
+		var i ListPendingTicketsOfContactInSectorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.PendingReason,
+			&i.PendingAt,
+			&i.PendingByID,
+			&i.PendingByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSectorWorkload = `-- name: ListSectorWorkload :many
 select u.id, u.name, u.role, u.active, count(t.id)::integer as active_tickets
 from users u
@@ -1752,6 +1809,113 @@ func (q *Queries) MarkTicketRead(ctx context.Context, arg MarkTicketReadParams) 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const mergeTicketIntoPending = `-- name: MergeTicketIntoPending :one
+update tickets
+set status = 'closed', closure_type = 'merged', merged_into_ticket_id = $1,
+    closed_at = now(), closed_by_id = $2::bigint,
+    ended_at = greatest(now(), started_at), subject = null, resolution = null
+where id = $3
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at
+`
+
+type MergeTicketIntoPendingParams struct {
+	MergedIntoTicketID *int64
+	ClosedByID         int64
+	ID                 int64
+}
+
+// The caller holds the lock of the ticket and checked it is in progress with
+// the actor as assignee. The merged ticket keeps its assignee, without
+// subject, resolution or modules; the link is never undone.
+func (q *Queries) MergeTicketIntoPending(ctx context.Context, arg MergeTicketIntoPendingParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, mergeTicketIntoPending, arg.MergedIntoTicketID, arg.ClosedByID, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TransferReason,
+		&i.Channel,
+		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
+		&i.AssigneeReadAt,
+	)
+	return i, err
+}
+
+const moveMessageActionsToTicket = `-- name: MoveMessageActionsToTicket :exec
+update message_actions set ticket_id = $1
+where ticket_id = $2
+`
+
+type MoveMessageActionsToTicketParams struct {
+	ToTicketID   int64
+	FromTicketID int64
+}
+
+// The edits and deletions of the messages that passed follow them to the
+// resumed ticket, where the answer of the provider applies them.
+func (q *Queries) MoveMessageActionsToTicket(ctx context.Context, arg MoveMessageActionsToTicketParams) error {
+	_, err := q.db.Exec(ctx, moveMessageActionsToTicket, arg.ToTicketID, arg.FromTicketID)
+	return err
+}
+
+const moveMessagesToTicket = `-- name: MoveMessagesToTicket :many
+update messages set ticket_id = $1
+where ticket_id = $2
+returning id
+`
+
+type MoveMessagesToTicketParams struct {
+	ToTicketID   int64
+	FromTicketID int64
+}
+
+// The messages of the merged ticket pass to the resumed one, with their
+// attachments, reactions, versions and actions (keyed by the message), keeping
+// their times. The caller holds the locks of both tickets. All rows change in
+// one statement, so the foreign key of a quote always finds its message in the
+// same ticket at the end of it.
+func (q *Queries) MoveMessagesToTicket(ctx context.Context, arg MoveMessagesToTicketParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, moveMessagesToTicket, arg.ToTicketID, arg.FromTicketID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const nextProtocolNumber = `-- name: NextProtocolNumber :one

@@ -92,6 +92,51 @@ type pendingRequest struct {
 	Reason string `json:"reason" validate:"max=2000"`
 }
 
+type resumePendingRequest struct {
+	PendingTicketID int64 `json:"pendingTicketId" validate:"required"`
+}
+
+// resumePendingResponse answers with the resumed ticket A, which the screen
+// opens in /chamados/<A>.
+type resumePendingResponse struct {
+	ID         int64           `json:"id"`
+	Protocol   string          `json:"protocol"`
+	Status     db.TicketStatus `json:"status"`
+	AssigneeID *int64          `json:"assigneeId"`
+}
+
+// resumePending resumes a pending ticket from the new ticket in progress,
+// merging it into the pending one (#335, spec #332).
+func (h *Handler) resumePending(w http.ResponseWriter, r *http.Request) {
+	ticketID, ok := urlTicketID(w, r)
+	if !ok {
+		return
+	}
+	var req resumePendingRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	t, err := h.service.ResumePending(r.Context(), auth.CurrentUser(r.Context()), ticketID, req.PendingTicketID)
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusOK, resumePendingResponse{ID: t.ID, Protocol: t.Protocol, Status: t.Status, AssigneeID: t.AssigneeID})
+	case errors.Is(err, ErrNotAssignee):
+		httpx.WriteError(w, http.StatusForbidden, "Apenas o responsável pelo chamado pode retomar um pendente a partir dele.")
+	case errors.Is(err, ErrNotInProgress):
+		httpx.WriteError(w, http.StatusConflict, "Este chamado está na fila. Assuma o chamado antes de retomar um pendente.")
+	case errors.Is(err, ErrNotPending):
+		httpx.WriteError(w, http.StatusConflict, "Este chamado pendente não está mais pendente. Atualize a lista e tente novamente.")
+	case errors.Is(err, ErrPendingMismatch):
+		httpx.WriteError(w, http.StatusUnprocessableEntity, "Escolha um chamado pendente do mesmo contato e setor.")
+	case errors.Is(err, ErrClosed):
+		httpx.WriteError(w, http.StatusConflict, "Este chamado já foi encerrado.")
+	case errors.Is(err, ErrPending):
+		httpx.WriteError(w, http.StatusConflict, "Este chamado está pendente. Retome-o pela lista de Pendentes.")
+	default:
+		h.ticketError(w, r, err)
+	}
+}
+
 type pendingResponse struct {
 	ID         int64           `json:"id"`
 	Status     db.TicketStatus `json:"status"`

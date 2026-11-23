@@ -53,6 +53,9 @@ type assignmentLogResponse struct {
 	// Reason is the one given for a cancellation, a correction or a transfer
 	// between sectors.
 	Reason *string `json:"reason"`
+	// MergedProtocol is the protocol of the ticket merged into this one, when
+	// this one was resumed from a new ticket (#335).
+	MergedProtocol *string `json:"mergedProtocol"`
 }
 
 // listAssignments returns when the ticket was assigned and each transfer,
@@ -70,6 +73,9 @@ func (h *Handler) listAssignments(w http.ResponseWriter, r *http.Request) {
 	out := make([]assignmentLogResponse, len(rows))
 	for i, l := range rows {
 		out[i] = assignmentLogResponse{ID: l.ID, Action: l.Action, CreatedAt: l.CreatedAt, FromName: l.FromName, ToName: l.ToName, ToSectorName: l.ToSectorName, FromSectorName: l.FromSectorName, Reason: l.Reason}
+		if l.MergedProtocol != "" {
+			out[i].MergedProtocol = &l.MergedProtocol
+		}
 		if l.ActorID != nil && l.ActorName != nil {
 			out[i].Actor = &httpx.Ref{ID: *l.ActorID, Name: *l.ActorName}
 		}
