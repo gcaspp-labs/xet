@@ -73,7 +73,10 @@ export function PendingSheet({
           aria-invalid={missing}
           placeholder="Por que o chamado vai ficar pendente"
           value={reason}
-          onChange={(event) => setReason(event.target.value)}
+          onChange={(event) => {
+            setReason(event.target.value)
+            if (missing) setMissing(false)
+          }}
         />
         {missing ? (
           <FieldError>Informe o motivo do pendente.</FieldError>
