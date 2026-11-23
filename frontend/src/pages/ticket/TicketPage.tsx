@@ -28,6 +28,8 @@ import {
   type MutableRefObject,
   type KeyboardEvent,
   type ReactNode,
+  type TouchEvent,
+  type WheelEvent,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -122,6 +124,10 @@ const messageStatusLabels: Record<
 }
 
 const backToList = { to: '/atendimentos', label: 'Voltar à lista' }
+
+// Distância em pixels do fim que ainda conta como "estar no fim" da conversa: arredondamento e
+// zoom não podem fazer o botão de ir à última mensagem piscar.
+const NEAR_END_PX = 48
 
 const fileLabels: Record<string, string> = {
   image: 'Imagem',
@@ -1068,10 +1074,17 @@ export function ConversationCard({
 
   // A conversa segue a mensagem mais recente enquanto a pessoa está no fim; rolada para cima, ela
   // fica onde está, e as mensagens que chegam contam no botão de ir ao fim (regra 44 de
-  // conversation.md). "No fim" tem 48 px de tolerância, para arredondamento e zoom não fazerem o
-  // botão piscar. O contador é só da tela: não vai à API nem ao banco.
+  // conversation.md). "No fim" tem uma tolerância em pixels, para arredondamento e zoom não
+  // fazerem o botão piscar. O contador é só da tela: não vai à API nem ao banco.
   const [following, setFollowing] = useState(true)
   const [missed, setMissed] = useState(0)
+  // A intenção em ref: o observador de altura e o efeito das mensagens leem o valor atual sem
+  // esperar o próximo render.
+  const followingRef = useRef(true)
+  const follow = (value: boolean) => {
+    followingRef.current = value
+    setFollowing(value)
+  }
   // O maior id de mensagem já visto neste chamado: null até a primeira carga, que abre no fim.
   const seen = useRef<{ ticket: number; newest: number | null }>({
     ticket: ticket.id,
@@ -1079,9 +1092,19 @@ export function ConversationCard({
   })
   // A rolagem do botão é suave: ele some já no clique, e os eventos de rolagem do meio do caminho
   // não são a pessoa saindo do fim, então não podem trazê-lo de volta nem contar a mensagem que
-  // chegue enquanto a tela desce. O temporizador é a rede de segurança, se a rolagem não chegar.
+  // chegue enquanto a tela desce. Se a pessoa puxar a tela para cima no meio da descida, a
+  // descida automática para: ela fica onde está, e a próxima mensagem conta no botão. O
+  // temporizador é a rede de segurança, se a rolagem não chegar ao fim.
   const settling = useRef(false)
   const settleTimer = useRef<number | null>(null)
+  // Último scrollTop visto: diz se o passo de rolagem foi para cima (a mão da pessoa) ou para
+  // baixo (a descida automática).
+  const lastTop = useRef(0)
+  // Altura do conteúdo na última rolagem: com a altura parada, uma mudança de posição é a mão da
+  // pessoa; com a altura mudando, é o layout que está assentando e não tira a conversa do fim.
+  const scrollHeight = useRef(0)
+  // A pessoa pediu para subir pela roda, pelo teclado ou pelo dedo: só isso tira a conversa do fim.
+  const manualUp = useRef(false)
   const stopSettling = () => {
     settling.current = false
     if (settleTimer.current !== null) {
@@ -1089,6 +1112,8 @@ export function ConversationCard({
       settleTimer.current = null
     }
   }
+  const distanceToEnd = (element: HTMLElement) =>
+    element.scrollHeight - element.scrollTop - element.clientHeight
   useEffect(() => stopSettling, [])
   const scrollToEnd = (smooth: boolean) => {
     const element = list.current
@@ -1100,8 +1125,8 @@ export function ConversationCard({
       settleTimer.current = window.setTimeout(() => {
         stopSettling()
         const current = list.current
-        if (current && current.scrollHeight - current.scrollTop - current.clientHeight > 48) {
-          setFollowing(false)
+        if (current && distanceToEnd(current) > NEAR_END_PX) {
+          follow(false)
         }
       }, 1000)
     }
@@ -1110,16 +1135,57 @@ export function ConversationCard({
       behavior: settling.current ? 'smooth' : 'auto',
     })
   }
+  // A roda, o teclado e o dedo são a mão da pessoa: para cima tiram a conversa do fim; para baixo
+  // devolvem a decisão ao próprio fim.
+  const onWheel = (event: WheelEvent) => {
+    if (event.deltaY < 0) manualUp.current = true
+    else if (event.deltaY > 0) manualUp.current = false
+  }
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home') {
+      manualUp.current = true
+    } else if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === 'End') {
+      manualUp.current = false
+    }
+  }
+  const touchY = useRef<number | null>(null)
+  const onTouchStart = (event: TouchEvent) => {
+    touchY.current = event.touches[0]?.clientY ?? null
+  }
+  const onTouchMove = (event: TouchEvent) => {
+    const y = event.touches[0]?.clientY
+    if (y == null || touchY.current == null) return
+    if (y > touchY.current + 2) manualUp.current = true
+    else if (y < touchY.current - 2) manualUp.current = false
+    touchY.current = y
+  }
   // O botão aparece fora do fim, e o contador zera ao chegar nele por qualquer caminho.
   const onScroll = () => {
     const element = list.current
-    const end = !element || element.scrollHeight - element.scrollTop - element.clientHeight <= 48
+    if (!element) return
+    const top = element.scrollTop
+    const height = element.scrollHeight
+    const distance = distanceToEnd(element)
+    const movingUp = top < lastTop.current - 1
+    const heightChanged = height !== scrollHeight.current
+    lastTop.current = top
+    scrollHeight.current = height
+    const end = distance <= NEAR_END_PX
+    if (settling.current && movingUp) {
+      // Rolagem manual para cima no meio da descida: cancela a descida automática. A conversa
+      // fica onde a pessoa a deixou e a mensagem que chegar agora conta no botão.
+      stopSettling()
+      follow(false)
+      return
+    }
     if (end) stopSettling()
     if (end || settling.current) {
-      setFollowing(true)
+      follow(true)
       setMissed(0)
-    } else {
-      setFollowing(false)
+    } else if (manualUp.current || !heightChanged) {
+      // Fora do fim, pela mão da pessoa: a conversa fica onde está e o que chegar conta no botão.
+      // Quando só o layout se ajusta (a altura muda junto), ela continua seguindo o fim.
+      follow(false)
     }
   }
   // Uma mensagem nova: no fim, desce junto; fora do fim, fica onde está e conta. Edição, exclusão,
@@ -1130,7 +1196,7 @@ export function ConversationCard({
     if (seen.current.ticket !== ticket.id) {
       // Trocar de chamado abre no fim, sem botão e sem contador herdado.
       seen.current = { ticket: ticket.id, newest: null }
-      setFollowing(true)
+      follow(true)
       setMissed(0)
     }
     const before = seen.current.newest
@@ -1151,23 +1217,22 @@ export function ConversationCard({
   // Avisos do sistema não contam, mas também não puxam a conversa para baixo; no fim, continuam
   // descendo junto com o resto.
   useEffect(() => {
-    if (following) list.current?.scrollTo({ top: list.current.scrollHeight })
+    // Durante a descida suave do botão, o salto daqui cancelaria a animação e o temporizador de
+    // segurança: a rolagem já está a caminho.
+    if (following && !settling.current) list.current?.scrollTo({ top: list.current.scrollHeight })
   }, [logs.length, following])
   // A altura do conteúdo muda sozinha depois de rolar (a largura e as fontes assentam, um aviso
   // entra): quem estava no fim continua no fim, e quem estava lendo mais acima fica onde está. Sem
   // isso, abrir o chamado podia deixar a última mensagem por baixo do fim.
-  const contentHeight = useRef<number | null>(null)
   useEffect(() => {
     const element = list.current
     const content = element?.firstElementChild
     if (!element || !content) return
-    contentHeight.current ??= element.scrollHeight
     const observer = new ResizeObserver(() => {
-      const before = contentHeight.current ?? element.scrollHeight
-      contentHeight.current = element.scrollHeight
-      if (element.scrollTop + element.clientHeight >= before - 48) {
+      // Quem está seguindo o fim continua no fim quando a altura assenta; quem saiu, pela mão da
+      // pessoa, fica onde está e não é arrastado de volta.
+      if (followingRef.current) {
         element.scrollTop = element.scrollHeight
-        setFollowing(true)
         setMissed(0)
       }
     })
@@ -1211,6 +1276,10 @@ export function ConversationCard({
         <div
           ref={list}
           onScroll={onScroll}
+          onWheel={onWheel}
+          onKeyDown={onKeyDown}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
           className={cn(
             'flex-1 overflow-y-auto px-4 py-4',
             modern && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
@@ -1270,8 +1339,9 @@ export function ConversationCard({
               }
               title="Ir para a última mensagem"
               onClick={() => {
+                manualUp.current = false
                 scrollToEnd(true)
-                setFollowing(true)
+                follow(true)
                 setMissed(0)
               }}
               className="pointer-events-auto size-9 rounded-full border-line bg-card shadow-(--shadow) hover:border-ink-faint"
@@ -1317,7 +1387,8 @@ export function ConversationCard({
           onStartEditing={setEditingId}
           onStopEditing={() => setEditingId(null)}
           onSent={() => {
-            setFollowing(true)
+            manualUp.current = false
+            follow(true)
             setMissed(0)
             scrollToEnd(false)
           }}
