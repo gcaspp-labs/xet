@@ -30,6 +30,28 @@ type ticketDetailResponse struct {
 	Previous     *previousTicketResponse `json:"previous"`
 	Next         *nextTicketResponse     `json:"next"`
 	Pending      *pendingDetailResponse  `json:"pending"`
+	// PendingTickets are the pendings of the same contact and sector, for a
+	// ticket in progress: the notice and the window of resuming one from it
+	// (#335, spec #332).
+	PendingTickets []pendingChoiceResponse `json:"pendingTickets,omitempty"`
+	// MergedInto is the ticket this one was merged into; only on a merged one.
+	MergedInto *mergedTicketResponse `json:"mergedInto,omitempty"`
+}
+
+// pendingChoiceResponse is a pending ticket the user may resume from a new
+// ticket: enough to choose it without opening it.
+type pendingChoiceResponse struct {
+	ID       int64     `json:"id"`
+	Protocol string    `json:"protocol"`
+	Reason   string    `json:"reason"`
+	By       httpx.Ref `json:"by"`
+	At       time.Time `json:"at"`
+}
+
+// mergedTicketResponse is the ticket a merged one went to.
+type mergedTicketResponse struct {
+	ID       int64  `json:"id"`
+	Protocol string `json:"protocol"`
 }
 
 // pendingDetailResponse is why the ticket is pending, who marked it and
@@ -107,6 +129,32 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 	if t.Status == db.TicketStatusPending && t.PendingReason != nil && t.PendingByID != nil && t.PendingByName != nil && t.PendingAt != nil {
 		out.Pending = &pendingDetailResponse{
 			Reason: *t.PendingReason, By: httpx.Ref{ID: *t.PendingByID, Name: *t.PendingByName}, At: *t.PendingAt,
+		}
+	}
+	if t.MergedIntoID != nil && t.MergedIntoProtocol != nil {
+		out.MergedInto = &mergedTicketResponse{ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol}
+	}
+	// O chamado em atendimento traz os pendentes do mesmo contato e setor, para
+	// a tela avisar e oferecer Retomar chamado (#335, spec #332).
+	if t.Status == db.TicketStatusInProgress {
+		rows, err := h.service.PendingOfContact(r.Context(), t.ContactID, t.SectorID)
+		if err != nil {
+			h.ticketError(w, r, err)
+			return
+		}
+		out.PendingTickets = make([]pendingChoiceResponse, len(rows))
+		for i, row := range rows {
+			item := pendingChoiceResponse{ID: row.ID, Protocol: row.Protocol}
+			if row.PendingReason != nil {
+				item.Reason = *row.PendingReason
+			}
+			if row.PendingByID != nil {
+				item.By = httpx.Ref{ID: *row.PendingByID, Name: row.PendingByName}
+			}
+			if row.PendingAt != nil {
+				item.At = *row.PendingAt
+			}
+			out.PendingTickets[i] = item
 		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)

@@ -11,6 +11,9 @@ var (
 	ErrPending = errors.New("ticket pending")
 	// ErrNotPending refuses resuming a ticket that is not pending.
 	ErrNotPending = errors.New("ticket not pending")
+	// ErrPendingMismatch refuses resuming a pending ticket of another contact
+	// or sector from a new ticket.
+	ErrPendingMismatch = errors.New("pending ticket of another contact or sector")
 	// ErrResumeRaced refuses a resume when the ticket that won the dispute of
 	// the contact is no longer open at the new reading: it is rare, and trying
 	// again resumes the pending ticket.
@@ -88,6 +91,9 @@ var (
 	ErrNoChanges      = errors.New("correction changes nothing")
 	ErrCancelled      = errors.New("ticket cancelled")
 	ErrTransferred    = errors.New("ticket transferred to another sector")
+	// ErrMerged refuses correcting a ticket that was merged into another: it
+	// keeps no subject nor resolution, and the link is not undone.
+	ErrMerged = errors.New("ticket merged into another")
 )
 
 var (

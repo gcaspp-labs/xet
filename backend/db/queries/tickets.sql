@@ -113,7 +113,8 @@ select
     p.transfer_reason as previous_transfer_reason,
     n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name,
     t.transfer_reason as next_transfer_reason,
-    t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name
+    t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name,
+    t.merged_into_ticket_id as merged_into_id, mt.protocol as merged_into_protocol
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id
@@ -127,6 +128,7 @@ left join users pb on pb.id = p.closed_by_id
 left join tickets n on n.previous_ticket_id = t.id
 left join sectors ns on ns.id = n.sector_id
 left join users pu on pu.id = t.pending_by_id
+left join tickets mt on mt.id = t.merged_into_ticket_id
 where t.id = @id;
 
 -- name: CountContactTickets :one
@@ -286,6 +288,42 @@ update tickets
 set status = 'in_progress', assignee_id = @assignee_id, assignee_read_at = clock_timestamp()
 where id = @id
 returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
+
+-- name: ListPendingTicketsOfContactInSector :many
+-- Pending tickets of the contact in the sector, the ones pending for longer
+-- first: the choices of resuming a pending ticket from a new ticket (#335).
+select t.id, t.protocol, t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name
+from tickets t
+join users pu on pu.id = t.pending_by_id
+where t.contact_id = @contact_id and t.sector_id = @sector_id and t.status = 'pending'
+order by t.pending_at, t.id;
+
+-- name: MergeTicketIntoPending :one
+-- The caller holds the lock of the ticket and checked it is in progress with
+-- the actor as assignee. The merged ticket keeps its assignee, without
+-- subject, resolution or modules; the link is never undone.
+update tickets
+set status = 'closed', closure_type = 'merged', merged_into_ticket_id = @merged_into_ticket_id,
+    closed_at = now(), closed_by_id = @closed_by_id::bigint,
+    ended_at = greatest(now(), started_at), subject = null, resolution = null
+where id = @id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
+
+-- name: MoveMessagesToTicket :many
+-- The messages of the merged ticket pass to the resumed one, with their
+-- attachments, reactions, versions and actions (keyed by the message), keeping
+-- their times. The caller holds the locks of both tickets. All rows change in
+-- one statement, so the foreign key of a quote always finds its message in the
+-- same ticket at the end of it.
+update messages set ticket_id = @to_ticket_id
+where ticket_id = @from_ticket_id
+returning id;
+
+-- name: MoveMessageActionsToTicket :exec
+-- The edits and deletions of the messages that passed follow them to the
+-- resumed ticket, where the answer of the provider applies them.
+update message_actions set ticket_id = @to_ticket_id
+where ticket_id = @from_ticket_id;
 
 -- name: AddTicketModules :many
 -- Records the active modules of the sector among the given ones; the caller

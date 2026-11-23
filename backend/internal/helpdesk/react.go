@@ -62,19 +62,15 @@ func (s *Service) React(ctx context.Context, provider messaging.Provider, actor 
 	}
 
 	// Decided with the ticket locked, on the message as it is now: its status
-	// may have changed since it was read above.
+	// may have changed since it was read above, and a merge may have moved it.
 	var target db.Message
 	removing := false
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ref.TicketID))
-		if err != nil {
-			return fmt.Errorf("lock ticket: %w", err)
-		}
+	err = s.withMessageTicket(ctx, messageID, func(q *db.Queries, t db.Ticket) error {
 		if err := conducts(t, actor); err != nil {
 			return err
 		}
-		if target, err = q.GetMessage(ctx, ref.ID); err != nil {
+		var err error
+		if target, err = q.GetMessage(ctx, messageID); err != nil {
 			return fmt.Errorf("get message: %w", err)
 		}
 		if !reactable(target) {
@@ -107,11 +103,9 @@ func (s *Service) React(ctx context.Context, provider messaging.Provider, actor 
 	}
 
 	changed := false
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		if _, err := q.GetTicketForUpdate(ctx, target.TicketID); err != nil {
-			return fmt.Errorf("lock ticket: %w", err)
-		}
+	var ticketID int64
+	err = s.withMessageTicket(ctx, target.ID, func(q *db.Queries, t db.Ticket) error {
+		ticketID = t.ID
 		current, err := sectorReaction(ctx, q, target.ID)
 		if err != nil {
 			return err
@@ -143,7 +137,7 @@ func (s *Service) React(ctx context.Context, provider messaging.Provider, actor 
 		return nil, err
 	}
 	if changed {
-		s.hub.Publish(realtime.TicketChanged(target.SectorID, target.TicketID))
+		s.hub.Publish(realtime.TicketChanged(target.SectorID, ticketID))
 	}
 	if removing {
 		return nil, nil

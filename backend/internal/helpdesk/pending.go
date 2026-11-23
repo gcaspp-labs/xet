@@ -208,3 +208,123 @@ func (s *Service) openTicketOfContact(ctx context.Context, ticketID int64) error
 	}
 	return &OpenTicketError{Protocol: open.Protocol, AssigneeName: open.AssigneeName}
 }
+
+// PendingOfContact lists the pending tickets the contact has in the sector,
+// the oldest pending first, for the notice and the window of resuming one from
+// a new ticket (#335, spec #332). The caller checked that the user sees the
+// ticket.
+func (s *Service) PendingOfContact(ctx context.Context, contactID, sectorID int64) ([]db.ListPendingTicketsOfContactInSectorRow, error) {
+	rows, err := s.q.ListPendingTicketsOfContactInSector(ctx, db.ListPendingTicketsOfContactInSectorParams{
+		ContactID: contactID, SectorID: sectorID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list pending tickets of the contact: %w", err)
+	}
+	return rows, nil
+}
+
+// ResumePending resumes the pending ticket A from the new ticket B in progress
+// (#335, spec #332): the messages of B pass to A, with their attachments,
+// reactions, versions and actions, and B is closed as merged into A. Only the
+// assignee of B resumes, with B in progress; supervisors and admins are no
+// exception, as in the closing. A must be pending, of the same contact and the
+// same sector as B.
+//
+// The pending ticket is locked first and B after it, in a fixed order, and the
+// contact at the end, as in the closing. So a merge never crosses the resume of
+// A from the list (one of them wins, the other finds A taken) nor the receiving
+// of a message: a message that opens a ticket of the contact finds B locked
+// until the commit and, after it, the resumed A.
+func (s *Service) ResumePending(ctx context.Context, actor auth.User, ticketID, pendingTicketID int64) (db.Ticket, error) {
+	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
+		return db.Ticket{}, err
+	}
+
+	var resumed, merged db.Ticket
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		// A first, then B, always in this order: the merge of a closed ticket
+		// into a pending one (#341) is the only other two-ticket action.
+		a, err := db.AsTicket(q.GetTicketForUpdate(ctx, pendingTicketID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock pending ticket: %w", err)
+		}
+		b, err := db.AsTicket(q.GetTicketForUpdate(ctx, ticketID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock ticket: %w", err)
+		}
+		switch b.Status {
+		case db.TicketStatusClosed:
+			return ErrClosed
+		case db.TicketStatusPending:
+			return ErrPending
+		case db.TicketStatusQueued:
+			return ErrNotInProgress
+		}
+		if err := conducts(b, actor); err != nil {
+			return err
+		}
+		if a.Status != db.TicketStatusPending {
+			return ErrNotPending
+		}
+		if a.ContactID != b.ContactID || a.SectorID != b.SectorID {
+			return ErrPendingMismatch
+		}
+		// The contact is locked after the tickets, in the order of the
+		// closing, so the registration of the contact never waits on this one.
+		if _, err := q.GetContactForShare(ctx, b.ContactID); err != nil {
+			return fmt.Errorf("lock contact: %w", err)
+		}
+
+		messageIDs, err := q.MoveMessagesToTicket(ctx, db.MoveMessagesToTicketParams{ToTicketID: a.ID, FromTicketID: b.ID})
+		if err != nil {
+			return fmt.Errorf("move messages: %w", err)
+		}
+		if err := q.MoveMessageActionsToTicket(ctx, db.MoveMessageActionsToTicketParams{ToTicketID: a.ID, FromTicketID: b.ID}); err != nil {
+			return fmt.Errorf("move message actions: %w", err)
+		}
+
+		merged, err = db.AsTicket(q.MergeTicketIntoPending(ctx, db.MergeTicketIntoPendingParams{
+			ID: b.ID, MergedIntoTicketID: &a.ID, ClosedByID: actor.ID,
+		}))
+		if err != nil {
+			return fmt.Errorf("merge ticket: %w", err)
+		}
+		resumed, err = db.AsTicket(q.ResumeTicket(ctx, db.ResumeTicketParams{ID: a.ID, AssigneeID: &actor.ID}))
+		if err != nil {
+			return fmt.Errorf("resume pending ticket: %w", err)
+		}
+
+		// B tells how it arrived: A and the messages that passed (#336).
+		mergedChanges := audit.Changes{}
+		mergedChanges.Set("status", string(b.Status), string(merged.Status))
+		mergedChanges.Set("closure_type", nil, string(merged.ClosureType.ClosureType))
+		mergedChanges.Set("merged_into_ticket_id", nil, a.ID)
+		mergedChanges.Set("ended_at", nil, merged.EndedAt.UTC())
+		mergedChanges.Set("message_ids", nil, messageIDs)
+		if err := recordTicket(ctx, q, b.ID, "ticket_merged", actor.ID, mergedChanges); err != nil {
+			return err
+		}
+		// A tells who resumed it and from which ticket: the notice of the
+		// conversation names B's protocol.
+		resumedChanges := audit.Changes{}
+		resumedChanges.Set("status", string(a.Status), string(resumed.Status))
+		resumedChanges.Set("assignee_id", a.AssigneeID, resumed.AssigneeID)
+		resumedChanges.Set("merged_ticket_id", nil, b.ID)
+		resumedChanges.Set("merged_protocol", nil, b.Protocol)
+		return recordTicket(ctx, q, a.ID, "ticket_resumed_by_merge", actor.ID, resumedChanges)
+	})
+	if err != nil {
+		return db.Ticket{}, err
+	}
+	// Both lists change: B leaves the attendance and A leaves the pending ones.
+	s.hub.Publish(realtime.TicketChanged(resumed.SectorID, resumed.ID))
+	s.hub.Publish(realtime.TicketChanged(merged.SectorID, merged.ID))
+	return resumed, nil
+}

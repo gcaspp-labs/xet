@@ -117,16 +117,12 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 	var action db.MessageAction
 	var target db.Message
 	local := req.Kind == db.MessageActionKindDeleteLocal
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
-		t, err := db.AsTicket(q.GetTicketForUpdate(ctx, ref.TicketID))
-		if err != nil {
-			return fmt.Errorf("lock ticket: %w", err)
-		}
+	err = s.withMessageTicket(ctx, messageID, func(q *db.Queries, t db.Ticket) error {
 		if err := conducts(t, actor); err != nil {
 			return err
 		}
-		if target, err = q.GetMessage(ctx, ref.ID); err != nil {
+		var err error
+		if target, err = q.GetMessage(ctx, messageID); err != nil {
 			return fmt.Errorf("get message: %w", err)
 		}
 		if err := changeable(target, req.Kind, capabilities, time.Now()); err != nil {
@@ -203,16 +199,21 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 	}
 
 	applied := false
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := s.q.WithTx(tx)
+	var ticketID int64
+	err = s.withMovedTicketRetry(ctx, func(q *db.Queries) error {
+		applied, ticketID = false, 0
 		// The same order of locks as a change received from the provider, so
 		// its echo waits for this one, or this one for it.
 		if err := q.LockMessageExternalID(ctx, db.LockMessageExternalIDParams{SectorID: target.SectorID, ExternalMessageID: *target.ExternalMessageID}); err != nil {
 			return fmt.Errorf("lock message: %w", err)
 		}
-		if _, err := q.GetTicketForUpdate(ctx, target.TicketID); err != nil {
-			return fmt.Errorf("lock ticket: %w", err)
+		// The ticket the message is in now: a merge may have moved it while
+		// the provider answered.
+		t, err := lockTicketOfMessage(ctx, q, target.ID)
+		if err != nil {
+			return err
 		}
+		ticketID = t.ID
 		finished, err := q.FinishMessageAction(ctx, db.FinishMessageActionParams{
 			ID: action.ID, Status: status, FailureReason: reason, ExternalEventID: optional(eventID),
 		})
@@ -238,7 +239,7 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 		return db.Message{}, err
 	}
 	if applied {
-		s.hub.Publish(realtime.TicketChanged(target.SectorID, target.TicketID))
+		s.hub.Publish(realtime.TicketChanged(target.SectorID, ticketID))
 	}
 	current, err := s.q.GetMessageActionByClientRequestID(ctx, req.ClientRequestID)
 	if err != nil {

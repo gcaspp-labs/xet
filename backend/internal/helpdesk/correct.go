@@ -79,6 +79,11 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 		if t.ClosureType.ClosureType == db.ClosureTypeTransferred {
 			return ErrTransferred
 		}
+		// O mesclado também não: as mensagens estão no chamado de destino, e o
+		// vínculo não é desfeito (#335, spec #332).
+		if t.ClosureType.ClosureType == db.ClosureTypeMerged {
+			return ErrMerged
+		}
 		if (t.ClosedByID == nil || *t.ClosedByID != actor.ID) && !actor.HasRole(db.UserRoleSupervisor, db.UserRoleAdmin) {
 			return ErrCannotCorrect
 		}

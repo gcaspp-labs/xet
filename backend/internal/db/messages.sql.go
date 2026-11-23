@@ -548,6 +548,20 @@ func (q *Queries) GetMessageForChange(ctx context.Context, arg GetMessageForChan
 	return i, err
 }
 
+const getMessageTicketID = `-- name: GetMessageTicketID :one
+select ticket_id from messages
+where id = $1
+`
+
+// Ticket the message is in now: a merge may have moved it after it was read,
+// and the caller locks the current ticket instead of the one it read.
+func (q *Queries) GetMessageTicketID(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getMessageTicketID, id)
+	var ticket_id int64
+	err := row.Scan(&ticket_id)
+	return ticket_id, err
+}
+
 const linkMessageChange = `-- name: LinkMessageChange :exec
 update message_changes
 set message_id = $1
