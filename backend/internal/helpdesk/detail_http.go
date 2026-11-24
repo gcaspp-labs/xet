@@ -139,12 +139,13 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 	if t.MergedIntoID != nil && t.MergedIntoProtocol != nil {
 		out.MergedInto = &mergedTicketResponse{ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol}
 	}
-	// O chamado em atendimento traz os pendentes do mesmo contato e setor, para
-	// a tela avisar e oferecer Retomar chamado (#335, spec #332); o encerrado ou
-	// cancelado que o usuário pode mesclar traz os mesmos pendentes, como as
-	// escolhas da janela Mesclar em pendente (#341, spec #332).
+	// O chamado em atendimento ou na fila traz os pendentes do mesmo contato e
+	// setor, para a tela avisar e oferecer Retomar chamado (#335 e #338, spec
+	// #332: na fila só o aviso, sem a ação); o encerrado ou cancelado que o
+	// usuário pode mesclar traz os mesmos pendentes, como as escolhas da janela
+	// Mesclar em pendente (#341, spec #332).
 	mergeable := mayMergeIntoPending(t, auth.CurrentUser(r.Context()))
-	if t.Status == db.TicketStatusInProgress || mergeable {
+	if t.Status == db.TicketStatusInProgress || t.Status == db.TicketStatusQueued || mergeable {
 		out.CanMergeIntoPending = mergeable
 		rows, err := h.service.PendingOfContact(r.Context(), t.ContactID, t.SectorID)
 		if err != nil {
