@@ -518,12 +518,12 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 | `entity_id` | bigint | Obrigatório |
 | `action` | text | Ver tabela abaixo |
 | `actor_id` | bigint → `users` | Quem fez; vazio para ações do sistema |
-| `reason` | text | Obrigatório em correções, cancelamentos e ao colocar como pendente |
+| `reason` | text | Obrigatório em correções e ao colocar como pendente; opcional no cancelamento, vazio quando não informado ([#395](https://github.com/gcaspp-labs/xet/issues/395)) |
 | `changes` | jsonb | Valores anteriores e novos: `{"campo": {"from": ..., "to": ...}}` |
 
 Índices: `(ticket_id, created_at)` e `(entity_type, entity_id)`.
 
-Restrição: `action in ('ticket_corrected', 'ticket_cancelled', 'ticket_pending')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o cancelamento e para o pendente).
+Restrição: `action in ('ticket_corrected', 'ticket_pending')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o pendente; o cancelamento saiu da lista na [#395](https://github.com/gcaspp-labs/xet/issues/395), que tornou o motivo opcional).
 
 A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabela, na migração que cria `tickets`.
 
@@ -537,7 +537,7 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |
 | `ticket_closed` | Encerramento: `changes` com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados no formulário, `started_at` (de `arrived_at` para o informado) e `organization_id` |
 | `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at` e `ended_at` |
-| `ticket_cancelled` | Cancelamento (exige `reason`): `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
+| `ticket_cancelled` | Cancelamento: `reason` quando informado, vazio quando não ([#395](https://github.com/gcaspp-labs/xet/issues/395)); `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
 | `ticket_returned` | Devolver à fila: `changes` com `status` e `assignee_id` |
 | `ticket_pending` | Colocar como pendente: `reason` com o motivo; `changes` com `status` (de `in_progress` para `pending`) e `assignee_id` (do responsável para vazio) |
 | `ticket_resumed` | Retomar pela lista ([#334](https://github.com/gcaspp-labs/xet/issues/334)): `changes` com `status` e `assignee_id` |
