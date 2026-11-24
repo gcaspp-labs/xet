@@ -156,7 +156,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
     contactName: 'Pedro Cliente',
     body: 'Boa tarde',
   })
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await expect(queue).toContainText('Pedro Cliente')
   await expect(queue).toContainText('Boa tarde')
   await queue.getByRole('button', { name: 'Assumir chamado de Pedro Cliente' }).click()
@@ -279,7 +279,7 @@ test('rascunho da mensagem volta ao recarregar e ao trocar de chamado, e some ao
 
   // Outro chamado começa vazio; o rascunho de cada um volta ao trocar pela lista de Meus chamados.
   await page.goto('/chamados')
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await queue.getByRole('button', { name: `Assumir chamado de ${second}` }).click()
   await expect(page.getByRole('heading', { name: second })).toBeVisible()
   await expect(field).toHaveValue('')
@@ -431,7 +431,7 @@ test('rascunho do outro chamado continua ao enviar e trocar de chamado em seguid
   await assume(page, first)
   await field.fill('Rascunho da Elis')
   await page.goto('/chamados')
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await queue.getByRole('button', { name: `Assumir chamado de ${second}` }).click()
   await expect(page.getByRole('heading', { name: second })).toBeVisible()
   await field.fill('Rascunho do Fabio')

@@ -139,7 +139,7 @@ test('contato recebido aparece como cartão, com vários no mesmo balão e a pr�
   await signIn(page, agent, userPassword)
 
   // A Fila mostra a prévia com o nome do primeiro cartão.
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await expect(queue).toContainText('👤 Ana Beatriz Nunes')
 
   await openQueued(page, 'Clara Cliente')

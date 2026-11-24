@@ -81,7 +81,7 @@ const agentNameOf = (email: string) => {
   return match ? `${match[1]} ${match[2]}` : email
 }
 
-const pendingTab = (page: Page) => page.getByRole('region', { name: 'Fila e assuntos' })
+const pendingTab = (page: Page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
 
 const pendingRow = (page: Page, contact: string) =>
   pendingTab(page).getByRole('listitem').filter({ hasText: contact })

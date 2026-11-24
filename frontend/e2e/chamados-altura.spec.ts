@@ -169,7 +169,7 @@ test.describe('desktop 1440×900', () => {
     await signIn(page, agent, userPassword)
     await seedLongQueue(page, sector.id)
     await page.goto('/chamados')
-    const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+    const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
     const buttons = queue.getByRole('button', { name: /^Assumir chamado de/ })
     await expect(buttons.first()).toBeVisible()
     expect(await pageScrolls(page)).toBe(false)
@@ -196,7 +196,7 @@ test.describe('1024×768', () => {
     await expectScrollsAlone(page, history, history.getByRole('listitem').last())
 
     await selector.getByRole('tab', { name: /^Fila/ }).click()
-    const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+    const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
     await expect(queue).toBeVisible()
     await expect(conversation).toBeHidden()
     expect(await pageScrolls(page)).toBe(false)
@@ -212,7 +212,7 @@ test.describe('1024×768', () => {
     await page.goto('/chamados')
     const selector = page.getByRole('tablist', { name: 'Mostrar' })
     await selector.getByRole('tab', { name: /^Fila/ }).click()
-    const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+    const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
     const buttons = queue.getByRole('button', { name: /^Assumir chamado de/ })
     await expect(buttons).toHaveCount(16)
     expect(await pageScrolls(page)).toBe(false)
@@ -317,7 +317,7 @@ test.describe('celular 390×844', () => {
       'aria-selected',
       'true',
     )
-    await expect(page.getByRole('region', { name: 'Fila e assuntos' })).toBeHidden()
+    await expect(page.getByRole('region', { name: 'Fila, assuntos e pendentes' })).toBeHidden()
     await expect(page.getByText('Você não tem atendimentos ativos.')).toBeVisible()
     // O estado vazio fica em Conversa e, com um bloco só na tela, não aponta lado nenhum.
     await selector.getByRole('tab', { name: 'Conversa' }).click()
@@ -343,7 +343,7 @@ test.describe('seletor abaixo de xl com chamados', () => {
     const selector = page.getByRole('tablist', { name: 'Mostrar' })
     await expect(selector.getByRole('tab', { name: /^Fila \(2\)/ })).toBeVisible()
     await selector.getByRole('tab', { name: /^Fila/ }).click()
-    const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+    const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
     const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
     await expect(queue).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Meus chamados' })).toHaveCount(0)

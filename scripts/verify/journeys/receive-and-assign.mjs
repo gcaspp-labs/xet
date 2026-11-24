@@ -10,8 +10,8 @@ await journey('receive-and-assign', async (t) => {
   const maria = t.customer('Maria Cliente')
 
   const agentPage = await t.signIn(agent)
-  // A fila é a aba Fila do cartão "Fila e assuntos" da tela Chamados; cada chamado é um item da lista.
-  const queue = agentPage.getByRole('region', { name: 'Fila e assuntos' })
+  // A fila é a aba Fila do cartão "Fila, assuntos e pendentes" da tela Chamados; cada chamado é um item da lista.
+  const queue = agentPage.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   const mariaRow = queue.getByRole('listitem').filter({ hasText: 'Maria Cliente' })
   const mine = agentPage.getByRole('navigation', { name: 'Meus chamados' })
 
@@ -58,7 +58,7 @@ await journey('receive-and-assign', async (t) => {
 
   // A colega entra agora e fica sem tempo real: a tela dela continua mostrando o chamado na fila.
   const stalePage = await t.signIn(colleague, { blockRealtime: true })
-  const staleQueue = stalePage.getByRole('region', { name: 'Fila e assuntos' })
+  const staleQueue = stalePage.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   const staleAssign = staleQueue.getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
   await expect(staleAssign).toBeVisible()
 
@@ -134,7 +134,7 @@ await journey('receive-and-assign', async (t) => {
     await expect(otherPage.getByRole('heading', { name: 'Chamados' })).toBeVisible()
     await expect(
       otherPage
-        .getByRole('region', { name: 'Fila e assuntos' })
+        .getByRole('region', { name: 'Fila, assuntos e pendentes' })
         .getByText('Nenhum chamado esperando.'),
     ).toBeVisible()
     await expect(otherPage.getByText('Maria Cliente')).toHaveCount(0)
