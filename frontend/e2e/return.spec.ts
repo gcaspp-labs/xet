@@ -1,6 +1,8 @@
 import { expect, request as apiRequest, test } from '@playwright/test'
 import {
   admin,
+  closeMenuWithEsc,
+  openMenuAndWait,
   recordToasts,
   seedSector,
   signIn,
@@ -58,13 +60,11 @@ test('chamado devolvido volta à fila, e outra pessoa assume', async ({
   await openQueued(page, 'Joana Devolvida')
   const url = page.url()
   await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Mais ações' }).click()
-  // O menu abre depois do clique: esperar por ele evita que o Esc caia na regra da tela
-  // (com nada por cima, volta para Chamados) antes de o menu existir.
-  await expect(page.getByRole('menu')).toBeVisible()
+  await openMenuAndWait(page.getByRole('button', { name: 'Mais ações' }))
   await expect(page.getByRole('menuitem', { name: 'Devolver à fila' })).toHaveCount(0)
-  await page.keyboard.press('Escape')
-  await expect(page.getByRole('menu')).toHaveCount(0)
+  await closeMenuWithEsc(page)
+  // O Esc fechou o menu, e não a tela: o chamado continua aberto no mesmo endereço.
+  await expect(page).toHaveURL(url)
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
   const ticketPath = `/api/tickets/${url.split('/').pop()}`

@@ -8,8 +8,10 @@ import {
 } from '@playwright/test'
 import {
   admin,
+  closeMenuWithEsc,
   json,
   ok,
+  openMenuAndWait,
   openQueued,
   seedContact,
   seedSector,
@@ -785,9 +787,9 @@ test('em janela de 1280px, o cartão enviado cabe na conversa e o mouse alcança
   }
 
   // O ⋯ abre pelo clique do mouse (o Playwright recusa o clique se outro elemento cobre o botão).
-  await menu.click()
+  await openMenuAndWait(menu)
   await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toBeVisible()
-  await page.keyboard.press('Escape')
+  await closeMenuWithEsc(page)
   await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toHaveCount(0)
 
   // O Reagir também abre pelo mouse, e a reação escolhida aparece no cartão.
@@ -856,13 +858,9 @@ test('cartão enviando ou com falha não oferece reação nem Responder', async 
     // A mensagem do XET tem o menu (⋯), que também não oferece Responder.
     const menu = message.getByRole('button', { name: 'Ações da mensagem' })
     if ((await menu.count()) > 0) {
-      await menu.click()
-      // O menu só existe depois de abrir: sem esperar por ele, o Esc cairia na regra da tela
-      // (com nada por cima, volta para Chamados) e o chamado fecharia no meio do teste.
-      await expect(page.getByRole('menu')).toBeVisible()
+      await openMenuAndWait(menu)
       await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toHaveCount(0)
-      await page.keyboard.press('Escape')
-      await expect(page.getByRole('menu')).toHaveCount(0)
+      await closeMenuWithEsc(page)
       // O chamado continua aberto: o menu fechou, e não foi a tela que saiu daqui.
       await expect(page).toHaveURL(/\/chamados\/\d+$/)
     }
