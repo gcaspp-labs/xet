@@ -61,14 +61,13 @@ func (h *Handler) mergeIntoPending(w http.ResponseWriter, r *http.Request) {
 
 // mayMergeIntoPending tells whether the user may merge the closed ticket into a
 // pending one (#341, spec #332): the same people who correct it, and only while
-// its situation is resolved or cancelled. The pending choices come only with it.
+// its situation is resolved or cancelled (mergeRefusal). The pending choices
+// come only with it.
 func mayMergeIntoPending(t db.GetTicketDetailRow, actor auth.User) bool {
 	if t.Status != db.TicketStatusClosed || !t.ClosureType.Valid {
 		return false
 	}
-	switch t.ClosureType.ClosureType {
-	case db.ClosureTypeResolved, db.ClosureTypeCancelled:
-	default:
+	if mergeRefusal(t.ClosureType.ClosureType) != nil {
 		return false
 	}
 	return mayCorrectCloser(t.ClosedByID, actor)

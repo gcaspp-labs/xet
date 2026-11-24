@@ -13,6 +13,25 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
+// mergeRefusal tells why a closed ticket with this situation is not merged into
+// a pending one, or nil when it may be (#341, spec #332): only a resolved or a
+// cancelled one. A transferred ticket — including the old transfer made with the
+// closing form (#243) — and an already merged one are refused. The detail of the
+// ticket and the merge both ask here, so a new situation never shows the action
+// and refuses the merge, or the other way around.
+func mergeRefusal(closureType db.ClosureType) error {
+	switch closureType {
+	case db.ClosureTypeResolved, db.ClosureTypeCancelled:
+		return nil
+	case db.ClosureTypeTransferred:
+		return ErrTransferred
+	case db.ClosureTypeMerged:
+		return ErrMerged
+	default:
+		return ErrNotClosed
+	}
+}
+
 // MergeClosedIntoPending merges the closed ticket B into the pending ticket A
 // (#341, spec #332): the messages of B pass to A, A takes the situation and the
 // closing data of B, and B becomes merged into A. Whoever may correct B does it
@@ -52,12 +71,8 @@ func (s *Service) MergeClosedIntoPending(ctx context.Context, actor auth.User, t
 		if b.Status != db.TicketStatusClosed {
 			return ErrNotClosed
 		}
-		switch b.ClosureType.ClosureType {
-		case db.ClosureTypeTransferred:
-			// Também a antiga, feita com o formulário de encerramento (#243).
-			return ErrTransferred
-		case db.ClosureTypeMerged:
-			return ErrMerged
+		if err := mergeRefusal(b.ClosureType.ClosureType); err != nil {
+			return err
 		}
 		if !mayCorrect(b, actor) {
 			return ErrCannotCorrect
@@ -75,6 +90,16 @@ func (s *Service) MergeClosedIntoPending(ctx context.Context, actor auth.User, t
 		// so the registration of the contact never waits on this one.
 		if _, err := q.GetContactForShare(ctx, b.ContactID); err != nil {
 			return fmt.Errorf("lock contact: %w", err)
+		}
+
+		// O motivo do cancelamento ficou só na auditoria de B, que passa a ser
+		// mesclado: A o herda como dado de cancelamento (spec #332).
+		var cancelReason *string
+		if b.ClosureType.ClosureType == db.ClosureTypeCancelled {
+			cancelReason, err = q.GetTicketCancellationReason(ctx, &b.ID)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("read cancellation reason: %w", err)
+			}
 		}
 
 		// Os módulos são lidos antes de mudar: a auditoria de B guarda os que
@@ -149,7 +174,7 @@ func (s *Service) MergeClosedIntoPending(ctx context.Context, actor auth.User, t
 		closedChanges.Set("assignee_id", a.AssigneeID, closed.AssigneeID)
 		closedChanges.Set("merged_ticket_id", nil, b.ID)
 		closedChanges.Set("merged_protocol", nil, b.Protocol)
-		return recordTicket(ctx, q, a.ID, "ticket_closed_by_merge", actor.ID, closedChanges)
+		return recordTicketReason(ctx, q, a.ID, "ticket_closed_by_merge", actor.ID, cancelReason, closedChanges)
 	})
 	if err != nil {
 		return db.Ticket{}, err

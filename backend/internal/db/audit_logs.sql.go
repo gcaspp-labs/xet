@@ -38,6 +38,22 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 	return err
 }
 
+const getTicketCancellationReason = `-- name: GetTicketCancellationReason :one
+select a.reason from audit_logs a
+where a.ticket_id = $1 and a.action = 'ticket_cancelled'
+order by a.id desc
+limit 1
+`
+
+// Motivo do cancelamento do chamado, que a mesclagem de um encerrado leva para o
+// pendente: o cancelamento guarda o motivo na auditoria do próprio chamado.
+func (q *Queries) GetTicketCancellationReason(ctx context.Context, ticketID *int64) (*string, error) {
+	row := q.db.QueryRow(ctx, getTicketCancellationReason, ticketID)
+	var reason *string
+	err := row.Scan(&reason)
+	return reason, err
+}
+
 const listAuditLogsByEntity = `-- name: ListAuditLogsByEntity :many
 select id, ticket_id, entity_type, entity_id, action, actor_id, reason, changes, created_at from audit_logs
 where entity_type = $1 and entity_id = $2

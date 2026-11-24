@@ -543,7 +543,7 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `ticket_resumed` | Retomar pela lista ([#334](https://github.com/gcaspp-labs/xet/issues/334)): `changes` com `status` e `assignee_id` |
 | `ticket_merged` | No chamado mesclado (B, [#335](https://github.com/gcaspp-labs/xet/issues/335) e [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `closure_type`, `merged_into_ticket_id` e os ids das mensagens que passaram para o pendente; na mesclagem de um atendimento encerrado, também os dados de encerramento que B deixou |
 | `ticket_resumed_by_merge` | No pendente retomado a partir de um chamado novo (A, [#335](https://github.com/gcaspp-labs/xet/issues/335)): `changes` com `status`, `assignee_id` e o chamado mesclado |
-| `ticket_closed_by_merge` | No pendente que recebeu um atendimento encerrado (A, [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `status`, o chamado mesclado e os dados de encerramento herdados de B |
+| `ticket_closed_by_merge` | No pendente que recebeu um atendimento encerrado (A, [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `status`, o chamado mesclado e os dados de encerramento herdados de B; quando B foi cancelado, `reason` com o motivo do cancelamento, que A herda |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
 | `user_password_changed` | O próprio usuário troca a senha em Configurações: `actor_id` é o próprio usuário; sem `changes` |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |

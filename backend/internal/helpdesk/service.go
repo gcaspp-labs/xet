@@ -40,6 +40,14 @@ func NewService(pool *pgxpool.Pool, files storage.Storage, hub *realtime.Hub) *S
 }
 
 func recordTicket(ctx context.Context, q *db.Queries, ticketID int64, action string, actorID int64, changes audit.Changes) error {
+	return recordTicketReason(ctx, q, ticketID, action, actorID, nil, changes)
+}
+
+// recordTicketReason records the audit of the ticket with the free text the
+// action keeps in audit_logs.reason, as the correction, the cancellation and the
+// pending do — and now the merge of a cancelled ticket, which carries the reason
+// of B to A.
+func recordTicketReason(ctx context.Context, q *db.Queries, ticketID int64, action string, actorID int64, reason *string, changes audit.Changes) error {
 	raw, err := changes.JSON()
 	if err != nil {
 		return err
@@ -50,6 +58,7 @@ func recordTicket(ctx context.Context, q *db.Queries, ticketID int64, action str
 		EntityID:   ticketID,
 		Action:     action,
 		ActorID:    &actorID,
+		Reason:     reason,
 		Changes:    raw,
 	}); err != nil {
 		return fmt.Errorf("audit: %w", err)

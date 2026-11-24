@@ -51,6 +51,18 @@ func (e *testEnv) closedByMerge(ticketID int64) closedByMerge {
 	return c
 }
 
+// auditReason reads the free text recorded with the last action of the ticket.
+func (e *testEnv) auditReason(ticketID int64, action string) *string {
+	e.T.Helper()
+	var reason *string
+	if err := e.Pool.QueryRow(e.T.Context(), `
+		select reason from audit_logs where ticket_id = $1 and action = $2 order by id desc limit 1`,
+		ticketID, action).Scan(&reason); err != nil {
+		e.T.Fatal(err)
+	}
+	return reason
+}
+
 // moduleOf creates a module of the sector.
 func (e *testEnv) moduleOf(sectorID int64, name string) int64 {
 	e.T.Helper()
@@ -310,6 +322,10 @@ func TestMergeClosedIntoPendingMovesTheMessagesAndClosesA(t *testing.T) {
 		last["ended_at"]["to"] == nil || last["closed_at"]["to"] == nil {
 		t.Fatalf("audit of A = %v %v", actions[len(actions)-1], last)
 	}
+	// Um encerrado não tem motivo de cancelamento para herdar.
+	if r := e.auditReason(a.ID, "ticket_closed_by_merge"); r != nil {
+		t.Fatalf("reason recorded in the merge of a resolved ticket = %v", *r)
+	}
 
 	// A conversa de A terá o aviso da mesclagem com o protocolo de B quando a
 	// tela da #343 o mostrar; aqui a auditoria já guarda o vínculo e o
@@ -381,6 +397,11 @@ func TestMergeCancelledTicketIntoPending(t *testing.T) {
 	}
 	if got := e.mergedState(b.ID); got.ClosureType == nil || *got.ClosureType != "merged" || got.MergedInto == nil || *got.MergedInto != a.ID {
 		t.Fatalf("merged ticket = %+v", got)
+	}
+	// A herda também o motivo do cancelamento de B: ele ficava só na auditoria
+	// de B, que agora é um mesclado (spec #332, "os dados de cancelamento").
+	if got := e.auditReason(a.ID, "ticket_closed_by_merge"); got == nil || *got != "Cliente desistiu" {
+		t.Fatalf("reason of A = %v, want the cancellation reason of B", got)
 	}
 	// As mensagens de B passaram para A.
 	if n := len(e.messages(b.ID)); n != 0 {
@@ -654,6 +675,101 @@ func TestResumeByListLosesToTheMergeOfAClosedTicket(t *testing.T) {
 				}
 			default:
 				t.Fatalf("neither won: merge %d %v, resume %d %v", merged.Status, merged.Body, resumed.Status, resumed.Body)
+			}
+		})
+	}
+}
+
+// Dois atendimentos encerrados mesclados no mesmo pendente ao mesmo tempo: só
+// um vence; o outro recebe o erro e nada muda nele (spec #332, "ou mescla outro
+// chamado nele").
+func TestTwoClosedTicketsMergedIntoTheSamePendingAtOnce(t *testing.T) {
+	t.Parallel()
+	const notPending = "Este chamado pendente não está mais pendente. Atualize a lista e tente novamente."
+	for i := range 6 {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			t.Parallel()
+			c := newConversation(t)
+			e := c.e
+			a, b1, module, org := c.pendingAndClosed()
+			// O contato volta a escrever e abre outro chamado, que Ana assume e
+			// encerra como o primeiro.
+			e.receive(c.sector.ID, text("MSG-7", "5511988887777@s.whatsapp.net", "5511988887777", "E as férias?"))
+			b2 := e.queuedTicketOf(c.sector.ID, a.ContactID)
+			if resp := e.assign(b2.ID, c.anaToken); resp.Status != http.StatusOK {
+				t.Fatalf("assign B2: status %d, body %v", resp.Status, resp.Body)
+			}
+			if resp := e.closeForm(b2.ID, c.anaToken, map[string]any{
+				"subject": "Férias", "resolution": "Programadas para janeiro.",
+				"moduleIds": []int64{module}, "organizationId": org,
+			}); resp.Status != http.StatusOK {
+				t.Fatalf("close B2: status %d, body %v", resp.Status, resp.Body)
+			}
+
+			var wg sync.WaitGroup
+			var first, second response
+			start := make(chan struct{})
+			wg.Go(func() {
+				<-start
+				first = e.mergeIntoPending(b1.ID, c.anaToken, a.ID)
+			})
+			wg.Go(func() {
+				<-start
+				second = e.mergeIntoPending(b2.ID, c.anaToken, a.ID)
+			})
+			close(start)
+			wg.Wait()
+
+			won, lost, wantSubject := b1, b2, "Contracheque"
+			loseStatus, loseBody := second.Status, second.Body
+			if second.Status == http.StatusOK {
+				won, lost, wantSubject = b2, b1, "Férias"
+				loseStatus, loseBody = first.Status, first.Body
+			}
+			if first.Status == http.StatusOK && second.Status == http.StatusOK {
+				t.Fatalf("both merges won: A cannot take two closed tickets")
+			}
+			if first.Status != http.StatusOK && second.Status != http.StatusOK {
+				t.Fatalf("neither won: merge B1 %d %v, merge B2 %d %v", first.Status, first.Body, second.Status, second.Body)
+			}
+			// O que chegou depois encontra A encerrado e não muda nada.
+			if loseStatus != http.StatusConflict || loseBody["error"] != notPending {
+				t.Fatalf("losing merge: status %d, body %v", loseStatus, loseBody)
+			}
+
+			// A fica com os dados e as mensagens do vencedor, e nada do perdedor.
+			closed := e.closedByMerge(a.ID)
+			if closed.Status != "closed" || closed.ClosureType == nil || *closed.ClosureType != "resolved" ||
+				closed.Subject == nil || *closed.Subject != wantSubject {
+				t.Fatalf("A after the merge = %+v, winner = %d", closed, won.ID)
+			}
+			if m := e.mergedState(won.ID); m.MergedInto == nil || *m.MergedInto != a.ID {
+				t.Fatalf("winner after the merge = %+v", m)
+			}
+			if n := len(e.messages(a.ID)); n != 2 {
+				t.Fatalf("messages of A = %d, want its own and the winner's", n)
+			}
+			if n := len(e.messages(won.ID)); n != 0 {
+				t.Fatalf("messages left in the winner = %d", n)
+			}
+			// O perdedor continua encerrado, com a mensagem dele e sem vínculo.
+			if m := e.mergedState(lost.ID); m.MergedInto != nil ||
+				m.ClosureType == nil || *m.ClosureType != "resolved" {
+				t.Fatalf("loser after the refusal = %+v", m)
+			}
+			if n := len(e.messages(lost.ID)); n != 1 {
+				t.Fatalf("messages of the loser = %d, want its own", n)
+			}
+			// E A guarda uma mesclagem só.
+			actions, _ := e.AuditChanges("ticket", a.ID)
+			merges := 0
+			for _, action := range actions {
+				if action == "ticket_closed_by_merge" {
+					merges++
+				}
+			}
+			if merges != 1 {
+				t.Fatalf("merges recorded in A = %d, want 1 (%v)", merges, actions)
 			}
 		})
 	}
