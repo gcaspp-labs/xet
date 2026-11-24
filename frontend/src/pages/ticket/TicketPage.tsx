@@ -1036,7 +1036,7 @@ export function ConversationCard({
   user: User
   onRegister: () => void
   // Abre a janela Retomar chamado, que escolhe um dos pendentes do contato (spec #332).
-  onResumePending?: () => void
+  onResumePending: () => void
   modern?: boolean
   // A tela Chamados define a altura do cartão; a ficha do chamado segue com a própria.
   className?: string
@@ -1344,7 +1344,7 @@ export function ConversationCard({
                   !canResumePendingNow &&
                   ' Só quem atende este chamado pode retomar o pendente.'}
               </span>
-              {canResumePendingNow && onResumePending && (
+              {canResumePendingNow && (
                 <Button variant="outline" size="sm" onClick={onResumePending}>
                   <CirclePlay strokeWidth={1.7} aria-hidden />
                   Retomar chamado

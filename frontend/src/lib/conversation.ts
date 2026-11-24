@@ -35,7 +35,8 @@ export type TicketDetail = {
   // Por que o chamado está pendente, quem o marcou e quando; vem só no pendente (spec #332).
   pending: { reason: string; by: { id: number; name: string }; at: string } | null
   // Pendentes do mesmo contato e setor, para o aviso e a janela Retomar chamado; vem no chamado
-  // em atendimento e no da fila (spec #332).
+  // em atendimento e no da fila, e no encerrado ou cancelado que o usuário pode mesclar num
+  // pendente (#341) (spec #332).
   pendingTickets?: PendingChoice[]
   // Chamado do setor de origem, quando este veio de uma transferência entre setores.
   previous: {
