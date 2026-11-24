@@ -325,6 +325,40 @@ returning id;
 update message_actions set ticket_id = @to_ticket_id
 where ticket_id = @from_ticket_id;
 
+-- name: ClosePendingByMerge :one
+-- The pending ticket A takes the situation and the closing data of B, the
+-- closed one (#341, spec #332): the same closure_type, subject, resolution,
+-- organization, end, closing and responsible. assigned_at and started_at of A
+-- stay. The caller holds the locks of both tickets and of the contact.
+update tickets
+set status = 'closed', closure_type = @closure_type::closure_type,
+    subject = @subject, resolution = @resolution, organization_id = @organization_id,
+    ended_at = @ended_at::timestamptz, closed_at = @closed_at::timestamptz,
+    closed_by_id = @closed_by_id::bigint, assignee_id = @assignee_id::bigint
+where id = @id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
+
+-- name: MergeClosedTicket :one
+-- The closed ticket B becomes merged into the pending A (#341, spec #332),
+-- without subject, resolution or modules; its closing moment, end and
+-- responsible stay as they are. The caller holds the locks of both tickets.
+update tickets
+set closure_type = 'merged', merged_into_ticket_id = @merged_into_ticket_id::bigint,
+    subject = null, resolution = null
+where id = @id
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at;
+
+-- name: MoveTicketModulesToTicket :exec
+-- The modules of B pass to A in the merge of a closed ticket into a pending
+-- one (#341). A has none, but the conflict keeps a module the two already
+-- share.
+insert into ticket_modules (ticket_id, module_id)
+select @to_ticket_id::bigint, tm.module_id from ticket_modules tm where tm.ticket_id = @from_ticket_id
+on conflict do nothing;
+
+-- name: DeleteTicketModules :exec
+delete from ticket_modules where ticket_id = @ticket_id;
+
 -- name: AddTicketModules :many
 -- Records the active modules of the sector among the given ones; the caller
 -- compares the result with what was asked. Modules are locked for share so

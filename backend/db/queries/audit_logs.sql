@@ -39,6 +39,14 @@ where (
 )
 order by a.created_at, a.id;
 
+-- name: GetTicketCancellationReason :one
+-- Motivo do cancelamento do chamado, que a mesclagem de um encerrado leva para o
+-- pendente: o cancelamento guarda o motivo na auditoria do próprio chamado.
+select a.reason from audit_logs a
+where a.ticket_id = @ticket_id and a.action = 'ticket_cancelled'
+order by a.id desc
+limit 1;
+
 -- name: ListTicketCorrections :many
 -- Corrections of the closed ticket in the order they were written (each one
 -- holds the lock of the ticket, so the id follows that order), with the name

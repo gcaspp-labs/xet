@@ -157,6 +157,78 @@ func (q *Queries) CancelTicket(ctx context.Context, arg CancelTicketParams) (Tic
 	return i, err
 }
 
+const closePendingByMerge = `-- name: ClosePendingByMerge :one
+update tickets
+set status = 'closed', closure_type = $1::closure_type,
+    subject = $2, resolution = $3, organization_id = $4,
+    ended_at = $5::timestamptz, closed_at = $6::timestamptz,
+    closed_by_id = $7::bigint, assignee_id = $8::bigint
+where id = $9
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at
+`
+
+type ClosePendingByMergeParams struct {
+	ClosureType    ClosureType
+	Subject        *string
+	Resolution     *string
+	OrganizationID *int64
+	EndedAt        time.Time
+	ClosedAt       time.Time
+	ClosedByID     int64
+	AssigneeID     int64
+	ID             int64
+}
+
+// The pending ticket A takes the situation and the closing data of B, the
+// closed one (#341, spec #332): the same closure_type, subject, resolution,
+// organization, end, closing and responsible. assigned_at and started_at of A
+// stay. The caller holds the locks of both tickets and of the contact.
+func (q *Queries) ClosePendingByMerge(ctx context.Context, arg ClosePendingByMergeParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, closePendingByMerge,
+		arg.ClosureType,
+		arg.Subject,
+		arg.Resolution,
+		arg.OrganizationID,
+		arg.EndedAt,
+		arg.ClosedAt,
+		arg.ClosedByID,
+		arg.AssigneeID,
+		arg.ID,
+	)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TransferReason,
+		&i.Channel,
+		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
+		&i.AssigneeReadAt,
+	)
+	return i, err
+}
+
 const closeTicket = `-- name: CloseTicket :one
 update tickets
 set status = 'closed', closure_type = $1::closure_type, closed_at = now(), closed_by_id = assignee_id,
@@ -641,6 +713,15 @@ func (q *Queries) CreateTransferredTicket(ctx context.Context, arg CreateTransfe
 		&i.AssigneeReadAt,
 	)
 	return i, err
+}
+
+const deleteTicketModules = `-- name: DeleteTicketModules :exec
+delete from ticket_modules where ticket_id = $1
+`
+
+func (q *Queries) DeleteTicketModules(ctx context.Context, ticketID int64) error {
+	_, err := q.db.Exec(ctx, deleteTicketModules, ticketID)
+	return err
 }
 
 const getOpenTicketForUpdate = `-- name: GetOpenTicketForUpdate :one
@@ -1811,6 +1892,58 @@ func (q *Queries) MarkTicketRead(ctx context.Context, arg MarkTicketReadParams) 
 	return result.RowsAffected(), nil
 }
 
+const mergeClosedTicket = `-- name: MergeClosedTicket :one
+update tickets
+set closure_type = 'merged', merged_into_ticket_id = $1::bigint,
+    subject = null, resolution = null
+where id = $2
+returning id, protocol, sector_id, contact_id, organization_id, assignee_id, status, previous_ticket_id, created_by_id, arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type, subject, resolution, created_at, updated_at, transfer_reason, channel, client_request_id, pending_reason, pending_by_id, pending_at, merged_into_ticket_id, assignee_read_at
+`
+
+type MergeClosedTicketParams struct {
+	MergedIntoTicketID int64
+	ID                 int64
+}
+
+// The closed ticket B becomes merged into the pending A (#341, spec #332),
+// without subject, resolution or modules; its closing moment, end and
+// responsible stay as they are. The caller holds the locks of both tickets.
+func (q *Queries) MergeClosedTicket(ctx context.Context, arg MergeClosedTicketParams) (Ticket, error) {
+	row := q.db.QueryRow(ctx, mergeClosedTicket, arg.MergedIntoTicketID, arg.ID)
+	var i Ticket
+	err := row.Scan(
+		&i.ID,
+		&i.Protocol,
+		&i.SectorID,
+		&i.ContactID,
+		&i.OrganizationID,
+		&i.AssigneeID,
+		&i.Status,
+		&i.PreviousTicketID,
+		&i.CreatedByID,
+		&i.ArrivedAt,
+		&i.AssignedAt,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ClosedAt,
+		&i.ClosedByID,
+		&i.ClosureType,
+		&i.Subject,
+		&i.Resolution,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TransferReason,
+		&i.Channel,
+		&i.ClientRequestID,
+		&i.PendingReason,
+		&i.PendingByID,
+		&i.PendingAt,
+		&i.MergedIntoTicketID,
+		&i.AssigneeReadAt,
+	)
+	return i, err
+}
+
 const mergeTicketIntoPending = `-- name: MergeTicketIntoPending :one
 update tickets
 set status = 'closed', closure_type = 'merged', merged_into_ticket_id = $1,
@@ -1916,6 +2049,25 @@ func (q *Queries) MoveMessagesToTicket(ctx context.Context, arg MoveMessagesToTi
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveTicketModulesToTicket = `-- name: MoveTicketModulesToTicket :exec
+insert into ticket_modules (ticket_id, module_id)
+select $1::bigint, tm.module_id from ticket_modules tm where tm.ticket_id = $2
+on conflict do nothing
+`
+
+type MoveTicketModulesToTicketParams struct {
+	ToTicketID   int64
+	FromTicketID int64
+}
+
+// The modules of B pass to A in the merge of a closed ticket into a pending
+// one (#341). A has none, but the conflict keeps a module the two already
+// share.
+func (q *Queries) MoveTicketModulesToTicket(ctx context.Context, arg MoveTicketModulesToTicketParams) error {
+	_, err := q.db.Exec(ctx, moveTicketModulesToTicket, arg.ToTicketID, arg.FromTicketID)
+	return err
 }
 
 const nextProtocolNumber = `-- name: NextProtocolNumber :one

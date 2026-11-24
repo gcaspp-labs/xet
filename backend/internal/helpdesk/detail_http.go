@@ -30,10 +30,15 @@ type ticketDetailResponse struct {
 	Previous     *previousTicketResponse `json:"previous"`
 	Next         *nextTicketResponse     `json:"next"`
 	Pending      *pendingDetailResponse  `json:"pending"`
-	// PendingTickets are the pendings of the same contact and sector, for a
-	// ticket in progress: the notice and the window of resuming one from it
-	// (#335, spec #332).
+	// PendingTickets are the pendings of the same contact and sector: for a
+	// ticket in progress, the notice and the window of resuming one from it
+	// (#335, spec #332); for a closed one that may be merged, the choices of
+	// the merge (#341, spec #332).
 	PendingTickets []pendingChoiceResponse `json:"pendingTickets,omitempty"`
+	// CanMergeIntoPending tells whether the user may merge this closed ticket
+	// into a pending one of the same contact and sector; only then the choices
+	// come (#341, spec #332).
+	CanMergeIntoPending bool `json:"canMergeIntoPending,omitempty"`
 	// MergedInto is the ticket this one was merged into; only on a merged one.
 	MergedInto *mergedTicketResponse `json:"mergedInto,omitempty"`
 }
@@ -135,27 +140,39 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 		out.MergedInto = &mergedTicketResponse{ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol}
 	}
 	// O chamado em atendimento traz os pendentes do mesmo contato e setor, para
-	// a tela avisar e oferecer Retomar chamado (#335, spec #332).
-	if t.Status == db.TicketStatusInProgress {
+	// a tela avisar e oferecer Retomar chamado (#335, spec #332); o encerrado ou
+	// cancelado que o usuário pode mesclar traz os mesmos pendentes, como as
+	// escolhas da janela Mesclar em pendente (#341, spec #332).
+	mergeable := mayMergeIntoPending(t, auth.CurrentUser(r.Context()))
+	if t.Status == db.TicketStatusInProgress || mergeable {
+		out.CanMergeIntoPending = mergeable
 		rows, err := h.service.PendingOfContact(r.Context(), t.ContactID, t.SectorID)
 		if err != nil {
 			h.ticketError(w, r, err)
 			return
 		}
-		out.PendingTickets = make([]pendingChoiceResponse, len(rows))
-		for i, row := range rows {
-			item := pendingChoiceResponse{ID: row.ID, Protocol: row.Protocol}
-			if row.PendingReason != nil {
-				item.Reason = *row.PendingReason
-			}
-			if row.PendingByID != nil {
-				item.By = httpx.Ref{ID: *row.PendingByID, Name: row.PendingByName}
-			}
-			if row.PendingAt != nil {
-				item.At = *row.PendingAt
-			}
-			out.PendingTickets[i] = item
-		}
+		out.PendingTickets = pendingChoices(rows)
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// pendingChoices turns the pendings of the contact into the choices of the
+// screen: the notice of a ticket in progress and the window of the merge of a
+// closed one (#335 and #341, spec #332).
+func pendingChoices(rows []db.ListPendingTicketsOfContactInSectorRow) []pendingChoiceResponse {
+	out := make([]pendingChoiceResponse, len(rows))
+	for i, row := range rows {
+		item := pendingChoiceResponse{ID: row.ID, Protocol: row.Protocol}
+		if row.PendingReason != nil {
+			item.Reason = *row.PendingReason
+		}
+		if row.PendingByID != nil {
+			item.By = httpx.Ref{ID: *row.PendingByID, Name: row.PendingByName}
+		}
+		if row.PendingAt != nil {
+			item.At = *row.PendingAt
+		}
+		out[i] = item
+	}
+	return out
 }
