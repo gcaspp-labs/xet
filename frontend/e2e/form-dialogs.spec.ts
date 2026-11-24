@@ -4,6 +4,7 @@ import {
   expectClosableDialog,
   expectLockedDialog,
   seedDirectory,
+  seedPendingWithNewTicket,
   seedSector,
   signIn,
   unique,
@@ -95,6 +96,17 @@ test('as janelas do atendimento têm bloqueio', async ({ page, baseURL }) => {
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Cadastrar contato' }), {
     field: 'Nome',
   })
+})
+
+test('a janela Retomar chamado tem bloqueio', async ({ page, baseURL }) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+
+  await chooseAction(page, 'Retomar chamado')
+  await expectLockedDialog(page, page.getByRole('dialog', { name: 'Retomar chamado' }))
 })
 
 test('cancelar o cadastro aberto pelo encerramento volta à janela com os dados mantidos', async ({

@@ -6,6 +6,7 @@ import {
   queuedTicketId,
   recordToasts,
   seedClosedTicket,
+  seedPendingWithNewTicket,
   seedSector,
   signIn,
   unique,
@@ -527,4 +528,202 @@ test('o link do histórico para um pendente abre o chamado em Chamados', async (
     .click()
   await expect(page).toHaveURL(new RegExp(`/chamados/${pending.id}$`))
   await expect(page.getByRole('heading', { name: closed.contact.name })).toBeVisible()
+})
+
+// O aviso e a janela de Retomar chamado no chamado novo (spec #332), com o pendente criado pela
+// API: o chamado novo é o que a tela abre.
+const pendingNotice = (page: Page) =>
+  page
+    .getByRole('region', { name: 'Conversa', exact: true })
+    .locator('[data-slot="alert"]')
+    .filter({ hasText: 'Este contato tem' })
+
+test('o chamado novo avisa quantos pendentes o contato tem, e na fila só avisa', async ({
+  page,
+  baseURL,
+}) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+
+  // Sem pendentes, um chamado em atendimento não mostra o aviso.
+  const other = `Outro ${unique().id}`
+  expect(
+    (
+      await page.request.post(`/api/test/messaging/sectors/${seed.sector.id}/receive`, {
+        data: {
+          externalMessageId: `E2E-${unique().id}`,
+          phone: unique().phone,
+          contactName: other,
+          body: 'Bom dia',
+        },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await openQueued(page, other, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  await expect(pendingNotice(page)).toHaveCount(0)
+
+  // Na fila, o aviso vem com o número e sem a ação: retomar exige assumir antes.
+  await openQueued(page, seed.contact, seed.sector.id)
+  const notice = pendingNotice(page)
+  await expect(notice).toHaveCount(1)
+  await expect(notice).toContainText('Este contato tem 1 chamado pendente.')
+  await expect(notice).toContainText('Assuma o chamado para retomar o pendente.')
+  await expect(notice.getByRole('button', { name: 'Retomar chamado' })).toHaveCount(0)
+
+  // Assumido, o mesmo aviso ganha a ação, e a janela lista o pendente do contato.
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  await expect(notice).toContainText('Este contato tem 1 chamado pendente.')
+  await notice.getByRole('button', { name: 'Retomar chamado' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Retomar chamado' })
+  await expect(dialog.getByRole('radio')).toHaveCount(1)
+  await expect(dialog).toContainText(await protocolOf(page, seed.pendingId))
+  await expect(dialog).toContainText('Aguardando a nota fiscal do serviço')
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+
+  // Um segundo pendente do mesmo contato: o aviso usa o plural e a janela lista os dois.
+  expect(
+    (
+      await page.request.post(`/api/tickets/${seed.ticketId}/pending`, {
+        data: { reason: 'Depende do órgão' },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  expect(
+    (
+      await page.request.post(`/api/test/messaging/sectors/${seed.sector.id}/receive`, {
+        data: {
+          externalMessageId: `E2E-${unique().id}`,
+          phone: seed.phone,
+          contactName: seed.contact,
+          body: 'Mais uma dúvida',
+        },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await openQueued(page, seed.contact, seed.sector.id)
+  await expect(pendingNotice(page)).toContainText('Este contato tem 2 chamados pendentes.')
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  await pendingNotice(page).getByRole('button', { name: 'Retomar chamado' }).click()
+  await expect(dialog.getByRole('radio')).toHaveCount(2)
+  await expect(dialog).toContainText('Depende do órgão')
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+})
+
+test('o responsável retoma pelo aviso e o pendente abre com as mensagens do chamado novo', async ({
+  page,
+  baseURL,
+}) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  const agentNameDisplay = agentNameOf(seed.agent)
+  const secondProtocol = await protocolOf(page, seed.ticketId)
+  const pendingProtocol = await protocolOf(page, seed.pendingId)
+
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  await pendingNotice(page).getByRole('button', { name: 'Retomar chamado' }).click()
+
+  // A janela explica a mesclagem e lista o pendente com protocolo, motivo e quem marcou.
+  const dialog = page.getByRole('dialog', { name: 'Retomar chamado' })
+  await expect(dialog).toContainText(
+    'As mensagens deste chamado passam para o pendente escolhido, que volta para o seu atendimento. Este chamado fica registrado como Mesclado.',
+  )
+  await expect(dialog).toContainText(pendingProtocol)
+  await expect(dialog).toContainText('Aguardando a nota fiscal do serviço')
+  await expect(dialog).toContainText(`por ${agentNameDisplay}`)
+  await dialog.getByRole('button', { name: 'Retomar chamado' }).click()
+
+  // O pendente abre no lugar do chamado novo, com as mensagens dos dois na ordem do tempo.
+  await expect(page.getByText('Chamado retomado')).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`/chamados/${seed.pendingId}$`))
+  const conversa = page.getByRole('region', { name: 'Conversa', exact: true })
+  await expect(conversa.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  await expect(conversa.getByText('Preciso da nota fiscal do serviço')).toBeVisible()
+  await expect(conversa.getByText('Voltei com a nota fiscal')).toBeVisible()
+  const firstAt = await conversa.getByText('Preciso da nota fiscal do serviço').boundingBox()
+  const lastAt = await conversa.getByText('Voltei com a nota fiscal').boundingBox()
+  expect(firstAt!.y).toBeLessThan(lastAt!.y)
+  const entries = conversa.getByRole('listitem', { name: 'Registro do chamado' })
+  await expect(
+    entries.filter({ hasText: `retomou este chamado a partir do ${secondProtocol}` }),
+  ).toBeVisible()
+  await expect(
+    entries.filter({ hasText: `retomou este chamado a partir do ${secondProtocol}` }),
+  ).toContainText(agentNameDisplay)
+  // O aviso de pendentes some: não há mais pendente deste contato.
+  await expect(pendingNotice(page)).toHaveCount(0)
+
+  // O pendente sai da aba Pendentes e o chamado novo sai de Meus chamados.
+  await page.goto('/chamados')
+  await pendingTab(page)
+    .getByRole('tab', { name: /^Pendentes/ })
+    .click()
+  await expect(pendingRow(page, seed.contact)).toHaveCount(0)
+  const mine = page.getByRole('navigation', { name: 'Meus chamados' })
+  const links = mine.getByRole('link', { name: new RegExp(seed.contact) })
+  await expect(links).toHaveCount(1)
+  await expect(links).toHaveAttribute('href', `/chamados/${seed.pendingId}`)
+})
+
+test('o menu ⋯ também oferece o Retomar chamado, e cancelar a janela não muda nada', async ({
+  page,
+  baseURL,
+}) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+
+  // É o primeiro item do menu, antes de Devolver à fila.
+  await page.getByRole('button', { name: 'Mais ações' }).click()
+  await expect(page.getByRole('menuitem').first()).toHaveText('Retomar chamado')
+  await page.getByRole('menuitem', { name: 'Retomar chamado' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Retomar chamado' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+
+  // Nada mudou: o chamado novo continua em atendimento, e o pendente, na lista.
+  await expect(page).toHaveURL(new RegExp(`/chamados/${seed.ticketId}$`))
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Mais ações' })).toBeVisible()
+  await page.goto('/chamados')
+  await pendingTab(page)
+    .getByRole('tab', { name: /^Pendentes/ })
+    .click()
+  await expect(pendingRow(page, seed.contact)).toBeVisible()
+})
+
+test('quem não é o responsável vê o aviso com o número e sem a ação', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  const colleague = await addAgent(baseURL!, seed.sector.id)
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  const url = page.url()
+
+  const context = await browser.newContext()
+  const other = await context.newPage()
+  await signIn(other, colleague, userPassword)
+  await other.goto(url)
+  await expect(other.getByRole('heading', { name: seed.contact })).toBeVisible()
+  const notice = pendingNotice(other)
+  await expect(notice).toContainText('Este contato tem 1 chamado pendente.')
+  await expect(notice).toContainText('Só quem atende este chamado pode retomar o pendente.')
+  await expect(notice.getByRole('button', { name: 'Retomar chamado' })).toHaveCount(0)
+  await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
+  await context.close()
 })
