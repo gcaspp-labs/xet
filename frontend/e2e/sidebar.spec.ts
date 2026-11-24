@@ -9,13 +9,13 @@ test('barra lateral acompanha o tema escolhido', async ({ page }) => {
   const inner = page.locator(sidebar)
   await expect(inner).toHaveCSS('background-color', 'rgb(255, 255, 255)')
   const brand = page.getByRole('banner').locator('img:visible')
-  await expect(brand).toHaveAttribute('src', /glab-simbolo(?!-escuro)/)
+  await expect(brand).toHaveAttribute('src', /gcaspp-simbolo(?!-escuro)/)
 
   await page.getByRole('button', { name: 'Configurações' }).click()
   await page.getByRole('menuitemradio', { name: 'Escuro' }).click()
   await page.keyboard.press('Escape')
   await expect(inner).toHaveCSS('background-color', 'rgb(24, 24, 27)')
-  await expect(brand).toHaveAttribute('src', /glab-simbolo-escuro/)
+  await expect(brand).toHaveAttribute('src', /gcaspp-simbolo-escuro/)
 })
 
 test('cabeçalho fica fixo com a marca e o sino de notificações, acima da barra lateral', async ({
@@ -26,7 +26,7 @@ test('cabeçalho fica fixo com a marca e o sino de notificações, acima da barr
   await login(page, admin.email, admin.password)
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
   const header = page.getByRole('banner')
-  await expect(header).toContainText('GCASPP LAB')
+  await expect(header).toContainText('GCASPP')
   await expect(header).toContainText('Central de Atendimento')
   await expect(header.getByRole('button', { name: 'Notificações' })).toBeEnabled()
 
@@ -53,7 +53,7 @@ test('barra lateral recolhe para os ícones, com o botão à direita ou no centr
   // Aberta, o botão fica à direita, com a mesma folga que tem no topo.
   expect(openBar.x + openBar.width - (place.x + place.width)).toBeCloseTo(place.y - openBar.y, 0)
   expect(place.x).toBeGreaterThan(openBar.x + openBar.width / 2)
-  const brand = await page.getByRole('banner').getByText('GCASPP LAB').boundingBox()
+  const brand = await page.getByRole('banner').getByText('GCASPP').boundingBox()
   const settings = await inner.getByRole('button', { name: 'Configurações' }).boundingBox()
   const contacts = await inner.getByRole('link', { name: 'Contatos' }).boundingBox()
 
@@ -73,7 +73,7 @@ test('barra lateral recolhe para os ícones, com o botão à direita ou no centr
   expect(centered.y).toBe(place.y)
   expect(centered.height).toBe(place.height)
   expect(centered.x + centered.width / 2).toBeCloseTo(closedBar.x + closedBar.width / 2, 0)
-  expect(await page.getByRole('banner').getByText('GCASPP LAB').boundingBox()).toEqual(brand)
+  expect(await page.getByRole('banner').getByText('GCASPP').boundingBox()).toEqual(brand)
   expect((await inner.getByRole('button', { name: 'Configurações' }).boundingBox())!.y).toBe(
     settings!.y,
   )

@@ -1,5 +1,5 @@
-import symbol from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo.svg'
-import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/glab-simbolo-escuro.svg'
+import symbol from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-simbolo.svg'
+import symbolDark from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-simbolo-escuro.svg'
 import {
   ALargeSmall,
   BellRing,
@@ -275,7 +275,7 @@ function AppHeader({ user }: { user: User }) {
       <img src={symbol} alt="" className="size-8 shrink-0 dark:hidden" />
       <img src={symbolDark} alt="" className="hidden size-8 shrink-0 dark:block" />
       <div className="min-w-0 flex-1">
-        <p className="body-strong truncate">GCASPP LAB</p>
+        <p className="body-strong truncate">GCASPP</p>
         <p className="caption truncate text-ink-soft">Central de Atendimento</p>
       </div>
       <NotificationBell user={user} />
@@ -320,9 +320,6 @@ export default function AppLayout() {
                 <SettingsMenu role={user.role} />
               </SidebarMenuItem>
             </SidebarMenu>
-            <p className="caption px-2 whitespace-nowrap text-ink-faint transition-[opacity,visibility] duration-200 group-data-[collapsible=icon]:invisible group-data-[collapsible=icon]:opacity-0">
-              g-lab
-            </p>
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="min-w-0">

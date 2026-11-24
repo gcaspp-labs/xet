@@ -1,6 +1,6 @@
 # Central de atendimento via WhatsApp
 
-O xet é a central de atendimento da GCASPP LAB, onde cada setor atende pelo seu número de WhatsApp. Este glossário liga o nome que aparece na interface ao nome usado no código e no banco.
+O xet é a central de atendimento da GCASPP, onde cada setor atende pelo seu número de WhatsApp. Este glossário liga o nome que aparece na interface ao nome usado no código e no banco.
 
 ## Linguagem
 
