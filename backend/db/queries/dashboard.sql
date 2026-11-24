@@ -135,10 +135,12 @@ from (
 
 -- name: DashboardByAssignee :many
 -- One row per person and sector, with the rules of the numbers above. Only
--- what counts makes a row, so nobody appears with everything at zero. With a
--- module, only the closings that apply to it count. With a channel, the tickets
--- in progress and the started ones do not make a row: the channel does not
--- apply to those numbers, and the closings are the numbers of the channel.
+-- what counts makes a row, so nobody appears with everything at zero. A merged
+-- ticket counts nowhere in the closings, so its assignee does not make a row
+-- with it either. With a module, only the closings that apply to it count. With
+-- a channel, the tickets in progress and the started ones do not make a row:
+-- the channel does not apply to those numbers, and the closings are the numbers
+-- of the channel.
 select
     r.sector_id, s.name as sector_name, r.user_id::bigint as user_id, u.name as user_name,
     sum(r.in_progress)::bigint as in_progress,
@@ -206,6 +208,9 @@ from (
             ), 0)::float8 as pending_seconds
         from tickets t
         where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.closed_at < @period_end::timestamptz
+          -- A merged ticket (#335, #341) counts nowhere in the closings, so it
+          -- must not make a row for its assignee either.
+          and t.closure_type <> 'merged'
           and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
           and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
           and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))

@@ -135,6 +135,9 @@ from (
             ), 0)::float8 as pending_seconds
         from tickets t
         where t.status = 'closed' and t.closed_at >= $6::timestamptz and t.closed_at < $7::timestamptz
+          -- A merged ticket (#335, #341) counts nowhere in the closings, so it
+          -- must not make a row for its assignee either.
+          and t.closure_type <> 'merged'
           and ($3::bigint is null or t.sector_id = $3)
           and ($4::bigint is null or t.assignee_id = $4)
           and ($5::bigint is null or t.organization_id = $5)
@@ -174,10 +177,12 @@ type DashboardByAssigneeRow struct {
 }
 
 // One row per person and sector, with the rules of the numbers above. Only
-// what counts makes a row, so nobody appears with everything at zero. With a
-// module, only the closings that apply to it count. With a channel, the tickets
-// in progress and the started ones do not make a row: the channel does not
-// apply to those numbers, and the closings are the numbers of the channel.
+// what counts makes a row, so nobody appears with everything at zero. A merged
+// ticket counts nowhere in the closings, so its assignee does not make a row
+// with it either. With a module, only the closings that apply to it count. With
+// a channel, the tickets in progress and the started ones do not make a row:
+// the channel does not apply to those numbers, and the closings are the numbers
+// of the channel.
 func (q *Queries) DashboardByAssignee(ctx context.Context, arg DashboardByAssigneeParams) ([]DashboardByAssigneeRow, error) {
 	rows, err := q.db.Query(ctx, dashboardByAssignee,
 		arg.ModuleID,

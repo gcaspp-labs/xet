@@ -293,3 +293,62 @@ func TestDashboardCountsMergedTicketAsItArrived(t *testing.T) {
 		t.Fatalf("numbers = %v, want the merged one out of the closings", numbers)
 	}
 }
+
+// TestDashboardTableLeavesOutTheMergedTicketAssignee: quem só tem um chamado
+// mesclado no período não aparece na tabela por atendente com tudo zerado, como
+// manda a regra 15 do dashboard.md: o mesclado não conta em nenhuma coluna,
+// então também não faz linha.
+func TestDashboardTableLeavesOutTheMergedTicketAssignee(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	d := &dashboardFixture{e: c.e}
+	org := c.e.Organization(c.supToken, "Prefeitura", "")
+	module := c.e.moduleOf(c.sector.ID, "Folha")
+	c.registerContact(org, "5511988887777")
+
+	// A fica pendente com a Ana.
+	c.assign()
+	a := c.ticket
+	if resp := c.e.markPending(a.ID, c.anaToken, "Aguardando o sistema"); resp.Status != http.StatusOK {
+		t.Fatalf("mark pending: status %d, body %v", resp.Status, resp.Body)
+	}
+	// B chega, a Bia assume e retoma o pendente A a partir dele (#335): B fica
+	// mesclado com a Bia e A segue em andamento com ela.
+	c.e.receive(c.sector.ID, text("MSG-2", "5511988887777@s.whatsapp.net", "5511988887777", "Voltei"))
+	b := c.e.queuedTicketOf(c.sector.ID, a.ContactID)
+	if resp := c.e.assign(b.ID, c.biaToken); resp.Status != http.StatusOK {
+		t.Fatalf("assign B: status %d, body %v", resp.Status, resp.Body)
+	}
+	if resp := c.e.resumePending(b.ID, c.biaToken, a.ID); resp.Status != http.StatusOK {
+		t.Fatalf("resume pending: status %d, body %v", resp.Status, resp.Body)
+	}
+	d.setTimes(b.ID, ticketTimes{arrived: &dashboardNoon, assigned: &dashboardNoon, ended: &dashboardNoon, closed: &dashboardNoon})
+	d.setTimes(a.ID, ticketTimes{arrived: &dashboardNoon, assigned: &dashboardNoon})
+
+	// No filtro por canal, o em andamento não faz linha: sobra o mesclado, que
+	// também não pode fazer.
+	order, rows := d.rows(c.supToken, filtered("sectorId", c.sector.ID, "channel", "whatsapp"))
+	if len(order) != 0 {
+		t.Fatalf("rows by channel = %v, %v, want nobody", order, rows)
+	}
+
+	// A Bia devolve A a pendente, a Ana retoma e encerra: sem o filtro por
+	// canal, só a Ana aparece.
+	if resp := c.e.markPending(a.ID, c.biaToken, "Aguardando o retorno"); resp.Status != http.StatusOK {
+		t.Fatalf("mark pending again: status %d, body %v", resp.Status, resp.Body)
+	}
+	if resp := c.e.resume(a.ID, c.anaToken); resp.Status != http.StatusOK {
+		t.Fatalf("resume: status %d, body %v", resp.Status, resp.Body)
+	}
+	if resp := c.e.closeForm(a.ID, c.anaToken, d.form(org, module)); resp.Status != http.StatusOK {
+		t.Fatalf("close: status %d, body %v", resp.Status, resp.Body)
+	}
+	ended := dashboardNoon.Add(45 * time.Minute)
+	d.setTimes(a.ID, ticketTimes{arrived: &dashboardNoon, assigned: &dashboardNoon, ended: &ended, closed: &ended})
+
+	order, rows = d.rows(c.supToken, filtered("sectorId", c.sector.ID))
+	ana := d.userName("ana@exemplo.com")
+	if len(order) != 1 || order[0] != ana || rows[ana]["resolved"] != 1 {
+		t.Fatalf("rows = %v, %v, want only Ana", order, rows)
+	}
+}
