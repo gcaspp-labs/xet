@@ -13,7 +13,7 @@ await journey("message-revisions", async (t) => {
     phone.receive(maria, "Preciso do balancete de setembro"),
   );
   const page = await t.signIn(agent);
-  const queue = page.getByRole("region", { name: "Fila e assuntos" });
+  const queue = page.getByRole("region", { name: "Fila, assuntos e pendentes" });
   const conversation = page.getByRole("region", {
     name: "Conversa",
     exact: true,

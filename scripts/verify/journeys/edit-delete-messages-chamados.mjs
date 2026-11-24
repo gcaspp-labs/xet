@@ -21,7 +21,7 @@ await journey('edit-delete-messages-chamados', async (t) => {
 
   const ticketId = await t.step('Atendente assume e responde duas vezes', async () => {
     await page
-      .getByRole('region', { name: 'Fila e assuntos' })
+      .getByRole('region', { name: 'Fila, assuntos e pendentes' })
       .getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
       .click()
     await expect(page).toHaveURL(/\/chamados\/\d+$/)

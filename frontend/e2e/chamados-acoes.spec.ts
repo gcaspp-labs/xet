@@ -366,7 +366,7 @@ test('o X da fila pede confirmação no item; Voltar e Esc não cancelam, e o Ca
   const ticket = await seedTicket(baseURL!, sector.id)
   await signIn(page, agent, userPassword)
   await page.goto('/chamados')
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   const x = queue.getByRole('button', { name: `Cancelar chamado de ${ticket.name}` })
   await expect(x).toBeVisible()
 
@@ -419,7 +419,7 @@ test('com um chamado aberto, o Esc fecha só a confirmação do X da fila', asyn
   await page.goto(`/chamados/${mine.id}`)
   await expect(page.getByRole('heading', { name: mine.name })).toBeVisible()
 
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await queue.getByRole('button', { name: `Cancelar chamado de ${queued.name}` }).click()
   await expect(queue.getByRole('button', { name: 'Voltar' })).toBeFocused()
   await page.keyboard.press('Escape')

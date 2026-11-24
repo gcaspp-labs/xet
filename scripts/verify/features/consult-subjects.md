@@ -12,7 +12,7 @@ O responsável consulta e copia soluções do setor sem sair da conversa.
 
 ## How to get to it
 
-Na tela Chamados, assuma um chamado pela Fila, abra a aba Assuntos do cartão "Fila e assuntos" e busque uma solução. Use Copiar para adaptar o texto no chat.
+Na tela Chamados, assuma um chamado pela Fila, abra a aba Assuntos do cartão "Fila, assuntos e pendentes" e busque uma solução. Use Copiar para adaptar o texto no chat.
 
 ## Driving it
 

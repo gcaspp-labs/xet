@@ -745,7 +745,7 @@ test('em "Maior", no computador, as ações do painel e o título da conversa fi
   const page = await context.newPage()
   await prefer(page, { size: 'larger' })
   await signIn(page, agent, userPassword)
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await expect(queue.getByRole('button', { name: 'Assumir' })).toBeInViewport({ ratio: 1 })
 
   await openAssignedTicket(page, contact)

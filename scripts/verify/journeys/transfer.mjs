@@ -21,8 +21,8 @@ await journey('transfer', async (t) => {
     await page.getByRole('button', { name: 'Mais ações' }).click()
     await page.getByRole('menuitem', { name, exact: true }).click()
   }
-  // A fila fica na aba Fila do cartão "Fila e assuntos" da tela Chamados.
-  const queueOf = (page) => page.getByRole('region', { name: 'Fila e assuntos' })
+  // A fila fica na aba Fila do cartão "Fila, assuntos e pendentes" da tela Chamados.
+  const queueOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
 
   const agentPage = await t.signIn(agent)
   const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })

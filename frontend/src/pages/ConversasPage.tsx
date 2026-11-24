@@ -729,7 +729,7 @@ export default function ConversasPage() {
           )}
           <Card
             role="region"
-            aria-label="Fila e assuntos"
+            aria-label="Fila, assuntos e pendentes"
             className={cn('min-h-0', rightPanel ? undefined : 'max-xl:hidden')}
           >
             <Tabs

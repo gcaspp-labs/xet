@@ -33,7 +33,7 @@ async function receiveText(
 }
 
 // Fila da tela Chamados e o item de cada contato nela.
-const queueOf = (page: Page) => page.getByRole('region', { name: 'Fila e assuntos' })
+const queueOf = (page: Page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
 const queuedItems = (page: Page, contactName: string) =>
   queueOf(page).getByRole('listitem').filter({ hasText: contactName })
 
