@@ -244,6 +244,13 @@ export function canCancel(ticket: TicketDetail, user: User) {
   )
 }
 
+// Na fila o X cancela sem assumir: qualquer pessoa do setor, e o administrador nos setores que
+// enxerga (spec.md, Cancelamento; #395). Os itens da fila são sempre chamados na fila, por isso a
+// regra olha só o setor.
+export function canCancelFromQueue(sectorId: number, user: User) {
+  return user.role === 'admin' || user.sectorId === sectorId
+}
+
 // Devolvem à fila o chamado em atendimento o responsável e a supervisão do
 // setor (spec.md, Devolver à fila).
 export function canReturn(ticket: TicketDetail, user: User) {
@@ -350,11 +357,12 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
       <Icon strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       <span className="min-w-0">
         {text(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
-        {(log.action === 'ticket_cancelled' ||
-          log.action === 'ticket_pending' ||
-          (log.action === 'ticket_transferred_sector' && log.reason)) && (
-          <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
-        )}
+        {log.reason &&
+          (log.action === 'ticket_cancelled' ||
+            log.action === 'ticket_pending' ||
+            log.action === 'ticket_transferred_sector') && (
+            <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
+          )}
       </span>
     </li>
   )

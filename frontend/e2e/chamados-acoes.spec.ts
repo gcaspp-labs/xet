@@ -357,3 +357,53 @@ test.describe('seletor de setor do administrador', () => {
     })
   }
 })
+
+test('o X da fila pede confirmação no item; Voltar e Esc não cancelam, e o Cancelar chamado cancela sem motivo', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const ticket = await seedTicket(baseURL!, sector.id)
+  await signIn(page, agent, userPassword)
+  await page.goto('/chamados')
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const x = queue.getByRole('button', { name: `Cancelar chamado de ${ticket.name}` })
+  await expect(x).toBeVisible()
+
+  // O X fica no fim da linha de ações, à direita do Assumir, e não junto do horário.
+  const assumir = queue.getByRole('button', { name: `Assumir chamado de ${ticket.name}` })
+  const xBox = (await x.boundingBox())!
+  const assumirBox = (await assumir.boundingBox())!
+  expect(xBox.x).toBeGreaterThanOrEqual(assumirBox.x + assumirBox.width)
+
+  // O clique não cancela: o próprio item troca as ações pela confirmação, com o Voltar em foco.
+  await x.click()
+  await expect(queue).toContainText(`Cancelar o chamado de ${ticket.name}? Ele não é reaberto.`)
+  await expect(queue.getByRole('button', { name: 'Voltar' })).toBeFocused()
+  await expect(page.getByRole('dialog', { name: 'Cancelar chamado' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(x).toBeVisible()
+  await expect(queue).not.toContainText('Ele não é reaberto.')
+
+  // Voltar também desfaz, e o chamado continua na fila.
+  await x.click()
+  await queue.getByRole('button', { name: 'Voltar' }).click()
+  await expect(assumir).toBeVisible()
+
+  // "Cancelar chamado" cancela direto, sem janela e sem motivo, com o aviso, e o item sai da Fila.
+  await x.click()
+  await queue.getByRole('button', { name: 'Cancelar chamado', exact: true }).click()
+  await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+  await expect(queue.getByText(ticket.name)).toHaveCount(0)
+
+  // Em Atendimentos o chamado aparece como Cancelado, e o registro na conversa fica sem "Motivo:".
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  const row = page.getByRole('row', { name: ticket.name })
+  await expect(row).toContainText('Cancelado')
+  await row.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
+  const entry = page
+    .getByRole('listitem', { name: 'Registro do chamado' })
+    .filter({ hasText: 'cancelou o chamado' })
+  await expect(entry).toHaveCount(1)
+  await expect(entry).not.toContainText('Motivo:')
+})

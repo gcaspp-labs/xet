@@ -165,7 +165,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   await expect(queue).toContainText('Agora é sobre férias')
 })
 
-test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', async ({
+test('cancelamento tem motivo opcional, dispensa o cadastro e fica identificado', async ({
   page,
   browser,
   request,
@@ -180,14 +180,13 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
     })
   expect((await receive('Seu boleto venceu')).ok()).toBeTruthy()
 
-  // Na fila, o atendente cancela sem assumir e sem cadastrar o contato.
+  // Na fila, o atendente cancela sem assumir, sem cadastrar o contato e sem motivo (#395).
   await signIn(page, agent, userPassword)
   await openQueued(page, 'Paula Golpe')
   await chooseAction(page, 'Cancelar chamado')
   const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
-  await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
-  await expect(sheet).toContainText('Informe o motivo do cancelamento.')
-  await sheet.getByLabel('Motivo').fill('Golpe do falso boleto.')
+  await expect(sheet.getByLabel('Motivo (opcional)')).toHaveValue('')
+  await expect(sheet).toContainText('Sem o motivo, a conversa mostra só quem cancelou e quando.')
   await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
   await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
 
@@ -199,7 +198,8 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   await expect(doneRow).toContainText(agent.replace(/^agent\.(\d+)@.*$/, 'agent $1'))
   await expect(doneRow).toContainText('Cancelado')
 
-  // A conversa mostra quem cancelou e o motivo; não há correção nem nova ação.
+  // A conversa mostra quem cancelou e quando, sem a linha "Motivo:"; não há
+  // correção nem nova ação.
   await doneRow.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText('Cancelado em')
@@ -207,7 +207,8 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   const entry = conversation.getByRole('listitem', { name: 'Registro do chamado' }).filter({
     hasText: `${agentName} cancelou o chamado`,
   })
-  await expect(entry).toContainText('Motivo: Golpe do falso boleto.')
+  await expect(entry).toBeVisible()
+  await expect(entry).not.toContainText('Motivo:')
   const details = page.getByRole('region', { name: 'Atendimento', exact: true })
   await expect(details).toContainText('Cancelado')
   await expect(details).toContainText('Cancelado em')
@@ -275,9 +276,14 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   await supervisorPage.goto(url)
   await chooseAction(supervisorPage, 'Cancelar chamado')
   const supervisorSheet = supervisorPage.getByRole('dialog', { name: 'Cancelar chamado' })
-  await supervisorSheet.getByLabel('Motivo').fill('Número bloqueado.')
+  await supervisorSheet.getByLabel('Motivo (opcional)').fill('Número bloqueado.')
   await supervisorSheet.getByRole('button', { name: 'Cancelar chamado' }).click()
   await expect(supervisorPage.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+  // Com motivo, o registro continua mostrando a linha "Motivo:".
+  await supervisorPage.goto(url.replace('/chamados/', '/atendimentos/'))
+  await expect(supervisorPage.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
+    'Motivo: Número bloqueado.',
+  )
   await supervisorContext.close()
 })
 

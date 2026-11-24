@@ -521,6 +521,13 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByRole('button', { name: `Assumir chamado de ${queued}` })).toBeVisible()
     await expectContrast(page, 'painel')
 
+    // Confirmação do X da fila (#395): o texto do item e os botões, com o Voltar em foco.
+    await page.getByRole('button', { name: `Cancelar chamado de ${queued}` }).click()
+    await expect(page.getByRole('button', { name: 'Voltar' })).toBeFocused()
+    await expectContrast(page, 'confirmação de cancelamento na fila')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: `Cancelar chamado de ${queued}` })).toBeVisible()
+
     // Sino aberto, com a fila.
     await page
       .getByRole('banner')
