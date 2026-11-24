@@ -632,3 +632,53 @@ test('chamado encerrado não mostra o aviso de cadastro', async ({ page, request
   await expect(conversation).not.toContainText('Contato não cadastrado')
   await expect(page.getByRole('button', { name: 'Cadastrar contato' })).toHaveCount(0)
 })
+
+test('a janela de cancelamento mostra o erro do servidor quando o chamado já foi cancelado', async ({
+  page,
+  browser,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent, supervisor } = await seedSector(baseURL!)
+  await prepare(baseURL!, sector.id)
+  const { phone } = unique()
+  const name = `Golpe Tardio ${unique().id}`
+  expect(
+    (
+      await request.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+        data: {
+          externalMessageId: `E2E-${unique().id}`,
+          phone,
+          contactName: name,
+          body: 'Pague agora',
+        },
+      })
+    ).ok(),
+  ).toBeTruthy()
+
+  // O atendente abre a janela do cancelamento.
+  await signIn(page, agent, userPassword)
+  await openQueued(page, name)
+  await chooseAction(page, 'Cancelar chamado')
+  const sheet = page.getByRole('dialog', { name: 'Cancelar chamado' })
+  const url = page.url()
+
+  // Antes de confirmar, a supervisão cancela o mesmo chamado.
+  const otherContext = await browser.newContext()
+  const other = await otherContext.newPage()
+  await signIn(other, supervisor, userPassword)
+  await openQueued(other, name)
+  await chooseAction(other, 'Cancelar chamado')
+  await other
+    .getByRole('dialog', { name: 'Cancelar chamado' })
+    .getByRole('button', { name: 'Cancelar chamado' })
+    .click()
+  await expect(other.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+  await otherContext.close()
+
+  // A janela continua aberta e mostra o erro do servidor, sem cancelar de novo.
+  await sheet.getByRole('button', { name: 'Cancelar chamado' }).click()
+  await expect(sheet).toContainText('Este chamado já foi encerrado.')
+  await expect(page).toHaveURL(url)
+  await sheet.getByRole('button', { name: 'Voltar' }).click()
+})
