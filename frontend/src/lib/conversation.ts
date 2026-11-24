@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
@@ -6,7 +6,7 @@ import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
 import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
 import { readDraft, saveDraft } from '@/lib/message-draft'
-import { type MessageType, ticketsKey, workloadKey } from '@/lib/tickets'
+import { type MessageType, pendingTicketsKey, ticketsKey, workloadKey } from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
 export const maxFileSize = 16 * 1024 * 1024
@@ -16,7 +16,7 @@ export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
 export type TicketDetail = {
   id: number
   protocol: string
-  status: 'queued' | 'in_progress' | 'closed'
+  status: 'queued' | 'in_progress' | 'pending' | 'closed'
   // Como o atendimento aconteceu: WhatsApp ou registro por telefone.
   channel: TicketChannel
   sector: { id: number; name: string }
@@ -32,6 +32,8 @@ export type TicketDetail = {
   assignee: { id: number; name: string } | null
   closedBy: { id: number; name: string } | null
   closureType: 'resolved' | 'transferred' | 'cancelled' | null
+  // Por que o chamado está pendente, quem o marcou e quando; vem só no pendente (spec #332).
+  pending: { reason: string; by: { id: number; name: string }; at: string } | null
   // Chamado do setor de origem, quando este veio de uma transferência entre setores.
   previous: {
     id: number
@@ -112,7 +114,7 @@ export type MessageReactions = {
 export type HistoryEntry = {
   id: number
   protocol: string
-  status: 'queued' | 'in_progress' | 'closed'
+  status: 'queued' | 'in_progress' | 'pending' | 'closed'
   channel: TicketChannel
   closureType: 'resolved' | 'transferred' | 'cancelled' | null
   sectorName: string
@@ -126,8 +128,8 @@ export type HistoryEntry = {
 }
 
 // Como o chamado ganhou o primeiro responsável (conversa iniciada ou assumido),
-// cada transferência, a devolução à fila, o encerramento, o cancelamento com o motivo e as correções,
-// com quem fez e de quem para quem.
+// cada transferência, a devolução à fila, o pendente e a retomada, o encerramento,
+// o cancelamento com o motivo e as correções, com quem fez e de quem para quem.
 export type AssignmentLog = {
   id: number
   action:
@@ -135,6 +137,8 @@ export type AssignmentLog = {
     | 'ticket_assigned'
     | 'ticket_transferred_user'
     | 'ticket_returned'
+    | 'ticket_pending'
+    | 'ticket_resumed'
     | 'ticket_closed'
     | 'ticket_transferred_sector'
     | 'ticket_cancelled'
@@ -146,7 +150,7 @@ export type AssignmentLog = {
   toSectorName: string | null
   // Setor de origem da transferência que abriu este chamado; vem só no aviso do destino.
   fromSectorName: string | null
-  // Motivo do cancelamento, da correção ou da transferência entre setores.
+  // Motivo do cancelamento, da correção, da transferência entre setores ou do pendente.
   reason: string | null
 }
 
@@ -600,6 +604,41 @@ export function useReturnTicket(ticketId: number, sectorId: number) {
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
       ]),
+  })
+}
+
+// Depois de uma ação que muda o chamado (marcar pendente, retomar, mesclar), recarrega o chamado, os
+// avisos, a fila, os pendentes e a carga do setor. Fica num lugar só para a próxima ação não copiar
+// a lista de novo.
+function invalidateTicketChange(queryClient: QueryClient, ticketId: number, sectorId: number) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
+    queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
+    queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+    queryClient.invalidateQueries({ queryKey: pendingTicketsKey(sectorId) }),
+    queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+  ])
+}
+
+// Coloca como pendente o chamado em atendimento do usuário, com o motivo; o backend confere de novo.
+export function useMarkPending(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (reason: string) =>
+      api<void>(`/tickets/${ticketId}/pending`, { method: 'POST', body: { reason } }),
+    onSettled: () => invalidateTicketChange(queryClient, ticketId, sectorId),
+  })
+}
+
+// Retoma um pendente, pela lista ou pelo chamado aberto; o backend decide os conflitos. O setor vem
+// na chamada porque a lista reúne os setores que o administrador vê.
+export function useResumeTicket() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ticketId }: { ticketId: number; sectorId: number }) =>
+      api<void>(`/tickets/${ticketId}/resume`, { method: 'POST' }),
+    onSettled: (_data, _error, { ticketId, sectorId }) =>
+      invalidateTicketChange(queryClient, ticketId, sectorId),
   })
 }
 

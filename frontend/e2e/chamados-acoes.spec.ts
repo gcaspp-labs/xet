@@ -77,6 +77,7 @@ test('responsável vê Encerrar e o ⋯ com as ações, e Cancelar chamado fica 
   const menu = await openMenu(page)
   expect(await itemNames(menu)).toEqual([
     'Devolver à fila',
+    'Colocar como pendente',
     'Transferir',
     'Outro setor',
     'Cancelar chamado',

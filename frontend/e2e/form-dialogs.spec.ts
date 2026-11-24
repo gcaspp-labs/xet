@@ -68,6 +68,11 @@ test('as janelas do atendimento têm bloqueio', async ({ page, baseURL }) => {
   await chooseAction(page, 'Devolver à fila')
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Devolver à fila' }))
 
+  await chooseAction(page, 'Colocar como pendente')
+  await expectLockedDialog(page, page.getByRole('dialog', { name: 'Colocar como pendente' }), {
+    field: 'Motivo',
+  })
+
   // Sem texto a digitar, a escolha do seletor é o que precisa continuar.
   const supervisorName = supervisor.replace(/^supervisor\.(\d+)@.*$/, 'supervisor $1')
   await chooseAction(page, 'Transferir')

@@ -1,5 +1,13 @@
 import { expect, request as apiRequest, test, type Page } from '@playwright/test'
-import { admin, openQueued, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  chooseAction,
+  openQueued,
+  seedSector,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 type Preferences = { theme?: 'light' | 'dark'; size?: 'large' | 'larger'; contrast?: boolean }
 
@@ -371,6 +379,35 @@ test('o texto da janela de registro por telefone acompanha o tamanho escolhido',
   const standard = await textSizes(page)
   await page.goto('/chamados')
   await expect(page.getByRole('heading', { name: 'Chamados' })).toBeVisible()
+  await chooseInMenu(page, 'menuitemradio', 'Maior')
+  await open()
+  const larger = await textSizes(page)
+  expectScaled(standard, larger, 5)
+  await context.close()
+})
+
+test('o texto da janela Colocar como pendente acompanha o tamanho escolhido', async ({
+  browser,
+  baseURL,
+}) => {
+  test.slow()
+  const { sector, agent } = await connectedSector(baseURL!)
+  const contact = await receive(baseURL!, sector.id)
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, agent, userPassword)
+  await openAssignedTicket(page, contact)
+
+  const dialog = page.getByRole('dialog', { name: 'Colocar como pendente' })
+  const open = async () => {
+    await chooseAction(page, 'Colocar como pendente')
+    await expect(dialog).toBeVisible()
+  }
+
+  await open()
+  const standard = await textSizes(page)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
   await chooseInMenu(page, 'menuitemradio', 'Maior')
   await open()
   const larger = await textSizes(page)

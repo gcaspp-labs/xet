@@ -105,12 +105,29 @@ export function formatMessageTime(value: string) {
   return format(date, isToday(date) ? 'HH:mm' : 'dd/MM HH:mm')
 }
 
+// Há quanto tempo um chamado está pendente, no formato do protótipo (#337): "há 3 dias", "há 9 h",
+// "há 12 min". O date-fns com pt-BR diria "há cerca de 9 horas", mais longo do que o aprovado.
+export function formatElapsed(value: string, now = Date.now()) {
+  const minutes = Math.floor((now - Date.parse(value)) / 60_000)
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `há ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `há ${hours} h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `há ${days} ${days === 1 ? 'dia' : 'dias'}`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `há ${months} ${months === 1 ? 'mês' : 'meses'}`
+  const years = Math.floor(months / 12)
+  return `há ${years} ${years === 1 ? 'ano' : 'anos'}`
+}
+
 export const ticketStatusLabels: Record<
-  'queued' | 'in_progress' | 'closed',
+  'queued' | 'in_progress' | 'pending' | 'closed',
   { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }
 > = {
   queued: { label: 'Na fila', tone: 'warning' },
   in_progress: { label: 'Em atendimento', tone: 'success' },
+  pending: { label: 'Pendente', tone: 'warning' },
   closed: { label: 'Encerrado', tone: 'neutral' },
 }
 
