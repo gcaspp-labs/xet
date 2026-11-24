@@ -407,3 +407,25 @@ test('o X da fila pede confirmação no item; Voltar e Esc não cancelam, e o Ca
   await expect(entry).toHaveCount(1)
   await expect(entry).not.toContainText('Motivo:')
 })
+
+test('com um chamado aberto, o Esc fecha só a confirmação do X da fila', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const mine = await seedTicket(baseURL!, sector.id, { email: agent })
+  const queued = await seedTicket(baseURL!, sector.id)
+  await signIn(page, agent, userPassword)
+  await page.goto(`/chamados/${mine.id}`)
+  await expect(page.getByRole('heading', { name: mine.name })).toBeVisible()
+
+  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  await queue.getByRole('button', { name: `Cancelar chamado de ${queued.name}` }).click()
+  await expect(queue.getByRole('button', { name: 'Voltar' })).toBeFocused()
+  await page.keyboard.press('Escape')
+
+  // A confirmação fecha e o chamado aberto continua aberto (regra 38 de queue.md).
+  await expect(queue.getByRole('button', { name: 'Voltar' })).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`/chamados/${mine.id}$`))
+  await expect(page.getByRole('heading', { name: mine.name })).toBeVisible()
+})
