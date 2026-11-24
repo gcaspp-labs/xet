@@ -6,7 +6,7 @@ Regra geral: o shadcn/ui fornece o comportamento e a acessibilidade dos componen
 
 ## Dependência
 
-- O design system entra como dependência npm do frontend, fixada por commit: `npm install github:gcaspp-labs/glab-design-system#a05e5eb` (versão 1.1.0). Quando o repositório tiver tags, trocar o commit pela tag (`#v1.0.0`).
+- O design system entra como dependência npm do frontend, fixada por commit: `npm install github:gcaspp-labs/glab-design-system#a583ac3` (versão 2.0.0). Quando o repositório tiver a tag, trocar o commit pela tag (`#v2.0.0`).
 - Usamos somente `tokens/tokens.css`, os ícones e os logos. O `css/components.css` **não** é importado: os componentes vêm do shadcn, estilizados com os tokens.
 - Atualizar o design system é uma mudança deliberada: trocar a versão no `package.json`, conferir o CHANGELOG e revisar as telas.
 
@@ -93,9 +93,9 @@ Player de áudio: componente próprio, usado na gravação e nas mensagens. Bot�
 
 ## Marca e layout
 
-- Cabeçalho: símbolo a 32px, `glab-simbolo.svg` no tema claro e `glab-simbolo-escuro.svg` no escuro, + "GCASPP LAB" e, abaixo, o nome do produto **"Central de Atendimento"**. "g-lab" só no rodapé.
-- Favicon: símbolo do polvo (`glab-simbolo.svg`), copiado para `frontend/public/favicon.svg`.
-- Tela de login: fundo `paper`, Panel central com a assinatura `gcaspp-lab-horizontal.svg`, sem barra lateral.
+- Cabeçalho: símbolo a 32px, `gcaspp-simbolo.svg` no tema claro e `gcaspp-simbolo-escuro.svg` no escuro, + "GCASPP" e, abaixo, o nome do produto **"Central de Atendimento"**.
+- Favicon: o favicon do design system (`assets/logos/favicon/favicon.svg`), copiado para `frontend/public/favicon.svg`.
+- Tela de login: fundo `paper`, Panel central com a assinatura `gcaspp-horizontal.svg` no tema claro e `gcaspp-horizontal-escuro.svg` no escuro, sem barra lateral.
 - Aplicação: Cabeçalho fixo, barra lateral fixa abaixo dele (`sidebar-width`), Topbar fixa, conteúdo com padding `space-30` no desktop e `space-16` no celular, largura máxima `content-max` (exceto a tela Chamados, que usa a largura toda).
 - Foco de teclado: outline sólido de 2px em `focus`, afastado 2px. Transições de 150–200ms, desligadas com `prefers-reduced-motion`.
 
