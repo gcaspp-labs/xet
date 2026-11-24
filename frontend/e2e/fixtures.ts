@@ -77,6 +77,57 @@ export async function seedSector(baseURL: string) {
   return result
 }
 
+// Contato com um pendente e um chamado novo na fila, criados pela API: o chamado novo é o que as
+// telas abrem para o aviso "Este contato tem N chamados pendentes" e a janela Retomar chamado, que
+// precisam de um pendente do mesmo contato e setor (spec #332). O chamado novo fica na fila, para
+// o teste decidir quando assumir.
+export async function seedPendingWithNewTicket(baseURL: string) {
+  const seed = await seedSector(baseURL)
+  const adminApi = await request.newContext({ baseURL })
+  await ok(
+    await adminApi.post('/api/auth/login', {
+      data: { email: admin.email, password: admin.password },
+    }),
+  )
+  await ok(await adminApi.post(`/api/sectors/${seed.sector.id}/connection`))
+  await ok(await adminApi.post(`/api/test/messaging/sectors/${seed.sector.id}/pair`))
+  await adminApi.dispose()
+
+  const api = await request.newContext({ baseURL })
+  await ok(
+    await api.post('/api/auth/login', { data: { email: seed.agent, password: userPassword } }),
+  )
+  const contact = `Cliente ${unique().id}`
+  const phone = unique().phone
+  const send = async (body: string) => {
+    await ok(
+      await api.post(`/api/test/messaging/sectors/${seed.sector.id}/receive`, {
+        data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: contact, body },
+      }),
+    )
+  }
+  const queued = async () => {
+    const tickets = await json<{ id: number; status: string; contact: { name: string } }[]>(
+      await api.get(`/api/sectors/${seed.sector.id}/tickets`),
+    )
+    const found = tickets.find((item) => item.status === 'queued' && item.contact.name === contact)
+    expect(found).toBeTruthy()
+    return found!
+  }
+  await send('Preciso da nota fiscal do serviço')
+  const pending = await queued()
+  await ok(await api.post(`/api/tickets/${pending.id}/assign`))
+  await ok(
+    await api.post(`/api/tickets/${pending.id}/pending`, {
+      data: { reason: 'Aguardando a nota fiscal do serviço' },
+    }),
+  )
+  await send('Voltei com a nota fiscal')
+  const ticket = await queued()
+  await api.dispose()
+  return { ...seed, contact, phone, pendingId: pending.id, ticketId: ticket.id }
+}
+
 // O banco é compartilhado entre os testes, que rodam em paralelo e deixam números desconectados.
 // `onlySectors(...ids)` limita a lista de setores da página aos do teste, para a contagem do sino do
 // administrador ser exata. O restante, inclusive a fila e o tempo real, continua vindo do backend.

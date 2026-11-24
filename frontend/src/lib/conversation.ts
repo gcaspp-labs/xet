@@ -34,6 +34,10 @@ export type TicketDetail = {
   closureType: 'resolved' | 'transferred' | 'cancelled' | null
   // Por que o chamado está pendente, quem o marcou e quando; vem só no pendente (spec #332).
   pending: { reason: string; by: { id: number; name: string }; at: string } | null
+  // Pendentes do mesmo contato e setor, para o aviso e a janela Retomar chamado; vem no chamado
+  // em atendimento e no da fila, e no encerrado ou cancelado que o usuário pode mesclar num
+  // pendente (#341) (spec #332).
+  pendingTickets?: PendingChoice[]
   // Chamado do setor de origem, quando este veio de uma transferência entre setores.
   previous: {
     id: number
@@ -47,6 +51,16 @@ export type TicketDetail = {
   } | null
   // Setor e protocolo para onde este chamado foi transferido, com o motivo escrito, sem acesso a ele.
   next: { protocol: string; sectorName: string; reason: string | null } | null
+}
+
+// Um pendente do contato no setor, como a janela Retomar chamado o mostra: o suficiente para
+// escolher sem abrir o chamado (spec #332).
+export type PendingChoice = {
+  id: number
+  protocol: string
+  reason: string
+  by: { id: number; name: string }
+  at: string
 }
 
 export type Message = {
@@ -128,8 +142,9 @@ export type HistoryEntry = {
 }
 
 // Como o chamado ganhou o primeiro responsável (conversa iniciada ou assumido),
-// cada transferência, a devolução à fila, o pendente e a retomada, o encerramento,
-// o cancelamento com o motivo e as correções, com quem fez e de quem para quem.
+// cada transferência, a devolução à fila, o pendente e a retomada, a retomada a partir
+// de um chamado novo (a mesclagem) em cada um dos dois, o encerramento, o
+// cancelamento com o motivo e as correções, com quem fez e de quem para quem.
 export type AssignmentLog = {
   id: number
   action:
@@ -139,6 +154,8 @@ export type AssignmentLog = {
     | 'ticket_returned'
     | 'ticket_pending'
     | 'ticket_resumed'
+    | 'ticket_merged'
+    | 'ticket_resumed_by_merge'
     | 'ticket_closed'
     | 'ticket_transferred_sector'
     | 'ticket_cancelled'
@@ -152,6 +169,8 @@ export type AssignmentLog = {
   fromSectorName: string | null
   // Motivo do cancelamento, da correção, da transferência entre setores ou do pendente.
   reason: string | null
+  // Protocolo do chamado novo que foi mesclado neste, na retomada a partir dele (spec #332).
+  mergedProtocol?: string | null
 }
 
 export const ticketKey = (ticketId: number) => ['tickets', ticketId]
@@ -639,6 +658,23 @@ export function useResumeTicket() {
       api<void>(`/tickets/${ticketId}/resume`, { method: 'POST' }),
     onSettled: (_data, _error, { ticketId, sectorId }) =>
       invalidateTicketChange(queryClient, ticketId, sectorId),
+  })
+}
+
+// Retoma um pendente a partir do chamado novo em atendimento: as mensagens deste passam para o
+// pendente escolhido, que volta ao atendimento, e este fica Mesclado (spec #332). Devolve o
+// chamado retomado, que a tela passa a mostrar.
+export function useResumePending(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (pendingTicketId: number) =>
+      api<{ id: number; protocol: string }>(`/tickets/${ticketId}/resume-pending`, {
+        method: 'POST',
+        body: { pendingTicketId },
+      }),
+    onSettled: () => invalidateTicketChange(queryClient, ticketId, sectorId),
+    // O pendente retomado abre em seguida: mensagens, avisos e ficha vêm frescos.
+    onSuccess: (resumed) => queryClient.invalidateQueries({ queryKey: ticketKey(resumed.id) }),
   })
 }
 

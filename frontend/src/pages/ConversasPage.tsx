@@ -23,6 +23,7 @@ import { RegisterContactSheet } from '@/components/ContactSheet'
 import { PhoneCopy } from '@/components/PhoneCopy'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { PendingSheet } from '@/components/PendingSheet'
+import { ResumePendingSheet } from '@/components/ResumePendingSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
 import NotFoundPage from '@/pages/NotFoundPage'
@@ -71,6 +72,7 @@ import {
   canClose,
   canMarkPending,
   canResume,
+  canResumePending,
   canReturn,
   canTransfer,
   ConversationCard,
@@ -80,7 +82,7 @@ import { useConversasSearch } from '@/pages/ticket/useTicketView'
 import type { TicketDetail } from '@/lib/conversation'
 import type { User } from '@/lib/auth'
 
-type Action = 'cancel' | 'return' | 'pending' | 'transfer' | 'sector' | 'close'
+type Action = 'cancel' | 'return' | 'pending' | 'transfer' | 'sector' | 'close' | 'resume-pending'
 
 // Ação principal visível (Assumir na fila, Encerrar em atendimento, Retomar no pendente) e o resto no
 // menu "Mais ações" (⋯), com Cancelar chamado no fim, depois de um divisor. Cada item aparece só para
@@ -128,8 +130,11 @@ function TicketActions({
     },
     canSubjects && { id: 'sector' as const, label: 'Outro setor', icon: ArrowRightLeft },
   ].filter((item) => !!item)
+  // Retomar chamado abre o menu, antes de Devolver à fila, e só o responsável pelo chamado em
+  // atendimento com pendentes do contato o vê (spec #332).
+  const resumePending = canResumePending(ticket, user)
   const cancel = canCancel(ticket, user)
-  const hasMenu = main.length > 0 || cancel
+  const hasMenu = main.length > 0 || cancel || resumePending
   return (
     <div className="flex items-center gap-2">
       {ticket.status === 'queued' && (
@@ -154,6 +159,15 @@ function TicketActions({
             <MoreHorizontal strokeWidth={1.7} aria-hidden />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-48">
+            {resumePending && (
+              <>
+                <DropdownMenuItem onClick={() => onAction('resume-pending')}>
+                  <CirclePlay strokeWidth={1.7} aria-hidden />
+                  Retomar chamado
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             {main.map((item) => (
               <DropdownMenuItem key={item.id} onClick={() => onAction(item.id)}>
                 <item.icon strokeWidth={1.7} aria-hidden />
@@ -555,6 +569,11 @@ export default function ConversasPage() {
             onOpenChange={(open) => !open && setAction('')}
             successTo="/chamados"
           />
+          <ResumePendingSheet
+            ticket={ticket}
+            open={action === 'resume-pending'}
+            onOpenChange={(open) => !open && setAction('')}
+          />
           <ClosingSheet
             key={closingKey}
             ticket={ticket}
@@ -666,6 +685,7 @@ export default function ConversasPage() {
               modern
               className={cn('h-full min-h-0 lg:h-full', show('conversation'))}
               onRegister={() => setAction('register')}
+              onResumePending={() => setAction('resume-pending')}
             />
           ) : (
             <Card className={cn('min-h-0 justify-center', show('conversation'))}>

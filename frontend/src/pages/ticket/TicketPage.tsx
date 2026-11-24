@@ -11,6 +11,7 @@ import {
   FileText,
   History,
   Lock,
+  Merge,
   MessagesSquare,
   Mic,
   Paperclip,
@@ -204,6 +205,12 @@ export function canMarkPending(ticket: TicketDetail, user: User) {
   return conducts(ticket, user)
 }
 
+// O responsável pelo chamado em atendimento retoma um pendente do contato, pela janela. Na fila
+// só o aviso aparece: a ação exige assumir antes, e o backend recusa (spec #332).
+export function canResumePending(ticket: TicketDetail, user: User) {
+  return conducts(ticket, user) && (ticket.pendingTickets?.length ?? 0) > 0
+}
+
 // O responsável transfere o próprio chamado em atendimento; supervisão e
 // administração transferem o de qualquer atendente (spec.md, Transferências).
 export function canTransfer(ticket: TicketDetail, user: User) {
@@ -287,6 +294,17 @@ const assignmentActions: Record<
   ticket_resumed: {
     icon: CirclePlay,
     text: (log) => `${log.actor?.name ?? 'Sistema'} retomou o chamado`,
+  },
+  // A retomada a partir de um chamado novo nomeia o chamado mesclado, que a tela não abre (spec #332).
+  ticket_resumed_by_merge: {
+    icon: CirclePlay,
+    text: (log) =>
+      `${log.actor?.name ?? 'Sistema'} retomou este chamado a partir do ${log.mergedProtocol ?? 'chamado mesclado'}`,
+  },
+  // No chamado que foi mesclado, o destino aparece na própria ficha (spec #332, #339).
+  ticket_merged: {
+    icon: Merge,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} mesclou este chamado num pendente`,
   },
   ticket_closed: {
     icon: CircleCheck,
@@ -1010,12 +1028,15 @@ export function ConversationCard({
   ticket,
   user,
   onRegister,
+  onResumePending,
   modern = false,
   className,
 }: {
   ticket: TicketDetail
   user: User
   onRegister: () => void
+  // Abre a janela Retomar chamado, que escolhe um dos pendentes do contato (spec #332).
+  onResumePending: () => void
   modern?: boolean
   // A tela Chamados define a altura do cartão; a ficha do chamado segue com a própria.
   className?: string
@@ -1026,6 +1047,12 @@ export function ConversationCard({
   const react = useReactToMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
+  // O aviso de pendentes no contato vale para o chamado em atendimento e para o da fila, que só
+  // avisa: retomar exige assumir antes (spec #332).
+  const pendings = ticket.pendingTickets ?? []
+  const showPendingNotice =
+    (ticket.status === 'in_progress' || ticket.status === 'queued') && pendings.length > 0
+  const canResumePendingNow = canResumePending(ticket, user)
   // Chamado que não está mais com o usuário (encerrado, transferido, cancelado, devolvido) não
   // mostra rascunho: o que estava guardado é descartado, para não voltar num chamado futuro.
   useEffect(() => {
@@ -1304,6 +1331,29 @@ export function ConversationCard({
       {...dropProps}
     >
       {canReply && dragging && <DropOverlay />}
+      {showPendingNotice && (
+        <div className="border-b border-line-soft p-3">
+          <Alert variant="warning">
+            <CirclePause strokeWidth={1.7} aria-hidden />
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Este contato tem {pendings.length}{' '}
+                {pendings.length === 1 ? 'chamado pendente' : 'chamados pendentes'}.
+                {ticket.status === 'queued' && ' Assuma o chamado para retomar o pendente.'}
+                {ticket.status === 'in_progress' &&
+                  !canResumePendingNow &&
+                  ' Só quem atende este chamado pode retomar o pendente.'}
+              </span>
+              {canResumePendingNow && (
+                <Button variant="outline" size="sm" onClick={onResumePending}>
+                  <CirclePlay strokeWidth={1.7} aria-hidden />
+                  Retomar chamado
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       {needsRegistration(ticket) && (
         <div className="border-b border-line-soft p-3">
           <Alert variant="warning">

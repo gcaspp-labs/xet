@@ -143,6 +143,33 @@ func TestTicketInProgressShowsPendingsOfTheContact(t *testing.T) {
 	}
 }
 
+func TestQueuedTicketShowsPendingsOfTheContactWithoutTheAction(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	c.markPending("Aguardando a nota fiscal")
+	// O cliente volta a escrever: o chamado novo B espera na fila.
+	e.receive(c.sector.ID, text("MSG-2", "5511988887777@s.whatsapp.net", "5511988887777", "Voltei"))
+	b := e.queuedTicketOf(c.sector.ID, c.ticket.ContactID)
+
+	// Na fila, o detalhe traz a lista para o aviso "Este contato tem N chamados
+	// pendentes", mas não a oferta da mesclagem: B precisa ser assumido antes (#338).
+	detail := e.detailAs(b.ID, c.anaToken)
+	pending, ok := detail["pendingTickets"].([]any)
+	if !ok || len(pending) != 1 {
+		t.Fatalf("pendingTickets = %v, want the pending of the same contact and sector", detail["pendingTickets"])
+	}
+	choice := pending[0].(map[string]any)
+	if int64(choice["id"].(float64)) != c.ticket.ID || choice["protocol"] != c.ticket.Protocol ||
+		choice["reason"] != "Aguardando a nota fiscal" {
+		t.Fatalf("pending choice = %v", choice)
+	}
+	if detail["canMergeIntoPending"] != nil {
+		t.Fatalf("queued ticket offered the merge: %v", detail["canMergeIntoPending"])
+	}
+}
+
 func TestResumePendingMergesTheNewTicketIntoThePending(t *testing.T) {
 	t.Parallel()
 	c := newConversation(t)

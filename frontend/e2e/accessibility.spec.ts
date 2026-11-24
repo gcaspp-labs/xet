@@ -3,6 +3,7 @@ import {
   admin,
   chooseAction,
   openQueued,
+  seedPendingWithNewTicket,
   seedSector,
   signIn,
   unique,
@@ -401,6 +402,36 @@ test('o texto da janela Colocar como pendente acompanha o tamanho escolhido', as
   const dialog = page.getByRole('dialog', { name: 'Colocar como pendente' })
   const open = async () => {
     await chooseAction(page, 'Colocar como pendente')
+    await expect(dialog).toBeVisible()
+  }
+
+  await open()
+  const standard = await textSizes(page)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await chooseInMenu(page, 'menuitemradio', 'Maior')
+  await open()
+  const larger = await textSizes(page)
+  expectScaled(standard, larger, 5)
+  await context.close()
+})
+
+test('o texto da janela Retomar chamado acompanha o tamanho escolhido', async ({
+  browser,
+  baseURL,
+}) => {
+  test.slow()
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+
+  const dialog = page.getByRole('dialog', { name: 'Retomar chamado' })
+  const open = async () => {
+    await chooseAction(page, 'Retomar chamado')
     await expect(dialog).toBeVisible()
   }
 
