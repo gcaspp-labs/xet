@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
@@ -607,20 +607,26 @@ export function useReturnTicket(ticketId: number, sectorId: number) {
   })
 }
 
+// Depois de uma ação que muda o chamado (marcar pendente, retomar, mesclar), recarrega o chamado, os
+// avisos, a fila, os pendentes e a carga do setor. Fica num lugar só para a próxima ação não copiar
+// a lista de novo.
+function invalidateTicketChange(queryClient: QueryClient, ticketId: number, sectorId: number) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
+    queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
+    queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
+    queryClient.invalidateQueries({ queryKey: pendingTicketsKey(sectorId) }),
+    queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+  ])
+}
+
 // Coloca como pendente o chamado em atendimento do usuário, com o motivo; o backend confere de novo.
 export function useMarkPending(ticketId: number, sectorId: number) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (reason: string) =>
       api<void>(`/tickets/${ticketId}/pending`, { method: 'POST', body: { reason } }),
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
-        queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
-        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: pendingTicketsKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
-      ]),
+    onSettled: () => invalidateTicketChange(queryClient, ticketId, sectorId),
   })
 }
 
@@ -632,13 +638,7 @@ export function useResumeTicket() {
     mutationFn: ({ ticketId }: { ticketId: number; sectorId: number }) =>
       api<void>(`/tickets/${ticketId}/resume`, { method: 'POST' }),
     onSettled: (_data, _error, { ticketId, sectorId }) =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ticketKey(ticketId), exact: true }),
-        queryClient.invalidateQueries({ queryKey: assignmentsKey(ticketId) }),
-        queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: pendingTicketsKey(sectorId) }),
-        queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
-      ]),
+      invalidateTicketChange(queryClient, ticketId, sectorId),
   })
 }
 

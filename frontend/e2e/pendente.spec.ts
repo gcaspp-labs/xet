@@ -4,6 +4,7 @@ import {
   chooseAction,
   openQueued,
   queuedTicketId,
+  recordToasts,
   seedClosedTicket,
   seedSector,
   signIn,
@@ -136,7 +137,8 @@ test('o responsável marca como pendente e o chamado sai de Meus chamados para a
   await expect(row).toContainText(protocol)
   await expect(row).toContainText(reason)
   await expect(row).toContainText(`por ${agentName}`)
-  await expect(row).toContainText(/há /)
+  // Marcado agora, a linha mostra "agora"; o formato do protótipo é "há 9 h", "há 12 min".
+  await expect(row).toContainText('agora')
   await expect(row.getByRole('button', { name: `Retomar chamado de ${contact}` })).toBeVisible()
 })
 
@@ -226,6 +228,59 @@ test('outro atendente abre o pendente só leitura e o retoma, e o chamado abre e
   await context.close()
 })
 
+test('quem não é do setor do pendente não vê o Retomar, mesmo conseguindo abrir o chamado', async ({
+  page,
+  baseURL,
+}) => {
+  // O servidor recusa o pendente de outro setor; a resposta fabricada prova a proteção da tela, que
+  // não pode oferecer o Retomar a quem o backend recusaria (spec #332). Sem ela, só quem é do setor
+  // (ou o administrador) abre um pendente.
+  const pendingSector = await seedSector(baseURL!)
+  const outsider = await seedSector(baseURL!)
+  const contact = `Helena ${unique().id}`
+  const ticketId = 990001
+  const now = new Date().toISOString()
+  await page.route(`**/api/tickets/${ticketId}`, (route) =>
+    route.fulfill({
+      json: {
+        id: ticketId,
+        protocol: '2026-099999',
+        status: 'pending',
+        channel: 'whatsapp',
+        sector: { id: pendingSector.sector.id, name: pendingSector.sector.name },
+        arrivedAt: now,
+        assignedAt: now,
+        startedAt: now,
+        endedAt: null,
+        closedAt: null,
+        subject: null,
+        resolution: null,
+        contact: { id: 1, name: contact, phone: '5511999999999', registered: true },
+        organization: null,
+        assignee: { id: 1, name: 'Outro atendente' },
+        closedBy: null,
+        closureType: null,
+        pending: {
+          reason: 'Aguardando retorno do órgão',
+          by: { id: 1, name: 'Outro atendente' },
+          at: now,
+        },
+        previous: null,
+        next: null,
+      },
+    }),
+  )
+
+  await signIn(page, outsider.agent, userPassword)
+  await page.goto(`/chamados/${ticketId}`)
+  await expect(page.getByRole('heading', { name: contact })).toBeVisible()
+  await expect(
+    page.getByText('Somente leitura. Retome o chamado para responder ao contato.'),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Retomar', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
+})
+
 test('retomar com outro chamado do contato aberto mostra o aviso e nada muda', async ({
   page,
   browser,
@@ -260,14 +315,71 @@ test('retomar com outro chamado do contato aberto mostra o aviso e nada muda', a
   const row = pendingRow(other, contact)
   await expect(row).toBeVisible()
   await row.getByRole('button', { name: `Retomar chamado de ${contact}` }).click()
-  const alert = pendingTab(other).getByRole('alert')
-  await expect(alert).toContainText(
+  const notice = other.locator('[data-sonner-toast]', { hasText: 'Este contato tem o chamado' })
+  await expect(notice).toContainText(
     `Este contato tem o chamado ${secondProtocol} aberto com ${colleagueName}`,
   )
-  await expect(alert).toContainText('Encerre esse chamado ou use Retomar chamado a partir dele.')
+  await expect(notice).toContainText('Encerre esse chamado ou use Retomar chamado a partir dele.')
+  // O erro aparece uma vez só: a aba Pendentes não repete o aviso num alerta.
+  await expect(pendingTab(other).getByRole('alert')).toHaveCount(0)
   // Nada mudou: o pendente continua na lista.
   await expect(row).toBeVisible()
   await expect(other).toHaveURL(/\/chamados$/)
+  await context.close()
+})
+
+test('o erro ao retomar o pendente aberto aparece uma vez só', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!)
+  const colleague = await addAgent(baseURL!, sector.id)
+  const contact = `Gabi ${unique().id}`
+  const phone = await receive(baseURL!, sector.id, contact)
+
+  await signIn(page, agent, userPassword)
+  const pendingId = await queuedTicketId(page, contact)
+  await markPending(page, contact, 'Aguardando o número do protocolo antigo')
+
+  // O cliente volta a escrever: chamado novo, que o colega assume e deixa aberto.
+  await receive(baseURL!, sector.id, contact, 'Voltei, consegue ver agora?', phone)
+  const context = await browser.newContext()
+  const other = await context.newPage()
+  const toasts = await recordToasts(other)
+  await signIn(other, colleague, userPassword)
+  const secondId = await queuedTicketId(other, contact)
+  const secondProtocol = await protocolOf(other, secondId)
+  await openQueued(other, contact)
+  await other.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(other.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+
+  // Abre o pendente pela aba Pendentes (que fica aberta na coluna da direita) e tenta retomar.
+  await other.goto('/chamados')
+  await pendingTab(other)
+    .getByRole('tab', { name: /^Pendentes/ })
+    .click()
+  await pendingRow(other, contact).getByRole('button', { name: contact, exact: true }).click()
+  await expect(other).toHaveURL(new RegExp(`/chamados/${pendingId}$`))
+  await other.getByRole('button', { name: 'Retomar', exact: true }).click()
+
+  // Um aviso só: nem o toast se repete no alerta da aba Pendentes, nem um segundo toast.
+  await expect(other.getByText(/Este contato tem o chamado/)).toHaveCount(1)
+  await expect(
+    other.locator('[data-sonner-toast]', {
+      hasText: `Este contato tem o chamado ${secondProtocol} aberto`,
+    }),
+  ).toBeVisible()
+  await expect(other.getByRole('alert')).toHaveCount(0)
+  await expect
+    .poll(
+      async () =>
+        (await toasts()).filter((text) => text.includes('Este contato tem o chamado')).length,
+    )
+    .toBe(1)
+  // Nada mudou: o chamado continua pendente e só leitura.
+  await expect(other.getByText('Somente leitura. Retome o chamado')).toBeVisible()
+  await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
   await context.close()
 })
 

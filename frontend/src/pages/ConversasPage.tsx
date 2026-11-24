@@ -70,6 +70,7 @@ import {
   canCancel,
   canClose,
   canMarkPending,
+  canResume,
   canReturn,
   canTransfer,
   ConversationCard,
@@ -103,8 +104,9 @@ function TicketActions({
   onResume: () => void
   resuming: boolean
 }) {
-  // O pendente é só leitura: no topo só o Retomar (spec #332).
+  // O pendente é só leitura: no topo só o Retomar, e só para quem é do setor (spec #332).
   if (ticket.status === 'pending') {
+    if (!canResume(ticket, user)) return null
     return (
       <Button disabled={resuming} onClick={onResume}>
         <CirclePlay strokeWidth={1.7} aria-hidden />
@@ -418,6 +420,9 @@ export default function ConversasPage() {
           setPanel('conversation')
           void navigate(`/chamados/${item.id}`)
         },
+        // O erro do Retomar aparece uma vez só, no aviso, pelo mesmo caminho da lista e do chamado
+        // aberto; a aba Pendentes não repete o alerta.
+        onError: (err) => toast.error(err.message),
       },
     )
   const resumeOpen = (item: TicketDetail) =>
@@ -777,12 +782,6 @@ export default function ConversasPage() {
                 )}
               </TabsContent>
               <TabsContent value="pending" className="min-h-0 overflow-y-auto">
-                {resume.error && (
-                  <Alert variant="warning">
-                    <CircleAlert strokeWidth={1.7} aria-hidden />
-                    <AlertDescription>{resume.error.message}</AlertDescription>
-                  </Alert>
-                )}
                 {pendings.length === 0 ? (
                   <Empty className="border-0">
                     <EmptyMedia>

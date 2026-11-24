@@ -22,6 +22,7 @@ import {
   Undo2,
   UserRoundCog,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import {
   type ChangeEvent,
@@ -200,7 +201,7 @@ function conducts(ticket: TicketDetail, user: User) {
 
 // Só o responsável pelo chamado em atendimento o coloca como pendente (spec #332).
 export function canMarkPending(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && conducts(ticket, user)
+  return conducts(ticket, user)
 }
 
 // O responsável transfere o próprio chamado em atendimento; supervisão e
@@ -218,6 +219,12 @@ export function canClose(ticket: TicketDetail, user: User) {
 // setores só lê os chamados anteriores (spec.md, Transferências).
 function worksIn(ticket: TicketDetail, user: User) {
   return user.role === 'admin' || user.sectorId === ticket.sector.id
+}
+
+// Retoma o pendente quem é do setor dele (o administrador também). O backend confere de novo, e a
+// tela não pode oferecer o Retomar a quem ele recusaria (spec #332).
+export function canResume(ticket: TicketDetail, user: User) {
+  return ticket.status === 'pending' && worksIn(ticket, user)
 }
 
 // Na fila, quem é do setor cancela; em atendimento, o responsável e a
@@ -252,47 +259,68 @@ export function canCorrect(ticket: TicketDetail, user: User) {
   )
 }
 
-function assignmentText(log: AssignmentLog) {
-  if (log.action === 'ticket_started') {
-    return `${log.toName} abriu e assumiu o chamado`
-  }
-  if (log.action === 'ticket_assigned') {
-    return `${log.toName} assumiu o chamado`
-  }
-  if (log.action === 'ticket_returned') {
-    return log.actor?.name === log.fromName
-      ? `${log.fromName} devolveu o chamado à fila`
-      : `${log.actor?.name ?? 'Sistema'} devolveu à fila o chamado de ${log.fromName}`
-  }
-  if (log.action === 'ticket_pending') {
-    return `${log.actor?.name ?? 'Sistema'} colocou o chamado como pendente`
-  }
-  if (log.action === 'ticket_resumed') {
-    return `${log.actor?.name ?? 'Sistema'} retomou o chamado`
-  }
-  if (log.action === 'ticket_closed') {
-    return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
-  }
-  if (log.action === 'ticket_transferred_sector') {
-    const who = log.actor?.name ?? 'Sistema'
-    return log.fromSectorName
-      ? `${who} transferiu o chamado do setor ${log.fromSectorName} para o setor ${log.toSectorName}`
-      : `${who} transferiu o chamado para o setor ${log.toSectorName}`
-  }
-  if (log.action === 'ticket_cancelled') {
-    return `${log.actor?.name ?? 'Sistema'} cancelou o chamado`
-  }
-  if (log.action === 'ticket_corrected') {
-    return `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`
-  }
-  if (log.actor?.name === log.fromName) {
-    return `${log.fromName} transferiu o chamado para ${log.toName}`
-  }
-  return `${log.actor?.name ?? 'Sistema'} transferiu o chamado de ${log.fromName} para ${log.toName}`
+// O que cada registro do chamado mostra na conversa: o ícone e o texto da ação. Fica num mapa só
+// para uma ação nova mexer num lugar só, sem um segundo switch para o ícone.
+const assignmentActions: Record<
+  AssignmentLog['action'],
+  { icon: LucideIcon; text: (log: AssignmentLog) => string }
+> = {
+  ticket_started: {
+    icon: UserRoundCog,
+    text: (log) => `${log.toName} abriu e assumiu o chamado`,
+  },
+  ticket_assigned: {
+    icon: UserRoundCog,
+    text: (log) => `${log.toName} assumiu o chamado`,
+  },
+  ticket_returned: {
+    icon: Undo2,
+    text: (log) =>
+      log.actor?.name === log.fromName
+        ? `${log.fromName} devolveu o chamado à fila`
+        : `${log.actor?.name ?? 'Sistema'} devolveu à fila o chamado de ${log.fromName}`,
+  },
+  ticket_pending: {
+    icon: CirclePause,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} colocou o chamado como pendente`,
+  },
+  ticket_resumed: {
+    icon: CirclePlay,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} retomou o chamado`,
+  },
+  ticket_closed: {
+    icon: CircleCheck,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} encerrou o chamado`,
+  },
+  ticket_transferred_sector: {
+    icon: ArrowRightLeft,
+    text: (log) => {
+      const who = log.actor?.name ?? 'Sistema'
+      return log.fromSectorName
+        ? `${who} transferiu o chamado do setor ${log.fromSectorName} para o setor ${log.toSectorName}`
+        : `${who} transferiu o chamado para o setor ${log.toSectorName}`
+    },
+  },
+  ticket_cancelled: {
+    icon: Ban,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} cancelou o chamado`,
+  },
+  ticket_corrected: {
+    icon: PencilLine,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`,
+  },
+  ticket_transferred_user: {
+    icon: UserRoundCog,
+    text: (log) =>
+      log.actor?.name === log.fromName
+        ? `${log.fromName} transferiu o chamado para ${log.toName}`
+        : `${log.actor?.name ?? 'Sistema'} transferiu o chamado de ${log.fromName} para ${log.toName}`,
+  },
 }
 
 // Registro de responsável ou de encerramento entre as mensagens, na ordem do tempo.
 function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?: boolean }) {
+  const { icon: Icon, text } = assignmentActions[log.action]
   return (
     <li
       aria-label="Registro do chamado"
@@ -301,25 +329,9 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
         modern ? 'border-dashed border-line bg-transparent' : 'border-line-soft bg-muted',
       )}
     >
-      {log.action === 'ticket_cancelled' ? (
-        <Ban strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_closed' ? (
-        <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_pending' ? (
-        <CirclePause strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_resumed' ? (
-        <CirclePlay strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_transferred_sector' ? (
-        <ArrowRightLeft strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_corrected' ? (
-        <PencilLine strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_returned' ? (
-        <Undo2 strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : (
-        <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      )}
+      <Icon strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       <span className="min-w-0">
-        {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
+        {text(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
         {(log.action === 'ticket_cancelled' ||
           log.action === 'ticket_pending' ||
           (log.action === 'ticket_transferred_sector' && log.reason)) && (
@@ -1430,13 +1442,10 @@ export function ConversationCard({
         <div
           role="status"
           aria-label="Somente leitura"
-          className="caption flex items-center gap-2 border-t border-line-soft bg-muted px-4 py-3 text-ink-soft"
+          className="caption flex shrink-0 items-center gap-2 border-t border-line-soft px-4 py-3 text-ink-soft"
         >
           <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-          <span>
-            <span className="font-medium text-foreground">Somente leitura.</span> Retome o chamado
-            para responder ao contato.
-          </span>
+          <span>Somente leitura. Retome o chamado para responder ao contato.</span>
         </div>
       ) : (
         notice && (
