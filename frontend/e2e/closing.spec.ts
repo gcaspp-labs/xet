@@ -158,7 +158,7 @@ test('encerramento exige o formulário completo e o cadastro do contato', async 
   // Nova mensagem do cliente abre outro chamado, na fila.
   expect((await receive('Agora é sobre férias')).ok()).toBeTruthy()
   await page.getByRole('link', { name: 'Chamados', exact: true }).click()
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await expect(queue.getByRole('button', { name: 'Assumir chamado de Paulo Cliente' })).toHaveCount(
     1,
   )
@@ -224,7 +224,7 @@ test('cancelamento pede o motivo, dispensa o cadastro e fica identificado', asyn
   // Nova mensagem do mesmo número abre outro chamado, na fila.
   expect((await receive('Última chance')).ok()).toBeTruthy()
   await page.getByRole('link', { name: 'Chamados', exact: true }).click()
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await expect(queue.getByRole('button', { name: 'Assumir chamado de Paula Golpe' })).toHaveCount(1)
   await expect(queue).toContainText('Última chance')
 
@@ -356,7 +356,7 @@ test('cadastra o contato durante o atendimento, só com o nome ou por inteiro', 
   const otherContext = await browser.newContext()
   const otherPanel = await otherContext.newPage()
   await signIn(otherPanel, supervisor, userPassword)
-  const otherQueue = otherPanel.getByRole('region', { name: 'Fila e assuntos' })
+  const otherQueue = otherPanel.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await expect(
     otherQueue.getByRole('button', { name: `Assumir chamado de ${profile}` }),
   ).toBeVisible()

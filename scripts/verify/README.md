@@ -80,7 +80,7 @@ await journey('nome-da-jornada', async (t) => {
   const page = await t.signIn(sector.agents[0])
   await t.step('Mensagem chega à fila sem recarregar', async () => {
     await phone.receive(t.customer('Maria Cliente'), 'Bom dia')
-    await expect(page.getByRole('region', { name: 'Fila e assuntos' })).toContainText('Bom dia')
+    await expect(page.getByRole('region', { name: 'Fila, assuntos e pendentes' })).toContainText('Bom dia')
     await t.shot(page, 'mensagem-na-fila')
   })
   await t.step('Estado final no banco', async () => {

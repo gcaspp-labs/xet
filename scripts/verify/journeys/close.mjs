@@ -17,7 +17,7 @@ await journey('close', async (t) => {
 
   // Os chamados encerrados ficam no histórico da tela Atendimentos; a fila, na tela Chamados.
   const history = (page) => page.getByRole('table').getByRole('row')
-  const queueOf = (page) => page.getByRole('region', { name: 'Fila e assuntos' })
+  const queueOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   // As ações menos usadas ficam no menu "Mais ações".
   const chooseAction = async (page, name) => {
     await page.getByRole('button', { name: 'Mais ações' }).click()

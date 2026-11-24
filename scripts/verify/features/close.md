@@ -42,7 +42,7 @@ scripts/verify/scripts/drive.sh close
 - Formulário: `getByRole('dialog', { name: 'Encerrar chamado' })`, com `getByLabel('Assunto')`, `getByLabel('Resolução')`, `getByRole('checkbox', { name: 'Folha' })`, `getByLabel('Órgão')`, seguido de `getByRole('option', { name })`, `getByLabel('Início')` e `getByLabel('Fim')`.
 - Cadastro do contato: `getByRole('dialog', { name: 'Editar contato' })`.
 - Cancelamento: `getByRole('dialog', { name: 'Cancelar chamado' })`, com `getByLabel('Motivo')`.
-- Fila: `getByRole('region', { name: 'Fila e assuntos' })`, com `getByRole('button', { name: 'Assumir chamado de Nome' })`.
+- Fila: `getByRole('region', { name: 'Fila, assuntos e pendentes' })`, com `getByRole('button', { name: 'Assumir chamado de Nome' })`.
 - Histórico: em Atendimentos, `getByRole('table').getByRole('row')` filtrada pelo nome do contato. Ações como "Cancelar chamado" ficam no menu `getByRole('button', { name: 'Mais ações' })`.
 - Ficha: `getByRole('status', { name: 'Só leitura' })` e `getByRole('region', { name: 'Atendimento', exact: true })` para os detalhes.
 
