@@ -5,6 +5,7 @@ import type { FormSubject } from '@/lib/closing'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
 import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
+import { dashboardKey } from '@/lib/dashboard'
 import { readDraft, saveDraft } from '@/lib/message-draft'
 import { type MessageType, pendingTicketsKey, ticketsKey, workloadKey } from '@/lib/tickets'
 
@@ -756,6 +757,7 @@ export function useCancelTicket() {
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
         queryClient.invalidateQueries({ queryKey: closedTicketsKey }),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),

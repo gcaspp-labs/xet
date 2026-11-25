@@ -108,6 +108,7 @@ import {
   ticketStatusLabel,
 } from '@/lib/format'
 import { isNotFound } from '@/lib/api'
+import { canCorrect, canResumePending, conducts } from '@/lib/permissions'
 import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
@@ -193,84 +194,6 @@ function MessageMedia({ message }: { message: Message }) {
 // O pendente é só leitura: o cadastro fica para quem o retomar.
 function needsRegistration(ticket: TicketDetail) {
   return ticket.status !== 'closed' && ticket.status !== 'pending' && !ticket.contact.registered
-}
-
-// Só o responsável conduz a conversa, com o chamado em atendimento; o backend confere de novo.
-function conducts(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && ticket.assignee?.id === user.id
-}
-
-// Só o responsável pelo chamado em atendimento o coloca como pendente (spec #332).
-export function canMarkPending(ticket: TicketDetail, user: User) {
-  return conducts(ticket, user)
-}
-
-// O responsável pelo chamado em atendimento retoma um pendente do contato, pela janela. Na fila
-// só o aviso aparece: a ação exige assumir antes, e o backend recusa (spec #332).
-export function canResumePending(ticket: TicketDetail, user: User) {
-  return conducts(ticket, user) && (ticket.pendingTickets?.length ?? 0) > 0
-}
-
-// O responsável transfere o próprio chamado em atendimento; supervisão e
-// administração transferem o de qualquer atendente (spec.md, Transferências).
-export function canTransfer(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')
-}
-
-// Só o responsável encerra, como responde (spec.md, Formulário de encerramento).
-export function canClose(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && conducts(ticket, user)
-}
-
-// Quem é do setor do chamado age nele; o destino de uma transferência entre
-// setores só lê os chamados anteriores (spec.md, Transferências).
-function worksIn(ticket: TicketDetail, user: User) {
-  return user.role === 'admin' || user.sectorId === ticket.sector.id
-}
-
-// Retoma o pendente quem é do setor dele (o administrador também). O backend confere de novo, e a
-// tela não pode oferecer o Retomar a quem ele recusaria (spec #332).
-export function canResume(ticket: TicketDetail, user: User) {
-  return ticket.status === 'pending' && worksIn(ticket, user)
-}
-
-// Na fila, quem é do setor cancela; em atendimento, o responsável e a
-// supervisão do setor (spec.md, Cancelamento).
-export function canCancel(ticket: TicketDetail, user: User) {
-  return (
-    worksIn(ticket, user) &&
-    (ticket.status === 'queued' ||
-      (ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')))
-  )
-}
-
-// Na fila o X cancela sem assumir: qualquer pessoa do setor, e o administrador nos setores que
-// enxerga (spec.md, Cancelamento; #395). Os itens da fila são sempre chamados na fila, por isso a
-// regra olha só o setor.
-export function canCancelFromQueue(sectorId: number, user: User) {
-  return user.role === 'admin' || user.sectorId === sectorId
-}
-
-// Devolvem à fila o chamado em atendimento o responsável e a supervisão do
-// setor (spec.md, Devolver à fila).
-export function canReturn(ticket: TicketDetail, user: User) {
-  return (
-    worksIn(ticket, user) &&
-    ticket.status === 'in_progress' &&
-    (conducts(ticket, user) || user.role !== 'agent')
-  )
-}
-
-// Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
-// cancelado e o transferido para outro setor não são corrigidos (closing.md, regra 14).
-export function canCorrect(ticket: TicketDetail, user: User) {
-  return (
-    ticket.status === 'closed' &&
-    ticket.closureType !== 'cancelled' &&
-    ticket.closureType !== 'transferred' &&
-    worksIn(ticket, user) &&
-    (ticket.closedBy?.id === user.id || user.role !== 'agent')
-  )
 }
 
 // O que cada registro do chamado mostra na conversa: o ícone e o texto da ação. Fica num mapa só

@@ -40,6 +40,7 @@ export function CancelQueueConfirm({
 }) {
   return (
     <div
+      data-slot="cancel-queue-confirm"
       className="flex flex-col gap-2 rounded-(--radius-7) bg-danger-soft px-3 py-2 whitespace-normal"
       onKeyDown={(event) => {
         // O Esc fecha só a confirmação: a tela não usa o Esc para outra coisa enquanto ela está

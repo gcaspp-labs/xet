@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Pagination } from '@/components/Pagination'
 import { CancelQueueButton, CancelQueueConfirm } from '@/components/QueueCancel'
+import { useCancelFromQueue } from '@/components/useCancelFromQueue'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,11 +14,11 @@ import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
-import { useAssignTicket, useCancelTicket } from '@/lib/conversation'
+import { useAssignTicket } from '@/lib/conversation'
 import { organizationLabel } from '@/lib/format'
 import { useQueryState } from '@/lib/paging'
 import type { TicketSummary } from '@/lib/tickets'
-import { canCancelFromQueue } from '@/pages/ticket/TicketPage'
+import { canCancelFromQueue } from '@/lib/permissions'
 
 type LiveTicket = TicketSummary & { sector: { id: number; name: string } }
 type Lists = { queued: LiveTicket[]; inProgress: LiveTicket[] }
@@ -196,20 +197,9 @@ export function DashboardLists({
   }, [data, queuePage, progressPage, update])
   const { data: user } = useCurrentUser()
   const assign = useAssignTicket()
-  const cancel = useCancelTicket()
   // O item da Fila com a confirmação do X aberta (#395), que troca a linha inteira pela faixa.
   const [confirming, setConfirming] = useState<number | null>(null)
-  const cancelFromQueue = (ticket: LiveTicket) =>
-    cancel.mutate(
-      { ticketId: ticket.id, sectorId: ticket.sector.id, reason: '' },
-      {
-        onSuccess: () => {
-          setConfirming(null)
-          toast.success('Chamado cancelado')
-        },
-        onError: (err) => toast.error(err.message),
-      },
-    )
+  const { cancel, cancelFromQueue } = useCancelFromQueue(() => setConfirming(null))
   const navigate = useNavigate()
   return (
     <div className="flex flex-col gap-3">
@@ -245,7 +235,7 @@ export function DashboardLists({
                       contactName={ticket.contact.name}
                       pending={cancel.isPending && cancel.variables?.ticketId === ticket.id}
                       onBack={() => setConfirming(null)}
-                      onCancel={() => cancelFromQueue(ticket)}
+                      onCancel={() => cancelFromQueue(ticket.id, ticket.sector.id)}
                     />
                   </TableCell>
                 </TableRow>
