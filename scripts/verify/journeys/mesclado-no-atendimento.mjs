@@ -117,7 +117,7 @@ await journey('mesclado-no-atendimento', async (t) => {
     expect(mergedRow[0]).toEqual({
       status: 'closed',
       closure_type: 'merged',
-      merged_into_ticket_id: String(original.id),
+      merged_into_ticket_id: original.id,
     })
     const originalRow = t.sql(
       `select status, closure_type, subject from tickets where id = ${original.id}`,
