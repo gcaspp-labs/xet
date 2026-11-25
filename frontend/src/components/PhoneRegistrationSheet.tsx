@@ -240,7 +240,11 @@ export function PhoneRegistrationSheet({
             </div>
           ) : (
             <div className="rounded-(--radius-7) border border-line bg-surface-2 p-3">
-              <ContactSearch onChoose={choose} onRegister={() => setRegistering('new')} />
+              <ContactSearch
+                variant="phone-registration"
+                onChoose={choose}
+                onRegister={() => setRegistering('new')}
+              />
             </div>
           )}
           {!choosing && contact && !contact.registered && (

@@ -120,3 +120,47 @@ test('administrador escolhe o setor para iniciar o chamado', async ({ page, base
   )
   await expect(page.getByText(sector.name).first()).toBeVisible()
 })
+
+// A rota do contato sem telefone responde até o fim do teste: encerra a interceptação para nenhuma
+// resposta chegar depois do fim ("route.fetch: Test ended", como na #403).
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
+test('contato sem telefone aparece na busca, mas não pode ser escolhido', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  const { id, phone } = unique()
+  const name = `Sem telefone ${id}`
+  await seedDirectory(
+    baseURL!,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name, phone, organization: 0, sector: sector.id }],
+  )
+  // A API devolve o contato sem telefone, como o contato que ainda não tem um.
+  await page.route('**/api/contacts?**', async (route) => {
+    const response = await route.fetch()
+    const body = (await response.json()) as { items: { name: string; phone: string | null }[] }
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        items: body.items.map((item) => (item.name === name ? { ...item, phone: null } : item)),
+      },
+    })
+  })
+
+  await signIn(page, agent, userPassword)
+  await page.getByRole('link', { name: 'Chamados', exact: true }).click()
+  await page.getByRole('button', { name: 'Novo chamado' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Novo chamado' })
+  await sheet.getByRole('searchbox', { name: 'Buscar contato' }).fill(name)
+
+  // A linha mostra "Sem telefone" e fica desabilitada: escolher o contato não avança a janela.
+  const row = sheet.getByRole('button', { name: new RegExp(name) })
+  await expect(row).toContainText('Sem telefone')
+  await expect(row).toBeDisabled()
+  await expect(sheet.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+})

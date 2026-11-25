@@ -33,55 +33,55 @@ export function ContactSummary({ contact }: { contact: Contact }) {
   )
 }
 
-// Busca no cadastro de Órgãos e contatos, compartilhada por Novo chamado, Registrar
-// atendimento por telefone e Enviar contato. Cada tela escolhe as diferenças de hoje:
-// os filtros, o botão de cadastrar, o foco da busca, a navegação pelas setas, a
-// paginação ao focar o último contato e o que fazer com contato sem telefone.
+// O que muda de uma tela para outra: os filtros, o foco da busca, o contato sem telefone e o
+// espaço entre o nome e o telefone na linha. O resto é igual nas três: as setas percorrem a lista,
+// e ao focar o último contato que dá pra escolher vem a próxima página.
+const variants = {
+  // Novo chamado: os filtros por setor, módulo, município e órgão ficam na tela.
+  'new-conversation': { filters: true, autoFocus: false, reachableOnly: false, summaryGap: false },
+  // Registrar atendimento por telefone: sem filtros, a busca procura no cadastro inteiro.
+  'phone-registration': {
+    filters: false,
+    autoFocus: false,
+    reachableOnly: false,
+    summaryGap: false,
+  },
+  // Enviar contato: filtros, foco na busca, só contato cadastrado com telefone (o único que o
+  // cartão serve) e a linha com o espaço de 0.5 entre o nome e o telefone, como ela sempre foi.
+  'send-contact': { filters: true, autoFocus: true, reachableOnly: true, summaryGap: true },
+} as const
+
+export type ContactSearchVariant = keyof typeof variants
+
+// Busca no cadastro de Órgãos e contatos, compartilhada por Novo chamado, Registrar atendimento
+// por telefone e Enviar contato. `variant` diz qual das três telas é.
 export function ContactSearch({
+  variant,
   onChoose,
   onRegister,
   checking = false,
-  withFilters = false,
-  autoFocus = false,
-  onlyReachable = false,
-  disableUnreachable = true,
-  keyboardNavigation = true,
-  loadOnLastFocus = true,
-  summaryGap = false,
   selectedId,
   selectedRow,
 }: {
+  variant: ContactSearchVariant
   onChoose: (contact: Contact) => void
   // Só as telas que cadastram o contato ali mesmo mostram o botão.
   onRegister?: () => void
   // Escolha em andamento: os contatos ficam desabilitados enquanto a tela confere.
   checking?: boolean
-  // "Enviar contato" e "Novo chamado" filtram por setor, módulo, município e órgão.
-  withFilters?: boolean
-  // A busca recebe o foco ao abrir a janela, como no "Enviar contato".
-  autoFocus?: boolean
-  // "Enviar contato" só mostra contato cadastrado com telefone, o único que o cartão serve.
-  onlyReachable?: boolean
-  // Fora do "Enviar contato" (que já esconde o contato sem telefone), a linha fica desabilitada.
-  disableUnreachable?: boolean
-  // As setas movem o foco entre os contatos (Novo chamado e Registrar por telefone).
-  keyboardNavigation?: boolean
-  // Ao focar o último contato que dá pra escolher, vem a próxima página.
-  loadOnLastFocus?: boolean
-  // O "Enviar contato" mantém o espaço de 0.5 entre o nome e o telefone, como as linhas dele eram.
-  summaryGap?: boolean
   // A linha escolhida: ao voltar da prévia, o foco de novo nela, no lugar da busca.
   selectedId?: number
   selectedRow?: Ref<HTMLButtonElement>
 }) {
+  const options = variants[variant]
   const [query, setQuery] = useState('')
   const contactFilter = useContactFilter()
   const search = useDeferredValue(query)
   // Sem os filtros na tela, a busca é a mesma de antes: sem recorte de setor, módulo etc.
-  const filter = withFilters ? contactFilter.filter : {}
+  const filter = options.filters ? contactFilter.filter : {}
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useContactOptions(search, filter)
   const loaded = data?.pages.flatMap((page) => page.items) ?? []
-  const contacts = onlyReachable
+  const contacts = options.reachableOnly
     ? loaded.filter((contact) => contact.registered && contact.phone)
     : loaded
   const end = useContactPagination({
@@ -93,28 +93,25 @@ export function ContactSearch({
     itemCount: contacts.length,
   })
 
-  // As setas movem o foco entre os contatos; ao focar o último contato que dá pra escolher, vem a próxima página.
+  // As setas movem o foco entre os contatos que dá pra escolher.
   const moveFocus = (event: KeyboardEvent<HTMLUListElement>) => {
-    if (!keyboardNavigation) {
-      return
-    }
     const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
     if (step === 0) {
       return
     }
-    const options = Array.from(
+    const buttons = Array.from(
       event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
     )
-    const next = options[options.indexOf(document.activeElement as HTMLButtonElement) + step]
+    const next = buttons[buttons.indexOf(document.activeElement as HTMLButtonElement) + step]
     if (next) {
       event.preventDefault()
       next.focus()
     }
   }
 
+  // Ao focar o último contato que dá pra escolher, vem a próxima página.
   const loadMoreOnFocus = (index: number) => {
     if (
-      loadOnLastFocus &&
       hasNextPage &&
       !isFetchingNextPage &&
       contacts.slice(index + 1).every((contact) => !contact.phone)
@@ -130,9 +127,9 @@ export function ContactSearch({
         onChange={setQuery}
         label="Buscar contato"
         placeholder="Nome, município, telefone ou CNPJ"
-        autoFocus={autoFocus}
+        autoFocus={options.autoFocus}
       />
-      {withFilters && <ContactFilters {...contactFilter} />}
+      {options.filters && <ContactFilters {...contactFilter} />}
       {onRegister && (
         <Button
           type="button"
@@ -156,12 +153,13 @@ export function ContactSearch({
               <button
                 ref={contact.id === selectedId ? selectedRow : undefined}
                 type="button"
-                disabled={disableUnreachable && (checking || !contact.phone)}
+                // Sem telefone não há como escolher o contato: a linha fica desabilitada.
+                disabled={checking || !contact.phone}
                 onClick={() => onChoose(contact)}
                 onFocus={() => loadMoreOnFocus(index)}
                 className={cn(
                   'w-full min-w-0 rounded-(--radius-7) px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
-                  summaryGap && 'flex flex-col gap-0.5',
+                  options.summaryGap && 'flex flex-col gap-0.5',
                 )}
               >
                 <ContactSummary contact={contact} />

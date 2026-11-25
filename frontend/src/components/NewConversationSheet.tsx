@@ -136,8 +136,8 @@ export function NewConversationSheet({
         ) : (
           // Busca do contato: escolher um contato com chamado aberto no setor leva ao chamado.
           <ContactSearch
+            variant="new-conversation"
             checking={checking}
-            withFilters
             onChoose={(chosen) => void choose(chosen)}
             onRegister={() => setRegistering(true)}
           />

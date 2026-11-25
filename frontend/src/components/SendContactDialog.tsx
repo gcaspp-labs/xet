@@ -134,13 +134,7 @@ export function SendContactDialog({
       {/* A lista fica montada por baixo da prévia: a busca e os filtros continuam como estavam. */}
       <div ref={root} hidden={step === 'preview'}>
         <ContactSearch
-          withFilters
-          autoFocus
-          onlyReachable
-          disableUnreachable={false}
-          keyboardNavigation={false}
-          loadOnLastFocus={false}
-          summaryGap
+          variant="send-contact"
           onChoose={choose}
           selectedId={contact?.id}
           selectedRow={chosenRow}
