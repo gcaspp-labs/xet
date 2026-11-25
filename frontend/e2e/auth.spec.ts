@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { admin, login, seedSector, unique, userPassword } from './fixtures'
 
 test('sem sessão, a página inicial leva ao login', async ({ page }) => {
@@ -131,6 +132,7 @@ test('favicon é o símbolo GCASPP novo, num endereço com versão', async ({ pa
   const href = await page.locator('link[rel="icon"]').getAttribute('href')
   // O endereço muda quando o ícone muda, para o navegador não reaproveitar o favicon antigo.
   expect(href).toMatch(/^\/favicon\.svg\?v=\d+$/)
+  expect(href).not.toBeNull()
 
   const response = await request.get(href!)
   expect(response.ok()).toBeTruthy()
@@ -139,13 +141,17 @@ test('favicon é o símbolo GCASPP novo, num endereço com versão', async ({ pa
   expect(svg).not.toContain('GCASPP LAB')
 
   // O arquivo servido é igual ao do design system na versão instalada.
-  const designSystem = readFileSync(
-    new URL(
-      '../node_modules/@gcaspp-labs/glab-design-system/assets/logos/favicon/favicon.svg',
-      import.meta.url,
-    ),
-    'utf8',
-  ).trim()
+  const designSystemIcon = new URL(
+    '../node_modules/@gcaspp-labs/glab-design-system/assets/logos/favicon/favicon.svg',
+    import.meta.url,
+  )
+  // Se o pacote do design system mudar o ícone de lugar, avisa que o problema é o
+  // caminho de onde o teste lê a referência, e não o ícone servido.
+  expect(
+    existsSync(designSystemIcon),
+    `o ícone de referência não existe em ${fileURLToPath(designSystemIcon)}; confira o caminho do pacote @gcaspp-labs/glab-design-system`,
+  ).toBe(true)
+  const designSystem = readFileSync(designSystemIcon, 'utf8').trim()
   expect(svg).toBe(designSystem)
 })
 
