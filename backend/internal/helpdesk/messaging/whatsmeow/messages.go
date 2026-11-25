@@ -73,13 +73,40 @@ func (s *session) reaction(ctx context.Context, evt *events.Message, reaction *w
 		At:                      info.Timestamp,
 	}
 	if !info.IsGroup {
-		contact := s.contact(ctx, info)
-		ev.ExternalContactID = contact.String()
-		if contact.Server == types.DefaultUserServer {
-			ev.Phone = contact.User
-		}
+		ev.ExternalContactID, ev.Phone = s.chatContact(ctx, info)
 	}
 	return s.adapter.emit(ev) == nil
+}
+
+// changeEvent is an edit or a deletion received of a message: the target, the
+// event and the contact of a private chat.
+type changeEvent struct {
+	eventID, target, contactID, phone string
+	group, fromSector                 bool
+	at                                time.Time
+}
+
+// receivedChange reads the common data of an edit or a deletion of a message,
+// from the contact or from the phone of the sector. A protocol message without
+// a target, or in a status broadcast, is not followed; there is no contact in
+// a group.
+func (s *session) receivedChange(ctx context.Context, evt *events.Message, pm *waE2E.ProtocolMessage) (changeEvent, bool) {
+	info := evt.Info
+	target := pm.GetKey().GetID()
+	if target == "" || info.Chat == types.StatusBroadcastJID {
+		return changeEvent{}, false
+	}
+	c := changeEvent{
+		eventID:    info.ID,
+		target:     target,
+		group:      info.IsGroup,
+		fromSector: info.IsFromMe,
+		at:         info.Timestamp,
+	}
+	if !info.IsGroup {
+		c.contactID, c.phone = s.chatContact(ctx, info)
+	}
+	return c, true
 }
 
 // edit emits the new text or caption of a message, made by the contact or
@@ -87,50 +114,48 @@ func (s *session) reaction(ctx context.Context, evt *events.Message, reaction *w
 // with the key of the target, unwrapped from the edited message. An edit
 // without text or caption (a reaction edit, a poll) is skipped.
 func (s *session) edit(ctx context.Context, evt *events.Message, pm *waE2E.ProtocolMessage) bool {
-	info := evt.Info
-	target := pm.GetKey().GetID()
 	body, ok := editedBody(pm.GetEditedMessage())
-	if target == "" || !ok || info.Chat == types.StatusBroadcastJID {
+	if !ok {
 		return true
 	}
-	ev := messaging.MessageEdited{
-		SectorID:                s.sectorID,
-		ExternalEventID:         info.ID,
-		TargetExternalMessageID: target,
-		Group:                   info.IsGroup,
-		FromSector:              info.IsFromMe,
-		Body:                    body,
-		At:                      info.Timestamp,
+	c, ok := s.receivedChange(ctx, evt, pm)
+	if !ok {
+		return true
 	}
+	at := c.at
 	if ms := pm.GetTimestampMS(); ms > 0 {
-		ev.At = time.UnixMilli(ms)
+		at = time.UnixMilli(ms)
 	}
-	if !info.IsGroup {
-		ev.ExternalContactID, ev.Phone = s.chatContact(ctx, info)
-	}
-	return s.adapter.emit(ev) == nil
+	return s.adapter.emit(messaging.MessageEdited{
+		SectorID:                s.sectorID,
+		ExternalEventID:         c.eventID,
+		TargetExternalMessageID: c.target,
+		Group:                   c.group,
+		FromSector:              c.fromSector,
+		ExternalContactID:       c.contactID,
+		Phone:                   c.phone,
+		Body:                    body,
+		At:                      at,
+	}) == nil
 }
 
 // revoke emits a message deleted for everyone by the contact or from the
 // phone of the sector.
 func (s *session) revoke(ctx context.Context, evt *events.Message, pm *waE2E.ProtocolMessage) bool {
-	info := evt.Info
-	target := pm.GetKey().GetID()
-	if target == "" || info.Chat == types.StatusBroadcastJID {
+	c, ok := s.receivedChange(ctx, evt, pm)
+	if !ok {
 		return true
 	}
-	ev := messaging.MessageRevoked{
+	return s.adapter.emit(messaging.MessageRevoked{
 		SectorID:                s.sectorID,
-		ExternalEventID:         info.ID,
-		TargetExternalMessageID: target,
-		Group:                   info.IsGroup,
-		FromSector:              info.IsFromMe,
-		At:                      info.Timestamp,
-	}
-	if !info.IsGroup {
-		ev.ExternalContactID, ev.Phone = s.chatContact(ctx, info)
-	}
-	return s.adapter.emit(ev) == nil
+		ExternalEventID:         c.eventID,
+		TargetExternalMessageID: c.target,
+		Group:                   c.group,
+		FromSector:              c.fromSector,
+		ExternalContactID:       c.contactID,
+		Phone:                   c.phone,
+		At:                      c.at,
+	}) == nil
 }
 
 // editedBody is the text or caption of the new content of an edit.
@@ -180,11 +205,7 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 		return msg, true
 	}
 
-	contact := s.contact(ctx, info)
-	msg.ExternalContactID = contact.String()
-	if contact.Server == types.DefaultUserServer {
-		msg.Phone = contact.User
-	}
+	msg.ExternalContactID, msg.Phone = s.chatContact(ctx, info)
 	if !info.IsFromMe {
 		msg.ContactName = info.PushName
 	}
