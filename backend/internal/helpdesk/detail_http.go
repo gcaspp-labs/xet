@@ -150,8 +150,9 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 	mergeable := mayMergeIntoPending(t, auth.CurrentUser(r.Context()))
 	if t.Status == db.TicketStatusInProgress || t.Status == db.TicketStatusQueued || mergeable {
 		out.CanMergeIntoPending = mergeable
-		// O aviso de retomar lista todos os pendentes; a janela da mesclagem só
-		// os que já existiam quando B terminou (#440): é neles que B continua.
+		// The notice of resuming lists every pending; the window of the merge
+		// only the ones that already existed when B ended (#440): those are the
+		// ones B continues in.
 		var startedUntil *time.Time
 		if mergeable {
 			startedUntil = t.EndedAt
