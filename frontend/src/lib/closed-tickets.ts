@@ -2,9 +2,11 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
+import { type ClosureKind } from '@/lib/format'
 import { type Page, pageParams, type PageRequest, useQueryState } from '@/lib/paging'
+import type { TicketStatus } from '@/lib/tickets'
 
-export type ClosureType = 'resolved' | 'transferred' | 'cancelled'
+export type ClosureType = ClosureKind
 
 // Como o atendimento aconteceu: WhatsApp ou registro por telefone.
 export type TicketChannel = 'whatsapp' | 'phone'
@@ -27,6 +29,9 @@ export type ClosedTicket = {
   assignee: Ref | null
   // Setor de destino de um transferido.
   transferredTo: Ref | null
+  // Chamado original de um mesclado num pendente: o link leva a ele, ativo em Chamados ou já
+  // encerrado em Atendimentos (spec #332).
+  mergedInto: { id: number; protocol: string; status: TicketStatus } | null
   modules: string[]
 }
 

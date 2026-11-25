@@ -138,8 +138,10 @@ func (h *Handler) listClosedTickets(w http.ResponseWriter, r *http.Request) {
 		if t.TransferredSectorID != nil && t.TransferredSectorName != nil {
 			item.TransferredTo = &httpx.Ref{ID: *t.TransferredSectorID, Name: *t.TransferredSectorName}
 		}
-		if t.MergedIntoID != nil && t.MergedIntoProtocol != nil {
-			item.MergedInto = &mergedTicketResponse{ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol}
+		if t.MergedIntoID != nil && t.MergedIntoProtocol != nil && t.MergedIntoStatus.Valid {
+			item.MergedInto = &mergedTicketResponse{
+				ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol, Status: t.MergedIntoStatus.TicketStatus,
+			}
 		}
 		out[i] = item
 	}

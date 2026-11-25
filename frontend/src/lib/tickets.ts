@@ -14,10 +14,12 @@ export type MessageType =
   | 'unsupported'
   | 'media_unavailable'
 
+export type TicketStatus = 'queued' | 'in_progress' | 'pending' | 'closed'
+
 export type TicketSummary = {
   id: number
   protocol: string
-  status: 'queued' | 'in_progress' | 'pending' | 'closed'
+  status: TicketStatus
   arrivedAt: string
   assignedAt: string | null
   contact: { id: number; name: string; phone: string | null; registered: boolean }
@@ -39,10 +41,8 @@ export type TicketSummary = {
 }
 
 // Endereço do chamado pela situação: ativo abre em Chamados; encerrado, em Atendimentos.
-export const ticketPath = (ticket: {
-  id: number
-  status: 'queued' | 'in_progress' | 'pending' | 'closed'
-}) => (ticket.status === 'closed' ? `/atendimentos/${ticket.id}` : `/chamados/${ticket.id}`)
+export const ticketPath = (ticket: { id: number; status: TicketStatus }) =>
+  ticket.status === 'closed' ? `/atendimentos/${ticket.id}` : `/chamados/${ticket.id}`
 
 // Chamado pendente do setor: o motivo, quem marcou e desde quando, para a aba Pendentes
 // (queue.md, regras da spec #332). A lista vem do servidor, mais antigos primeiro.

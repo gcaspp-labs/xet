@@ -6,6 +6,7 @@ import {
   ok,
   seedClosedTicket,
   seedDirectory,
+  seedMergedTicket,
   seedSector,
   signIn,
   unique,
@@ -267,4 +268,32 @@ test('a ficha mostra a cadeia de transferências e o destino lê o chamado anter
   await expectReadOnly(page)
   // O destino só lê o chamado de outro setor: sem Corrigir.
   await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toHaveCount(0)
+})
+
+// O mesclado num pendente: as mensagens foram para o original, e a ficha só avisa e leva a ele.
+test('o mesclado só avisa a mesclagem com o link, sem conversa e sem Corrigir', async ({
+  page,
+  baseURL,
+}) => {
+  const m = await seedMergedTicket(baseURL!)
+  await signIn(page, m.agent, userPassword)
+  await page.goto(`/atendimentos/${m.merged.id}`)
+
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  await expect(conversation).toContainText('Chamado mesclado')
+  await expect(conversation).toContainText(
+    'As mensagens deste chamado foram para o chamado original.',
+  )
+  const link = conversation.getByRole('link', { name: `Ver chamado ${m.original.protocol}` })
+  await expect(link).toBeVisible()
+
+  // Sem conversa (as mensagens estão no original), sem Corrigir, e a situação nos Detalhes.
+  await expect(page.getByText('Preciso da segunda via do contracheque')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+  await expect(details(page)).toContainText('Mesclado')
+
+  // O pendente ficou encerrado com os dados do mesclado, então o link abre em Atendimentos.
+  await link.click()
+  await expect(page).toHaveURL(new RegExp(`/atendimentos/${m.original.id}$`))
 })

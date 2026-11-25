@@ -110,7 +110,7 @@ import {
 import { isNotFound } from '@/lib/api'
 import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
-import { parseTicketId } from '@/lib/tickets'
+import { parseTicketId, ticketPath } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 import NotFoundPage from '@/pages/NotFoundPage'
 import { ImageViewer } from '@/pages/ticket/ImageViewer'
@@ -255,12 +255,14 @@ export function canReturn(ticket: TicketDetail, user: User) {
 }
 
 // Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
-// cancelado e o transferido para outro setor não são corrigidos (closing.md, regra 14).
+// cancelado, o transferido para outro setor e o mesclado num pendente não são
+// corrigidos (closing.md, regra 14; spec #332, Mesclar em pendente).
 export function canCorrect(ticket: TicketDetail, user: User) {
   return (
     ticket.status === 'closed' &&
     ticket.closureType !== 'cancelled' &&
     ticket.closureType !== 'transferred' &&
+    ticket.closureType !== 'merged' &&
     worksIn(ticket, user) &&
     (ticket.closedBy?.id === user.id || user.role !== 'agent')
   )
@@ -1587,8 +1589,10 @@ function CorrectionHistory({ corrections: all }: { corrections: Correction[] }) 
 function DetailsTab({ ticket }: { ticket: TicketDetail }) {
   const status = ticketStatusLabel(ticket.status, ticket.closureType)
   const cancelled = ticket.closureType === 'cancelled'
-  // O cancelado não lança o atendimento: não tem formulário de encerramento nem correções.
-  const closed = ticket.status === 'closed' && !cancelled
+  // O cancelado e o mesclado não lançam o atendimento: não têm formulário de encerramento nem
+  // correções, e o mesclado perde assunto, resolução e módulos para o chamado original (spec #332).
+  const merged = ticket.closureType === 'merged'
+  const closed = ticket.status === 'closed' && !cancelled && !merged
   const { data: modules = [] } = useTicketModules(ticket.id, closed)
   const { data: corrections } = useCorrections(ticket.id, closed)
   const row = (label: string, value: ReactNode) => (
@@ -1930,6 +1934,43 @@ function PhoneConversation({ ticket }: { ticket: TicketDetail }) {
   )
 }
 
+// O mesclado num pendente não tem conversa própria: as mensagens foram para o chamado original,
+// e a ficha só avisa disso e leva a ele (spec #332).
+function MergedConversation({ ticket }: { ticket: TicketDetail }) {
+  const mergedInto = ticket.mergedInto
+  return (
+    <Card role="region" aria-label="Conversa" className="flex min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-10">
+        <Empty>
+          <EmptyMedia>
+            <Merge strokeWidth={1.7} aria-hidden />
+          </EmptyMedia>
+          <EmptyDescription>
+            <span className="body-strong block text-ink">Chamado mesclado</span>
+            As mensagens deste chamado foram para o chamado original.
+            {mergedInto && (
+              <Link
+                to={ticketPath(mergedInto)}
+                className="caption mt-1 block text-accent-strong underline-offset-2 hover:underline"
+              >
+                Ver chamado {mergedInto.protocol}
+              </Link>
+            )}
+          </EmptyDescription>
+        </Empty>
+      </div>
+      {ticket.closedAt && (
+        <div className="border-t border-line-soft px-4 py-3">
+          <p className="caption text-ink-faint">
+            Mesclado{ticket.closedBy ? ` por ${ticket.closedBy.name}` : ''} em{' '}
+            <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>.
+          </p>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export default function TicketPage() {
   const location = useLocation()
   const origin = location.state as Partial<HistoryReturnState> | null
@@ -1999,6 +2040,8 @@ export default function TicketPage() {
       <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[minmax(0,1fr)]">
         {ticket.channel === 'phone' ? (
           <PhoneConversation ticket={ticket} />
+        ) : ticket.mergedInto ? (
+          <MergedConversation ticket={ticket} />
         ) : (
           <ReadOnlyConversation ticket={ticket} />
         )}

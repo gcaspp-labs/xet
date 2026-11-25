@@ -131,19 +131,23 @@ export const ticketStatusLabels: Record<
   closed: { label: 'Encerrado', tone: 'neutral' },
 }
 
-export const closureTypeLabels: Record<'resolved' | 'transferred' | 'cancelled', string> = {
+export type ClosureKind = 'resolved' | 'transferred' | 'cancelled' | 'merged'
+
+export const closureTypeLabels: Record<ClosureKind, string> = {
   resolved: 'Encerrado',
   transferred: 'Transferido',
   cancelled: 'Cancelado',
+  merged: 'Mesclado',
 }
 
-// Situação do chamado; o cancelado é identificado como tal (spec.md, Cancelamento).
+// Situação do chamado; o cancelado e o mesclado num pendente são identificados como tal
+// (spec.md, Cancelamento; spec #332, Mesclar em pendente).
 export function ticketStatusLabel(
   status: keyof typeof ticketStatusLabels,
-  closureType: keyof typeof closureTypeLabels | null,
+  closureType: ClosureKind | null,
 ) {
-  return closureType === 'cancelled'
-    ? { label: closureTypeLabels.cancelled, tone: 'neutral' as const }
+  return closureType === 'cancelled' || closureType === 'merged'
+    ? { label: closureTypeLabels[closureType], tone: 'neutral' as const }
     : ticketStatusLabels[status]
 }
 

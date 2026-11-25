@@ -114,7 +114,7 @@ select
     n.id as next_id, n.protocol as next_protocol, ns.name as next_sector_name,
     t.transfer_reason as next_transfer_reason,
     t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name,
-    t.merged_into_ticket_id as merged_into_id, mt.protocol as merged_into_protocol
+    t.merged_into_ticket_id as merged_into_id, mt.protocol as merged_into_protocol, mt.status as merged_into_status
 from tickets t
 join sectors s on s.id = t.sector_id
 join contacts c on c.id = t.contact_id

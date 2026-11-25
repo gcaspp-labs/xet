@@ -38,7 +38,7 @@ select
     t.sector_id, s.name as sector_name,
     t.assignee_id, u.name as assignee_name,
     ns.id as transferred_sector_id, ns.name as transferred_sector_name,
-    mt.id as merged_into_id, mt.protocol as merged_into_protocol,
+    mt.id as merged_into_id, mt.protocol as merged_into_protocol, mt.status as merged_into_status,
     coalesce((select array_agg(md.name order by lower(md.name), md.id)
         from ticket_modules tm join modules md on md.id = tm.module_id where tm.ticket_id = t.id), '{}')::text[] as module_names
 from tickets t

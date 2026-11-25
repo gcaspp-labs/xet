@@ -53,6 +53,7 @@ import {
 } from '@/lib/closed-tickets'
 import { closureTypeLabels, formatPhone, organizationLabel } from '@/lib/format'
 import { usePagedList } from '@/lib/paging'
+import { ticketPath } from '@/lib/tickets'
 
 const periodChoices: { value: PeriodChoice; label: string }[] = [
   { value: 'all', label: 'Todo o período' },
@@ -345,6 +346,15 @@ function SituationCell({ ticket }: { ticket: ClosedTicket }) {
       {ticket.channel === 'phone' && <PhoneTag />}
       {ticket.transferredTo && (
         <span className="caption text-ink-faint">para {ticket.transferredTo.name}</span>
+      )}
+      {ticket.mergedInto && (
+        // Fica por cima do link da linha inteira, e leva ao chamado original (spec #332).
+        <Link
+          to={ticketPath(ticket.mergedInto)}
+          className="caption relative z-10 text-accent-strong underline-offset-2 hover:underline"
+        >
+          Ver chamado {ticket.mergedInto.protocol}
+        </Link>
       )}
     </span>
   )
