@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 import { admin, login, seedSector, unique, userPassword } from './fixtures'
 
 test('sem sessão, a página inicial leva ao login', async ({ page }) => {
@@ -125,10 +126,27 @@ for (const theme of [
   })
 }
 
-test('favicon é o símbolo do design system', async ({ request }) => {
-  const response = await request.get('/favicon.svg')
+test('favicon é o símbolo GCASPP novo, num endereço com versão', async ({ page, request }) => {
+  await page.goto('/')
+  const href = await page.locator('link[rel="icon"]').getAttribute('href')
+  // O endereço muda quando o ícone muda, para o navegador não reaproveitar o favicon antigo.
+  expect(href).toMatch(/^\/favicon\.svg\?v=\d+$/)
+
+  const response = await request.get(href!)
   expect(response.ok()).toBeTruthy()
-  expect(await response.text()).toContain('<svg')
+  const svg = (await response.text()).trim()
+  expect(svg).toContain('aria-label="GCASPP"')
+  expect(svg).not.toContain('GCASPP LAB')
+
+  // O arquivo servido é igual ao do design system na versão instalada.
+  const designSystem = readFileSync(
+    new URL(
+      '../node_modules/@gcaspp-labs/glab-design-system/assets/logos/favicon/favicon.svg',
+      import.meta.url,
+    ),
+    'utf8',
+  ).trim()
+  expect(svg).toBe(designSystem)
 })
 
 for (const role of ['admin', 'supervisor', 'agent'] as const) {

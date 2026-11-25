@@ -94,7 +94,7 @@ Player de áudio: componente próprio, usado na gravação e nas mensagens. Bot�
 ## Marca e layout
 
 - Cabeçalho: símbolo a 32px, `gcaspp-simbolo.svg` no tema claro e `gcaspp-simbolo-escuro.svg` no escuro, + "GCASPP" e, abaixo, o nome do produto **"Central de Atendimento"**.
-- Favicon: o favicon do design system (`assets/logos/favicon/favicon.svg`), copiado para `frontend/public/favicon.svg`.
+- Favicon: o favicon do design system (`assets/logos/favicon/favicon.svg`), copiado para `frontend/public/favicon.svg`, com o endereço versionado no `index.html` (`/favicon.svg?v=2`) para o navegador buscar o ícone novo no lugar do que estava em cache.
 - Tela de login: fundo `paper`, Panel central com a assinatura `gcaspp-horizontal.svg` no tema claro e `gcaspp-horizontal-escuro.svg` no escuro, sem barra lateral.
 - Aplicação: Cabeçalho fixo, barra lateral fixa abaixo dele (`sidebar-width`), Topbar fixa, conteúdo com padding `space-30` no desktop e `space-16` no celular, largura máxima `content-max` (exceto a tela Chamados, que usa a largura toda).
 - Foco de teclado: outline sólido de 2px em `focus`, afastado 2px. Transições de 150–200ms, desligadas com `prefers-reduced-motion`.
