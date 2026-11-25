@@ -9,7 +9,40 @@ var (
 	ErrClosed          = errors.New("ticket closed")
 	// ErrPending refuses acting on a pending ticket: it is resumed first.
 	ErrPending = errors.New("ticket pending")
+	// ErrNotPending refuses resuming a ticket that is not pending.
+	ErrNotPending = errors.New("ticket not pending")
+	// ErrPendingMismatch refuses resuming a pending ticket of another contact
+	// or sector from a new ticket.
+	ErrPendingMismatch = errors.New("pending ticket of another contact or sector")
+	// ErrResumeRaced refuses a resume when the ticket that won the dispute of
+	// the contact is no longer open at the new reading: it is rare, and trying
+	// again resumes the pending ticket.
+	ErrResumeRaced = errors.New("ticket that won the resume is no longer open")
 )
+
+// OpenTicketError refuses resuming a pending ticket while the contact has a
+// ticket in the queue or in progress in the sector (#334). It carries the
+// protocol and, when someone holds it, the assignee, for the notice.
+type OpenTicketError struct {
+	Protocol     string
+	AssigneeName *string
+}
+
+func (e *OpenTicketError) Error() string {
+	if e.AssigneeName != nil {
+		return "contact has the open ticket " + e.Protocol + " with " + *e.AssigneeName
+	}
+	return "contact has the open ticket " + e.Protocol + " in the queue"
+}
+
+// Message is the notice shown on the screen.
+func (e *OpenTicketError) Message() string {
+	if e.AssigneeName != nil {
+		return "Este contato tem o chamado " + e.Protocol + " aberto com " + *e.AssigneeName +
+			". Encerre esse chamado ou use Retomar chamado a partir dele."
+	}
+	return "Este contato tem o chamado " + e.Protocol + " na fila. Encerre esse chamado ou use Retomar chamado a partir dele."
+}
 
 var (
 	ErrNotAssignee     = errors.New("user is not the assignee of the ticket")
@@ -58,6 +91,9 @@ var (
 	ErrNoChanges      = errors.New("correction changes nothing")
 	ErrCancelled      = errors.New("ticket cancelled")
 	ErrTransferred    = errors.New("ticket transferred to another sector")
+	// ErrMerged refuses correcting a ticket that was merged into another: it
+	// keeps no subject nor resolution, and the link is not undone.
+	ErrMerged = errors.New("ticket merged into another")
 )
 
 var (

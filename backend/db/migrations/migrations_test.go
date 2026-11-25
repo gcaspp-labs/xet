@@ -879,3 +879,64 @@ func TestMessageCreatedAtUsesTheInstantOfTheInsert(t *testing.T) {
 		t.Fatalf("default of messages.created_at after down = %q", got)
 	}
 }
+
+// A migração 39 tira o cancelamento da lista de ações que exigem motivo (#395).
+// A correção e o pendente continuam exigindo, e o down volta a exigir o motivo
+// no cancelamento — recusando antes, se já houver cancelamento sem motivo.
+func TestCancelReasonBecomesOptional(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 38); err != nil {
+		t.Fatalf("up to 38: %v", err)
+	}
+
+	insert := func(action string) error {
+		_, err := db.ExecContext(ctx, `
+			insert into audit_logs (entity_type, entity_id, action, changes)
+			values ('ticket', 1, $1, '{}')`, action)
+		return err
+	}
+	if err := insert("ticket_cancelled"); err == nil {
+		t.Fatal("cancellation without reason accepted before the migration")
+	}
+
+	if _, err := p.UpTo(ctx, 39); err != nil {
+		t.Fatalf("up to 39: %v", err)
+	}
+	if err := insert("ticket_cancelled"); err != nil {
+		t.Fatalf("cancellation without reason refused: %v", err)
+	}
+	for _, action := range []string{"ticket_corrected", "ticket_pending"} {
+		if err := insert(action); err == nil {
+			t.Fatalf("%s without reason accepted", action)
+		}
+	}
+
+	// Com um cancelamento sem motivo guardado, a volta é recusada: a regra antiga
+	// voltaria a exigir um motivo que não existe.
+	if _, err := p.DownTo(ctx, 38); err == nil {
+		t.Fatal("down with a cancellation without reason: accepted")
+	}
+	if _, err := db.ExecContext(ctx, `
+		update audit_logs set reason = 'Engano.' where action = 'ticket_cancelled'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.DownTo(ctx, 38); err != nil {
+		t.Fatalf("down to 38: %v", err)
+	}
+	if err := insert("ticket_cancelled"); err == nil {
+		t.Fatal("cancellation without reason accepted after the down")
+	}
+	if _, err := p.UpTo(ctx, 39); err != nil {
+		t.Fatalf("up again: %v", err)
+	}
+}

@@ -342,7 +342,7 @@ stateDiagram-v2
 | Cancelamento | Com o chamado travado (`for update`) e aberto, conforme as permissões: `closure_type = 'cancelled'`, `closed_at` e `ended_at` = agora (`ended_at` nunca antes de `started_at`, que vem do relógio do celular), `closed_by_id` = quem cancelou; vindo da fila, `assignee_id` = quem cancelou, porque chamado encerrado exige responsável (`assigned_at` fica vazio). Não exige contato cadastrado nem `ticket_modules`; auditoria `ticket_cancelled` com `reason` na mesma transação. Chamado cancelado não é corrigido |
 | Mensagem após encerramento | Cria novo chamado (não reabre) |
 | Colocar como pendente | Com o chamado travado (`for update`), `in_progress` e o usuário como responsável (supervisor e administrador também precisam ser o responsável), e o contato travado para leitura (`for share`), com motivo não em branco: `status = 'pending'`, `assignee_id` vazio, `pending_reason`, `pending_by_id` = responsável e `pending_at = now()` (sobrescritos a cada vez), `assigned_at` mantido; nada é enviado ao cliente; auditoria `ticket_pending` na mesma transação. A trava do chamado é a mesma que a mensagem recebida espera: depois do commit, a mensagem não o encontra como aberto e cria um chamado `queued`. O aviso de chamado é publicado depois do commit |
-| Retomar pela lista ([#334](https://github.com/gcaspp-labs/xet/issues/334)) | Com o pendente e o contato travados: se o contato tiver chamado `queued` ou `in_progress` no setor, recusa sem mudar nada; senão `status = 'in_progress'`, `assignee_id` = quem retomou, `assigned_at` e os campos do pendente mantidos; auditoria `ticket_resumed` |
+| Retomar pela lista ([#334](https://github.com/gcaspp-labs/xet/issues/334)) | Com o pendente e o contato travados: se o contato tiver chamado `queued` ou `in_progress` no setor, recusa com o protocolo dele e o responsável (ou que está na fila) e sem mudar nada; senão `status = 'in_progress'`, `assignee_id` = quem retomou, a leitura recomeça (`assignee_read_at`), `assigned_at` e os campos do pendente mantidos; se o chamado não tinha órgão e o contato tem, recebe o órgão do contato; auditoria `ticket_resumed` e, no órgão, `ticket_organization_linked` |
 | Retomar a partir de um chamado novo ([#335](https://github.com/gcaspp-labs/xet/issues/335)) | Com A (pendente), B (`in_progress`, do usuário) e o contato travados, numa transação: as mensagens de B passam para A; B fica `closed` com `closure_type = 'merged'`, `merged_into_ticket_id` = A, `closed_at` e `ended_at` = agora e `closed_by_id` = quem mesclou, sem assunto, resolução nem módulos; A volta a `in_progress` com `assignee_id` = quem mesclou; auditoria `ticket_merged` em B e `ticket_resumed_by_merge` em A |
 | Mesclar um atendimento encerrado num pendente ([#341](https://github.com/gcaspp-labs/xet/issues/341)) | Com A (pendente), B (`closed`, `resolved` ou `cancelled`) e o contato travados: as mensagens de B passam para A; A vai de `pending` a `closed` com o `closure_type` e os dados de encerramento de B; B passa a `closure_type = 'merged'` com `merged_into_ticket_id` = A, sem assunto, resolução nem módulos; auditoria `ticket_merged` em B e `ticket_closed_by_merge` em A. É a única saída de `pending` direto para `closed` |
 
@@ -518,12 +518,12 @@ O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banc
 | `entity_id` | bigint | Obrigatório |
 | `action` | text | Ver tabela abaixo |
 | `actor_id` | bigint → `users` | Quem fez; vazio para ações do sistema |
-| `reason` | text | Obrigatório em correções, cancelamentos e ao colocar como pendente |
+| `reason` | text | Obrigatório em correções e ao colocar como pendente; opcional no cancelamento, vazio quando não informado ([#395](https://github.com/gcaspp-labs/xet/issues/395)) |
 | `changes` | jsonb | Valores anteriores e novos: `{"campo": {"from": ..., "to": ...}}` |
 
 Índices: `(ticket_id, created_at)` e `(entity_type, entity_id)`.
 
-Restrição: `action in ('ticket_corrected', 'ticket_cancelled', 'ticket_pending')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o cancelamento e para o pendente).
+Restrição: `action in ('ticket_corrected', 'ticket_pending')` ⇒ `reason` preenchido e não em branco (`audit_logs_correction_reason`, ampliada para o pendente; o cancelamento saiu da lista na [#395](https://github.com/gcaspp-labs/xet/issues/395), que tornou o motivo opcional).
 
 A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabela, na migração que cria `tickets`.
 
@@ -537,13 +537,13 @@ A chave estrangeira de `ticket_id` para `tickets` foi adicionada depois da tabel
 | `ticket_organization_linked` | Cadastro do contato preenche o órgão de um chamado aberto que estava sem órgão (`changes` com `organization_id` de vazio para o órgão) |
 | `ticket_closed` | Encerramento: `changes` com `status`, `subject`, `resolution`, `module_ids`, `ended_at` e, quando alterados no formulário, `started_at` (de `arrived_at` para o informado) e `organization_id` |
 | `ticket_corrected` | Correção de chamado encerrado (exige `reason`): `changes` só com os campos alterados entre `subject`, `resolution`, `organization_id`, `module_ids` (listas ordenadas), `started_at` e `ended_at` |
-| `ticket_cancelled` | Cancelamento (exige `reason`): `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
+| `ticket_cancelled` | Cancelamento: `reason` quando informado, vazio quando não ([#395](https://github.com/gcaspp-labs/xet/issues/395)); `changes` com `status`, `closure_type`, `ended_at` e, vindo da fila, `assignee_id` |
 | `ticket_returned` | Devolver à fila: `changes` com `status` e `assignee_id` |
 | `ticket_pending` | Colocar como pendente: `reason` com o motivo; `changes` com `status` (de `in_progress` para `pending`) e `assignee_id` (do responsável para vazio) |
 | `ticket_resumed` | Retomar pela lista ([#334](https://github.com/gcaspp-labs/xet/issues/334)): `changes` com `status` e `assignee_id` |
 | `ticket_merged` | No chamado mesclado (B, [#335](https://github.com/gcaspp-labs/xet/issues/335) e [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `closure_type`, `merged_into_ticket_id` e os ids das mensagens que passaram para o pendente; na mesclagem de um atendimento encerrado, também os dados de encerramento que B deixou |
 | `ticket_resumed_by_merge` | No pendente retomado a partir de um chamado novo (A, [#335](https://github.com/gcaspp-labs/xet/issues/335)): `changes` com `status`, `assignee_id` e o chamado mesclado |
-| `ticket_closed_by_merge` | No pendente que recebeu um atendimento encerrado (A, [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `status`, o chamado mesclado e os dados de encerramento herdados de B |
+| `ticket_closed_by_merge` | No pendente que recebeu um atendimento encerrado (A, [#341](https://github.com/gcaspp-labs/xet/issues/341)): `changes` com `status`, o chamado mesclado e os dados de encerramento herdados de B; quando B foi cancelado, `reason` com o motivo do cancelamento, que A herda |
 | `user_created`, `user_updated`, `user_password_reset` | Administração de usuários |
 | `user_password_changed` | O próprio usuário troca a senha em Configurações: `actor_id` é o próprio usuário; sem `changes` |
 | `sector_created`, `sector_updated`, `sector_connected`, `sector_disconnected` | Administração e conexão de setores |

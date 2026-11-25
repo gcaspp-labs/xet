@@ -52,6 +52,7 @@ func (h *Handler) Routes(r chi.Router) {
 
 	// Painel: chamados abertos e carga de cada atendente, para todos os papéis do setor.
 	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/tickets", h.listTickets)
+	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/pending-tickets", h.listPendingTickets)
 	r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/workload", h.workload)
 	// Atendimentos: histórico dos chamados encerrados. O serviço confere o setor pedido: o próprio, ou qualquer um para o administrador.
 	r.Get("/closed-tickets", h.listClosedTickets)
@@ -62,6 +63,7 @@ func (h *Handler) Routes(r chi.Router) {
 		r.Use(auth.RequireRole(db.UserRoleSupervisor, db.UserRoleAdmin))
 		r.Get("/dashboard", h.dashboard)
 		r.Get("/dashboard/tickets", h.dashboardTickets)
+		r.Get("/dashboard/pending", h.dashboardPending)
 		r.With(auth.RequireSector("sectorID")).Get("/sectors/{sectorID}/dashboard/assignees", h.listDashboardAssignees)
 	})
 	// Iniciar conversa pelo número do setor, ou ir ao chamado aberto do contato.
@@ -77,6 +79,9 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/tickets/{ticketID}/transfer", h.transferTicket)
 	r.Post("/tickets/{ticketID}/return", h.returnTicket)
 	r.Post("/tickets/{ticketID}/pending", h.markPending)
+	r.Post("/tickets/{ticketID}/resume", h.resumeTicket)
+	r.Post("/tickets/{ticketID}/resume-pending", h.resumePending)
+	r.Post("/tickets/{ticketID}/merge-into-pending", h.mergeIntoPending)
 	r.Get("/tickets/{ticketID}/assignments", h.listAssignments)
 	r.Get("/tickets/{ticketID}/closing-form", h.closingForm)
 	r.Post("/tickets/{ticketID}/close", h.closeTicket)

@@ -4,6 +4,8 @@ import {
   Ban,
   CircleAlert,
   CircleCheck,
+  CirclePause,
+  CirclePlay,
   Inbox,
   MoreHorizontal,
   Plus,
@@ -20,12 +22,17 @@ import { ClosingSheet } from '@/components/ClosingSheet'
 import { RegisterContactSheet } from '@/components/ContactSheet'
 import { PhoneCopy } from '@/components/PhoneCopy'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
+import { PendingSheet } from '@/components/PendingSheet'
+import { CancelQueueButton, CancelQueueConfirm } from '@/components/QueueCancel'
+import { useCancelFromQueue } from '@/components/useCancelFromQueue'
+import { ResumePendingSheet } from '@/components/ResumePendingSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
 import NotFoundPage from '@/pages/NotFoundPage'
 import { SectorTransferSheet } from '@/components/SectorTransferSheet'
 import { TransferSheet } from '@/components/TransferSheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -48,34 +55,41 @@ import { cn } from '@/lib/utils'
 import { useSectors } from '@/lib/admin'
 import { isNotFound } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
-import { ticketKey, useAssignTicket, useTicket } from '@/lib/conversation'
-import { formatMessageTime, organizationLabel } from '@/lib/format'
+import { ticketKey, useAssignTicket, useResumeTicket, useTicket } from '@/lib/conversation'
+import { formatDateTime, formatElapsed, formatMessageTime, organizationLabel } from '@/lib/format'
 import { setOpenTicket } from '@/lib/notifications'
 import {
   lastMessagePreview,
   parseTicketId,
+  pendingTicketsQuery,
   ticketsQuery,
   useMarkTicketRead,
+  type PendingTicket,
   type TicketSummary,
 } from '@/lib/tickets'
 import { useDocumentVisible } from '@/lib/visibility'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import {
   canCancel,
+  canCancelFromQueue,
   canClose,
+  canMarkPending,
+  canResume,
+  canResumePending,
   canReturn,
   canTransfer,
-  ConversationCard,
-} from '@/pages/ticket/TicketPage'
+} from '@/lib/permissions'
+import { ConversationCard } from '@/pages/ticket/TicketPage'
 import { useConversasSearch } from '@/pages/ticket/useTicketView'
 
 import type { TicketDetail } from '@/lib/conversation'
 import type { User } from '@/lib/auth'
 
-type Action = 'cancel' | 'return' | 'transfer' | 'sector' | 'close'
+type Action = 'cancel' | 'return' | 'pending' | 'transfer' | 'sector' | 'close' | 'resume-pending'
 
-// Ação principal visível (Assumir na fila, Encerrar em atendimento) e o resto no menu "Mais ações" (⋯),
-// com Cancelar chamado no fim, depois de um divisor. Cada item aparece só para quem pode.
+// Ação principal visível (Assumir na fila, Encerrar em atendimento, Retomar no pendente) e o resto no
+// menu "Mais ações" (⋯), com Cancelar chamado no fim, depois de um divisor. Cada item aparece só para
+// quem pode.
 function TicketActions({
   ticket,
   user,
@@ -83,6 +97,8 @@ function TicketActions({
   onAction,
   onAssign,
   assigning,
+  onResume,
+  resuming,
 }: {
   ticket: TicketDetail
   user: User
@@ -90,9 +106,26 @@ function TicketActions({
   onAction: (action: Action) => void
   onAssign: () => void
   assigning: boolean
+  onResume: () => void
+  resuming: boolean
 }) {
+  // O pendente é só leitura: no topo só o Retomar, e só para quem é do setor (spec #332).
+  if (ticket.status === 'pending') {
+    if (!canResume(ticket, user)) return null
+    return (
+      <Button disabled={resuming} onClick={onResume}>
+        <CirclePlay strokeWidth={1.7} aria-hidden />
+        Retomar
+      </Button>
+    )
+  }
   const main = [
     canReturn(ticket, user) && { id: 'return' as const, label: 'Devolver à fila', icon: Undo2 },
+    canMarkPending(ticket, user) && {
+      id: 'pending' as const,
+      label: 'Colocar como pendente',
+      icon: CirclePause,
+    },
     canTransfer(ticket, user) && {
       id: 'transfer' as const,
       label: 'Transferir',
@@ -100,8 +133,11 @@ function TicketActions({
     },
     canSubjects && { id: 'sector' as const, label: 'Outro setor', icon: ArrowRightLeft },
   ].filter((item) => !!item)
+  // Retomar chamado abre o menu, antes de Devolver à fila, e só o responsável pelo chamado em
+  // atendimento com pendentes do contato o vê (spec #332).
+  const resumePending = canResumePending(ticket, user)
   const cancel = canCancel(ticket, user)
-  const hasMenu = main.length > 0 || cancel
+  const hasMenu = main.length > 0 || cancel || resumePending
   return (
     <div className="flex items-center gap-2">
       {ticket.status === 'queued' && (
@@ -126,6 +162,15 @@ function TicketActions({
             <MoreHorizontal strokeWidth={1.7} aria-hidden />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-48">
+            {resumePending && (
+              <>
+                <DropdownMenuItem onClick={() => onAction('resume-pending')}>
+                  <CirclePlay strokeWidth={1.7} aria-hidden />
+                  Retomar chamado
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             {main.map((item) => (
               <DropdownMenuItem key={item.id} onClick={() => onAction(item.id)}>
                 <item.icon strokeWidth={1.7} aria-hidden />
@@ -164,7 +209,7 @@ const openLayers = [
 
 type SectorTicket = TicketSummary & { sectorId: number }
 // Abaixo de xl só um bloco aparece por vez; a partir de xl, os três ficam lado a lado.
-type Panel = 'mine' | 'conversation' | 'queue'
+type Panel = 'mine' | 'conversation' | 'queue' | 'pending'
 
 // Contador de não lidas do item, junto do horário: a pílula do sino, "99+" acima de 99. O número
 // visível fica fora da leitura do leitor de tela, que recebe o texto com a quantidade real.
@@ -220,6 +265,83 @@ function TicketLine({
   )
 }
 
+// Linha da aba Pendentes: contato, órgão, protocolo, motivo em duas linhas, quem marcou, há quanto
+// tempo e o Retomar (spec #332). Para o administrador, o setor ao lado do protocolo.
+function PendingLine({
+  ticket,
+  admin,
+  onOpen,
+  onResume,
+  resuming,
+}: {
+  ticket: PendingTicket
+  admin: boolean
+  onOpen: () => void
+  onResume: () => void
+  resuming: boolean
+}) {
+  const organization = ticket.organizationName
+    ? organizationLabel(ticket.organizationName, ticket.municipalityName)
+    : 'Não cadastrado'
+  return (
+    <li className="flex flex-col gap-2 py-3">
+      <div className="flex flex-col gap-0.5">
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpen}
+            title={`Abrir ${ticket.protocol}`}
+            className="body-strong min-w-0 flex-1 truncate text-left hover:underline"
+          >
+            {ticket.contact.name}
+          </button>
+          {ticket.pendingAt && (
+            <span className="mono-num caption shrink-0 text-ink-soft">
+              {formatElapsed(ticket.pendingAt)}
+            </span>
+          )}
+        </span>
+        <span className="caption min-w-0 truncate text-ink-soft">{organization}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="mono-num caption text-ink-faint">{ticket.protocol}</span>
+          {admin && (
+            <Badge
+              variant="tag"
+              className="ml-auto max-w-[130px] truncate"
+              title={ticket.sector.name}
+            >
+              {ticket.sector.name}
+            </Badge>
+          )}
+        </span>
+      </div>
+      <div className="flex items-start gap-1.5 rounded-(--radius-7) bg-muted px-2.5 py-1.5">
+        <CirclePause
+          strokeWidth={1.7}
+          aria-hidden
+          className="mt-px size-[15px] shrink-0 text-ink-soft"
+        />
+        <p className="caption line-clamp-2 text-ink">{ticket.reason}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="caption min-w-0 flex-1 truncate text-ink-faint">
+          por {ticket.pendingBy?.name ?? 'Sistema'}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={resuming}
+          aria-label={`Retomar chamado de ${ticket.contact.name}`}
+          onClick={onResume}
+        >
+          <CirclePlay strokeWidth={1.7} aria-hidden />
+          Retomar
+        </Button>
+      </div>
+    </li>
+  )
+}
+
 export default function ConversasPage() {
   const { ticketId: param } = useParams()
   // Sem id é a tela sem seleção; com id que não é número, Não encontrado (sem chamar a API).
@@ -229,11 +351,23 @@ export default function ConversasPage() {
   const { data: sectors = [] } = useSectors()
   const visible = sectors.filter((sector) => user?.role === 'admin' || sector.id === user?.sectorId)
   const results = useQueries({ queries: visible.map((sector) => ticketsQuery(sector.id)) })
+  const pendingResults = useQueries({
+    queries: visible.map((sector) => pendingTicketsQuery(sector.id)),
+  })
   const { data: ticket, error: ticketError } = useTicket(ticketId ?? 0, !!ticketId)
   const queryClient = useQueryClient()
   const assign = useAssignTicket()
+  const resume = useResumeTicket()
+  // O item da Fila com a confirmação do X aberta (#395). O X não cancela na hora.
+  const [confirming, setConfirming] = useState<number | null>(null)
+  const { cancel, cancelFromQueue } = useCancelFromQueue(() => setConfirming(null))
   const navigate = useNavigate()
-  const [tab, setTab] = useState('queue')
+  const location = useLocation()
+  // Abrir a tela já na aba Pendentes (o "Ver todos" do Dashboard): /chamados?aba=pendentes.
+  // A aba padrão continua Fila, e o parâmetro não é reaplicado ao trocar de chamado.
+  const [tab, setTab] = useState(() =>
+    new URLSearchParams(location.search).get('aba') === 'pendentes' ? 'pending' : 'queue',
+  )
   // Bloco visível abaixo de xl: com chamado aberto começa em Conversa; sem chamado, em Meus.
   const [panel, setPanel] = useState<Panel>(ticketId ? 'conversation' : 'mine')
   const [previousTicketId, setPreviousTicketId] = useState(ticketId)
@@ -285,11 +419,45 @@ export default function ConversasPage() {
     (item) =>
       item.status === 'queued' && (user?.role !== 'admin' || activeSectorIds.has(item.sectorId)),
   )
+  // Os pendentes de todos os setores que a pessoa vê (o administrador, os ativos), mais antigos
+  // primeiro, como a lista do servidor em cada setor.
+  const pendings: (PendingTicket & { sectorId: number })[] = visible
+    .flatMap((sector, i) =>
+      (pendingResults[i]?.data ?? []).map((item) => ({ ...item, sectorId: sector.id })),
+    )
+    .filter((item) => user?.role !== 'admin' || activeSectorIds.has(item.sectorId))
+    .sort((a, b) => Date.parse(a.pendingAt ?? '') - Date.parse(b.pendingAt ?? ''))
   const showSubjects = !!ticket && !!user && canClose(ticket, user)
-  const currentTab = showSubjects ? tab : 'queue'
+  // A aba Assuntos some quando o chamado aberto não pode ser encerrado; Fila e Pendentes ficam.
+  const currentTab = tab === 'subjects' && !showSubjects ? 'queue' : tab
   const leave = () => void navigate('/chamados')
   const show = (which: Panel) => (panel === which ? undefined : 'max-xl:hidden')
-  const location = useLocation()
+  // A coluna da direita é uma só: Fila, Pendentes e Assuntos são abas dela, e cada uma ocupa o bloco
+  // inteiro abaixo de xl.
+  const rightPanel = panel === 'queue' || panel === 'pending'
+  const resumeFromList = (item: PendingTicket & { sectorId: number }) =>
+    resume.mutate(
+      { ticketId: item.id, sectorId: item.sectorId },
+      {
+        onSuccess: () => {
+          toast.success('Chamado retomado')
+          setTab('pending')
+          setPanel('conversation')
+          void navigate(`/chamados/${item.id}`)
+        },
+        // O erro do Retomar aparece uma vez só, no aviso, pelo mesmo caminho da lista e do chamado
+        // aberto; a aba Pendentes não repete o alerta.
+        onError: (err) => toast.error(err.message),
+      },
+    )
+  const resumeOpen = (item: TicketDetail) =>
+    resume.mutate(
+      { ticketId: item.id, sectorId: item.sector.id },
+      {
+        onSuccess: () => toast.success('Chamado retomado'),
+        onError: (err) => toast.error(err.message),
+      },
+    )
   // Chamado encerrado (cancelado e transferido incluídos) não é desta tela: vai para Atendimentos,
   // substituindo o endereço no histórico. Vale para link antigo e para quem está com o chamado aberto
   // quando outra pessoa o encerra. Mas quem encerra, cancela ou transfere pela própria tela volta a
@@ -316,6 +484,9 @@ export default function ConversasPage() {
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [ticketId, navigate])
+  // O erro de uma retomada é só da tentativa anterior: trocar de chamado o apaga.
+  const { reset: resetResume } = resume
+  useEffect(() => resetResume(), [location.pathname, resetResume])
   if (invalidId || isNotFound(ticketError)) return <NotFoundPage />
   if (!user || (closed && action === '')) return null
 
@@ -363,11 +534,23 @@ export default function ConversasPage() {
                   )
                 }
                 assigning={assign.isPending}
+                onResume={() => resumeOpen(ticket)}
+                resuming={resume.isPending && resume.variables?.ticketId === ticket.id}
               />
             )}
           </div>
         }
       />
+      {ticket?.status === 'pending' && ticket.pending && (
+        // A faixa é do chamado inteiro: fica na largura toda, logo abaixo do topo (spec #332).
+        <div className="flex shrink-0 items-start gap-2 border-b border-warning/40 bg-warning-soft px-4 py-2 text-warning-ink md:px-[30px]">
+          <CirclePause strokeWidth={1.7} aria-hidden className="mt-0.5 size-[15px] shrink-0" />
+          <p className="caption">
+            <strong className="font-semibold">Pendente:</strong> {ticket.pending.reason}, por{' '}
+            {ticket.pending.by.name}, desde {formatDateTime(ticket.pending.at)}.
+          </p>
+        </div>
+      )}
       {sector && (
         <NewConversationSheet
           key={`${sector.id}-${starting}`}
@@ -389,6 +572,17 @@ export default function ConversasPage() {
             open={action === 'return'}
             onOpenChange={(open) => !open && setAction('')}
             successTo="/chamados"
+          />
+          <PendingSheet
+            ticket={ticket}
+            open={action === 'pending'}
+            onOpenChange={(open) => !open && setAction('')}
+            successTo="/chamados"
+          />
+          <ResumePendingSheet
+            ticket={ticket}
+            open={action === 'resume-pending'}
+            onOpenChange={(open) => !open && setAction('')}
           />
           <ClosingSheet
             key={closingKey}
@@ -422,7 +616,14 @@ export default function ConversasPage() {
       <div className="flex min-h-0 w-full flex-1 flex-col gap-3 px-4 py-3 md:px-[30px] md:py-[30px]">
         <Tabs
           value={panel}
-          onValueChange={(value) => setPanel(value as Panel)}
+          onValueChange={(value) => {
+            const next = value as Panel
+            setPanel(next)
+            // Abaixo de xl, Fila e Pendentes abrem a aba certa na coluna da direita, sem trocar
+            // Assuntos por Fila quando a pessoa só quer voltar ao bloco.
+            if (next === 'pending') setTab('pending')
+            if (next === 'queue' && tab === 'pending') setTab('queue')
+          }}
           className="shrink-0 xl:hidden"
         >
           <TabsList aria-label="Mostrar" className="w-full">
@@ -434,6 +635,9 @@ export default function ConversasPage() {
             </TabsTrigger>
             <TabsTrigger value="queue" className="flex-1">
               Fila <span className="mono-num ml-1">({queue.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="flex-1">
+              Pendentes <span className="mono-num ml-1">({pendings.length})</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -491,6 +695,7 @@ export default function ConversasPage() {
               modern
               className={cn('h-full min-h-0 lg:h-full', show('conversation'))}
               onRegister={() => setAction('register')}
+              onResumePending={() => setAction('resume-pending')}
             />
           ) : (
             <Card className={cn('min-h-0 justify-center', show('conversation'))}>
@@ -509,10 +714,19 @@ export default function ConversasPage() {
               </Empty>
             </Card>
           )}
-          <Card role="region" aria-label="Fila e assuntos" className={cn('min-h-0', show('queue'))}>
+          <Card
+            role="region"
+            aria-label="Fila, assuntos e pendentes"
+            className={cn('min-h-0', rightPanel ? undefined : 'max-xl:hidden')}
+          >
             <Tabs
               value={currentTab}
-              onValueChange={(value) => setTab(String(value))}
+              onValueChange={(value) => {
+                const next = String(value)
+                setTab(next)
+                // Abaixo de xl, a coluna da direita acompanha a aba escolhida.
+                if (next === 'queue' || next === 'pending') setPanel(next)
+              }}
               className="min-h-0 flex-1 p-5"
             >
               <TabsList>
@@ -527,6 +741,22 @@ export default function ConversasPage() {
                       className="mono-num ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[calc(10px*var(--text-scale))] leading-none font-medium text-primary-foreground"
                     >
                       {queue.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="pending"
+                  aria-label={
+                    pendings.length ? `Pendentes, ${pendings.length} para retomar` : 'Pendentes'
+                  }
+                >
+                  Pendentes
+                  {currentTab !== 'pending' && pendings.length > 0 && (
+                    <span
+                      aria-hidden
+                      className="mono-num ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[calc(10px*var(--text-scale))] leading-none font-medium text-primary-foreground"
+                    >
+                      {pendings.length}
                     </span>
                   )}
                 </TabsTrigger>
@@ -556,27 +786,75 @@ export default function ConversasPage() {
                             {organizationLabel(item.organizationName, item.municipalityName)}
                           </span>
                         )}
-                        <Button
-                          className="self-start"
-                          disabled={assign.isPending}
-                          aria-label={`Assumir chamado de ${item.contact.name}`}
-                          onClick={() =>
-                            assign.mutate(
-                              { ticketId: item.id, sectorId: item.sectorId },
-                              {
-                                onSuccess: () => {
-                                  setTab('queue')
-                                  setPanel('conversation')
-                                  void navigate(`/chamados/${item.id}`)
-                                },
-                              },
-                            )
-                          }
-                        >
-                          <UserCheck strokeWidth={1.7} aria-hidden />
-                          Assumir
-                        </Button>
+                        {confirming === item.id ? (
+                          <CancelQueueConfirm
+                            contactName={item.contact.name}
+                            pending={cancel.isPending && cancel.variables?.ticketId === item.id}
+                            onBack={() => setConfirming(null)}
+                            onCancel={() => cancelFromQueue(item.id, item.sectorId)}
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              disabled={assign.isPending}
+                              aria-label={`Assumir chamado de ${item.contact.name}`}
+                              onClick={() =>
+                                assign.mutate(
+                                  { ticketId: item.id, sectorId: item.sectorId },
+                                  {
+                                    onSuccess: () => {
+                                      setTab('queue')
+                                      setPanel('conversation')
+                                      void navigate(`/chamados/${item.id}`)
+                                    },
+                                  },
+                                )
+                              }
+                            >
+                              <UserCheck strokeWidth={1.7} aria-hidden />
+                              Assumir
+                            </Button>
+                            <span className="flex-1" />
+                            {user && canCancelFromQueue(item.sectorId, user) && (
+                              <CancelQueueButton
+                                contactName={item.contact.name}
+                                onClick={() => setConfirming(item.id)}
+                              />
+                            )}
+                          </div>
+                        )}
                       </li>
+                    ))}
+                  </ul>
+                )}
+              </TabsContent>
+              <TabsContent value="pending" className="min-h-0 overflow-y-auto">
+                {pendings.length === 0 ? (
+                  <Empty className="border-0">
+                    <EmptyMedia>
+                      <CirclePause strokeWidth={1.7} aria-hidden />
+                    </EmptyMedia>
+                    <EmptyDescription>
+                      <span className="body-strong block text-ink">Nenhum chamado pendente</span>
+                      Chamados que dependem de algo externo aparecem aqui, para qualquer um do setor
+                      retomar.
+                    </EmptyDescription>
+                  </Empty>
+                ) : (
+                  <ul className="flex flex-col divide-y divide-line-soft border-t border-line-soft">
+                    {pendings.map((item) => (
+                      <PendingLine
+                        key={item.id}
+                        ticket={item}
+                        admin={user?.role === 'admin'}
+                        onOpen={() => {
+                          setTab('pending')
+                          setPanel('conversation')
+                          void navigate(`/chamados/${item.id}`)
+                        }}
+                        onResume={() => resumeFromList(item)}
+                        resuming={resume.isPending && resume.variables?.ticketId === item.id}
+                      />
                     ))}
                   </ul>
                 )}

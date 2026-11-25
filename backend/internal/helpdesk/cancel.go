@@ -18,16 +18,13 @@ import (
 // queue; in progress, the assignee, supervisors and admins. The ticket is
 // locked, so the cancellation does not cross an assignment or a message: the
 // permission is checked on the state found under the lock, and the next
-// message opens another ticket. The audit with the reason goes in the same
-// transaction.
+// message opens another ticket. The audit goes in the same transaction, with
+// the reason when one was written and without it otherwise (#395).
 func (s *Service) Cancel(ctx context.Context, actor auth.User, ticketID int64, reason string) (db.Ticket, error) {
 	if _, err := s.accessible(ctx, actor, ticketID); err != nil {
 		return db.Ticket{}, err
 	}
 	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		return db.Ticket{}, ErrReasonRequired
-	}
 
 	var ticket db.Ticket
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -66,7 +63,7 @@ func (s *Service) Cancel(ctx context.Context, actor auth.User, ticketID int64, r
 			EntityID:   ticket.ID,
 			Action:     "ticket_cancelled",
 			ActorID:    &actor.ID,
-			Reason:     &reason,
+			Reason:     optional(reason),
 			Changes:    raw,
 		})
 		if err != nil {

@@ -2,6 +2,8 @@ package whatsmeow
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -454,7 +456,9 @@ func quotedMessage(sn *messaging.QuoteSnippet) *waE2E.Message {
 
 // SendMedia uploads the attachment to WhatsApp and sends it.
 func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (string, error) {
-	return a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(ctx context.Context, cli *whatsmeow.Client, to types.JID) (*waE2E.Message, error) {
+	// The upload response is kept to be logged for a voice note (#399).
+	var uploaded whatsmeow.UploadResponse
+	id, err := a.send(ctx, msg.SectorID, msg.To, msg.IdempotencyKey, func(ctx context.Context, cli *whatsmeow.Client, to types.JID) (*waE2E.Message, error) {
 		mediaType, ok := map[messaging.MessageType]whatsmeow.MediaType{
 			messaging.TypeImage:    whatsmeow.MediaImage,
 			messaging.TypeVideo:    whatsmeow.MediaVideo,
@@ -468,6 +472,7 @@ func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (st
 		if err != nil {
 			return nil, fmt.Errorf("upload media: %w", err)
 		}
+		uploaded = up
 		caption := optional(msg.Caption)
 		mime := proto.String(msg.Media.MimeType)
 		length := proto.Uint64(up.FileLength)
@@ -498,6 +503,38 @@ func (a *Adapter) SendMedia(ctx context.Context, msg messaging.MediaMessage) (st
 			}}, nil
 		}
 	})
+	if err != nil {
+		return "", err
+	}
+	if msg.Type == messaging.TypeAudio {
+		a.logVoiceNote(id, msg.Media, uploaded)
+	}
+	return id, nil
+}
+
+// logVoiceNote records what went to WhatsApp as a voice note, without changing
+// the send: the ID the provider returned, the size and the digest of the file
+// read from the storage, and the reference the upload returned, which is what
+// the message points to. A message whose reference is empty, or whose
+// file_length and digests do not match the file, is one the recipient cannot
+// download (#399).
+func (a *Adapter) logVoiceNote(id string, media messaging.Media, up whatsmeow.UploadResponse) {
+	sum := sha256.Sum256(media.Data)
+	a.logger.Info("voice note uploaded",
+		"message_id", id,
+		"mimetype", media.MimeType,
+		"seconds", media.DurationSeconds,
+		"size", len(media.Data),
+		"sha256", hex.EncodeToString(sum[:]),
+		"upload_url", up.URL,
+		"upload_direct_path", up.DirectPath,
+		"upload_handle", up.Handle,
+		"upload_object_id", up.ObjectID,
+		"upload_file_length", up.FileLength,
+		"upload_file_sha256", hex.EncodeToString(up.FileSHA256),
+		"upload_file_enc_sha256", hex.EncodeToString(up.FileEncSHA256),
+		"upload_media_key_bytes", len(up.MediaKey),
+	)
 }
 
 // SendContact sends the card as a ContactMessage, a reply when it quotes. A

@@ -14,10 +14,12 @@ export type MessageType =
   | 'unsupported'
   | 'media_unavailable'
 
+export type TicketStatus = 'queued' | 'in_progress' | 'pending' | 'closed'
+
 export type TicketSummary = {
   id: number
   protocol: string
-  status: 'queued' | 'in_progress' | 'closed'
+  status: TicketStatus
   arrivedAt: string
   assignedAt: string | null
   contact: { id: number; name: string; phone: string | null; registered: boolean }
@@ -38,9 +40,41 @@ export type TicketSummary = {
   } | null
 }
 
+// Chamado original de um mesclado, como a ficha e a lista de Atendimentos o mostram.
+export type MergedInto = { id: number; protocol: string; status: TicketStatus }
+
 // Endereço do chamado pela situação: ativo abre em Chamados; encerrado, em Atendimentos.
-export const ticketPath = (ticket: { id: number; status: 'queued' | 'in_progress' | 'closed' }) =>
+export const ticketPath = (ticket: { id: number; status: TicketStatus }) =>
   ticket.status === 'closed' ? `/atendimentos/${ticket.id}` : `/chamados/${ticket.id}`
+
+// Chamado pendente do setor: o motivo, quem marcou e desde quando, para a aba Pendentes
+// (queue.md, regras da spec #332). A lista vem do servidor, mais antigos primeiro.
+export type PendingTicket = {
+  id: number
+  protocol: string
+  contact: { id: number; name: string; phone: string | null; registered: boolean }
+  organizationName: string | null
+  municipalityName: string | null
+  reason: string | null
+  pendingBy: { id: number; name: string } | null
+  pendingAt: string | null
+  sector: { id: number; name: string }
+}
+
+export function pendingTicketsQuery(sectorId: number) {
+  return {
+    queryKey: pendingTicketsKey(sectorId),
+    queryFn: () => api<PendingTicket[]>(`/sectors/${sectorId}/pending-tickets`),
+  }
+}
+
+// Chamados pendentes do setor, atualizados pelo WebSocket.
+export function usePendingTickets(sectorId: number | undefined) {
+  return useQuery({
+    ...pendingTicketsQuery(sectorId ?? 0),
+    enabled: sectorId !== undefined,
+  })
+}
 
 // Número do chamado no endereço; `null` quando não é um id válido (ex.: /chamados/abc).
 export function parseTicketId(param: string | undefined) {
@@ -56,6 +90,7 @@ export type Workload = {
 }
 
 export const ticketsKey = (sectorId: number) => ['sectors', sectorId, 'tickets']
+export const pendingTicketsKey = (sectorId: number) => ['sectors', sectorId, 'pending-tickets']
 export const workloadKey = (sectorId: number) => ['sectors', sectorId, 'workload']
 
 export const ticketsQuery = (sectorId: number) => ({

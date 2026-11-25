@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { CircleAlert, Inbox, MessagesSquare, UserCheck } from 'lucide-react'
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Pagination } from '@/components/Pagination'
+import { CancelQueueButton, CancelQueueConfirm } from '@/components/QueueCancel'
+import { useCancelFromQueue } from '@/components/useCancelFromQueue'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,6 +18,7 @@ import { useAssignTicket } from '@/lib/conversation'
 import { organizationLabel } from '@/lib/format'
 import { useQueryState } from '@/lib/paging'
 import type { TicketSummary } from '@/lib/tickets'
+import { canCancelFromQueue } from '@/lib/permissions'
 
 type LiveTicket = TicketSummary & { sector: { id: number; name: string } }
 type Lists = { queued: LiveTicket[]; inProgress: LiveTicket[] }
@@ -194,6 +197,9 @@ export function DashboardLists({
   }, [data, queuePage, progressPage, update])
   const { data: user } = useCurrentUser()
   const assign = useAssignTicket()
+  // O item da Fila com a confirmação do X aberta (#395), que troca a linha inteira pela faixa.
+  const [confirming, setConfirming] = useState<number | null>(null)
+  const { cancel, cancelFromQueue } = useCancelFromQueue(() => setConfirming(null))
   const navigate = useNavigate()
   return (
     <div className="flex flex-col gap-3">
@@ -221,37 +227,58 @@ export function DashboardLists({
                 <EmptyDescription>Nenhum chamado na fila.</EmptyDescription>
               </Empty>
             }
-            row={(ticket) => (
-              <TableRow key={ticket.id} className="relative">
-                <Contact ticket={ticket} />
-                <TableCell className="whitespace-nowrap text-right">
-                  <p className="mono-num">{elapsed(ticket.arrivedAt)}</p>
-                  {showSector && <p className="caption text-ink-faint">{ticket.sector.name}</p>}
-                </TableCell>
-                <TableCell className="w-0">
-                  <Button
-                    size="sm"
-                    className="relative z-10"
-                    disabled={assign.isPending}
-                    aria-label={`Assumir chamado de ${ticket.contact.name}`}
-                    onClick={() =>
-                      assign.mutate(
-                        { ticketId: ticket.id, sectorId: ticket.sector.id },
-                        {
-                          onSuccess: () => {
-                            toast.success('Chamado assumido')
-                            void navigate(`/chamados/${ticket.id}`)
-                          },
-                        },
-                      )
-                    }
-                  >
-                    <UserCheck strokeWidth={1.7} aria-hidden />
-                    Assumir
-                  </Button>
-                </TableCell>
-              </TableRow>
-            )}
+            row={(ticket) =>
+              confirming === ticket.id ? (
+                <TableRow key={ticket.id} className="hover:bg-transparent">
+                  <TableCell colSpan={3} className="py-2">
+                    <CancelQueueConfirm
+                      contactName={ticket.contact.name}
+                      pending={cancel.isPending && cancel.variables?.ticketId === ticket.id}
+                      onBack={() => setConfirming(null)}
+                      onCancel={() => cancelFromQueue(ticket.id, ticket.sector.id)}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <TableRow key={ticket.id} className="relative">
+                  <Contact ticket={ticket} />
+                  <TableCell className="whitespace-nowrap text-right">
+                    <p className="mono-num">{elapsed(ticket.arrivedAt)}</p>
+                    {showSector && <p className="caption text-ink-faint">{ticket.sector.name}</p>}
+                  </TableCell>
+                  <TableCell className="w-0">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="sm"
+                        className="relative z-10"
+                        disabled={assign.isPending}
+                        aria-label={`Assumir chamado de ${ticket.contact.name}`}
+                        onClick={() =>
+                          assign.mutate(
+                            { ticketId: ticket.id, sectorId: ticket.sector.id },
+                            {
+                              onSuccess: () => {
+                                toast.success('Chamado assumido')
+                                void navigate(`/chamados/${ticket.id}`)
+                              },
+                            },
+                          )
+                        }
+                      >
+                        <UserCheck strokeWidth={1.7} aria-hidden />
+                        Assumir
+                      </Button>
+                      {user && canCancelFromQueue(ticket.sector.id, user) && (
+                        <CancelQueueButton
+                          contactName={ticket.contact.name}
+                          onClick={() => setConfirming(ticket.id)}
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            }
           />
           <ListCard
             titleId="board-progress-title"

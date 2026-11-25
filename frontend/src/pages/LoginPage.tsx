@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import logo from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-lab-horizontal.svg'
-import logoDark from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-lab-horizontal-escuro.svg'
+import logo from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-horizontal.svg'
+import logoDark from '@gcaspp-labs/glab-design-system/assets/logos/gcaspp-horizontal-escuro.svg'
 import { TriangleAlert } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Navigate, useNavigate } from 'react-router'
@@ -42,8 +42,8 @@ export default function LoginPage() {
     <main className="flex min-h-svh items-center justify-center bg-background px-4 py-8">
       <Card className="w-full max-w-[380px]">
         <CardHeader className="justify-items-center gap-3 py-6">
-          <img src={logo} alt="GCASPP LAB" className="h-10 dark:hidden" />
-          <img src={logoDark} alt="GCASPP LAB" className="hidden h-10 dark:block" />
+          <img src={logo} alt="GCASPP" className="h-10 dark:hidden" />
+          <img src={logoDark} alt="GCASPP" className="hidden h-10 dark:block" />
           <CardTitle>
             <h1>Central de Atendimento</h1>
           </CardTitle>

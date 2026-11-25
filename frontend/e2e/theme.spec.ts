@@ -31,9 +31,9 @@ test('tema escolhido persiste ao recarregar e vale na tela de login', async ({ p
   await page.getByRole('menuitem', { name: 'Sair' }).click()
   await expect(page).toHaveURL(/\/login$/)
   await expect(body).toHaveCSS('background-color', darkPaper)
-  await expect(page.getByRole('img', { name: 'GCASPP LAB' })).toHaveAttribute(
+  await expect(page.getByRole('img', { name: 'GCASPP' })).toHaveAttribute(
     'src',
-    /gcaspp-lab-horizontal-escuro/,
+    /gcaspp-horizontal-escuro/,
   )
 
   await page.reload()

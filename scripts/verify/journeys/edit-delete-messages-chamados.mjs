@@ -1,5 +1,5 @@
 // Editar e excluir mensagens pela tela Chamados: ver features/edit-delete-messages-chamados.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
 
 await journey('edit-delete-messages-chamados', async (t) => {
   const sector = await t.step('Preparar setor conectado com um atendente', () =>
@@ -14,14 +14,13 @@ await journey('edit-delete-messages-chamados', async (t) => {
 
   const page = await t.signIn(agent)
   const second = await t.signIn(agent)
-  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  const conversation = conversationOf(page)
   const composer = page.getByRole('textbox', { name: 'Mensagem', exact: true })
   const sent = conversation.getByRole('listitem', { name: 'Mensagem enviada' })
   const menuOf = (bubble) => bubble.getByRole('button', { name: 'Ações da mensagem' })
 
   const ticketId = await t.step('Atendente assume e responde duas vezes', async () => {
-    await page
-      .getByRole('region', { name: 'Fila e assuntos' })
+    await panelOf(page)
       .getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
       .click()
     await expect(page).toHaveURL(/\/chamados\/\d+$/)
@@ -34,8 +33,7 @@ await journey('edit-delete-messages-chamados', async (t) => {
     return Number(page.url().split('/').pop())
   })
   await second.goto(page.url())
-  const secondSent = second
-    .getByRole('region', { name: 'Conversa', exact: true })
+  const secondSent = conversationOf(second)
     .getByRole('listitem', { name: 'Mensagem enviada' })
   await expect(secondSent).toHaveCount(2)
 

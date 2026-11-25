@@ -43,6 +43,12 @@ order by ticket_id, sent_at desc, id desc;
 select * from messages
 where id = @id;
 
+-- name: GetMessageTicketID :one
+-- Ticket the message is in now: a merge may have moved it after it was read,
+-- and the caller locks the current ticket instead of the one it read.
+select ticket_id from messages
+where id = @id;
+
 -- name: GetMessageByClientRequestID :one
 select * from messages
 where client_request_id = @client_request_id;

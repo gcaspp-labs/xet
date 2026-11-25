@@ -1,5 +1,15 @@
 import { expect, request as apiRequest, test, type Page } from '@playwright/test'
-import { admin, openQueued, seedSector, signIn, unique, userPassword } from './fixtures'
+import {
+  admin,
+  chooseAction,
+  openQueued,
+  seedPendingWithNewTicket,
+  seedSector,
+  seedTicketToMergeIntoPending,
+  signIn,
+  unique,
+  userPassword,
+} from './fixtures'
 
 type Preferences = { theme?: 'light' | 'dark'; size?: 'large' | 'larger'; contrast?: boolean }
 
@@ -195,12 +205,13 @@ async function expectContrast(page: Page, screen: string) {
   expect(failures, `${screen}: textos abaixo de 7:1`).toEqual([])
 }
 
-// Contraste entre duas propriedades de cor do mesmo elemento.
-const contrastOf = (page: Page, selector: string) =>
+// Contraste entre a cor do texto do elemento e o fundo dele; sem `backgroundSelector`, o fundo é
+// o do próprio elemento (a faixa de confirmação pinta o fundo e o texto dos botões fica por cima).
+const contrastOf = (page: Page, selector: string, backgroundSelector = selector) =>
   page
     .locator(selector)
     .first()
-    .evaluate((element) => {
+    .evaluate((element, backgroundSelector) => {
       const channels = (color: string) => {
         const canvas = document.createElement('canvas')
         canvas.width = canvas.height = 1
@@ -216,13 +227,16 @@ const contrastOf = (page: Page, selector: string) =>
         })
         return 0.2126 * r + 0.7152 * g + 0.0722 * b
       }
-      const style = getComputedStyle(element)
+      const background = document.querySelector(backgroundSelector)
+      if (!background) {
+        throw new Error(`Fundo não encontrado: ${backgroundSelector}`)
+      }
       const [high, low] = [
-        luminance(channels(style.color)),
-        luminance(channels(style.backgroundColor)),
+        luminance(channels(getComputedStyle(element).color)),
+        luminance(channels(getComputedStyle(background).backgroundColor)),
       ].sort((x, y) => y - x)
       return (high + 0.05) / (low + 0.05)
-    })
+    }, backgroundSelector)
 
 async function expectNoPageScroll(page: Page, screen: string) {
   const overflow = await page.evaluate(
@@ -378,6 +392,93 @@ test('o texto da janela de registro por telefone acompanha o tamanho escolhido',
   await context.close()
 })
 
+test('o texto da janela Colocar como pendente acompanha o tamanho escolhido', async ({
+  browser,
+  baseURL,
+}) => {
+  test.slow()
+  const { sector, agent } = await connectedSector(baseURL!)
+  const contact = await receive(baseURL!, sector.id)
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, agent, userPassword)
+  await openAssignedTicket(page, contact)
+
+  const dialog = page.getByRole('dialog', { name: 'Colocar como pendente' })
+  const open = async () => {
+    await chooseAction(page, 'Colocar como pendente')
+    await expect(dialog).toBeVisible()
+  }
+
+  await open()
+  const standard = await textSizes(page)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await chooseInMenu(page, 'menuitemradio', 'Maior')
+  await open()
+  const larger = await textSizes(page)
+  expectScaled(standard, larger, 5)
+  await context.close()
+})
+
+test('o texto da janela Retomar chamado acompanha o tamanho escolhido', async ({
+  browser,
+  baseURL,
+}) => {
+  test.slow()
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+
+  const dialog = page.getByRole('dialog', { name: 'Retomar chamado' })
+  const open = async () => {
+    await chooseAction(page, 'Retomar chamado')
+    await expect(dialog).toBeVisible()
+  }
+
+  await open()
+  const standard = await textSizes(page)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await chooseInMenu(page, 'menuitemradio', 'Maior')
+  await open()
+  const larger = await textSizes(page)
+  expectScaled(standard, larger, 5)
+  await context.close()
+})
+
+test('o texto da janela Mesclar em pendente acompanha o tamanho escolhido', async ({
+  browser,
+  baseURL,
+}) => {
+  test.slow()
+  const seed = await seedTicketToMergeIntoPending(baseURL!)
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, seed.agent, userPassword)
+  await page.goto(`/atendimentos/${seed.ticketId}`)
+
+  const dialog = page.getByRole('dialog', { name: 'Mesclar em pendente' })
+  const open = async () => {
+    await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
+    await expect(dialog).toBeVisible()
+  }
+
+  await open()
+  const standard = await textSizes(page)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await chooseInMenu(page, 'menuitemradio', 'Maior')
+  await open()
+  const larger = await textSizes(page)
+  expectScaled(standard, larger, 5)
+  await context.close()
+})
+
 test('tamanho e contraste são aplicados antes de o aplicativo carregar', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await page.goto('/login')
@@ -452,6 +553,13 @@ for (const theme of ['light', 'dark'] as const) {
     // Painel, com barra lateral e status.
     await expect(page.getByRole('button', { name: `Assumir chamado de ${queued}` })).toBeVisible()
     await expectContrast(page, 'painel')
+
+    // Confirmação do X da fila (#395): o texto do item e os botões, com o Voltar em foco.
+    await page.getByRole('button', { name: `Cancelar chamado de ${queued}` }).click()
+    await expect(page.getByRole('button', { name: 'Voltar' })).toBeFocused()
+    await expectContrast(page, 'confirmação de cancelamento na fila')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: `Cancelar chamado de ${queued}` })).toBeVisible()
 
     // Sino aberto, com a fila.
     await page
@@ -596,6 +704,41 @@ for (const theme of ['light', 'dark'] as const) {
   })
 }
 
+for (const theme of ['light', 'dark'] as const) {
+  test(`a confirmação do X da fila mede 4,5:1 ou mais no tema normal, tema ${theme}`, async ({
+    browser,
+    baseURL,
+  }) => {
+    const { sector, agent } = await connectedSector(baseURL!)
+    const queued = await receive(baseURL!, sector.id)
+
+    const context = await browser.newContext()
+    const page = await context.newPage()
+    await prefer(page, { theme })
+    await signIn(page, agent, userPassword)
+    await page.getByRole('button', { name: `Cancelar chamado de ${queued}` }).click()
+    await expect(page.getByRole('button', { name: 'Voltar' })).toBeFocused()
+
+    // A faixa pinta o fundo e o texto dos botões fica por cima dele; o par medido é o texto do
+    // aviso e o do "Cancelar chamado" sobre o fundo da faixa (mínimo do texto no tema normal).
+    expect(
+      await contrastOf(
+        page,
+        '[data-slot="cancel-queue-confirm"] p',
+        '[data-slot="cancel-queue-confirm"]',
+      ),
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      await contrastOf(
+        page,
+        '[data-slot="cancel-queue-confirm"] [data-slot="button"].text-destructive',
+        '[data-slot="cancel-queue-confirm"]',
+      ),
+    ).toBeGreaterThanOrEqual(4.5)
+    await context.close()
+  })
+}
+
 test('na largura do celular, em "Maior", a página não rola para o lado', async ({
   browser,
   baseURL,
@@ -670,7 +813,7 @@ test('em "Maior", no computador, as ações do painel e o título da conversa fi
   const page = await context.newPage()
   await prefer(page, { size: 'larger' })
   await signIn(page, agent, userPassword)
-  const queue = page.getByRole('region', { name: 'Fila e assuntos' })
+  const queue = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   await expect(queue.getByRole('button', { name: 'Assumir' })).toBeInViewport({ ratio: 1 })
 
   await openAssignedTicket(page, contact)

@@ -90,13 +90,13 @@ for (const theme of [
     scheme: 'light' as const,
     paper: 'rgb(228, 228, 231)',
     accent: 'rgb(1, 70, 111)',
-    logo: 'gcaspp-lab-horizontal',
+    logo: 'gcaspp-horizontal',
   },
   {
     scheme: 'dark' as const,
     paper: 'rgb(9, 9, 11)',
     accent: 'rgb(75, 174, 206)',
-    logo: 'gcaspp-lab-horizontal-escuro',
+    logo: 'gcaspp-horizontal-escuro',
   },
 ]) {
   test(`tela de login usa o design system no tema ${theme.scheme}`, async ({ page }) => {
@@ -117,7 +117,7 @@ for (const theme of [
     )
     expect(await page.evaluate(() => document.fonts.check('14px "IBM Plex Sans"'))).toBe(true)
 
-    const logo = page.getByRole('img', { name: 'GCASPP LAB' })
+    const logo = page.getByRole('img', { name: 'GCASPP' })
     await expect(logo).toHaveCount(1)
     await expect(logo).toBeVisible()
     // O build de produção acrescenta um hash de 8 caracteres ao nome do arquivo.

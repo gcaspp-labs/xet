@@ -79,7 +79,12 @@ func (s *Service) Correct(ctx context.Context, actor auth.User, ticketID int64, 
 		if t.ClosureType.ClosureType == db.ClosureTypeTransferred {
 			return ErrTransferred
 		}
-		if (t.ClosedByID == nil || *t.ClosedByID != actor.ID) && !actor.HasRole(db.UserRoleSupervisor, db.UserRoleAdmin) {
+		// O mesclado também não: as mensagens estão no chamado de destino, e o
+		// vínculo não é desfeito (#335, spec #332).
+		if t.ClosureType.ClosureType == db.ClosureTypeMerged {
+			return ErrMerged
+		}
+		if !mayCorrect(t, actor) {
 			return ErrCannotCorrect
 		}
 		if _, err := q.GetOrganization(ctx, in.OrganizationID); errors.Is(err, pgx.ErrNoRows) {

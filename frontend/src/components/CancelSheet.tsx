@@ -2,12 +2,13 @@ import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { FormDialog } from '@/components/FormDialog'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { type TicketDetail, useCancelTicket } from '@/lib/conversation'
 
-// Janela de cancelamento: finaliza o chamado sem lançar o atendimento, com
-// motivo obrigatório (spec.md, Cancelamento). O backend confere de novo.
+// Janela de cancelamento: finaliza o chamado sem lançar o atendimento, com motivo opcional
+// (spec.md, Cancelamento; #395). Sem motivo, a conversa mostra só quem cancelou e quando. O backend
+// confere as permissões de novo.
 export function CancelSheet({
   ticket,
   open,
@@ -20,14 +21,12 @@ export function CancelSheet({
   successTo?: string
 }) {
   const navigate = useNavigate()
-  const cancel = useCancelTicket(ticket.id, ticket.sector.id)
+  const cancel = useCancelTicket()
   const [reason, setReason] = useState('')
-  const [missing, setMissing] = useState(false)
 
   const changeOpen = (next: boolean) => {
     if (!next) {
       setReason('')
-      setMissing(false)
       cancel.reset()
     }
     onOpenChange(next)
@@ -38,19 +37,17 @@ export function CancelSheet({
     if (cancel.isPending) {
       return
     }
-    if (!reason.trim()) {
-      setMissing(true)
-      return
-    }
-    setMissing(false)
-    cancel.mutate(reason.trim(), {
-      onSuccess: () => {
-        toast.success('Chamado cancelado')
-        changeOpen(false)
-        // A próxima ação depois de cancelar está no painel.
-        void navigate(successTo)
+    cancel.mutate(
+      { ticketId: ticket.id, sectorId: ticket.sector.id, reason: reason.trim() },
+      {
+        onSuccess: () => {
+          toast.success('Chamado cancelado')
+          changeOpen(false)
+          // A próxima ação depois de cancelar está no painel.
+          void navigate(successTo)
+        },
       },
-    })
+    )
   }
 
   return (
@@ -66,16 +63,17 @@ export function CancelSheet({
       error={cancel.error?.message}
       onSubmit={submit}
     >
-      <Field data-invalid={missing}>
-        <FieldLabel htmlFor="cancel-reason">Motivo</FieldLabel>
+      <Field>
+        <FieldLabel htmlFor="cancel-reason">Motivo (opcional)</FieldLabel>
         <Textarea
           id="cancel-reason"
           maxLength={2000}
-          aria-invalid={missing}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
         />
-        {missing && <FieldError>Informe o motivo do cancelamento.</FieldError>}
+        <FieldDescription>
+          Sem o motivo, a conversa mostra só quem cancelou e quando.
+        </FieldDescription>
       </Field>
     </FormDialog>
   )

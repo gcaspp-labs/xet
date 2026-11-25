@@ -464,7 +464,7 @@ for (const theme of [
       'font-family',
       /IBM Plex Serif/,
     )
-    await expect(page.getByText('GCASPP LAB')).toBeVisible()
+    await expect(page.getByText('GCASPP')).toBeVisible()
   })
 }
 

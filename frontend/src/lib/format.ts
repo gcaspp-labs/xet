@@ -105,28 +105,49 @@ export function formatMessageTime(value: string) {
   return format(date, isToday(date) ? 'HH:mm' : 'dd/MM HH:mm')
 }
 
+// Há quanto tempo um chamado está pendente, no formato do protótipo (#337): "há 3 dias", "há 9 h",
+// "há 12 min". O date-fns com pt-BR diria "há cerca de 9 horas", mais longo do que o aprovado.
+export function formatElapsed(value: string, now = Date.now()) {
+  const minutes = Math.floor((now - Date.parse(value)) / 60_000)
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `há ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `há ${hours} h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `há ${days} ${days === 1 ? 'dia' : 'dias'}`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `há ${months} ${months === 1 ? 'mês' : 'meses'}`
+  const years = Math.floor(months / 12)
+  return `há ${years} ${years === 1 ? 'ano' : 'anos'}`
+}
+
 export const ticketStatusLabels: Record<
-  'queued' | 'in_progress' | 'closed',
+  'queued' | 'in_progress' | 'pending' | 'closed',
   { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }
 > = {
   queued: { label: 'Na fila', tone: 'warning' },
   in_progress: { label: 'Em atendimento', tone: 'success' },
+  pending: { label: 'Pendente', tone: 'warning' },
   closed: { label: 'Encerrado', tone: 'neutral' },
 }
 
-export const closureTypeLabels: Record<'resolved' | 'transferred' | 'cancelled', string> = {
+export type ClosureKind = 'resolved' | 'transferred' | 'cancelled' | 'merged'
+
+export const closureTypeLabels: Record<ClosureKind, string> = {
   resolved: 'Encerrado',
   transferred: 'Transferido',
   cancelled: 'Cancelado',
+  merged: 'Mesclado',
 }
 
-// Situação do chamado; o cancelado é identificado como tal (spec.md, Cancelamento).
+// Situação do chamado; o cancelado e o mesclado num pendente são identificados como tal
+// (spec.md, Cancelamento; spec #332, Mesclar em pendente).
 export function ticketStatusLabel(
   status: keyof typeof ticketStatusLabels,
-  closureType: keyof typeof closureTypeLabels | null,
+  closureType: ClosureKind | null,
 ) {
-  return closureType === 'cancelled'
-    ? { label: closureTypeLabels.cancelled, tone: 'neutral' as const }
+  return closureType === 'cancelled' || closureType === 'merged'
+    ? { label: closureTypeLabels[closureType], tone: 'neutral' as const }
     : ticketStatusLabels[status]
 }
 
@@ -153,7 +174,29 @@ export function formatAverageTime(seconds: number) {
   if (minutes < 60) {
     return `${minutes} min`
   }
+  return formatHoursMinutes(minutes)
+}
+
+// Horas e minutos de uma duração em minutos inteiros: 65 → "1 h 05 min".
+function formatHoursMinutes(minutes: number) {
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`
+}
+
+// Há quanto tempo um chamado está parado, na coluna "Parado há" do quadro Pendentes do Dashboard:
+// "agora", "20 min", "18 h 00 min", "3 dias" (#342). Sem o "há", que o título da coluna já diz.
+export function formatIdleTime(iso: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  if (minutes < 1) {
+    return 'agora'
+  }
+  if (minutes < 60) {
+    return `${minutes} min`
+  }
+  if (minutes < 24 * 60) {
+    return formatHoursMinutes(minutes)
+  }
+  const days = Math.floor(minutes / (24 * 60))
+  return `${days} ${days === 1 ? 'dia' : 'dias'}`
 }
 
 // Dia que a API devolve como 2026-03-02, no formato pt-BR, sem passar pelo fuso do navegador.

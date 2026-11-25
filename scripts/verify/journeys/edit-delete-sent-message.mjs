@@ -1,6 +1,6 @@
 // Editar e excluir mensagem enviada pelo XET: ver features/edit-delete-sent-message.md.
 import { randomUUID } from 'node:crypto'
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
 
 await journey('edit-delete-sent-message', async (t) => {
   const sector = await t.step('Preparar setor conectado com dois atendentes', () =>
@@ -14,13 +14,12 @@ await journey('edit-delete-sent-message', async (t) => {
   )
 
   const page = await t.signIn(agent)
-  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  const conversation = conversationOf(page)
   const composer = page.getByRole('textbox', { name: 'Mensagem' })
   const sent = conversation.getByRole('listitem', { name: 'Mensagem enviada' })
 
   const ticketId = await t.step('Atendente assume e responde', async () => {
-    await page
-      .getByRole('region', { name: 'Fila e assuntos' })
+    await panelOf(page)
       .getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
       .click()
     await expect(page).toHaveURL(/\/chamados\/\d+$/)

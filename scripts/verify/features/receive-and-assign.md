@@ -22,7 +22,7 @@ Mensagem de um contato vira chamado na fila do setor, e uma pessoa do setor assu
 ## How to get to it
 
 1. Um contato manda uma mensagem para o número do setor.
-2. O atendente entra em `/login` e cai na tela Chamados (`/chamados`). A aba Fila, no cartão "Fila e assuntos", lista os chamados com o contato, o protocolo e a última mensagem.
+2. O atendente entra em `/login` e cai na tela Chamados (`/chamados`). A aba Fila, no cartão "Fila, assuntos e pendentes", lista os chamados com o contato, o protocolo e a última mensagem.
 3. Ele clica em "Assumir" na aba Fila. A tela vai para `/chamados/<id>`, com a conversa e a caixa de resposta.
 4. De volta a `/chamados`, o chamado está em "Meus chamados" e fora da Fila. Para outro contato na fila, clica em "Assumir" e também chega a `/chamados/<id>`.
 
@@ -33,7 +33,7 @@ scripts/verify/scripts/drive.sh receive-and-assign
 ```
 
 - A mensagem do contato vem do adaptador falso: `t.phone(setor).receive(contato, texto)`, que chama `POST /api/test/messaging/sectors/{id}/receive` e devolve o identificador, para repetir a entrega.
-- Fila: `getByRole('region', { name: 'Fila e assuntos' })`, item com `getByRole('listitem').filter({ hasText: 'Nome' })` e botão `getByRole('button', { name: 'Assumir chamado de Nome' })`. Meus chamados: `getByRole('navigation', { name: 'Meus chamados' })`.
+- Fila: `getByRole('region', { name: 'Fila, assuntos e pendentes' })`, item com `getByRole('listitem').filter({ hasText: 'Nome' })` e botão `getByRole('button', { name: 'Assumir chamado de Nome' })`. Meus chamados: `getByRole('navigation', { name: 'Meus chamados' })`.
 - A tela desatualizada vem de `t.signIn(pessoa, { blockRealtime: true })`.
 - A disputa simultânea é pela API (`POST /api/tickets/{id}/assign`, em duas sessões, com `Promise.all`), porque cliques não garantem a corrida. As duas sessões são de pessoas reais do setor.
 

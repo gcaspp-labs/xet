@@ -5,10 +5,13 @@ import {
   Check,
   CircleAlert,
   CircleCheck,
+  CirclePause,
+  CirclePlay,
   Contact,
   FileText,
   History,
   Lock,
+  Merge,
   MessagesSquare,
   Mic,
   Paperclip,
@@ -20,6 +23,7 @@ import {
   Undo2,
   UserRoundCog,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import {
   type ChangeEvent,
@@ -28,6 +32,8 @@ import {
   type MutableRefObject,
   type KeyboardEvent,
   type ReactNode,
+  type TouchEvent,
+  type WheelEvent,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -41,6 +47,8 @@ import { EmojiPicker } from '@/components/EmojiPicker'
 import { DeleteMessageDialog, MessageMenu } from '@/components/MessageActions'
 import { MessageChangesDialog } from '@/components/MessageChanges'
 import { MessageEditor } from '@/components/MessageEditor'
+import { MergeIntoPendingSheet } from '@/components/MergeIntoPendingSheet'
+import { MergedIntoLink } from '@/components/MergedIntoLink'
 import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
@@ -102,6 +110,7 @@ import {
   ticketStatusLabel,
 } from '@/lib/format'
 import { isNotFound } from '@/lib/api'
+import { canCorrect, canResumePending, conducts } from '@/lib/permissions'
 import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
@@ -122,6 +131,10 @@ const messageStatusLabels: Record<
 }
 
 const backToList = { to: '/atendimentos', label: 'Voltar à lista' }
+
+// Distância em pixels do fim que ainda conta como "estar no fim" da conversa: arredondamento e
+// zoom não podem fazer o botão de ir à última mensagem piscar.
+const NEAR_END_PX = 48
 
 const fileLabels: Record<string, string> = {
   image: 'Imagem',
@@ -180,99 +193,93 @@ function MessageMedia({ message }: { message: Message }) {
 }
 
 // O aviso de cadastro vale para quem abre o chamado, mesmo na fila (spec.md, Órgãos e contatos).
+// O pendente é só leitura: o cadastro fica para quem o retomar.
 function needsRegistration(ticket: TicketDetail) {
-  return ticket.status !== 'closed' && !ticket.contact.registered
+  return ticket.status !== 'closed' && ticket.status !== 'pending' && !ticket.contact.registered
 }
 
-// Só o responsável conduz a conversa, com o chamado aberto; o backend confere de novo.
-function conducts(ticket: TicketDetail, user: User) {
-  return ticket.status !== 'closed' && ticket.assignee?.id === user.id
-}
-
-// O responsável transfere o próprio chamado em atendimento; supervisão e
-// administração transferem o de qualquer atendente (spec.md, Transferências).
-export function canTransfer(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')
-}
-
-// Só o responsável encerra, como responde (spec.md, Formulário de encerramento).
-export function canClose(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && conducts(ticket, user)
-}
-
-// Quem é do setor do chamado age nele; o destino de uma transferência entre
-// setores só lê os chamados anteriores (spec.md, Transferências).
-function worksIn(ticket: TicketDetail, user: User) {
-  return user.role === 'admin' || user.sectorId === ticket.sector.id
-}
-
-// Na fila, quem é do setor cancela; em atendimento, o responsável e a
-// supervisão do setor (spec.md, Cancelamento).
-export function canCancel(ticket: TicketDetail, user: User) {
-  return (
-    worksIn(ticket, user) &&
-    (ticket.status === 'queued' ||
-      (ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')))
-  )
-}
-
-// Devolvem à fila o chamado em atendimento o responsável e a supervisão do
-// setor (spec.md, Devolver à fila).
-export function canReturn(ticket: TicketDetail, user: User) {
-  return (
-    worksIn(ticket, user) &&
-    ticket.status === 'in_progress' &&
-    (conducts(ticket, user) || user.role !== 'agent')
-  )
-}
-
-// Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
-// cancelado e o transferido para outro setor não são corrigidos (closing.md, regra 14).
-export function canCorrect(ticket: TicketDetail, user: User) {
-  return (
-    ticket.status === 'closed' &&
-    ticket.closureType !== 'cancelled' &&
-    ticket.closureType !== 'transferred' &&
-    worksIn(ticket, user) &&
-    (ticket.closedBy?.id === user.id || user.role !== 'agent')
-  )
-}
-
-function assignmentText(log: AssignmentLog) {
-  if (log.action === 'ticket_started') {
-    return `${log.toName} abriu e assumiu o chamado`
-  }
-  if (log.action === 'ticket_assigned') {
-    return `${log.toName} assumiu o chamado`
-  }
-  if (log.action === 'ticket_returned') {
-    return log.actor?.name === log.fromName
-      ? `${log.fromName} devolveu o chamado à fila`
-      : `${log.actor?.name ?? 'Sistema'} devolveu à fila o chamado de ${log.fromName}`
-  }
-  if (log.action === 'ticket_closed') {
-    return `${log.actor?.name ?? 'Sistema'} encerrou o chamado`
-  }
-  if (log.action === 'ticket_transferred_sector') {
-    const who = log.actor?.name ?? 'Sistema'
-    return log.fromSectorName
-      ? `${who} transferiu o chamado do setor ${log.fromSectorName} para o setor ${log.toSectorName}`
-      : `${who} transferiu o chamado para o setor ${log.toSectorName}`
-  }
-  if (log.action === 'ticket_cancelled') {
-    return `${log.actor?.name ?? 'Sistema'} cancelou o chamado`
-  }
-  if (log.action === 'ticket_corrected') {
-    return `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`
-  }
-  if (log.actor?.name === log.fromName) {
-    return `${log.fromName} transferiu o chamado para ${log.toName}`
-  }
-  return `${log.actor?.name ?? 'Sistema'} transferiu o chamado de ${log.fromName} para ${log.toName}`
+// O que cada registro do chamado mostra na conversa: o ícone e o texto da ação. Fica num mapa só
+// para uma ação nova mexer num lugar só, sem um segundo switch para o ícone.
+const assignmentActions: Record<
+  AssignmentLog['action'],
+  { icon: LucideIcon; text: (log: AssignmentLog) => string }
+> = {
+  ticket_started: {
+    icon: UserRoundCog,
+    text: (log) => `${log.toName} abriu e assumiu o chamado`,
+  },
+  ticket_assigned: {
+    icon: UserRoundCog,
+    text: (log) => `${log.toName} assumiu o chamado`,
+  },
+  ticket_returned: {
+    icon: Undo2,
+    text: (log) =>
+      log.actor?.name === log.fromName
+        ? `${log.fromName} devolveu o chamado à fila`
+        : `${log.actor?.name ?? 'Sistema'} devolveu à fila o chamado de ${log.fromName}`,
+  },
+  ticket_pending: {
+    icon: CirclePause,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} colocou o chamado como pendente`,
+  },
+  ticket_resumed: {
+    icon: CirclePlay,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} retomou o chamado`,
+  },
+  // A retomada a partir de um chamado novo nomeia o chamado mesclado, que a tela não abre (spec #332).
+  ticket_resumed_by_merge: {
+    icon: CirclePlay,
+    text: (log) =>
+      `${log.actor?.name ?? 'Sistema'} retomou este chamado a partir do ${log.mergedProtocol ?? 'chamado mesclado'}`,
+  },
+  // No chamado que foi mesclado, o destino aparece na própria ficha (spec #332, #339).
+  ticket_merged: {
+    icon: Merge,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} mesclou este chamado num pendente`,
+  },
+  ticket_closed: {
+    icon: CircleCheck,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} encerrou o chamado`,
+  },
+  ticket_transferred_sector: {
+    icon: ArrowRightLeft,
+    text: (log) => {
+      const who = log.actor?.name ?? 'Sistema'
+      return log.fromSectorName
+        ? `${who} transferiu o chamado do setor ${log.fromSectorName} para o setor ${log.toSectorName}`
+        : `${who} transferiu o chamado para o setor ${log.toSectorName}`
+    },
+  },
+  ticket_cancelled: {
+    icon: Ban,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} cancelou o chamado`,
+  },
+  // No atendimento que herdou o encerramento, no ponto da mesclagem (spec #332, #343). O protocolo
+  // vem sempre na mudança da mesclagem (#341); sem ele, o aviso não inventa um.
+  ticket_closed_by_merge: {
+    icon: Merge,
+    text: (log) => {
+      const merged = log.mergedProtocol ? `o atendimento ${log.mergedProtocol}` : 'um atendimento'
+      return `${log.actor?.name ?? 'Sistema'} mesclou ${merged} neste chamado`
+    },
+  },
+  ticket_corrected: {
+    icon: PencilLine,
+    text: (log) => `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`,
+  },
+  ticket_transferred_user: {
+    icon: UserRoundCog,
+    text: (log) =>
+      log.actor?.name === log.fromName
+        ? `${log.fromName} transferiu o chamado para ${log.toName}`
+        : `${log.actor?.name ?? 'Sistema'} transferiu o chamado de ${log.fromName} para ${log.toName}`,
+  },
 }
 
 // Registro de responsável ou de encerramento entre as mensagens, na ordem do tempo.
 function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?: boolean }) {
+  const { icon: Icon, text } = assignmentActions[log.action]
   return (
     <li
       aria-label="Registro do chamado"
@@ -281,25 +288,16 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
         modern ? 'border-dashed border-line bg-transparent' : 'border-line-soft bg-muted',
       )}
     >
-      {log.action === 'ticket_cancelled' ? (
-        <Ban strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_closed' ? (
-        <CircleCheck strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_transferred_sector' ? (
-        <ArrowRightLeft strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_corrected' ? (
-        <PencilLine strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : log.action === 'ticket_returned' ? (
-        <Undo2 strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      ) : (
-        <UserRoundCog strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
-      )}
+      <Icon strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       <span className="min-w-0">
-        {assignmentText(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
-        {(log.action === 'ticket_cancelled' ||
-          (log.action === 'ticket_transferred_sector' && log.reason)) && (
-          <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
-        )}
+        {text(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
+        {log.reason &&
+          (log.action === 'ticket_cancelled' ||
+            log.action === 'ticket_pending' ||
+            log.action === 'ticket_closed_by_merge' ||
+            log.action === 'ticket_transferred_sector') && (
+            <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
+          )}
       </span>
     </li>
   )
@@ -973,12 +971,15 @@ export function ConversationCard({
   ticket,
   user,
   onRegister,
+  onResumePending,
   modern = false,
   className,
 }: {
   ticket: TicketDetail
   user: User
   onRegister: () => void
+  // Abre a janela Retomar chamado, que escolhe um dos pendentes do contato (spec #332).
+  onResumePending: () => void
   modern?: boolean
   // A tela Chamados define a altura do cartão; a ficha do chamado segue com a própria.
   className?: string
@@ -989,6 +990,12 @@ export function ConversationCard({
   const react = useReactToMessage(ticket.id)
   const list = useRef<HTMLDivElement>(null)
   const canReply = conducts(ticket, user)
+  // O aviso de pendentes no contato vale para o chamado em atendimento e para o da fila, que só
+  // avisa: retomar exige assumir antes (spec #332).
+  const pendings = ticket.pendingTickets ?? []
+  const showPendingNotice =
+    (ticket.status === 'in_progress' || ticket.status === 'queued') && pendings.length > 0
+  const canResumePendingNow = canResumePending(ticket, user)
   // Chamado que não está mais com o usuário (encerrado, transferido, cancelado, devolvido) não
   // mostra rascunho: o que estava guardado é descartado, para não voltar num chamado futuro.
   useEffect(() => {
@@ -1068,10 +1075,17 @@ export function ConversationCard({
 
   // A conversa segue a mensagem mais recente enquanto a pessoa está no fim; rolada para cima, ela
   // fica onde está, e as mensagens que chegam contam no botão de ir ao fim (regra 44 de
-  // conversation.md). "No fim" tem 48 px de tolerância, para arredondamento e zoom não fazerem o
-  // botão piscar. O contador é só da tela: não vai à API nem ao banco.
+  // conversation.md). "No fim" tem uma tolerância em pixels, para arredondamento e zoom não
+  // fazerem o botão piscar. O contador é só da tela: não vai à API nem ao banco.
   const [following, setFollowing] = useState(true)
   const [missed, setMissed] = useState(0)
+  // A intenção em ref: o observador de altura e o efeito das mensagens leem o valor atual sem
+  // esperar o próximo render.
+  const followingRef = useRef(true)
+  const follow = (value: boolean) => {
+    followingRef.current = value
+    setFollowing(value)
+  }
   // O maior id de mensagem já visto neste chamado: null até a primeira carga, que abre no fim.
   const seen = useRef<{ ticket: number; newest: number | null }>({
     ticket: ticket.id,
@@ -1079,9 +1093,30 @@ export function ConversationCard({
   })
   // A rolagem do botão é suave: ele some já no clique, e os eventos de rolagem do meio do caminho
   // não são a pessoa saindo do fim, então não podem trazê-lo de volta nem contar a mensagem que
-  // chegue enquanto a tela desce. O temporizador é a rede de segurança, se a rolagem não chegar.
+  // chegue enquanto a tela desce. Se a pessoa puxar a tela para cima no meio da descida, a
+  // descida automática para: ela fica onde está, e a próxima mensagem conta no botão. O
+  // temporizador é a rede de segurança, se a rolagem não chegar ao fim.
   const settling = useRef(false)
   const settleTimer = useRef<number | null>(null)
+  // Último scrollTop visto: diz se o passo de rolagem foi para cima (a mão da pessoa) ou para
+  // baixo (a descida automática).
+  const lastTop = useRef(0)
+  // Altura do conteúdo na última rolagem: com a altura parada, uma mudança de posição é a mão da
+  // pessoa; com a altura mudando, é o layout que está assentando e não tira a conversa do fim.
+  const scrollHeight = useRef(0)
+  // A pessoa pediu para subir pela roda, pelo teclado ou pelo dedo: só isso tira a conversa do fim.
+  const manualUp = useRef(false)
+  // A primeira comparação parte do que a lista já mostra, e não de zero (posição e altura): sem
+  // isso, o primeiro evento de rolagem veria a altura mudar e a posição subir sem ninguém ter
+  // tocado na tela. Trocar de chamado semeia de novo.
+  const seededTicket = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    const element = list.current
+    if (!element || seededTicket.current === ticket.id) return
+    seededTicket.current = ticket.id
+    lastTop.current = element.scrollTop
+    scrollHeight.current = element.scrollHeight
+  }, [ticket.id])
   const stopSettling = () => {
     settling.current = false
     if (settleTimer.current !== null) {
@@ -1089,6 +1124,8 @@ export function ConversationCard({
       settleTimer.current = null
     }
   }
+  const distanceToEnd = (element: HTMLElement) =>
+    element.scrollHeight - element.scrollTop - element.clientHeight
   useEffect(() => stopSettling, [])
   const scrollToEnd = (smooth: boolean) => {
     const element = list.current
@@ -1100,8 +1137,8 @@ export function ConversationCard({
       settleTimer.current = window.setTimeout(() => {
         stopSettling()
         const current = list.current
-        if (current && current.scrollHeight - current.scrollTop - current.clientHeight > 48) {
-          setFollowing(false)
+        if (current && distanceToEnd(current) > NEAR_END_PX) {
+          follow(false)
         }
       }, 1000)
     }
@@ -1110,16 +1147,57 @@ export function ConversationCard({
       behavior: settling.current ? 'smooth' : 'auto',
     })
   }
+  // A roda, o teclado e o dedo são a mão da pessoa: para cima tiram a conversa do fim; para baixo
+  // devolvem a decisão ao próprio fim.
+  const onWheel = (event: WheelEvent) => {
+    if (event.deltaY < 0) manualUp.current = true
+    else if (event.deltaY > 0) manualUp.current = false
+  }
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home') {
+      manualUp.current = true
+    } else if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === 'End') {
+      manualUp.current = false
+    }
+  }
+  const touchY = useRef<number | null>(null)
+  const onTouchStart = (event: TouchEvent) => {
+    touchY.current = event.touches[0]?.clientY ?? null
+  }
+  const onTouchMove = (event: TouchEvent) => {
+    const y = event.touches[0]?.clientY
+    if (y == null || touchY.current == null) return
+    if (y > touchY.current + 2) manualUp.current = true
+    else if (y < touchY.current - 2) manualUp.current = false
+    touchY.current = y
+  }
   // O botão aparece fora do fim, e o contador zera ao chegar nele por qualquer caminho.
   const onScroll = () => {
     const element = list.current
-    const end = !element || element.scrollHeight - element.scrollTop - element.clientHeight <= 48
+    if (!element) return
+    const top = element.scrollTop
+    const height = element.scrollHeight
+    const distance = distanceToEnd(element)
+    const movingUp = top < lastTop.current - 1
+    const heightChanged = height !== scrollHeight.current
+    lastTop.current = top
+    scrollHeight.current = height
+    const end = distance <= NEAR_END_PX
+    if (settling.current && movingUp) {
+      // Rolagem manual para cima no meio da descida: cancela a descida automática. A conversa
+      // fica onde a pessoa a deixou e a mensagem que chegar agora conta no botão.
+      stopSettling()
+      follow(false)
+      return
+    }
     if (end) stopSettling()
     if (end || settling.current) {
-      setFollowing(true)
+      follow(true)
       setMissed(0)
-    } else {
-      setFollowing(false)
+    } else if (manualUp.current || !heightChanged) {
+      // Fora do fim, pela mão da pessoa: a conversa fica onde está e o que chegar conta no botão.
+      // Quando só o layout se ajusta (a altura muda junto), ela continua seguindo o fim.
+      follow(false)
     }
   }
   // Uma mensagem nova: no fim, desce junto; fora do fim, fica onde está e conta. Edição, exclusão,
@@ -1130,7 +1208,7 @@ export function ConversationCard({
     if (seen.current.ticket !== ticket.id) {
       // Trocar de chamado abre no fim, sem botão e sem contador herdado.
       seen.current = { ticket: ticket.id, newest: null }
-      setFollowing(true)
+      follow(true)
       setMissed(0)
     }
     const before = seen.current.newest
@@ -1151,23 +1229,22 @@ export function ConversationCard({
   // Avisos do sistema não contam, mas também não puxam a conversa para baixo; no fim, continuam
   // descendo junto com o resto.
   useEffect(() => {
-    if (following) list.current?.scrollTo({ top: list.current.scrollHeight })
+    // Durante a descida suave do botão, o salto daqui cancelaria a animação e o temporizador de
+    // segurança: a rolagem já está a caminho.
+    if (following && !settling.current) list.current?.scrollTo({ top: list.current.scrollHeight })
   }, [logs.length, following])
   // A altura do conteúdo muda sozinha depois de rolar (a largura e as fontes assentam, um aviso
   // entra): quem estava no fim continua no fim, e quem estava lendo mais acima fica onde está. Sem
   // isso, abrir o chamado podia deixar a última mensagem por baixo do fim.
-  const contentHeight = useRef<number | null>(null)
   useEffect(() => {
     const element = list.current
     const content = element?.firstElementChild
     if (!element || !content) return
-    contentHeight.current ??= element.scrollHeight
     const observer = new ResizeObserver(() => {
-      const before = contentHeight.current ?? element.scrollHeight
-      contentHeight.current = element.scrollHeight
-      if (element.scrollTop + element.clientHeight >= before - 48) {
+      // Quem está seguindo o fim continua no fim quando a altura assenta; quem saiu, pela mão da
+      // pessoa, fica onde está e não é arrastado de volta.
+      if (followingRef.current) {
         element.scrollTop = element.scrollHeight
-        setFollowing(true)
         setMissed(0)
       }
     })
@@ -1176,7 +1253,10 @@ export function ConversationCard({
   }, [ticket.id, messages.length, logs.length])
 
   let notice: string | null = null
-  if (ticket.status === 'closed') {
+  if (ticket.status === 'pending') {
+    // O pendente é só leitura; a explicação fica no rodapé, com o Retomar no topo da tela.
+    notice = null
+  } else if (ticket.status === 'closed') {
     notice = ticket.closureType === 'cancelled' ? 'Chamado cancelado.' : 'Chamado encerrado.'
   } else if (!ticket.assignee) {
     notice = ticket.previous
@@ -1194,6 +1274,29 @@ export function ConversationCard({
       {...dropProps}
     >
       {canReply && dragging && <DropOverlay />}
+      {showPendingNotice && (
+        <div className="border-b border-line-soft p-3">
+          <Alert variant="warning">
+            <CirclePause strokeWidth={1.7} aria-hidden />
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Este contato tem {pendings.length}{' '}
+                {pendings.length === 1 ? 'chamado pendente' : 'chamados pendentes'}.
+                {ticket.status === 'queued' && ' Assuma o chamado para retomar o pendente.'}
+                {ticket.status === 'in_progress' &&
+                  !canResumePendingNow &&
+                  ' Só quem atende este chamado pode retomar o pendente.'}
+              </span>
+              {canResumePendingNow && (
+                <Button variant="outline" size="sm" onClick={onResumePending}>
+                  <CirclePlay strokeWidth={1.7} aria-hidden />
+                  Retomar chamado
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       {needsRegistration(ticket) && (
         <div className="border-b border-line-soft p-3">
           <Alert variant="warning">
@@ -1211,6 +1314,10 @@ export function ConversationCard({
         <div
           ref={list}
           onScroll={onScroll}
+          onWheel={onWheel}
+          onKeyDown={onKeyDown}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
           className={cn(
             'flex-1 overflow-y-auto px-4 py-4',
             modern && 'border-y border-line-soft bg-background [[data-contrast=high]_&]:bg-muted',
@@ -1270,8 +1377,9 @@ export function ConversationCard({
               }
               title="Ir para a última mensagem"
               onClick={() => {
+                manualUp.current = false
                 scrollToEnd(true)
-                setFollowing(true)
+                follow(true)
                 setMissed(0)
               }}
               className="pointer-events-auto size-9 rounded-full border-line bg-card shadow-(--shadow) hover:border-ink-faint"
@@ -1317,11 +1425,21 @@ export function ConversationCard({
           onStartEditing={setEditingId}
           onStopEditing={() => setEditingId(null)}
           onSent={() => {
-            setFollowing(true)
+            manualUp.current = false
+            follow(true)
             setMissed(0)
             scrollToEnd(false)
           }}
         />
+      ) : ticket.status === 'pending' ? (
+        <div
+          role="status"
+          aria-label="Somente leitura"
+          className="caption flex shrink-0 items-center gap-2 border-t border-line-soft px-4 py-3 text-ink-soft"
+        >
+          <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+          <span>Somente leitura. Retome o chamado para responder ao contato.</span>
+        </div>
       ) : (
         notice && (
           <div className="border-t border-line-soft p-3">
@@ -1412,8 +1530,10 @@ function CorrectionHistory({ corrections: all }: { corrections: Correction[] }) 
 function DetailsTab({ ticket }: { ticket: TicketDetail }) {
   const status = ticketStatusLabel(ticket.status, ticket.closureType)
   const cancelled = ticket.closureType === 'cancelled'
-  // O cancelado não lança o atendimento: não tem formulário de encerramento nem correções.
-  const closed = ticket.status === 'closed' && !cancelled
+  // O cancelado e o mesclado não lançam o atendimento: não têm formulário de encerramento nem
+  // correções, e o mesclado perde assunto, resolução e módulos para o chamado original (spec #332).
+  const merged = ticket.closureType === 'merged'
+  const closed = ticket.status === 'closed' && !cancelled && !merged
   const { data: modules = [] } = useTicketModules(ticket.id, closed)
   const { data: corrections } = useCorrections(ticket.id, closed)
   const row = (label: string, value: ReactNode) => (
@@ -1448,7 +1568,7 @@ function DetailsTab({ ticket }: { ticket: TicketDetail }) {
         row('Assumido em', <span className="mono-num">{formatDateTime(ticket.assignedAt)}</span>)}
       {ticket.closedAt &&
         row(
-          cancelled ? 'Cancelado em' : 'Encerrado em',
+          cancelled ? 'Cancelado em' : merged ? 'Mesclado em' : 'Encerrado em',
           <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>,
         )}
       {closed && (
@@ -1755,6 +1875,51 @@ function PhoneConversation({ ticket }: { ticket: TicketDetail }) {
   )
 }
 
+// O mesclado num pendente não tem conversa própria: as mensagens foram para o chamado original,
+// e a ficha só avisa disso e leva a ele (spec #332). O registro por telefone não tem mensagens:
+// os dados do atendimento foram para o original, e o aviso aparece do mesmo jeito.
+function MergedConversation({ ticket }: { ticket: TicketDetail }) {
+  const mergedInto = ticket.mergedInto
+  const byPhone = ticket.channel === 'phone'
+  return (
+    <Card role="region" aria-label="Conversa" className="flex min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-10">
+        <Empty>
+          <EmptyMedia>
+            <Merge strokeWidth={1.7} aria-hidden />
+          </EmptyMedia>
+          <EmptyDescription>
+            <span className="body-strong block text-ink">
+              {byPhone ? 'Atendimento por telefone mesclado' : 'Chamado mesclado'}
+            </span>
+            {byPhone
+              ? 'Os dados deste atendimento foram para o chamado original.'
+              : 'As mensagens deste chamado foram para o chamado original.'}
+            {mergedInto && <MergedIntoLink mergedInto={mergedInto} className="mt-1 block" />}
+          </EmptyDescription>
+        </Empty>
+      </div>
+      {ticket.closedAt && (
+        <div
+          role="status"
+          aria-label="Só leitura"
+          className="caption flex items-center gap-2 border-t border-line-soft bg-muted px-4 py-3 text-ink-soft"
+        >
+          <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+          <span>
+            <span className="font-medium text-foreground">Só leitura.</span> Mesclado
+            {ticket.closedBy ? ` por ${ticket.closedBy.name}` : ''} em{' '}
+            <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>:{' '}
+            {byPhone
+              ? 'os dados do atendimento foram para o chamado original.'
+              : 'as mensagens foram para o chamado original.'}
+          </span>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export default function TicketPage() {
   const location = useLocation()
   const origin = location.state as Partial<HistoryReturnState> | null
@@ -1767,6 +1932,7 @@ export default function TicketPage() {
   const { data: user } = useCurrentUser()
   const { data: ticket, error } = useTicket(ticketId, validId)
   const [correcting, setCorrecting] = useState(false)
+  const [merging, setMerging] = useState(false)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
   const [view, setView] = useTicketView(ticketId)
 
@@ -1793,6 +1959,12 @@ export default function TicketPage() {
     return null
   }
 
+  // Mesclar em pendente: o backend diz quem pode (encerrado ou cancelado, não transferido nem
+  // mesclado) e manda as escolhas; sem pendente do contato no setor, a ação não aparece. No
+  // cancelado ela aparece sem o Corrigir, que não existe para ele.
+  const canMerge = ticket.canMergeIntoPending === true && (ticket.pendingTickets ?? []).length > 0
+  const correctable = canCorrect(ticket, user)
+
   // Na ficha só existem Detalhes e Histórico (a aba Assuntos não existe aqui).
   const tab =
     new URLSearchParams(location.search).has('historico') || view.tab === 'history'
@@ -1807,22 +1979,37 @@ export default function TicketPage() {
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={
-          // Única ação da ficha, visível e sem menu ⋯; nunca em chamado cancelado ou transferido.
-          canCorrect(ticket, user) && (
-            <Button onClick={() => setCorrecting(true)}>
-              <PencilLine strokeWidth={1.7} aria-hidden />
-              Corrigir
-            </Button>
+          // As ações da ficha, visíveis e sem menu ⋯: Corrigir é primária e, quando o contato tem
+          // um pendente do setor, "Mesclar em pendente" vem ao lado como secundária (spec #332,
+          // #343). Nada aparece em chamado transferido ou mesclado.
+          (correctable || canMerge) && (
+            <div className="flex items-center gap-2">
+              {canMerge && (
+                <Button variant="outline" onClick={() => setMerging(true)}>
+                  <Merge strokeWidth={1.7} aria-hidden />
+                  Mesclar em pendente
+                </Button>
+              )}
+              {correctable && (
+                <Button onClick={() => setCorrecting(true)}>
+                  <PencilLine strokeWidth={1.7} aria-hidden />
+                  Corrigir
+                </Button>
+              )}
+            </div>
           )
         }
       />
-      {/* Montado só aberto: começa com os dados atuais do atendimento. */}
+      {/* Montados só abertos: começam com os dados atuais do atendimento. */}
       {correcting && recordedModules && (
         <CorrectionSheet ticket={ticket} recorded={recordedModules} onOpenChange={setCorrecting} />
       )}
+      {merging && <MergeIntoPendingSheet ticket={ticket} open onOpenChange={setMerging} />}
       {/* A tela de conversas usa a largura toda (design.md). */}
       <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[minmax(0,1fr)]">
-        {ticket.channel === 'phone' ? (
+        {ticket.mergedInto ? (
+          <MergedConversation ticket={ticket} />
+        ) : ticket.channel === 'phone' ? (
           <PhoneConversation ticket={ticket} />
         ) : (
           <ReadOnlyConversation ticket={ticket} />

@@ -28,8 +28,19 @@ select
 from (
     select
         t.created_by_id,
+        -- A merged ticket (#335, #341) left its messages in the pending one, so
+        -- the first message that opened it comes from the ticket_merged audit.
         t.previous_ticket_id is not null or (t.created_by_id is null
-            and (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1) is distinct from 'phone') as came_in
+            and coalesce(
+                (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1),
+                (select m.origin
+                 from audit_logs a
+                 cross join lateral jsonb_array_elements_text(a.changes -> 'message_ids' -> 'to') as mid(id)
+                 join messages m on m.id = mid.id::bigint
+                 where a.ticket_id = t.id and a.action = 'ticket_merged'
+                 order by m.id
+                 limit 1)
+            ) is distinct from 'phone') as came_in
     from tickets t
     where t.arrived_at >= @period_start::timestamptz and t.arrived_at < @period_end::timestamptz
       and t.channel <> 'phone'
@@ -49,28 +60,69 @@ from tickets t
 where t.assigned_at >= @period_start::timestamptz and t.assigned_at < @period_end::timestamptz
   and t.channel <> 'phone'
   and (t.previous_ticket_id is not null or (t.created_by_id is null
-      and (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1) is distinct from 'phone'))
+      and coalesce(
+          (select m.origin from messages m where m.ticket_id = t.id order by m.id limit 1),
+          (select m.origin
+           from audit_logs a
+           cross join lateral jsonb_array_elements_text(a.changes -> 'message_ids' -> 'to') as mid(id)
+           join messages m on m.id = mid.id::bigint
+           where a.ticket_id = t.id and a.action = 'ticket_merged'
+           order by m.id
+           limit 1)
+      ) is distinct from 'phone'))
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
   and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id));
 
 -- name: DashboardClosures :one
 -- Tickets closed in the period, by the real closing moment, and the handling
--- time: from the first assignment to the end of the form, which may be edited.
--- An end before the start and the cancelled tickets stay out of the average.
--- The phone registration is born at the start informed of the call and that
--- start may be corrected, so its handling time goes from the start informed now
--- to the end. The start of the phone registration is the current started_at,
--- not assigned_at, which a correction does not touch.
+-- time: from the first assignment to the end of the form, which may be edited,
+-- without the periods the ticket stayed pending. A pending period goes from
+-- ticket_pending to the next resume by id; in the merge of a closed ticket
+-- (#341) there is no resume, so it ends when the closed ticket was assumed.
+-- An end before the start, the cancelled tickets and the merged ones stay out
+-- of the average. The phone registration is born at the start informed of the
+-- call and that start may be corrected, so its handling time goes from the
+-- start informed now to the end. The start of the phone registration is the
+-- current started_at, not assigned_at, which a correction does not touch.
 select
     count(*) filter (where c.closure_type = 'resolved') as resolved,
     count(*) filter (where c.closure_type = 'transferred') as transferred,
     count(*) filter (where c.closure_type = 'cancelled') as cancelled,
-    count(*) filter (where c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start) as handled,
-    coalesce(sum(extract(epoch from c.ended_at - c.handling_start))
-        filter (where c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start), 0)::float8 as handling_seconds
+    count(*) filter (where c.closure_type not in ('cancelled', 'merged')
+        and c.ended_at >= c.handling_start) as handled,
+    coalesce(sum(greatest(extract(epoch from c.ended_at - c.handling_start) - c.pending_seconds, 0))
+        filter (where c.closure_type not in ('cancelled', 'merged')
+            and c.ended_at >= c.handling_start), 0)::float8 as handling_seconds
 from (
     select t.closure_type, t.ended_at,
-        case when t.channel = 'phone' then t.started_at else t.assigned_at end as handling_start
+        case when t.channel = 'phone' then t.started_at else t.assigned_at end as handling_start,
+        -- Each pending period ends at the next resume by id, the order the audit
+        -- rows were written. The merge of a closed ticket has no resume: it ends
+        -- when the closed ticket was assumed, which may be before the pending
+        -- mark (the discount is zero then, never negative).
+        coalesce((
+            select sum(greatest(extract(epoch from r.resumed_at - p.pending_at), 0))
+            from (
+                select a.id, a.created_at as pending_at
+                from audit_logs a
+                where a.ticket_id = t.id and a.action = 'ticket_pending'
+            ) p
+            cross join lateral (
+                select case
+                    when a.action = 'ticket_closed_by_merge'
+                        then coalesce(merged.assigned_at, a.created_at)
+                    else a.created_at
+                end as resumed_at
+                from audit_logs a
+                left join tickets merged on a.action = 'ticket_closed_by_merge'
+                    and merged.id = (a.changes -> 'merged_ticket_id' ->> 'to')::bigint
+                where a.ticket_id = t.id
+                  and a.action in ('ticket_resumed', 'ticket_resumed_by_merge', 'ticket_closed_by_merge')
+                  and a.id > p.id
+                order by a.id
+                limit 1
+            ) r
+        ), 0)::float8 as pending_seconds
     from tickets t
     where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.closed_at < @period_end::timestamptz
       and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
@@ -83,10 +135,12 @@ from (
 
 -- name: DashboardByAssignee :many
 -- One row per person and sector, with the rules of the numbers above. Only
--- what counts makes a row, so nobody appears with everything at zero. With a
--- module, only the closings that apply to it count. With a channel, the tickets
--- in progress and the started ones do not make a row: the channel does not
--- apply to those numbers, and the closings are the numbers of the channel.
+-- what counts makes a row, so nobody appears with everything at zero. A merged
+-- ticket counts nowhere in the closings, so its assignee does not make a row
+-- with it either. With a module, only the closings that apply to it count. With
+-- a channel, the tickets in progress and the started ones do not make a row:
+-- the channel does not apply to those numbers, and the closings are the numbers
+-- of the channel.
 select
     r.sector_id, s.name as sector_name, r.user_id::bigint as user_id, u.name as user_name,
     sum(r.in_progress)::bigint as in_progress,
@@ -121,14 +175,42 @@ from (
         (c.closure_type = 'resolved')::int,
         (c.closure_type = 'transferred')::int,
         (c.closure_type = 'cancelled')::int,
-        case when c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start then 1 else 0 end,
-        case when c.closure_type <> 'cancelled' and c.ended_at >= c.handling_start
-            then extract(epoch from c.ended_at - c.handling_start)::float8 else 0::float8 end
+        case when c.closure_type not in ('cancelled', 'merged') and c.ended_at >= c.handling_start then 1 else 0 end,
+        case when c.closure_type not in ('cancelled', 'merged') and c.ended_at >= c.handling_start
+            then greatest(extract(epoch from c.ended_at - c.handling_start) - c.pending_seconds, 0)::float8
+            else 0::float8 end
     from (
         select t.sector_id, t.assignee_id, t.closure_type, t.ended_at,
-            case when t.channel = 'phone' then t.started_at else t.assigned_at end as handling_start
+            case when t.channel = 'phone' then t.started_at else t.assigned_at end as handling_start,
+            -- Same pending discount as DashboardClosures, person by person.
+            coalesce((
+                select sum(greatest(extract(epoch from r.resumed_at - p.pending_at), 0))
+                from (
+                    select a.id, a.created_at as pending_at
+                    from audit_logs a
+                    where a.ticket_id = t.id and a.action = 'ticket_pending'
+                ) p
+                cross join lateral (
+                    select case
+                        when a.action = 'ticket_closed_by_merge'
+                            then coalesce(merged.assigned_at, a.created_at)
+                        else a.created_at
+                    end as resumed_at
+                    from audit_logs a
+                    left join tickets merged on a.action = 'ticket_closed_by_merge'
+                        and merged.id = (a.changes -> 'merged_ticket_id' ->> 'to')::bigint
+                    where a.ticket_id = t.id
+                      and a.action in ('ticket_resumed', 'ticket_resumed_by_merge', 'ticket_closed_by_merge')
+                      and a.id > p.id
+                    order by a.id
+                    limit 1
+                ) r
+            ), 0)::float8 as pending_seconds
         from tickets t
         where t.status = 'closed' and t.closed_at >= @period_start::timestamptz and t.closed_at < @period_end::timestamptz
+          -- A merged ticket (#335, #341) counts nowhere in the closings, so it
+          -- must not make a row for its assignee either.
+          and t.closure_type <> 'merged'
           and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
           and (sqlc.narg(assignee_id)::bigint is null or t.assignee_id = sqlc.narg(assignee_id))
           and (sqlc.narg(organization_id)::bigint is null or t.organization_id = sqlc.narg(organization_id))
@@ -160,3 +242,28 @@ order by lower(u.name), u.id;
 
 -- name: DashboardModuleInSector :one
 select exists (select 1 from modules m where m.id = @id and m.sector_id = @sector_id);
+
+-- name: CountDashboardPendingTickets :one
+-- Quantos chamados estão pendentes agora no recorte do Dashboard: o setor do
+-- supervisor, o setor escolhido pelo administrador ou todos (spec #332, #342).
+-- O período dos números não muda o quadro: ele mostra os pendentes de agora.
+select count(*)
+from tickets t
+where t.status = 'pending'
+  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id));
+
+-- name: ListDashboardPendingTickets :many
+-- Os pendentes de agora no recorte do Dashboard, os que estão parados há mais
+-- tempo primeiro, com o suficiente para a linha do quadro e o link para o
+-- chamado (spec #332, #342). A quantidade fica na consulta de contagem.
+select
+    t.id, t.protocol, t.pending_reason, t.pending_at,
+    t.contact_id, c.name as contact_name,
+    t.sector_id, s.name as sector_name
+from tickets t
+join contacts c on c.id = t.contact_id
+join sectors s on s.id = t.sector_id
+where t.status = 'pending'
+  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
+order by t.pending_at, t.id
+limit 10;

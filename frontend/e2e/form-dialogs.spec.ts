@@ -4,7 +4,9 @@ import {
   expectClosableDialog,
   expectLockedDialog,
   seedDirectory,
+  seedPendingWithNewTicket,
   seedSector,
+  seedTicketToMergeIntoPending,
   signIn,
   unique,
   userPassword,
@@ -68,6 +70,11 @@ test('as janelas do atendimento têm bloqueio', async ({ page, baseURL }) => {
   await chooseAction(page, 'Devolver à fila')
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Devolver à fila' }))
 
+  await chooseAction(page, 'Colocar como pendente')
+  await expectLockedDialog(page, page.getByRole('dialog', { name: 'Colocar como pendente' }), {
+    field: 'Motivo',
+  })
+
   // Sem texto a digitar, a escolha do seletor é o que precisa continuar.
   const supervisorName = supervisor.replace(/^supervisor\.(\d+)@.*$/, 'supervisor $1')
   await chooseAction(page, 'Transferir')
@@ -90,6 +97,25 @@ test('as janelas do atendimento têm bloqueio', async ({ page, baseURL }) => {
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Cadastrar contato' }), {
     field: 'Nome',
   })
+})
+
+test('a janela Retomar chamado tem bloqueio', async ({ page, baseURL }) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+
+  await chooseAction(page, 'Retomar chamado')
+  await expectLockedDialog(page, page.getByRole('dialog', { name: 'Retomar chamado' }))
+})
+
+test('a janela Mesclar em pendente tem bloqueio', async ({ page, baseURL }) => {
+  const seed = await seedTicketToMergeIntoPending(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await page.goto(`/atendimentos/${seed.ticketId}`)
+  await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
+  await expectLockedDialog(page, page.getByRole('dialog', { name: 'Mesclar em pendente' }))
 })
 
 test('cancelar o cadastro aberto pelo encerramento volta à janela com os dados mantidos', async ({

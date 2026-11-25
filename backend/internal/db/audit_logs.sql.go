@@ -38,6 +38,22 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 	return err
 }
 
+const getTicketCancellationReason = `-- name: GetTicketCancellationReason :one
+select a.reason from audit_logs a
+where a.ticket_id = $1 and a.action = 'ticket_cancelled'
+order by a.id desc
+limit 1
+`
+
+// Motivo do cancelamento do chamado, que a mesclagem de um encerrado leva para o
+// pendente: o cancelamento guarda o motivo na auditoria do próprio chamado.
+func (q *Queries) GetTicketCancellationReason(ctx context.Context, ticketID *int64) (*string, error) {
+	row := q.db.QueryRow(ctx, getTicketCancellationReason, ticketID)
+	var reason *string
+	err := row.Scan(&reason)
+	return reason, err
+}
+
 const listAuditLogsByEntity = `-- name: ListAuditLogsByEntity :many
 select id, ticket_id, entity_type, entity_id, action, actor_id, reason, changes, created_at from audit_logs
 where entity_type = $1 and entity_id = $2
@@ -90,7 +106,8 @@ select
     from_user.name as from_name,
     to_user.name as to_name,
     to_sector.name as to_sector_name,
-    from_sector.name as from_sector_name
+    from_sector.name as from_sector_name,
+    coalesce(a.changes -> 'merged_protocol' ->> 'to', '')::text as merged_protocol
 from audit_logs a
 left join users actor on actor.id = a.actor_id
 left join users from_user on from_user.id = (a.changes -> 'assignee_id' ->> 'from')::bigint
@@ -98,7 +115,7 @@ left join users to_user on to_user.id = (a.changes -> 'assignee_id' ->> 'to')::b
 left join sectors to_sector on to_sector.id = (a.changes -> 'sector_id' ->> 'to')::bigint
 left join sectors from_sector on a.ticket_id <> $1 and from_sector.id = (a.changes -> 'sector_id' ->> 'from')::bigint
 where (
-    a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_returned', 'ticket_closed', 'ticket_transferred_sector', 'ticket_cancelled', 'ticket_corrected')
+    a.ticket_id = $1 and a.action in ('ticket_started', 'ticket_assigned', 'ticket_transferred_user', 'ticket_returned', 'ticket_pending', 'ticket_resumed', 'ticket_merged', 'ticket_resumed_by_merge', 'ticket_closed_by_merge', 'ticket_closed', 'ticket_transferred_sector', 'ticket_cancelled', 'ticket_corrected')
 ) or (
     a.action = 'ticket_transferred_sector' and a.ticket_id = (select t.previous_ticket_id from tickets t where t.id = $1)
 )
@@ -116,9 +133,14 @@ type ListTicketAssignmentLogsRow struct {
 	ToName         *string
 	ToSectorName   *string
 	FromSectorName *string
+	MergedProtocol string
 }
 
-// Start, assignment, transfers, return to the queue, closing, cancellation and corrections of the ticket, oldest first, with the names of
+// Start, assignment, transfers, return to the queue, pending and resuming, the
+// resuming from a new ticket (the merge), the merge of an attended one into
+// this ticket when it was pending (with the protocol of the merged one and the
+// reason of its cancellation), closing, cancellation and corrections of the
+// ticket, oldest first, with the names of
 // the actor, of the previous and new assignees and of the target of a transfer between sectors. The
 // transfer between sectors that opened this ticket (written on the origin) comes too, with the sector
 // it came from, so the destination sees it among its messages.
@@ -142,6 +164,7 @@ func (q *Queries) ListTicketAssignmentLogs(ctx context.Context, ticketID *int64)
 			&i.ToName,
 			&i.ToSectorName,
 			&i.FromSectorName,
+			&i.MergedProtocol,
 		); err != nil {
 			return nil, err
 		}

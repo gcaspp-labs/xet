@@ -1,5 +1,5 @@
 // Encerrar: ver features/close.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
 
 await journey('close', async (t) => {
   const { sector, organization, paulo } = await t.step(
@@ -17,7 +17,6 @@ await journey('close', async (t) => {
 
   // Os chamados encerrados ficam no histórico da tela Atendimentos; a fila, na tela Chamados.
   const history = (page) => page.getByRole('table').getByRole('row')
-  const queueOf = (page) => page.getByRole('region', { name: 'Fila e assuntos' })
   // As ações menos usadas ficam no menu "Mais ações".
   const chooseAction = async (page, name) => {
     await page.getByRole('button', { name: 'Mais ações' }).click()
@@ -32,12 +31,12 @@ await journey('close', async (t) => {
   const agentPage = await t.signIn(agent)
 
   const ticketId = await t.step('Atendente assume o chamado', async () => {
-    await queueOf(agentPage)
+    await panelOf(agentPage)
       .getByRole('button', { name: `Assumir chamado de ${paulo.name}` })
       .click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     await expect(
-      agentPage.getByRole('region', { name: 'Conversa', exact: true }),
+      conversationOf(agentPage),
     ).toContainText(`${agent.name} assumiu o chamado`)
     return Number(agentPage.url().split('/').pop())
   })
@@ -103,7 +102,7 @@ await journey('close', async (t) => {
       await sheet.getByRole('button', { name: 'Não adicionar' }).click()
       await expect(agentPage.getByText('Chamado encerrado', { exact: true })).toBeVisible()
       await expect(agentPage).toHaveURL(/\/chamados$/)
-      await expect(agentPage.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
+      await expect(conversationOf(agentPage)).toHaveCount(0)
       await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
       await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
       const doneRow = history(agentPage).filter({ hasText: paulo.name })
@@ -127,7 +126,7 @@ await journey('close', async (t) => {
     await agentPage.goto(`/chamados/${ticketId}`)
     await expect(agentPage).toHaveURL(new RegExp(`/atendimentos/${ticketId}$`))
     await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toContainText('Encerrado em')
-    const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+    const conversation = conversationOf(agentPage)
     // Na ficha, o aviso "Chamado encerrado." virou "Só leitura. Encerrado em ... por ...".
     await expect(conversation).toContainText('Só leitura. Encerrado em')
     await expect(
@@ -151,7 +150,7 @@ await journey('close', async (t) => {
     async () => {
       await phone.receive(paulo, 'Agora é sobre férias')
       await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
-      const queue = queueOf(agentPage)
+      const queue = panelOf(agentPage)
       await expect(queue.getByRole('listitem').filter({ hasText: paulo.name })).toHaveCount(1)
       await expect(queue).toContainText('Agora é sobre férias')
       await t.shot(agentPage, 'novo-chamado-na-fila')
@@ -164,43 +163,86 @@ await journey('close', async (t) => {
     },
   )
 
-  await t.step('Cancelamento direto da fila exige motivo e dispensa o cadastro', async () => {
-    const golpe = t.customer('Paula Golpe')
-    await phone.receive(golpe, 'Seu boleto venceu')
+  await t.step(
+    'Cancelar pelo X da fila, com a confirmação no item e sem motivo, dispensa o cadastro',
+    async () => {
+      const golpe = t.customer('Paula Golpe')
+      await phone.receive(golpe, 'Seu boleto venceu')
+      await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
+      const queue = panelOf(agentPage)
+      const x = queue.getByRole('button', { name: `Cancelar chamado de ${golpe.name}` })
+      // O X não cancela no primeiro clique: o próprio item pede confirmação, com o Voltar em foco.
+      await x.click()
+      await expect(queue).toContainText(
+        `Cancelar o chamado de ${golpe.name}? Ele não é reaberto.`,
+      )
+      await expect(queue.getByRole('button', { name: 'Voltar' })).toBeFocused()
+      await t.shot(agentPage, 'cancelamento-confirmar')
+      await expect(agentPage.getByRole('dialog', { name: 'Cancelar chamado' })).toHaveCount(0)
+      await queue.getByRole('button', { name: 'Cancelar chamado', exact: true }).click()
+      await expect(agentPage.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+      await expect(queue.getByText(golpe.name)).toHaveCount(0)
+      await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+      const row = history(agentPage).filter({ hasText: golpe.name })
+      await expect(row).toContainText('Cancelado')
+      await t.shot(agentPage, 'cancelado-no-historico')
+      // O registro na conversa mostra quem cancelou e quando, sem a linha "Motivo:".
+      await row.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
+      const conversation = conversationOf(agentPage)
+      const entry = conversation
+        .getByRole('listitem', { name: 'Registro do chamado' })
+        .filter({ hasText: `${agent.name} cancelou o chamado` })
+      await expect(entry).toBeVisible()
+      await expect(entry).not.toContainText('Motivo:')
+      await t.shot(agentPage, 'cancelado-sem-motivo')
+      const [cancelled] = t.sql(
+        `select t.status, t.closure_type, a.action, a.reason, c.registered as contact_registered
+           from tickets t join contacts c on c.id = t.contact_id
+           join audit_logs a on a.ticket_id = t.id and a.action = 'ticket_cancelled'
+          where c.phone = '${golpe.phone}'`,
+      )
+      expect(cancelled).toEqual({
+        status: 'closed',
+        closure_type: 'cancelled',
+        action: 'ticket_cancelled',
+        reason: null,
+        contact_registered: false,
+      })
+      t.observe('Chamado cancelado pelo X, sem motivo', cancelled)
+    },
+  )
+
+  await t.step('A janela de cancelamento salva com o motivo opcional', async () => {
+    const engano = t.customer('Rita Engano')
+    await phone.receive(engano, 'Era engano meu')
     // Um chamado da fila só abre pelo endereço, sem assumir.
     const [queued] = t.sql(
       `select t.id from tickets t join contacts c on c.id = t.contact_id
-        where c.phone = '${golpe.phone}' and t.status = 'queued'`,
+        where c.phone = '${engano.phone}' and t.status = 'queued'`,
     )
     await agentPage.goto(`/chamados/${queued.id}`)
-    await expect(agentPage.getByRole('heading', { name: golpe.name })).toBeVisible()
+    await expect(agentPage.getByRole('heading', { name: engano.name })).toBeVisible()
     await chooseAction(agentPage, 'Cancelar chamado')
     const cancel = agentPage.getByRole('dialog', { name: 'Cancelar chamado' })
-    await cancel.getByRole('button', { name: 'Cancelar chamado' }).click()
-    await expect(cancel).toContainText('Informe o motivo do cancelamento.')
-    await cancel.getByLabel('Motivo').fill('Golpe do falso boleto.')
-    await t.shot(agentPage, 'cancelamento')
+    await expect(cancel.getByLabel('Motivo (opcional)')).toHaveValue('')
+    await expect(cancel).toContainText('Sem o motivo, a conversa mostra só quem cancelou e quando.')
+    await t.shot(agentPage, 'cancelamento-motivo-opcional')
     await cancel.getByRole('button', { name: 'Cancelar chamado' }).click()
     await expect(agentPage.getByText('Chamado cancelado', { exact: true })).toBeVisible()
     await expect(agentPage).toHaveURL(/\/chamados$/)
-    await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
-    const row = history(agentPage).filter({ hasText: golpe.name })
-    await expect(row).toContainText('Cancelado')
-    await t.shot(agentPage, 'cancelado-no-historico')
     const [cancelled] = t.sql(
-      `select t.status, t.closure_type, a.action, a.reason, c.registered as contact_registered
+      `select t.status, t.closure_type, a.action, a.reason
          from tickets t join contacts c on c.id = t.contact_id
          join audit_logs a on a.ticket_id = t.id and a.action = 'ticket_cancelled'
-        where c.phone = '${golpe.phone}'`,
+        where c.phone = '${engano.phone}'`,
     )
     expect(cancelled).toEqual({
       status: 'closed',
       closure_type: 'cancelled',
       action: 'ticket_cancelled',
-      reason: 'Golpe do falso boleto.',
-      contact_registered: false,
+      reason: null,
     })
-    t.observe('Chamado cancelado', cancelled)
+    t.observe('Chamado cancelado pela janela, sem motivo', cancelled)
   })
 
   await t.step('Estado final do encerramento no banco', async () => {

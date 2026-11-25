@@ -25,7 +25,9 @@ type closedTicketResponse struct {
 	Assignee         *httpx.Ref            `json:"assignee"`
 	// TransferredTo is the sector a transferred ticket went to.
 	TransferredTo *httpx.Ref `json:"transferredTo"`
-	Modules       []string   `json:"modules"`
+	// MergedInto is the ticket a merged one went to.
+	MergedInto *mergedTicketResponse `json:"mergedInto"`
+	Modules    []string              `json:"modules"`
 }
 
 // closedTicketsFilter reads ?q=, ?period= (today, 7d or 30d) or ?from= and ?to=
@@ -135,6 +137,11 @@ func (h *Handler) listClosedTickets(w http.ResponseWriter, r *http.Request) {
 		}
 		if t.TransferredSectorID != nil && t.TransferredSectorName != nil {
 			item.TransferredTo = &httpx.Ref{ID: *t.TransferredSectorID, Name: *t.TransferredSectorName}
+		}
+		if t.MergedIntoID != nil && t.MergedIntoProtocol != nil && t.MergedIntoStatus.Valid {
+			item.MergedInto = &mergedTicketResponse{
+				ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol, Status: t.MergedIntoStatus.TicketStatus,
+			}
 		}
 		out[i] = item
 	}

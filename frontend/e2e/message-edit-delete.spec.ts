@@ -12,6 +12,7 @@ import {
   adminApi,
   json,
   ok,
+  openMenuAndWait,
   openQueued,
   seedContact,
   seedSector,
@@ -23,6 +24,15 @@ import {
 // As capacidades do WhatsApp falso (prazos) valem para o processo todo: os testes deste arquivo, que
 // as mudam, rodam um de cada vez.
 test.describe.configure({ mode: 'serial' })
+
+// O teste "mensagem originada no celular do setor não tem menu" intercepta a lista de mensagens com
+// `route.fetch()` e deixa a rota ativa até o fim. Se uma atualização da conversa buscar a lista
+// depois do fim do teste, o Playwright acusa "route.fetch: Test ended" no teste seguinte e esse
+// teste nem roda (#403): encerra a interceptação ao terminar e ignora só os erros dessas buscas
+// tardias.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
 
 type ApiMessage = {
   id: number
@@ -100,10 +110,7 @@ async function sendText(page: Page, conversation: Locator, text: string) {
 
 async function openMenu(bubble: Locator) {
   await bubble.hover()
-  await bubble.getByRole('button', { name: 'Ações da mensagem' }).click()
-  // O menu abre depois do clique: com ele fora do DOM, um Esc cairia na regra da tela
-  // (com nada por cima, volta para Chamados) e fecharia o chamado no meio do teste.
-  await expect(bubble.page().getByRole('menu')).toBeVisible()
+  await openMenuAndWait(bubble.getByRole('button', { name: 'Ações da mensagem' }))
 }
 
 async function chooseInMenu(bubble: Locator, item: 'Responder' | 'Editar' | 'Excluir') {

@@ -12,7 +12,8 @@ O responsável encerra o chamado com o formulário completo, ou cancela o que n�
 - [jornada] O supervisor vê o atendimento no histórico, sem recarregar.
 - [jornada] O chamado encerrado abre a ficha só leitura em `/atendimentos/<id>` (o endereço de Chamados leva até lá), com o registro, e não aceita resposta.
 - [jornada] Nova mensagem do contato abre outro chamado, sem reabrir.
-- [jornada] O cancelamento direto da fila exige motivo e dispensa o cadastro.
+- [jornada] Cancelar pelo X da fila, com a confirmação no item e sem motivo, dispensa o cadastro.
+- [jornada] A janela de cancelamento salva com o motivo opcional.
 - [não coberto] Correção de chamado encerrado (`correction.spec.ts`).
 - [não coberto] Cancelamento de chamado em atendimento e as permissões do cancelamento (`closing.spec.ts`).
 - [não coberto] Trocar o órgão só para este chamado, no formulário (`closing.spec.ts`).
@@ -30,8 +31,9 @@ Encerrar não depende do WhatsApp real: a matriz de `docs/pilot-validation.md` m
 
 **Cancelar:**
 
-1. No chamado, abre o menu "Mais ações", escolhe "Cancelar chamado", informa o motivo e confirma.
-2. A tela volta a `/chamados`, e o histórico de Atendimentos tem a linha marcada "Cancelado".
+1. Na Fila, clica no X do chamado (sempre visível no fim da linha de ações, à direita do Assumir). O próprio item troca as ações pela confirmação "Cancelar o chamado de <Nome>? Ele não é reaberto.", com **Voltar** (que recebe o foco; Esc também volta) e **Cancelar chamado**. Confirmar cancela sem janela e sem motivo.
+2. Ou, no chamado aberto, abre o menu "Mais ações", escolhe "Cancelar chamado" e confirma na janela — o campo **Motivo (opcional)** pode ficar vazio.
+3. A tela volta a `/chamados`, e o histórico de Atendimentos tem a linha marcada "Cancelado". Sem motivo, a conversa mostra só quem cancelou e quando.
 
 ## Driving it
 
@@ -41,8 +43,9 @@ scripts/verify/scripts/drive.sh close
 
 - Formulário: `getByRole('dialog', { name: 'Encerrar chamado' })`, com `getByLabel('Assunto')`, `getByLabel('Resolução')`, `getByRole('checkbox', { name: 'Folha' })`, `getByLabel('Órgão')`, seguido de `getByRole('option', { name })`, `getByLabel('Início')` e `getByLabel('Fim')`.
 - Cadastro do contato: `getByRole('dialog', { name: 'Editar contato' })`.
-- Cancelamento: `getByRole('dialog', { name: 'Cancelar chamado' })`, com `getByLabel('Motivo')`.
-- Fila: `getByRole('region', { name: 'Fila e assuntos' })`, com `getByRole('button', { name: 'Assumir chamado de Nome' })`.
+- Cancelamento pela janela: `getByRole('dialog', { name: 'Cancelar chamado' })`, com `getByLabel('Motivo (opcional)')`.
+- Cancelamento pelo X da fila: `getByRole('button', { name: 'Cancelar chamado de Nome' })`, a confirmação no próprio item com `getByRole('button', { name: 'Voltar' })` e `getByRole('button', { name: 'Cancelar chamado', exact: true })`.
+- Fila: `getByRole('region', { name: 'Fila, assuntos e pendentes' })`, com `getByRole('button', { name: 'Assumir chamado de Nome' })`.
 - Histórico: em Atendimentos, `getByRole('table').getByRole('row')` filtrada pelo nome do contato. Ações como "Cancelar chamado" ficam no menu `getByRole('button', { name: 'Mais ações' })`.
 - Ficha: `getByRole('status', { name: 'Só leitura' })` e `getByRole('region', { name: 'Atendimento', exact: true })` para os detalhes.
 
@@ -60,6 +63,6 @@ scripts/verify/scripts/drive.sh close
 - **Tela:** o histórico de Atendimentos com a linha "Encerrado", o nome do responsável e o assunto, para quem encerrou e para o supervisor; a ficha sem caixa de resposta, com assunto, resolução, módulos e órgão nos detalhes.
 - **`tickets`, encerrado:** `status = 'closed'`, `closure_type = 'resolved'`, assunto, resolução, órgão, quem encerrou e `ended_at >= started_at`.
 - **`ticket_modules`:** Folha e Patrimônio.
-- **`audit_logs`:** `ticket_closed` no encerrado; `ticket_cancelled` com o motivo no cancelado.
+- **`audit_logs`:** `ticket_closed` no encerrado; `ticket_cancelled` no cancelado, com o motivo quando informado e vazio quando não.
 - **`tickets`, cancelado:** `closure_type = 'cancelled'`, com o contato ainda sem cadastro.
 - **`tickets`, novo:** o mesmo contato com um chamado `closed` e um `queued`.

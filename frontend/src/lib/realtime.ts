@@ -6,7 +6,7 @@ import { historyKey, ticketKey } from '@/lib/conversation'
 import { dashboardAssigneesKey, dashboardKey } from '@/lib/dashboard'
 import { contactsKey } from '@/lib/directory'
 import { resetAlertBaselines } from '@/lib/notifications'
-import { ticketsKey, workloadKey } from '@/lib/tickets'
+import { ticketsKey, workloadKey, pendingTicketsKey } from '@/lib/tickets'
 
 // Avisos do backend (docs/architecture.md, Tempo real): dizem o que mudou, e os dados
 // são recarregados pela API.
@@ -23,6 +23,7 @@ function handle(queryClient: QueryClient, event: RealtimeEvent) {
   switch (event.type) {
     case 'ticket':
       void queryClient.invalidateQueries({ queryKey: ticketsKey(event.sectorId) })
+      void queryClient.invalidateQueries({ queryKey: pendingTicketsKey(event.sectorId) })
       void queryClient.invalidateQueries({ queryKey: workloadKey(event.sectorId) })
       void queryClient.invalidateQueries({ queryKey: closedTicketsKey })
       void queryClient.invalidateQueries({ queryKey: dashboardKey })
