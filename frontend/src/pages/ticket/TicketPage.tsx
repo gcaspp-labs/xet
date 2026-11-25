@@ -1960,11 +1960,18 @@ function MergedConversation({ ticket }: { ticket: TicketDetail }) {
         </Empty>
       </div>
       {ticket.closedAt && (
-        <div className="border-t border-line-soft px-4 py-3">
-          <p className="caption text-ink-faint">
-            Mesclado{ticket.closedBy ? ` por ${ticket.closedBy.name}` : ''} em{' '}
-            <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>.
-          </p>
+        <div
+          role="status"
+          aria-label="Só leitura"
+          className="caption flex items-center gap-2 border-t border-line-soft bg-muted px-4 py-3 text-ink-soft"
+        >
+          <Lock strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
+          <span>
+            <span className="font-medium text-foreground">Só leitura.</span> Mesclado
+            {ticket.closedBy ? ` por ${ticket.closedBy.name}` : ''} em{' '}
+            <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>: as mensagens foram
+            para o chamado original.
+          </span>
         </div>
       )}
     </Card>
