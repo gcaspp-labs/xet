@@ -150,7 +150,14 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 	mergeable := mayMergeIntoPending(t, auth.CurrentUser(r.Context()))
 	if t.Status == db.TicketStatusInProgress || t.Status == db.TicketStatusQueued || mergeable {
 		out.CanMergeIntoPending = mergeable
-		rows, err := h.service.PendingOfContact(r.Context(), t.ContactID, t.SectorID)
+		// The notice of resuming lists every pending; the window of the merge
+		// only the ones that already existed when B ended (#440): those are the
+		// ones B continues in.
+		var startedUntil *time.Time
+		if mergeable {
+			startedUntil = t.EndedAt
+		}
+		rows, err := h.service.PendingOfContact(r.Context(), t.ContactID, t.SectorID, startedUntil)
 		if err != nil {
 			h.ticketError(w, r, err)
 			return

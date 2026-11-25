@@ -659,10 +659,15 @@ export async function seedMergedTicket(
 // Um atendimento encerrado (ou cancelado) B e o pendente A do mesmo contato e setor, criados pela
 // API: a ficha de B oferece a janela Mesclar em pendente, que passa as mensagens de B para A
 // (spec #332, #343). `cancelled` cancela o B com o motivo, que a conversa de A mostra depois da
-// mesclagem. Fica um segundo atendente do setor, que não encerrou o B e, por isso, não mescla.
+// mesclagem. `secondPending` deixa um segundo pendente do contato, criado também antes de B
+// terminar: só os pendentes que já existiam no fim de B são as escolhas da janela (#440). Fica um
+// segundo atendente do setor, que não encerrou o B e, por isso, não mescla.
 export async function seedTicketToMergeIntoPending(
   baseURL: string,
-  { cancelled = false }: { cancelled?: boolean } = {},
+  {
+    cancelled = false,
+    secondPending = false,
+  }: { cancelled?: boolean; secondPending?: boolean } = {},
 ) {
   const { sector, agent } = await seedSector(baseURL)
   const { id, phone } = unique()
@@ -728,6 +733,19 @@ export async function seedTicketToMergeIntoPending(
       data: { reason },
     }),
   )
+  // O segundo pendente do contato nasce antes do B terminar, para ser uma escolha válida.
+  let secondPendingId: number | undefined
+  if (secondPending) {
+    await receive('Ainda estou esperando a nota fiscal')
+    const second = await queued()
+    ok(await api.post(`/api/tickets/${second.id}/assign`))
+    ok(
+      await api.post(`/api/tickets/${second.id}/pending`, {
+        data: { reason: `${reason} (segundo)` },
+      }),
+    )
+    secondPendingId = second.id
+  }
   await receive('Voltei, o comprovante veio errado')
   const closed = await queued()
   ok(await api.post(`/api/tickets/${closed.id}/assign`))
@@ -756,6 +774,7 @@ export async function seedTicketToMergeIntoPending(
     organization,
     module,
     pendingId: pending.id,
+    secondPendingId,
     ticketId: closed.id,
     reason,
     cancelReason,

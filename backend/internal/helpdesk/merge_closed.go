@@ -15,11 +15,17 @@ import (
 
 // mergeRefusal tells why a closed ticket with this situation is not merged into
 // a pending one, or nil when it may be (#341, spec #332): only a resolved or a
-// cancelled one. A transferred ticket — including the old transfer made with the
-// closing form (#243) — and an already merged one are refused. The detail of the
-// ticket and the merge both ask here, so a new situation never shows the action
-// and refuses the merge, or the other way around.
-func mergeRefusal(closureType db.ClosureType) error {
+// cancelled one, and never a ticket registered by phone (#440) — it is born
+// closed and resolved, and the merge would write it as merged, which the
+// constraint `tickets_phone_closed` refuses. A transferred ticket — including
+// the old transfer made with the closing form (#243) — and an already merged
+// one are refused. The detail of the ticket and the merge both ask here, so a
+// new situation never shows the action and refuses the merge, or the other way
+// around.
+func mergeRefusal(channel db.TicketChannel, closureType db.ClosureType) error {
+	if channel == db.TicketChannelPhone {
+		return ErrPhoneNotMergeable
+	}
 	switch closureType {
 	case db.ClosureTypeResolved, db.ClosureTypeCancelled:
 		return nil
@@ -38,7 +44,10 @@ func mergeRefusal(closureType db.ClosureType) error {
 // — whoever closed it, supervisors and admins — and only a ticket closed as
 // resolved or cancelled: a transferred one (with or without the old form) or an
 // already merged one is refused. A must be pending, of the same contact and
-// sector as B. No reason is asked: the merge has its own audit.
+// sector as B, and must have started before B ended (#440): B continues in A,
+// so a pending opened after B ended is not its continuation. A ticket
+// registered by phone is refused too (#440). No reason is asked: the merge has
+// its own audit.
 //
 // A is locked first and B after it, the order of resuming a pending ticket from
 // a new one (#335), and the contact at the end, as in the closing. So a merge
@@ -71,7 +80,7 @@ func (s *Service) MergeClosedIntoPending(ctx context.Context, actor auth.User, t
 		if b.Status != db.TicketStatusClosed {
 			return ErrNotClosed
 		}
-		if err := mergeRefusal(b.ClosureType.ClosureType); err != nil {
+		if err := mergeRefusal(b.Channel, b.ClosureType.ClosureType); err != nil {
 			return err
 		}
 		if !mayCorrect(b, actor) {
@@ -85,6 +94,11 @@ func (s *Service) MergeClosedIntoPending(ctx context.Context, actor auth.User, t
 		}
 		if b.EndedAt == nil || b.ClosedAt == nil || b.ClosedByID == nil || b.AssigneeID == nil {
 			return fmt.Errorf("closed ticket %d without the closing data", b.ID)
+		}
+		// B continues in A: a pending that only started after B ended is not
+		// its continuation (#440), and its closing would end before it started.
+		if a.StartedAt.After(*b.EndedAt) {
+			return ErrPendingAfterClosed
 		}
 		// The contact is locked after the tickets, in the order of the closing,
 		// so the registration of the contact never waits on this one.

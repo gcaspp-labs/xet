@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -212,10 +213,13 @@ func (s *Service) openTicketOfContact(ctx context.Context, ticketID int64) error
 // PendingOfContact lists the pending tickets the contact has in the sector,
 // the oldest pending first, for the notice and the window of resuming one from
 // a new ticket (#335, spec #332). The caller checked that the user sees the
-// ticket.
-func (s *Service) PendingOfContact(ctx context.Context, contactID, sectorID int64) ([]db.ListPendingTicketsOfContactInSectorRow, error) {
+// ticket. With startedUntil, only the ones that had already started at that
+// moment: the choices of merging a closed ticket into a pending one (#440, spec
+// #332), since a closed ticket continues in a pending that existed when it
+// ended.
+func (s *Service) PendingOfContact(ctx context.Context, contactID, sectorID int64, startedUntil *time.Time) ([]db.ListPendingTicketsOfContactInSectorRow, error) {
 	rows, err := s.q.ListPendingTicketsOfContactInSector(ctx, db.ListPendingTicketsOfContactInSectorParams{
-		ContactID: contactID, SectorID: sectorID,
+		ContactID: contactID, SectorID: sectorID, StartedUntil: startedUntil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list pending tickets of the contact: %w", err)

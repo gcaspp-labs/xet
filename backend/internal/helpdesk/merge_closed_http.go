@@ -44,6 +44,10 @@ func (h *Handler) mergeIntoPending(w http.ResponseWriter, r *http.Request) {
 		})
 	case errors.Is(err, ErrCannotCorrect):
 		httpx.WriteError(w, http.StatusForbidden, "Apenas quem encerrou o atendimento e a supervisão do setor podem mesclá-lo num pendente.")
+	case errors.Is(err, ErrPhoneNotMergeable):
+		httpx.WriteError(w, http.StatusConflict, "Registro por telefone não pode ser mesclado em pendente.")
+	case errors.Is(err, ErrPendingAfterClosed):
+		httpx.WriteError(w, http.StatusConflict, "Este pendente começou depois deste atendimento. Escolha um pendente aberto antes do fim dele.")
 	case errors.Is(err, ErrNotClosed):
 		httpx.WriteError(w, http.StatusConflict, "Só um atendimento encerrado ou cancelado é mesclado num pendente.")
 	case errors.Is(err, ErrTransferred):
@@ -61,13 +65,13 @@ func (h *Handler) mergeIntoPending(w http.ResponseWriter, r *http.Request) {
 
 // mayMergeIntoPending tells whether the user may merge the closed ticket into a
 // pending one (#341, spec #332): the same people who correct it, and only while
-// its situation is resolved or cancelled (mergeRefusal). The pending choices
-// come only with it.
+// its situation is resolved or cancelled and it was not registered by phone
+// (mergeRefusal). The pending choices come only with it.
 func mayMergeIntoPending(t db.GetTicketDetailRow, actor auth.User) bool {
 	if t.Status != db.TicketStatusClosed || !t.ClosureType.Valid {
 		return false
 	}
-	if mergeRefusal(t.ClosureType.ClosureType) != nil {
+	if mergeRefusal(t.Channel, t.ClosureType.ClosureType) != nil {
 		return false
 	}
 	return mayCorrectCloser(t.ClosedByID, actor)
