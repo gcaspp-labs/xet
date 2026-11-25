@@ -16,7 +16,13 @@ import {
 // Contexto da API já autenticado, para preparar o estado do teste sem passar pela tela.
 async function apiAs(baseURL: string, email: string, password = userPassword) {
   const api = await apiRequest.newContext({ baseURL })
-  expect((await api.post('/api/auth/login', { data: { email, password } })).ok()).toBeTruthy()
+  try {
+    expect((await api.post('/api/auth/login', { data: { email, password } })).ok()).toBeTruthy()
+  } catch (error) {
+    // Login falhou: fecha o contexto aqui, porque quem chamou não recebe a conexão para fechar.
+    await api.dispose()
+    throw error
+  }
   return api
 }
 
