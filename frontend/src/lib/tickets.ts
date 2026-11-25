@@ -107,7 +107,7 @@ export function useMarkTicketRead() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (ticketId: number) => api<void>(`/tickets/${ticketId}/read`, { method: 'POST' }),
-    onSuccess: async (_data, ticketId) => {
+    onSuccess: async () => {
       // A recarga traz o novo momento da leitura, que muda a chave da reserva das mensagens: a
       // mensagem que chega depois alerta mesmo dentro dos 10 s do alerta anterior (spec #310). A
       // lista pedida antes desta leitura é descartada, para não voltar com as não lidas antigas
