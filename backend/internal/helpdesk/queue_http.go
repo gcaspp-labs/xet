@@ -35,6 +35,10 @@ type ticketSummaryResponse struct {
 	MunicipalityName *string               `json:"municipalityName"`
 	Assignee         *httpx.Ref            `json:"assignee"`
 	LastMessage      *lastMessageResponse  `json:"lastMessage"`
+	// ReadAt is the instant the current assignee last read the ticket; null when
+	// there is no assignee, as in the queue. The interface uses it to separate a
+	// message that arrives after a reading, even one made on another device (#392).
+	ReadAt *time.Time `json:"readAt"`
 	// UnreadCount is the number of messages received from the customer after
 	// the assignee's reading; 0 in the queue (#313, spec #310).
 	UnreadCount int32 `json:"unreadCount"`
@@ -52,6 +56,7 @@ func toTicketSummaryResponse(t Summary) ticketSummaryResponse {
 		},
 		OrganizationName: t.OrganizationName,
 		MunicipalityName: t.MunicipalityName,
+		ReadAt:           t.AssigneeReadAt,
 		UnreadCount:      t.UnreadCount,
 	}
 	if t.AssigneeID != nil && t.AssigneeName != nil {

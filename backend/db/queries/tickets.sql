@@ -46,7 +46,7 @@ select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     o.name as organization_name, m.name as municipality_name,
-    t.assignee_id, u.name as assignee_name,
+    t.assignee_id, u.name as assignee_name, t.assignee_read_at,
     (select count(*)::integer from messages m
      where m.ticket_id = t.id and m.direction = 'inbound' and m.origin = 'customer'
        and t.status = 'in_progress' and t.assignee_read_at is not null
