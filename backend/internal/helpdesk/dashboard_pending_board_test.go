@@ -69,8 +69,20 @@ func TestDashboardPendingBoard(t *testing.T) {
 		if row["reason"] != fmt.Sprintf("Aguardando o item %d", i) {
 			t.Errorf("row %d reason = %v", i, row["reason"])
 		}
-		if row["contact"].(map[string]any)["id"] != float64(ticket.ContactID) || row["pendingAt"] == nil || row["sector"] == nil {
-			t.Errorf("row %d without contact, when or sector: %v", i, row)
+		// A checagem de tipo é conferida: um contato ausente falha com a mensagem dizendo o que
+		// faltou na linha, em vez de derrubar o teste com um panic.
+		contact, ok := row["contact"].(map[string]any)
+		if !ok {
+			t.Fatalf("row %d: contact missing in the item: %v", i, row)
+		}
+		if contact["id"] != float64(ticket.ContactID) {
+			t.Errorf("row %d: contact id = %v, want %d", i, contact["id"], ticket.ContactID)
+		}
+		if row["pendingAt"] == nil {
+			t.Errorf("row %d: pendingAt (since when) missing in the item: %v", i, row)
+		}
+		if row["sector"] == nil {
+			t.Errorf("row %d: sector missing in the item: %v", i, row)
 		}
 	}
 	// Atendente não tem Dashboard, e o supervisor não pede outro setor.
@@ -97,7 +109,11 @@ func TestDashboardPendingBoard(t *testing.T) {
 		t.Fatalf("administrator: count %d, %d tickets", count, len(tickets))
 	}
 	first := tickets[0].(map[string]any)
-	if first["id"] != float64(rh.ID) || first["sector"].(map[string]any)["id"] != float64(d.rh.ID) {
+	firstSector, ok := first["sector"].(map[string]any)
+	if !ok {
+		t.Fatalf("administrator: sector missing in the first item: %v", first)
+	}
+	if first["id"] != float64(rh.ID) || firstSector["id"] != float64(d.rh.ID) {
 		t.Fatalf("administrator first row = %v, want the RH ticket %d", first, rh.ID)
 	}
 	// Com o setor escolhido, só os dele.

@@ -1294,6 +1294,30 @@ test('sem pendentes, o quadro diz "Nenhum chamado pendente"', async ({ page, bas
   await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente')
 })
 
+test('quando o quadro Pendentes não carrega, o aviso mostra o erro, não um quadro vazio', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  // A API recusa o quadro: quem olha o Dashboard precisa saber que não carregou, e não ler
+  // "Nenhum chamado pendente" achando que está tudo em dia.
+  await page.route('**/api/dashboard/pending**', (route) =>
+    route.fulfill({ status: 500, json: { error: 'Não foi possível carregar os pendentes.' } }),
+  )
+  await signIn(page, own.supervisor, userPassword)
+  await page.goto('/dashboard')
+
+  // O aviso é o mesmo das listas ao vivo; o react-query ainda tenta de novo antes de desistir.
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Não foi possível carregar os pendentes.' }),
+  ).toBeVisible({ timeout: 20_000 })
+  // Sem os dados não há quantidade nem o vazio no quadro.
+  const board = page.getByRole('region', { name: 'Pendentes' })
+  await expect(board).toBeVisible()
+  await expect(board).not.toContainText('(0)')
+  await expect(board).not.toContainText('Nenhum chamado pendente')
+})
+
 test('o quadro Pendentes se atualiza sozinho quando outro usuário marca e retoma', async ({
   page,
   baseURL,
