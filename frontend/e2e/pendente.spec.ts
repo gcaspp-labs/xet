@@ -24,9 +24,12 @@ async function apiAs(baseURL: string, email: string, password = userPassword) {
 async function connectedSector(baseURL: string) {
   const seed = await seedSector(baseURL)
   const api = await apiAs(baseURL, admin.email, admin.password)
-  expect((await api.post(`/api/sectors/${seed.sector.id}/connection`)).ok()).toBeTruthy()
-  expect((await api.post(`/api/test/messaging/sectors/${seed.sector.id}/pair`)).ok()).toBeTruthy()
-  await api.dispose()
+  try {
+    expect((await api.post(`/api/sectors/${seed.sector.id}/connection`)).ok()).toBeTruthy()
+    expect((await api.post(`/api/test/messaging/sectors/${seed.sector.id}/pair`)).ok()).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
   return seed
 }
 
@@ -40,14 +43,17 @@ async function receive(
   phone = unique().phone,
 ) {
   const api = await apiRequest.newContext({ baseURL })
-  expect(
-    (
-      await api.post(`/api/test/messaging/sectors/${sectorId}/receive`, {
-        data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: contact, body },
-      })
-    ).ok(),
-  ).toBeTruthy()
-  await api.dispose()
+  try {
+    expect(
+      (
+        await api.post(`/api/test/messaging/sectors/${sectorId}/receive`, {
+          data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: contact, body },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
   return phone
 }
 
@@ -56,20 +62,23 @@ async function addAgent(baseURL: string, sectorId: number) {
   const api = await apiAs(baseURL, admin.email, admin.password)
   const { id } = unique()
   const email = `agent2.${id}@e2e.test`
-  expect(
-    (
-      await api.post('/api/users', {
-        data: {
-          name: `agent2 ${id}`,
-          email,
-          role: 'agent',
-          sectorId,
-          password: userPassword,
-        },
-      })
-    ).ok(),
-  ).toBeTruthy()
-  await api.dispose()
+  try {
+    expect(
+      (
+        await api.post('/api/users', {
+          data: {
+            name: `agent2 ${id}`,
+            email,
+            role: 'agent',
+            sectorId,
+            password: userPassword,
+          },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
   return email
 }
 
@@ -497,10 +506,14 @@ test('o link do histórico para um pendente abre o chamado em Chamados', async (
 }) => {
   const seed = await seedClosedTicket(baseURL!)
   const api = await apiAs(baseURL!, admin.email, admin.password)
-  const closed = (await (await api.get(`/api/tickets/${seed.ticketId}`)).json()) as {
-    contact: { name: string; phone: string }
+  let closed: { contact: { name: string; phone: string } }
+  try {
+    closed = (await (await api.get(`/api/tickets/${seed.ticketId}`)).json()) as {
+      contact: { name: string; phone: string }
+    }
+  } finally {
+    await api.dispose()
   }
-  await api.dispose()
 
   // O mesmo contato volta a escrever: chamado novo, que fica pendente.
   await receive(
