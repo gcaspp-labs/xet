@@ -314,4 +314,4 @@ Acompanha a spec [#374](https://github.com/gcaspp-labs/xet/issues/374) (tarefa [
 | M14 | Passados 15 minutos do envio, tentar editar | O menu não oferece editar e explica o prazo encerrado; pela API, a recusa vem com o mesmo motivo e a mensagem não muda | Pendente |
 | M15 | Passados os dois dias do WhatsApp, tentar excluir para todos | A opção fica indisponível, e "Excluir para mim" continua valendo | Pendente |
 | M16 | Desconectar o número, editar pelo painel e reconectar | A edição não é dada como feita: aparece o aviso de que não deu para confirmar, e a mensagem fica como estava; se o WhatsApp aplicar depois, o eco corrige a mensagem | Pendente |
-| M17 | Excluir para todos uma mensagem enviada pelo celular do setor | O menu não oferece as ações, porque a mensagem não foi enviada pelo XET | Pendente |
+| M17 | Abrir o menu ⋯ de uma mensagem enviada pelo celular do setor | O menu não oferece as ações, porque a mensagem não foi enviada pelo XET | Pendente |
