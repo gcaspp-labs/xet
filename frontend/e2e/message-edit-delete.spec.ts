@@ -25,11 +25,9 @@ import {
 // as mudam, rodam um de cada vez.
 test.describe.configure({ mode: 'serial' })
 
-// O teste "mensagem originada no celular do setor não tem menu" intercepta a lista de mensagens com
-// `route.fetch()` e deixa a rota ativa até o fim. Se uma atualização da conversa buscar a lista
-// depois do fim do teste, o Playwright acusa "route.fetch: Test ended" no teste seguinte e esse
-// teste nem roda (#403): encerra a interceptação ao terminar e ignora só os erros dessas buscas
-// tardias.
+// Testes deste arquivo interceptam requisições com `page.route()`. Uma requisição que ainda esteja
+// em voo quando o teste termina faz o Playwright acusar o erro no teste seguinte, que nem roda
+// (#403): encerra as interceptações ao terminar e ignora só os erros dessas requisições tardias.
 test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
@@ -897,28 +895,34 @@ test('supervisor já conectado vê a edição e a exclusão sem recarregar e sem
 })
 
 test('mensagem originada no celular do setor não tem menu', async ({ page, request, baseURL }) => {
-  const { agent } = await seedCustomer(request, baseURL!, 'Cássio Celular')
-  const conversation = await openAssigned(page, agent, 'Cássio Celular')
-  await sendText(page, conversation, 'Enviada pelo XET')
-
-  // O adaptador falso não tem como enviar pelo celular do setor: a resposta real da API passa a trazer
-  // a mensagem como enviada fora do sistema, que é o que o backend entrega nesse caso.
-  await page.route(/\/api\/tickets\/\d+\/messages$/, async (route) => {
-    const response = await route.fetch()
-    const messages = (await response.json()) as ApiMessage[]
-    await route.fulfill({
-      response,
-      json: messages.map((m) =>
-        m.origin === 'agent' ? { ...m, origin: 'phone', author: null } : m,
-      ),
-    })
+  const { agent, sector, number } = await seedCustomer(request, baseURL!, 'Cássio Celular')
+  // O celular do setor manda no mesmo contato antes de o chamado ser assumido: o adaptador falso
+  // grava a mensagem no chamado aberto, com origin phone e sem autor, como o backend faz com o
+  // aparelho de verdade.
+  const outsideBody = 'Respondida pelo celular do setor'
+  await phone(request, sector.id, 'send-outside', {
+    externalMessageId: `E2E-PHONE-${unique().id}`,
+    phone: number,
+    contactName: 'Cássio Celular',
+    body: outsideBody,
   })
-  await page.reload()
-  const outside = sentIn(conversation)
+  const conversation = await openAssigned(page, agent, 'Cássio Celular')
+  const ticketId = ticketIdOf(page)
+
+  // A mensagem chega do backend com origin phone...
+  const fromPhone = (await listMessages(page, ticketId)).find((m) => m.body === outsideBody)
+  expect(fromPhone?.origin).toBe('phone')
+
+  // ...e aparece como "Enviada fora do sistema", sem menu nem botão de excluir.
+  const outside = sentIn(conversation).filter({ hasText: outsideBody })
   await expect(outside).toContainText('Enviada fora do sistema')
   await outside.hover()
   await expect(outside.getByRole('button', { name: 'Ações da mensagem' })).toHaveCount(0)
   await expect(outside.getByRole('button', { name: 'Excluir' })).toHaveCount(0)
+
+  // A mensagem enviada pelo XET no mesmo chamado tem o menu: é a diferença que o teste prova.
+  const xet = await sendText(page, conversation, 'Enviada pelo XET')
+  await expect(xet.bubble.getByRole('button', { name: 'Ações da mensagem' })).toHaveCount(1)
 })
 
 // O balão que tem um cartão de contato enviado, pelo nome do contato no nome acessível do cartão.
