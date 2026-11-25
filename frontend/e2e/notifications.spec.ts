@@ -490,6 +490,64 @@ test('administrador só conta o número desconectado, no sino e no título da ab
   await expect(page).toHaveTitle('Central de Atendimento')
 })
 
+// A prévia do sino é a da última mensagem do chamado, pelo mesmo endpoint da lista (#304). Depois
+// de uma exclusão "para todos" pelo XET, o conteúdo não pode voltar a aparecer ali.
+test('exclusão para todos esconde o conteúdo também na prévia do sino', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await receive(request, sector.id, 'Nina Sino')
+  await signIn(page, agent, userPassword)
+  const bell = bellOf(page)
+  await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+
+  // Pelo sino o chamado é assumido e aberto para responder; a mensagem enviada passa a ser a última.
+  await bell.click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Assumir chamado de Nina Sino' })
+    .click()
+  await expect(page.getByText('Chamado assumido')).toBeVisible()
+  await page.getByRole('link', { name: 'Abrir chamado', exact: true }).click()
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  const composer = page.getByRole('textbox', { name: 'Mensagem' })
+  await composer.fill('Segue o boleto de outubro')
+  await composer.press('Enter')
+  // O balão é achado pela posição: o texto muda com a exclusão.
+  const bubble = conversation.getByRole('listitem', { name: 'Mensagem enviada' }).last()
+  await expect(bubble).toContainText('Segue o boleto de outubro')
+  await expect(bubble).toContainText('Enviada')
+
+  await bubble.hover()
+  await bubble.getByRole('button', { name: 'Ações da mensagem' }).click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Excluir', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: 'Excluir mensagem' })
+    .getByRole('button', { name: 'Excluir para todos' })
+    .click()
+  await expect(bubble).toContainText('Mensagem excluída no XET')
+
+  // Devolvido à fila, o chamado volta ao sino com a última mensagem já excluída.
+  await chooseAction(page, 'Devolver à fila')
+  await page
+    .getByRole('dialog', { name: 'Devolver à fila' })
+    .getByRole('button', { name: 'Devolver à fila' })
+    .click()
+  await expect(page.getByText('Chamado devolvido à fila')).toBeVisible()
+  await expect(page).toHaveURL(/\/chamados$/)
+  await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+
+  await bell.click()
+  const item = page.getByRole('dialog').getByRole('listitem').filter({ hasText: 'Nina Sino' })
+  await expect(item).toContainText('Mensagem excluída no XET')
+  await expect(item).not.toContainText('Segue o boleto de outubro')
+})
+
 test('o sino cabe na largura do celular', async ({ page, request, baseURL }) => {
   const { sector, agent } = await connectedSector(baseURL!, request)
   await receive(request, sector.id, 'Lia Celular')
