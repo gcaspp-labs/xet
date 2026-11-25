@@ -167,6 +167,13 @@ test('o responsável abre o menu, escolhe Contato, busca por nome, telefone, ór
   await expect(row(page, names.alves)).toContainText(`${organizations.prefeitura} — Campinas`)
   await expect(row(page, names.prado)).toContainText(`${organizations.camara} — Itu`)
 
+  // O ticket pede nenhuma mudança visual: a linha mantém o espaço de 2 px entre o nome e o
+  // telefone (o antigo gap-0.5), que a revisão pegou faltando.
+  const [nameLine, phoneLine] = await row(page, names.alves).locator(':scope > span').all()
+  const nameBox = (await nameLine.boundingBox())!
+  const phoneBox = (await phoneLine.boundingBox())!
+  expect(phoneBox.y - (nameBox.y + nameBox.height)).toBeCloseTo(2, 0)
+
   // Busca por telefone, por órgão e por município.
   await search(page).fill(phones.alves)
   await expect(row(page, names.alves)).toBeVisible()
@@ -365,6 +372,81 @@ test('Voltar preserva a página já carregada da lista', async ({ page, request,
   await expect(results(page).getByRole('button')).toHaveCount(21)
   await expect(last).toBeFocused()
   await expect(last).toBeVisible()
+})
+
+test('as setas do teclado percorrem a lista de contatos', async ({ page, request, baseURL }) => {
+  const { sector } = await openOwnTicket(page, request, baseURL!)
+  const { id } = unique()
+  // Marcador só de letras: a busca não esbarra no telefone de outro teste no banco compartilhado.
+  const marker = Array.from(
+    { length: 4 },
+    () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)],
+  ).join('')
+  const names = [1, 2, 3].map((index) => `Seta ${marker} ${index}`)
+  await seedContacts(
+    baseURL!,
+    sector.id,
+    [{ name: `Órgão ${marker}`, municipality: 'Itu' }],
+    names.map((name, index) => ({
+      name,
+      phone: `5511${id.slice(0, 5)}9${String(index).padStart(3, '0')}`,
+      organization: 0,
+    })),
+  )
+
+  await openSendContact(page)
+  await search(page).fill(`Seta ${marker}`)
+  await expect(results(page).getByRole('button')).toHaveCount(3)
+
+  // Tab chega à primeira linha; as setas descem e sobem pela lista, e Enter escolhe a em foco.
+  await tabTo(page, row(page, names[0]))
+  await expect(row(page, names[0])).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(row(page, names[1])).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(row(page, names[2])).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(row(page, names[1])).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(
+    dialog(page).getByRole('group', { name: new RegExp(`^Contato: ${names[1]},`) }),
+  ).toBeVisible()
+})
+
+test('focar o último contato carregado traz a próxima página', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector } = await openOwnTicket(page, request, baseURL!)
+  const { id } = unique()
+  const marker = Array.from(
+    { length: 4 },
+    () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)],
+  ).join('')
+  const names = Array.from(
+    { length: 21 },
+    (_, index) => `Fim ${marker} ${String(index + 1).padStart(2, '0')}`,
+  )
+  await seedContacts(
+    baseURL!,
+    sector.id,
+    [{ name: `Órgão ${marker}`, municipality: 'Itu' }],
+    names.map((name, index) => ({
+      name,
+      phone: `5511${id.slice(0, 5)}${String(index).padStart(4, '0')}`,
+      organization: 0,
+    })),
+  )
+
+  await openSendContact(page)
+  await search(page).fill(`Fim ${marker}`)
+  // A página 1 tem 20 contatos; o foco no último traz a página 2, e a seta desce para o 21º.
+  await expect(results(page).getByRole('button')).toHaveCount(20)
+  await row(page, names[19]).focus()
+  await expect(results(page).getByRole('button')).toHaveCount(21)
+  await page.keyboard.press('ArrowDown')
+  await expect(row(page, names[20])).toBeFocused()
 })
 
 test('o fluxo inteiro funciona pelo teclado, com nomes acessíveis', async ({

@@ -1,140 +1,17 @@
-import { BookUser, Plus } from 'lucide-react'
-import { type FormEvent, type KeyboardEvent, useDeferredValue, useRef, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
-import { ContactFilters } from '@/components/ContactFilters'
+import { ContactSearch, ContactSummary } from '@/components/ContactSearch'
 import { ContactSheet } from '@/components/ContactSheet'
 import { FormDialog } from '@/components/FormDialog'
-import { SearchBox } from '@/components/SearchBox'
 import { Button } from '@/components/ui/button'
-import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { newRequestId } from '@/lib/conversation'
-import {
-  type Contact,
-  useContactFilter,
-  useContactOptions,
-  useContactPagination,
-} from '@/lib/directory'
-import { formatPhone, organizationLabel } from '@/lib/format'
+import { type Contact } from '@/lib/directory'
 import { openTicketOf, useStartConversation } from '@/lib/tickets'
 
 const existingNotice = 'O contato já tem um chamado aberto no setor.'
-
-function ContactSummary({ contact }: { contact: Contact }) {
-  return (
-    <>
-      <span className="body-strong block truncate">{contact.name}</span>
-      <span className="caption block truncate text-ink-faint">
-        {contact.phone ? (
-          <span className="mono-num">{formatPhone(contact.phone)}</span>
-        ) : (
-          'Sem telefone'
-        )}
-        {' · '}
-        {contact.organization
-          ? organizationLabel(contact.organization.name, contact.organization.municipality.name)
-          : 'Não cadastrado'}
-      </span>
-    </>
-  )
-}
-
-// Busca do contato: escolher um contato com chamado aberto no setor leva ao chamado.
-function ContactSearch({
-  checking,
-  onChoose,
-  onRegister,
-}: {
-  checking: boolean
-  onChoose: (contact: Contact) => void
-  onRegister: () => void
-}) {
-  const [query, setQuery] = useState('')
-  const contactFilter = useContactFilter()
-  const search = useDeferredValue(query)
-  const { filter } = contactFilter
-  const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useContactOptions(search, filter)
-  const contacts = data?.pages.flatMap((page) => page.items) ?? []
-  const end = useContactPagination({
-    query: search,
-    filter,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
-    itemCount: contacts.length,
-  })
-
-  // As setas movem o foco entre os contatos; ao focar o último contato que dá pra escolher, vem a próxima página.
-  const moveFocus = (event: KeyboardEvent<HTMLUListElement>) => {
-    const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
-    if (step === 0) {
-      return
-    }
-    const options = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
-    )
-    const next = options[options.indexOf(document.activeElement as HTMLButtonElement) + step]
-    if (next) {
-      event.preventDefault()
-      next.focus()
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <SearchBox
-        value={query}
-        onChange={setQuery}
-        label="Buscar contato"
-        placeholder="Nome, município, telefone ou CNPJ"
-      />
-      <ContactFilters {...contactFilter} />
-      <Button type="button" variant="outline" size="sm" className="self-start" onClick={onRegister}>
-        <Plus strokeWidth={1.7} aria-hidden />
-        Novo contato
-      </Button>
-      {contacts.length > 0 ? (
-        <ul
-          aria-label="Contatos"
-          className="flex flex-col divide-y divide-line-soft"
-          onKeyDown={moveFocus}
-        >
-          {contacts.map((contact, index) => (
-            <li key={contact.id}>
-              <button
-                type="button"
-                disabled={checking || !contact.phone}
-                onClick={() => onChoose(contact)}
-                onFocus={() => {
-                  if (
-                    hasNextPage &&
-                    !isFetchingNextPage &&
-                    contacts.slice(index + 1).every((c) => !c.phone)
-                  ) {
-                    void fetchNextPage()
-                  }
-                }}
-                className="w-full min-w-0 rounded-(--radius-7) px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ContactSummary contact={contact} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <Empty>
-          <EmptyMedia>
-            <BookUser strokeWidth={1.7} aria-hidden />
-          </EmptyMedia>
-          <EmptyDescription>Nenhum contato encontrado.</EmptyDescription>
-        </Empty>
-      )}
-      <div ref={end} aria-hidden />
-    </div>
-  )
-}
 
 // Janela de nova conversa: escolhe o contato e escreve a primeira mensagem,
 // enviada pelo número do setor.
@@ -257,7 +134,9 @@ export function NewConversationSheet({
             </Field>
           </>
         ) : (
+          // Busca do contato: escolher um contato com chamado aberto no setor leva ao chamado.
           <ContactSearch
+            variant="new-conversation"
             checking={checking}
             onChoose={(chosen) => void choose(chosen)}
             onRegister={() => setRegistering(true)}
