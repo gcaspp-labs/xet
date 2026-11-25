@@ -662,6 +662,19 @@ export async function chooseAction(page: Page, name: string) {
   await page.getByRole('menuitem', { name, exact: true }).click()
 }
 
+// O menu (⋯) entra no DOM depois do clique. Sem esperar por ele, um Esc cairia na regra da tela
+// (com nada por cima, volta para Chamados) e fecharia o chamado no meio do teste. Abrir e fechar
+// sempre por aqui deixa a espera num lugar só (#389).
+export async function openMenuAndWait(trigger: Locator) {
+  await trigger.click()
+  await expect(trigger.page().getByRole('menu')).toBeVisible()
+}
+
+export async function closeMenuWithEsc(page: Page) {
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+}
+
 // Número do chamado de um contato que está na fila. Chamados só abre pelo endereço o chamado da
 // fila que ninguém assumiu, então o teste busca o número na API da própria sessão. Sem `sectorId`,
 // usa o setor da pessoa; o administrador informa o setor.

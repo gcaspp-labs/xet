@@ -12,6 +12,7 @@ import {
   adminApi,
   json,
   ok,
+  openMenuAndWait,
   openQueued,
   seedContact,
   seedSector,
@@ -109,10 +110,7 @@ async function sendText(page: Page, conversation: Locator, text: string) {
 
 async function openMenu(bubble: Locator) {
   await bubble.hover()
-  await bubble.getByRole('button', { name: 'Ações da mensagem' }).click()
-  // O menu abre depois do clique: com ele fora do DOM, um Esc cairia na regra da tela
-  // (com nada por cima, volta para Chamados) e fecharia o chamado no meio do teste.
-  await expect(bubble.page().getByRole('menu')).toBeVisible()
+  await openMenuAndWait(bubble.getByRole('button', { name: 'Ações da mensagem' }))
 }
 
 async function chooseInMenu(bubble: Locator, item: 'Responder' | 'Editar' | 'Excluir') {
