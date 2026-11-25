@@ -1,5 +1,13 @@
 // Mesclar um atendimento encerrado num chamado pendente: ver features/mesclar-encerrado-em-pendente.md.
-import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
+import {
+  atendimentosRowOf,
+  conversationOf,
+  expect,
+  expectAuditOrder,
+  journey,
+  panelOf,
+  queueRowOf,
+} from '../scripts/journey-lib.mjs'
 
 await journey('mesclar-encerrado-em-pendente', async (t) => {
   const reason = 'Aguardando o órgão confirmar o número antigo do protocolo'
@@ -31,10 +39,6 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
   )
   const agent = sector.agents[0]
 
-  // A aba que não está aberta não entra na árvore de acessibilidade: a linha é sempre a da aba atual.
-  const queueRowOf = (page) =>
-    panelOf(page).getByRole('listitem').filter({ hasText: customer.name })
-
   const page = await t.signIn(agent)
 
   const pending = await t.step(
@@ -54,7 +58,7 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
       await expect(page.getByText('Chamado marcado como pendente')).toBeVisible()
       // A tela volta para a lista e o chamado sai da Fila: ele está na aba Pendentes.
       await expect(page).toHaveURL(/\/chamados$/)
-      await expect(queueRowOf(page)).toHaveCount(0)
+      await expect(queueRowOf(page, customer)).toHaveCount(0)
       await t.shot(page, 'a-pendente')
       return ticket
     },
@@ -65,7 +69,7 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
       .getByRole('tab', { name: /^Fila/ })
       .click()
     await t.phone(sector.id).receive(customer, 'Voltei com o comprovante errado')
-    await expect(queueRowOf(page)).toContainText('Voltei com o comprovante errado')
+    await expect(queueRowOf(page, customer)).toContainText('Voltei com o comprovante errado')
     await t.shot(page, 'b-na-fila')
     // O id de B sai do banco: a entrega da mensagem devolve o id da mensagem, não do chamado.
     const [ticket] = t.sql(
@@ -98,12 +102,7 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
   })
 
   await t.step('Em Atendimentos, abre o encerrado e usa Mesclar em pendente com A escolhido', async () => {
-    await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Buscar chamados' }).fill(second.protocol)
-    const rows = page.getByRole('table').locator('tbody').getByRole('row')
-    await expect(rows).toHaveCount(1)
-    const row = rows.first()
+    const row = await atendimentosRowOf(page, second.protocol)
     await expect(row).toContainText('Encerrado')
     await expect(row).not.toContainText('Mesclado')
     // A linha inteira abre a ficha; o link do protocolo é o alvo de verdade.
@@ -171,12 +170,7 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
   )
 
   await t.step('B aparece em Atendimentos como Mesclado, com o link para A', async () => {
-    await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Buscar chamados' }).fill(second.protocol)
-    const rows = page.getByRole('table').locator('tbody').getByRole('row')
-    await expect(rows).toHaveCount(1)
-    const row = rows.first()
+    const row = await atendimentosRowOf(page, second.protocol)
     await expect(row).toContainText(customer.name)
     await expect(row).toContainText('Mesclado')
     await expect(row).not.toContainText('Encerrado')
@@ -197,7 +191,7 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
       .getByRole('tab', { name: /^Pendentes/ })
       .click()
     await expect(panelOf(page)).toContainText('Nenhum chamado pendente')
-    await expect(queueRowOf(page)).toHaveCount(0)
+    await expect(queueRowOf(page, customer)).toHaveCount(0)
     await expect(panelOf(page)).not.toContainText(pending.protocol)
     await t.shot(page, 'pendentes-vazio')
   })
@@ -242,24 +236,14 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
     )
     // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
     // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
-    const entries = audit.map((entry) => `${entry.ticket_id} ${entry.action}`)
-    const expected = [
+    expectAuditOrder(audit, [
       `${pending.id} ticket_assigned`,
       `${pending.id} ticket_pending`,
       `${second.id} ticket_assigned`,
       `${second.id} ticket_closed`,
       `${second.id} ticket_merged`,
       `${pending.id} ticket_closed_by_merge`,
-    ]
-    let after = 0
-    for (const entry of expected) {
-      const index = entries.indexOf(entry, after)
-      expect(
-        index,
-        `registro "${entry}" ausente ou fora de ordem; auditoria: ${entries.join(' | ')}`,
-      ).toBeGreaterThanOrEqual(0)
-      after = index + 1
-    }
+    ])
     const closedByMerge = audit.find((entry) => entry.action === 'ticket_closed_by_merge')
     expect(closedByMerge.changes.merged_protocol).toEqual({ from: null, to: second.protocol })
     // B era encerrado: o registro de A não tem motivo de cancelamento.

@@ -1,5 +1,14 @@
 // Chamado pendente e retomada por mesclagem: ver features/pendente-retomada.md.
-import { conversationOf, expect, journey, mineOf, panelOf } from '../scripts/journey-lib.mjs'
+import {
+  atendimentosRowOf,
+  conversationOf,
+  expect,
+  expectAuditOrder,
+  journey,
+  mineOf,
+  panelOf,
+  queueRowOf,
+} from '../scripts/journey-lib.mjs'
 
 await journey('pendente-retomada', async (t) => {
   const reason = 'Aguardando o órgão confirmar o número do protocolo antigo'
@@ -13,10 +22,6 @@ await journey('pendente-retomada', async (t) => {
     },
   )
   const agent = sector.agents[0]
-
-  // A aba que não está aberta não entra na árvore de acessibilidade: a linha é sempre a da aba atual.
-  const queueRowOf = (page) =>
-    panelOf(page).getByRole('listitem').filter({ hasText: customer.name })
 
   const agentPage = await t.signIn(agent)
 
@@ -52,7 +57,7 @@ await journey('pendente-retomada', async (t) => {
     await panelOf(agentPage)
       .getByRole('tab', { name: /^Pendentes/ })
       .click()
-    const row = queueRowOf(agentPage)
+    const row = queueRowOf(agentPage, customer)
     await expect(row).toBeVisible()
     await expect(row).toContainText(pending.protocol)
     await expect(row).toContainText(reason)
@@ -90,7 +95,7 @@ await journey('pendente-retomada', async (t) => {
       .getByRole('tab', { name: /^Fila/ })
       .click()
     await t.phone(sector.id).receive(customer, 'Voltei com a nota fiscal')
-    const row = queueRowOf(agentPage)
+    const row = queueRowOf(agentPage, customer)
     await expect(row).toContainText('Voltei com a nota fiscal')
     await t.shot(agentPage, 'b-na-fila')
     const [ticket] = t.sql(
@@ -164,12 +169,7 @@ await journey('pendente-retomada', async (t) => {
   })
 
   await t.step('B aparece em Atendimentos como Mesclado, com o link para A', async () => {
-    await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
-    await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
-    await agentPage.getByRole('searchbox', { name: 'Buscar chamados' }).fill(second.protocol)
-    const rows = agentPage.getByRole('table').locator('tbody').getByRole('row')
-    await expect(rows).toHaveCount(1)
-    const row = rows.first()
+    const row = await atendimentosRowOf(agentPage, second.protocol)
     await expect(row).toContainText(customer.name)
     await expect(row).toContainText('Mesclado')
     await expect(row).not.toContainText('Encerrado')
@@ -217,23 +217,13 @@ await journey('pendente-retomada', async (t) => {
     )
     // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
     // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
-    const entries = audit.map((entry) => `${entry.ticket_id} ${entry.action}`)
-    const expected = [
+    expectAuditOrder(audit, [
       `${pending.id} ticket_assigned`,
       `${pending.id} ticket_pending`,
       `${second.id} ticket_assigned`,
       `${second.id} ticket_merged`,
       `${pending.id} ticket_resumed_by_merge`,
-    ]
-    let after = 0
-    for (const entry of expected) {
-      const index = entries.indexOf(entry, after)
-      expect(
-        index,
-        `registro "${entry}" ausente ou fora de ordem; auditoria: ${entries.join(' | ')}`,
-      ).toBeGreaterThanOrEqual(0)
-      after = index + 1
-    }
+    ])
     const resumed = audit.find((entry) => entry.action === 'ticket_resumed_by_merge')
     expect(resumed.changes.merged_protocol).toEqual({ from: null, to: second.protocol })
     const merged = audit.find((entry) => entry.action === 'ticket_merged')
