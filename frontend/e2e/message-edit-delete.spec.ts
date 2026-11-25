@@ -24,6 +24,15 @@ import {
 // as mudam, rodam um de cada vez.
 test.describe.configure({ mode: 'serial' })
 
+// O teste "mensagem originada no celular do setor não tem menu" intercepta a lista de mensagens com
+// `route.fetch()` e deixa a rota ativa até o fim. Se uma atualização da conversa buscar a lista
+// depois do fim do teste, o Playwright acusa "route.fetch: Test ended" no teste seguinte e esse
+// teste nem roda (#403): encerra a interceptação ao terminar e ignora só os erros dessas buscas
+// tardias.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
 type ApiMessage = {
   id: number
   origin: string
