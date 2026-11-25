@@ -152,7 +152,7 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 		}
 		action, err = q.CreateMessageAction(ctx, db.CreateMessageActionParams{
 			ClientRequestID: req.ClientRequestID, MessageID: target.ID, TicketID: target.TicketID, SectorID: target.SectorID,
-			AuthorID: actor.ID, Kind: req.Kind, Body: body, Status: status, CreatedAt: actionTime(target, time.Now()),
+			AuthorID: actor.ID, Kind: req.Kind, Body: body, Status: status, CreatedAt: actionTime(target, time.Now(), true),
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -248,16 +248,18 @@ func (s *Service) ChangeMessage(ctx context.Context, provider messaging.Provider
 	return s.actionResult(ctx, current)
 }
 
-// actionTime is when an action is asked, taken with the ticket locked: after
-// the actions settled before it, with the same clock that applies an accepted
-// one, and after the current version, so the echo of an uncertain action,
-// applied at this time, never falls behind a version applied before it.
-func actionTime(m db.Message, now time.Time) time.Time {
-	now = now.Truncate(time.Microsecond)
-	if m.EditedAt != nil && !m.EditedAt.Before(now) {
+// actionTime is when an action is asked or applied, taken with the ticket
+// locked: truncated to the microsecond and, with afterVersion, kept strictly
+// after the current version of the message, so it never falls behind a version
+// applied before it. The acceptance of an action and a newest edit use it; the
+// echo of a late action does not, and keeps the time it was asked, so it never
+// undoes a newer version.
+func actionTime(m db.Message, at time.Time, afterVersion bool) time.Time {
+	at = at.Truncate(time.Microsecond)
+	if afterVersion && m.EditedAt != nil && !m.EditedAt.Before(at) {
 		return m.EditedAt.Add(time.Microsecond)
 	}
-	return now
+	return at
 }
 
 // repeatedChange answers a repeated request with the result of the first one,
@@ -386,7 +388,7 @@ func applyAction(ctx context.Context, q *db.Queries, a db.MessageAction, eventID
 	if err != nil {
 		return fmt.Errorf("get message: %w", err)
 	}
-	at = at.Truncate(time.Microsecond)
+	at = actionTime(m, at, newest && a.Kind == db.MessageActionKindEdit)
 	change := db.CreateMessageChangeParams{
 		SectorID: m.SectorID, MessageID: &m.ID, TargetExternalMessageID: m.ExternalMessageID,
 		Origin: db.MessageOriginAgent, AuthorID: &a.AuthorID, ExternalEventID: eventID,
@@ -397,9 +399,6 @@ func applyAction(ctx context.Context, q *db.Queries, a db.MessageAction, eventID
 	case db.MessageActionKindEdit:
 		if err := q.CreateOriginalVersion(ctx, m.ID); err != nil {
 			return fmt.Errorf("keep original version: %w", err)
-		}
-		if newest && m.EditedAt != nil && !m.EditedAt.Before(at) {
-			at = m.EditedAt.Add(time.Microsecond)
 		}
 		change.Kind, change.Body, change.OccurredAt = db.MessageChangeKindEdit, a.Body, at
 		auditAction = "message_edited"

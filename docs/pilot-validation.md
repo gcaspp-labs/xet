@@ -158,6 +158,7 @@ O "Pronto quando" destas tasks depende do número real, e os testes foram adiado
 - **#198:** pela API (a tela vem na #200), reagir a uma mensagem recebida do cliente e a uma enviada pelo setor (pelo painel e pelo celular): a reação aparece no celular do cliente, sem apelido, na mensagem certa; trocar o emoji substitui no celular; repetir o mesmo emoji remove; a reação feita no celular do setor é substituída pela do painel; com o número desconectado, a API avisa e nada muda.
 - **#201:** pela API (a tela vem depois), conferir em `GET /api/tickets/{id}/messages` a citação de respostas feitas no celular do cliente: citando uma mensagem do chamado, recebida e enviada pelo setor (fica ligada, com o trecho); citando uma mensagem de antes do XET ou de um chamado já encerrado (sem ligação, com o trecho do WhatsApp); citando áudio, imagem, vídeo e PDF (tipo e legenda ou nome do arquivo, sem a mídia); e uma resposta citada feita no celular do setor. Conferir também a citação vinda de chat por LID e de mensagem temporária ou de visualização única, que o WhatsApp pode embrulhar e chegar como `unsupported` no trecho.
 - **#202:** pela API (a tela vem depois), enviar com `quotedMessageId` um texto, uma imagem com legenda, um PDF e um áudio gravado citando: uma mensagem de texto do cliente, uma mensagem enviada pelo setor, um áudio, uma imagem e um PDF. No celular do cliente, cada resposta aparece com a bolha da citação na mensagem certa (com o trecho: texto, legenda ou nome do arquivo), o texto e a legenda com o apelido, e o áudio como mensagem de voz sem apelido. Desconectar, enviar citando (vira "Falhou"), reconectar e reenviar: chega uma vez só, com a mesma citação. Conferir também num chat por LID (se a bolha aparece citando a mensagem do cliente).
+- **#302:** editar texto e legenda pelo painel e pelo celular do setor, e excluir para todos pelo painel e pelo celular, seguindo o roteiro de edição e exclusão abaixo.
 
 ## Roteiro manual: reação e citação com o WhatsApp real
 
@@ -266,3 +267,51 @@ Acompanha a spec [#312](https://github.com/gcaspp-labs/xet/issues/312) (envio na
 | K12 | No painel, responder com texto citando um cartão recebido | O celular mostra a bolha da citação no cartão certo, com o nome | Pendente |
 | K13 | No painel, enviar um cartão como resposta citando uma mensagem do cliente | O cartão chega ao celular com a bolha da citação na mensagem certa | Pendente |
 | K14 | No painel, excluir para todos um cartão enviado | O cartão some do celular do cliente | Pendente |
+
+## Roteiro manual: edição e exclusão com o WhatsApp real
+
+Acompanha a spec [#374](https://github.com/gcaspp-labs/xet/issues/374) (tarefa [#453](https://github.com/gcaspp-labs/xet/issues/453)); a pendência com o número real vem da [#302](https://github.com/gcaspp-labs/xet/issues/302). Só o aparelho real prova o que o WhatsApp faz com a edição e a exclusão, por isso estes itens são **manuais**: não entram no CI e não bloqueiam o merge de nenhuma tarefa. A execução e o registro do resultado são da pessoa, depois que as tarefas da spec entrarem.
+
+**Antes de começar**
+
+- As mesmas regras do roteiro de reação e citação: só **número de teste** no setor de teste e outro celular de teste no papel do cliente; nenhum contato, telefone ou órgão reais (o repositório é público).
+- O chamado de teste precisa estar **aberto e assumido** por quem vai editar e excluir.
+- Para cada item, envie antes uma mensagem nova pelo painel, porque o prazo de edição é de 15 minutos contados do envio original.
+- Registre em cada linha a **data**, a **versão** (commit ou tag do XET em teste) e o **resultado** (OK, Falhou, com uma frase do que apareceu). Linhas não executadas ficam como **Pendente**.
+
+### Edição pelo painel (painel → celular do cliente)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| M1 | No menu ⋯ de uma mensagem de texto enviada pelo painel, escolher Editar, trocar o texto e confirmar | O celular do cliente mostra o texto novo na **mesma** mensagem, sem uma mensagem nova, e o apelido de quem enviou continua | Pendente |
+| M2 | Editar a legenda de uma imagem, de um vídeo e de um PDF enviados pelo painel | O celular mostra a legenda nova no mesmo arquivo, sem reenviar o arquivo | Pendente |
+| M3 | Editar duas vezes seguidas a mesma mensagem | O celular fica com a última edição; no painel, "Ver versões" lista a original e as duas edições, em ordem, e só a última leva "Atual" | Pendente |
+| M4 | Recarregar o painel depois de editar | A mensagem continua com o texto novo, e "Ver versões" continua mostrando a original | Pendente |
+| M5 | Deixar o campo de edição vazio num texto e confirmar | A edição é recusada com o aviso "Escreva a mensagem.", e a mensagem fica como estava (a legenda de um anexo pode ficar vazia) | Pendente |
+| M6 | Tentar editar um áudio e um cartão de contato | O menu não oferece editar e explica o motivo ("Áudio não pode ser editado.", "Contato não pode ser editado.") | Pendente |
+
+### Edição pelo celular do setor (celular → painel)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| M7 | No celular do setor, editar um texto enviado pelo painel | O painel mostra o texto novo na mesma mensagem, com a alteração registrada como feita pelo celular do setor | Pendente |
+| M8 | No celular do setor, editar a legenda de uma imagem enviada pelo painel | O painel mostra a legenda nova, sem reenviar a imagem | Pendente |
+
+### Exclusão
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| M9 | No painel, excluir uma mensagem para todos | A mensagem some do celular do cliente; no painel ela fica marcada como excluída, e Atendimentos guarda o conteúdo | Pendente |
+| M10 | No painel, excluir uma mensagem para mim | A mensagem some do painel de todo o setor, continua no celular do cliente, e Atendimentos guarda o conteúdo | Pendente |
+| M11 | No celular do setor, excluir para todos uma mensagem enviada pelo painel | O painel marca a mensagem como excluída para todos, com a exclusão registrada como feita pelo celular do setor | Pendente |
+| M12 | No painel, excluir para mim uma mensagem e, depois, no celular do setor, excluir para todos a mesma mensagem | Aparecem duas exclusões, em ordem, cada uma com o seu horário e quem fez; o alcance final é "para todos" | Pendente |
+| M13 | Conferir em Atendimentos uma mensagem editada e depois excluída | "Ver versões e exclusão" mostra a original, as edições e a exclusão, em ordem | Pendente |
+
+### Recusas e limites
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| M14 | Passados 15 minutos do envio, tentar editar | O menu não oferece editar e explica o prazo encerrado; pela API, a recusa vem com o mesmo motivo e a mensagem não muda | Pendente |
+| M15 | Passados os dois dias do WhatsApp, tentar excluir para todos | A opção fica indisponível, e "Excluir para mim" continua valendo | Pendente |
+| M16 | Desconectar o número, editar pelo painel e reconectar | A edição não é dada como feita: aparece o aviso de que não deu para confirmar, e a mensagem fica como estava; se o WhatsApp aplicar depois, o eco corrige a mensagem | Pendente |
+| M17 | Abrir o menu ⋯ de uma mensagem enviada pelo celular do setor | O menu não oferece as ações, porque a mensagem não foi enviada pelo XET | Pendente |
