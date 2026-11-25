@@ -183,10 +183,12 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
     const link = row.getByRole('link', { name: `Ver chamado ${pending.protocol}` })
     await expect(link).toBeVisible()
     await t.shot(page, 'b-mesclado-com-link-para-a')
-    // A está encerrado: o link abre a ficha dele em Atendimentos.
+    // A está encerrado: o link abre a ficha dele em Atendimentos, com o assunto herdado.
     await link.click()
     await expect(page).toHaveURL(new RegExp(`/atendimentos/${pending.id}$`))
-    await expect(conversationOf(page)).toContainText(subject)
+    const details = page.getByRole('region', { name: 'Atendimento', exact: true })
+    await expect(details).toContainText('Encerrado')
+    await expect(details).toContainText(subject)
   })
 
   await t.step('A não está mais na aba Pendentes', async () => {
