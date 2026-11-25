@@ -109,6 +109,17 @@ await journey('mesclado-no-atendimento', async (t) => {
     await expect(page).toHaveURL(new RegExp(`/atendimentos/${original.id}$`))
   })
 
+  await t.step('O histórico do contato mostra o mesclado com a situação Mesclado', async () => {
+    await page.getByRole('tab', { name: 'Histórico' }).click()
+    const entry = page
+      .getByRole('list', { name: 'Chamados do contato' })
+      .getByRole('listitem')
+      .filter({ hasText: merged.protocol })
+    await expect(entry).toContainText('Mesclado')
+    await expect(entry).not.toContainText('Encerrado')
+    await t.shot(page, 'historico-do-contato')
+  })
+
   await t.step('Estado final no banco', async () => {
     const mergedRow = t.sql(
       `select status, closure_type, merged_into_ticket_id from tickets where id = ${merged.id}`,
