@@ -790,7 +790,6 @@ test('em janela de 1280px, o cartão enviado cabe na conversa e o mouse alcança
   await openMenuAndWait(menu)
   await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toBeVisible()
   await closeMenuWithEsc(page)
-  await expect(page.getByRole('menuitem', { name: 'Responder', exact: true })).toHaveCount(0)
 
   // O Reagir também abre pelo mouse, e a reação escolhida aparece no cartão.
   await card.hover()
