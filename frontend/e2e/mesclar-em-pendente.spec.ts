@@ -6,6 +6,7 @@ import {
   seedTicketToMergeIntoPending,
   seedTransferredTicket,
   signIn,
+  unique,
   userPassword,
 } from './fixtures'
 
@@ -27,6 +28,57 @@ const mergeNotices = (page: Page, protocol: string) =>
   conversation(page)
     .getByRole('listitem', { name: 'Registro do chamado' })
     .filter({ hasText: `mesclou o atendimento ${protocol} neste chamado` })
+
+type Seed = Awaited<ReturnType<typeof seedTicketToMergeIntoPending>>
+type SectorTicket = { id: number; protocol: string; status: string; contact: { name: string } }
+
+// O cliente volta a escrever: abre um chamado na fila (o pendente não recebe mensagem nova), e o
+// atendente assume.
+async function openTicketAsContact(page: Page, seed: Seed, body: string) {
+  const received = await page.request.post(
+    `/api/test/messaging/sectors/${seed.sector.id}/receive`,
+    {
+      data: {
+        externalMessageId: `E2E-${unique().id}`,
+        phone: seed.phone,
+        contactName: seed.contact,
+        body,
+      },
+    },
+  )
+  expect(received.ok()).toBeTruthy()
+  const tickets = (await (
+    await page.request.get(`/api/sectors/${seed.sector.id}/tickets`)
+  ).json()) as SectorTicket[]
+  const found = tickets.find(
+    (ticket) => ticket.status === 'queued' && ticket.contact.name === seed.contact,
+  )
+  expect(found).toBeTruthy()
+  const assigned = await page.request.post(`/api/tickets/${found!.id}/assign`)
+  expect(assigned.ok()).toBeTruthy()
+  return found!
+}
+
+// Deixa um chamado do contato aguardando: é o segundo pendente da corrida.
+async function markPending(page: Page, seed: Seed, reason: string) {
+  const ticket = await openTicketAsContact(page, seed, `Voltei: ${reason}`)
+  const response = await page.request.post(`/api/tickets/${ticket.id}/pending`, {
+    data: { reason },
+  })
+  expect(response.ok()).toBeTruthy()
+  return ticket
+}
+
+// Alguém retoma o pendente antes da mesclagem (Atendimentos, Retomar chamado). Sem `from`, o
+// cliente escreve de novo, o atendente assume o chamado novo e traz o pendente para ele; com
+// `from`, o pendente é retomado a partir de um atendimento que já está em andamento.
+async function resumeElsewhere(page: Page, seed: Seed, pendingId: number, from?: number) {
+  const ticket = from ? { id: from } : await openTicketAsContact(page, seed, 'Voltando ao pendente')
+  const response = await page.request.post(`/api/tickets/${ticket.id}/resume-pending`, {
+    data: { pendingTicketId: pendingId },
+  })
+  expect(response.ok()).toBeTruthy()
+}
 
 // A ficha do atendimento encerrado mostra a ação, a janela lista o pendente do contato e a
 // mesclagem abre o pendente com as mensagens dos dois, o aviso da mesclagem e o encerrado do B
@@ -150,6 +202,60 @@ test('cancelar a janela da mesclagem não muda nada', async ({ page, baseURL }) 
 
   await page.goto(`/atendimentos/${seed.pendingId}`)
   await expect(mergeNotices(page, closedProtocol)).toHaveCount(0)
+})
+
+// A corrida: alguém retoma o pendente escolhido antes de a mesclagem chegar ao servidor. A janela
+// mostra o erro, recarrega a lista e a escolha cai no primeiro pendente que sobrou; retomado o
+// último, a janela avisa que o contato não tem mais pendente e o atendimento continua encerrado.
+test('quando alguém retoma o pendente antes, a janela avisa, recarrega e cai no que sobrou', async ({
+  page,
+  baseURL,
+}) => {
+  const seed = await seedTicketToMergeIntoPending(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+
+  // Dois pendentes do contato no setor: o da semente e um segundo, mais novo.
+  const second = await markPending(page, seed, 'Aguardando o boleto do mês')
+  const firstProtocol = await protocolOf(page, seed.pendingId)
+  const secondProtocol = await protocolOf(page, second.id)
+
+  await page.goto(`/atendimentos/${seed.ticketId}`)
+  await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Mesclar em pendente' })
+  await expect(dialog.getByRole('radio')).toHaveCount(2)
+  await expect(dialog).toContainText(firstProtocol)
+  await expect(dialog).toContainText(secondProtocol)
+
+  // A pessoa escolhe o segundo pendente, e outra pessoa o retoma nesse meio-tempo.
+  await dialog.getByRole('radio').nth(1).check()
+  await expect(dialog.getByRole('radio').nth(1)).toBeChecked()
+  await resumeElsewhere(page, seed, second.id)
+
+  await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
+  await expect(dialog).toContainText(
+    'Este chamado pendente não está mais pendente. Atualize a lista e tente novamente.',
+  )
+  // A lista recarrega sem o pendente retomado, e a escolha cai no primeiro que sobrou.
+  await expect(dialog.getByRole('radio')).toHaveCount(1)
+  await expect(dialog.getByRole('radio')).toBeChecked()
+  await expect(dialog).toContainText(firstProtocol)
+  await expect(dialog).not.toContainText(secondProtocol)
+
+  // Retomado também o último pendente, a janela fica sem escolhas e diz que não há mais pendente.
+  await resumeElsewhere(page, seed, seed.pendingId, second.id)
+  await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
+  await expect(dialog.getByRole('radio')).toHaveCount(0)
+  await expect(dialog).toContainText('Este contato não tem mais chamado pendente.')
+
+  // Nada foi mesclado: o atendimento continua encerrado e o último pendente voltou para a pessoa.
+  const closed = (await (await page.request.get(`/api/tickets/${seed.ticketId}`)).json()) as {
+    status: string
+  }
+  expect(closed.status).toBe('closed')
+  const resumed = (await (await page.request.get(`/api/tickets/${seed.pendingId}`)).json()) as {
+    status: string
+  }
+  expect(resumed.status).toBe('in_progress')
 })
 
 // A ação só aparece para quem pode mesclar e quando há pendente do contato no setor.

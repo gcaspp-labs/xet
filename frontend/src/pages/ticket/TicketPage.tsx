@@ -255,11 +255,14 @@ const assignmentActions: Record<
     icon: Ban,
     text: (log) => `${log.actor?.name ?? 'Sistema'} cancelou o chamado`,
   },
-  // No atendimento que herdou o encerramento, no ponto da mesclagem (spec #332, #343).
+  // No atendimento que herdou o encerramento, no ponto da mesclagem (spec #332, #343). O protocolo
+  // vem sempre na mudança da mesclagem (#341); sem ele, o aviso não inventa um.
   ticket_closed_by_merge: {
     icon: Merge,
-    text: (log) =>
-      `${log.actor?.name ?? 'Sistema'} mesclou o atendimento ${log.mergedProtocol ?? 'sem protocolo'} neste chamado`,
+    text: (log) => {
+      const merged = log.mergedProtocol ? `o atendimento ${log.mergedProtocol}` : 'um atendimento'
+      return `${log.actor?.name ?? 'Sistema'} mesclou ${merged} neste chamado`
+    },
   },
   ticket_corrected: {
     icon: PencilLine,
@@ -1959,7 +1962,7 @@ export default function TicketPage() {
   // Mesclar em pendente: o backend diz quem pode (encerrado ou cancelado, não transferido nem
   // mesclado) e manda as escolhas; sem pendente do contato no setor, a ação não aparece. No
   // cancelado ela aparece sem o Corrigir, que não existe para ele.
-  const mergedable = ticket.canMergeIntoPending === true && (ticket.pendingTickets ?? []).length > 0
+  const canMerge = ticket.canMergeIntoPending === true && (ticket.pendingTickets ?? []).length > 0
   const correctable = canCorrect(ticket, user)
 
   // Na ficha só existem Detalhes e Histórico (a aba Assuntos não existe aqui).
@@ -1979,9 +1982,9 @@ export default function TicketPage() {
           // As ações da ficha, visíveis e sem menu ⋯: Corrigir é primária e, quando o contato tem
           // um pendente do setor, "Mesclar em pendente" vem ao lado como secundária (spec #332,
           // #343). Nada aparece em chamado transferido ou mesclado.
-          (correctable || mergedable) && (
+          (correctable || canMerge) && (
             <div className="flex items-center gap-2">
-              {mergedable && (
+              {canMerge && (
                 <Button variant="outline" onClick={() => setMerging(true)}>
                   <Merge strokeWidth={1.7} aria-hidden />
                   Mesclar em pendente
