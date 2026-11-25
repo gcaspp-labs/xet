@@ -41,6 +41,37 @@ export const panelOf = (page) => page.getByRole('region', { name: 'Fila, assunto
 export const conversationOf = (page) =>
   page.getByRole('region', { name: 'Conversa', exact: true })
 
+// A linha do contato na aba aberta da coluna da direita. A aba que não está aberta não entra na
+// árvore de acessibilidade: a linha é sempre a da aba atual (Fila, Pendentes ou Assuntos).
+export const queueRowOf = (page, contact) =>
+  panelOf(page).getByRole('listitem').filter({ hasText: contact.name })
+
+// Em Atendimentos: abre a tela, busca o protocolo e devolve a única linha do resultado.
+export async function atendimentosRowOf(page, protocol) {
+  await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+  await expect(page).toHaveURL(/\/atendimentos$/)
+  await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+  await page.getByRole('searchbox', { name: 'Buscar chamados' }).fill(protocol)
+  const rows = page.getByRole('table').locator('tbody').getByRole('row')
+  await expect(rows).toHaveCount(1)
+  return rows.first()
+}
+
+// A auditoria pode ganhar registros novos ao lado dos esperados. O que se prova é que os esperados
+// ("<chamado> <ação>") aparecem nesta ordem relativa, sem quebrar por uma ação a mais no meio.
+export function expectAuditOrder(audit, expected) {
+  const entries = audit.map((entry) => `${entry.ticket_id} ${entry.action}`)
+  let after = 0
+  for (const entry of expected) {
+    const index = entries.indexOf(entry, after)
+    expect(
+      index,
+      `registro "${entry}" ausente ou fora de ordem; auditoria: ${entries.join(' | ')}`,
+    ).toBeGreaterThanOrEqual(0)
+    after = index + 1
+  }
+}
+
 let counter = Date.now() % 1_000_000
 
 // Sufixo único: uma jornada pode ser repetida no mesmo banco.

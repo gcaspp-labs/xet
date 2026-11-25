@@ -1,5 +1,10 @@
 // Chamado mesclado num pendente, em Atendimentos e na ficha: ver features/mesclado-no-atendimento.md.
-import { conversationOf, expect, journey } from '../scripts/journey-lib.mjs'
+import {
+  atendimentosRowOf,
+  conversationOf,
+  expect,
+  journey,
+} from '../scripts/journey-lib.mjs'
 
 await journey('mesclado-no-atendimento', async (t) => {
   const data = await t.step('Preparar um atendimento encerrado mesclado num chamado pendente', async () => {
@@ -69,15 +74,10 @@ await journey('mesclado-no-atendimento', async (t) => {
 
   const { sector, merged, original } = data
   const page = await t.signIn(sector.agents[0], { viewport: { width: 1440, height: 900 } })
-  const rows = () => page.getByRole('table').locator('tbody').getByRole('row')
   const linkTo = (protocol) => page.getByRole('link', { name: `Ver chamado ${protocol}` })
 
   await t.step('Atendimentos: o mesclado aparece com a situação Mesclado e o link para o original', async () => {
-    await page.getByRole('link', { name: 'Atendimentos', exact: true }).click()
-    await expect(page).toHaveURL(/\/atendimentos$/)
-    await page.getByRole('searchbox', { name: 'Buscar chamados' }).fill(merged.protocol)
-    await expect(rows()).toHaveCount(1)
-    const row = rows().first()
+    const row = await atendimentosRowOf(page, merged.protocol)
     await expect(row).toContainText('Mesclado')
     await expect(row).not.toContainText('Encerrado')
     await expect(linkTo(original.protocol)).toBeVisible()
