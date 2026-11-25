@@ -4,7 +4,7 @@ import { api } from '@/lib/api'
 import { useCurrentUser } from '@/lib/auth'
 import { type ClosureKind } from '@/lib/format'
 import { type Page, pageParams, type PageRequest, useQueryState } from '@/lib/paging'
-import type { TicketStatus } from '@/lib/tickets'
+import type { MergedInto } from '@/lib/tickets'
 
 export type ClosureType = ClosureKind
 
@@ -30,8 +30,8 @@ export type ClosedTicket = {
   // Setor de destino de um transferido.
   transferredTo: Ref | null
   // Chamado original de um mesclado num pendente: o link leva a ele, ativo em Chamados ou já
-  // encerrado em Atendimentos (spec #332).
-  mergedInto: { id: number; protocol: string; status: TicketStatus } | null
+  // encerrado em Atendimentos (spec #332). A lista manda nulo quando não é mesclado.
+  mergedInto?: MergedInto | null
   modules: string[]
 }
 

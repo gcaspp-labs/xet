@@ -40,6 +40,9 @@ export type TicketSummary = {
   } | null
 }
 
+// Chamado original de um mesclado, como a ficha e a lista de Atendimentos o mostram.
+export type MergedInto = { id: number; protocol: string; status: TicketStatus }
+
 // Endereço do chamado pela situação: ativo abre em Chamados; encerrado, em Atendimentos.
 export const ticketPath = (ticket: { id: number; status: TicketStatus }) =>
   ticket.status === 'closed' ? `/atendimentos/${ticket.id}` : `/chamados/${ticket.id}`

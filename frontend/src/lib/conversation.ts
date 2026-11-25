@@ -8,9 +8,9 @@ import type { User } from '@/lib/auth'
 import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
 import { readDraft, saveDraft } from '@/lib/message-draft'
 import {
+  type MergedInto,
   type MessageType,
   pendingTicketsKey,
-  type TicketStatus,
   ticketsKey,
   workloadKey,
 } from '@/lib/tickets'
@@ -40,8 +40,8 @@ export type TicketDetail = {
   closedBy: { id: number; name: string } | null
   closureType: ClosureKind | null
   // Chamado pendente em que este foi mesclado: só no mesclado, e as mensagens foram para ele
-  // (spec #332). A situação diz onde o link o abre.
-  mergedInto?: { id: number; protocol: string; status: TicketStatus } | null
+  // (spec #332). A situação diz onde o link o abre. A API omite a chave quando não é mesclado.
+  mergedInto?: MergedInto | null
   // Por que o chamado está pendente, quem o marcou e quando; vem só no pendente (spec #332).
   pending: { reason: string; by: { id: number; name: string }; at: string } | null
   // Pendentes do mesmo contato e setor, para o aviso e a janela Retomar chamado; vem no chamado

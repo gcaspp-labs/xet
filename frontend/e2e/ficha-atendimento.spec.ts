@@ -292,8 +292,41 @@ test('o mesclado só avisa a mesclagem com o link, sem conversa e sem Corrigir',
   await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toHaveCount(0)
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
   await expect(details(page)).toContainText('Mesclado')
+  // A data é a da mesclagem, como o badge da situação.
+  await expect(details(page)).toContainText('Mesclado em')
+  await expect(details(page)).not.toContainText('Encerrado em')
 
   // O pendente ficou encerrado com os dados do mesclado, então o link abre em Atendimentos.
   await link.click()
   await expect(page).toHaveURL(new RegExp(`/atendimentos/${m.original.id}$`))
+})
+
+// O aviso de mesclado vem antes do ramo do registro por telefone: a ficha do mesclado mostra o
+// aviso, e não a ficha do atendimento por telefone. Hoje o banco só aceita registro por telefone
+// encerrado como resolvido (constraint tickets_phone_closed), então a API ainda não cria esse
+// estado; o teste troca o canal na resposta do detalhe para cobrir a ordem dos ramos da ficha.
+test('o registro por telefone mesclado mostra o aviso da mesclagem, e não a ficha do telefone', async ({
+  page,
+  baseURL,
+}) => {
+  const m = await seedMergedTicket(baseURL!)
+  await signIn(page, m.agent, userPassword)
+  await page.route(`**/api/tickets/${m.merged.id}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    const response = await route.fetch()
+    const body = (await response.json()) as Record<string, unknown>
+    await route.fulfill({ response, json: { ...body, channel: 'phone' } })
+  })
+  await page.goto(`/atendimentos/${m.merged.id}`)
+
+  const card = page.getByRole('region', { name: 'Conversa', exact: true })
+  // O primeiro carregamento da ficha depois do login pode passar dos 5 s padrão do expect.
+  await expect(card).toBeVisible({ timeout: 15_000 })
+  await expect(card).toContainText('Atendimento por telefone mesclado')
+  await expect(card).toContainText('Os dados deste atendimento foram para o chamado original.')
+  await expect(card.getByRole('link', { name: `Ver chamado ${m.original.protocol}` })).toBeVisible()
+  await expect(card).toContainText('os dados do atendimento foram para o chamado original')
+
+  // Sem Correção nem a ficha do telefone.
+  await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toHaveCount(0)
 })

@@ -1,6 +1,7 @@
 import { CircleAlert, Inbox, Phone } from 'lucide-react'
 import { type ReactNode, useDeferredValue, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { MergedIntoLink } from '@/components/MergedIntoLink'
 import { Pagination } from '@/components/Pagination'
 import { PhoneRegistrationSheet } from '@/components/PhoneRegistrationSheet'
 import { SearchBox } from '@/components/SearchBox'
@@ -53,7 +54,6 @@ import {
 } from '@/lib/closed-tickets'
 import { closureTypeLabels, formatPhone, organizationLabel } from '@/lib/format'
 import { usePagedList } from '@/lib/paging'
-import { ticketPath } from '@/lib/tickets'
 
 const periodChoices: { value: PeriodChoice; label: string }[] = [
   { value: 'all', label: 'Todo o período' },
@@ -349,12 +349,7 @@ function SituationCell({ ticket }: { ticket: ClosedTicket }) {
       )}
       {ticket.mergedInto && (
         // Fica por cima do link da linha inteira, e leva ao chamado original (spec #332).
-        <Link
-          to={ticketPath(ticket.mergedInto)}
-          className="caption relative z-10 text-accent-strong underline-offset-2 hover:underline"
-        >
-          Ver chamado {ticket.mergedInto.protocol}
-        </Link>
+        <MergedIntoLink mergedInto={ticket.mergedInto} className="relative z-10" />
       )}
     </span>
   )

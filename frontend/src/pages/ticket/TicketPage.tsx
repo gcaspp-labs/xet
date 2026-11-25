@@ -47,6 +47,7 @@ import { EmojiPicker } from '@/components/EmojiPicker'
 import { DeleteMessageDialog, MessageMenu } from '@/components/MessageActions'
 import { MessageChangesDialog } from '@/components/MessageChanges'
 import { MessageEditor } from '@/components/MessageEditor'
+import { MergedIntoLink } from '@/components/MergedIntoLink'
 import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
 import { CorrectionSheet } from '@/components/CorrectionSheet'
@@ -110,7 +111,7 @@ import {
 import { isNotFound } from '@/lib/api'
 import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
-import { parseTicketId, ticketPath } from '@/lib/tickets'
+import { parseTicketId } from '@/lib/tickets'
 import { cn } from '@/lib/utils'
 import NotFoundPage from '@/pages/NotFoundPage'
 import { ImageViewer } from '@/pages/ticket/ImageViewer'
@@ -1627,7 +1628,7 @@ function DetailsTab({ ticket }: { ticket: TicketDetail }) {
         row('Assumido em', <span className="mono-num">{formatDateTime(ticket.assignedAt)}</span>)}
       {ticket.closedAt &&
         row(
-          cancelled ? 'Cancelado em' : 'Encerrado em',
+          cancelled ? 'Cancelado em' : merged ? 'Mesclado em' : 'Encerrado em',
           <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>,
         )}
       {closed && (
@@ -1935,9 +1936,11 @@ function PhoneConversation({ ticket }: { ticket: TicketDetail }) {
 }
 
 // O mesclado num pendente não tem conversa própria: as mensagens foram para o chamado original,
-// e a ficha só avisa disso e leva a ele (spec #332).
+// e a ficha só avisa disso e leva a ele (spec #332). O registro por telefone não tem mensagens:
+// os dados do atendimento foram para o original, e o aviso aparece do mesmo jeito.
 function MergedConversation({ ticket }: { ticket: TicketDetail }) {
   const mergedInto = ticket.mergedInto
+  const byPhone = ticket.channel === 'phone'
   return (
     <Card role="region" aria-label="Conversa" className="flex min-h-0 flex-col">
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-10">
@@ -1946,16 +1949,13 @@ function MergedConversation({ ticket }: { ticket: TicketDetail }) {
             <Merge strokeWidth={1.7} aria-hidden />
           </EmptyMedia>
           <EmptyDescription>
-            <span className="body-strong block text-ink">Chamado mesclado</span>
-            As mensagens deste chamado foram para o chamado original.
-            {mergedInto && (
-              <Link
-                to={ticketPath(mergedInto)}
-                className="caption mt-1 block text-accent-strong underline-offset-2 hover:underline"
-              >
-                Ver chamado {mergedInto.protocol}
-              </Link>
-            )}
+            <span className="body-strong block text-ink">
+              {byPhone ? 'Atendimento por telefone mesclado' : 'Chamado mesclado'}
+            </span>
+            {byPhone
+              ? 'Os dados deste atendimento foram para o chamado original.'
+              : 'As mensagens deste chamado foram para o chamado original.'}
+            {mergedInto && <MergedIntoLink mergedInto={mergedInto} className="mt-1 block" />}
           </EmptyDescription>
         </Empty>
       </div>
@@ -1969,8 +1969,10 @@ function MergedConversation({ ticket }: { ticket: TicketDetail }) {
           <span>
             <span className="font-medium text-foreground">Só leitura.</span> Mesclado
             {ticket.closedBy ? ` por ${ticket.closedBy.name}` : ''} em{' '}
-            <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>: as mensagens foram
-            para o chamado original.
+            <span className="mono-num">{formatDateTime(ticket.closedAt)}</span>:{' '}
+            {byPhone
+              ? 'os dados do atendimento foram para o chamado original.'
+              : 'as mensagens foram para o chamado original.'}
           </span>
         </div>
       )}
@@ -2045,10 +2047,10 @@ export default function TicketPage() {
       )}
       {/* A tela de conversas usa a largura toda (design.md). */}
       <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[minmax(0,1fr)]">
-        {ticket.channel === 'phone' ? (
-          <PhoneConversation ticket={ticket} />
-        ) : ticket.mergedInto ? (
+        {ticket.mergedInto ? (
           <MergedConversation ticket={ticket} />
+        ) : ticket.channel === 'phone' ? (
+          <PhoneConversation ticket={ticket} />
         ) : (
           <ReadOnlyConversation ticket={ticket} />
         )}
