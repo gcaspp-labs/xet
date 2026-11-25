@@ -1410,7 +1410,7 @@ select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
     o.name as organization_name, m.name as municipality_name,
-    t.assignee_id, u.name as assignee_name,
+    t.assignee_id, u.name as assignee_name, t.assignee_read_at,
     (select count(*)::integer from messages m
      where m.ticket_id = t.id and m.direction = 'inbound' and m.origin = 'customer'
        and t.status = 'in_progress' and t.assignee_read_at is not null
@@ -1438,6 +1438,7 @@ type ListOpenTicketsRow struct {
 	MunicipalityName  *string
 	AssigneeID        *int64
 	AssigneeName      *string
+	AssigneeReadAt    *time.Time
 	UnreadCount       int32
 }
 
@@ -1471,6 +1472,7 @@ func (q *Queries) ListOpenTickets(ctx context.Context, sectorID int64) ([]ListOp
 			&i.MunicipalityName,
 			&i.AssigneeID,
 			&i.AssigneeName,
+			&i.AssigneeReadAt,
 			&i.UnreadCount,
 		); err != nil {
 			return nil, err

@@ -150,6 +150,11 @@ async function backToList(page: Page) {
   await expect(page).toHaveURL(/\/chamados$/)
 }
 
+// Chaves da leitura do chamado no armazenamento (spec #310): a reserva usa o momento da leitura
+// que vem do servidor, então não deve sobrar nenhuma (#392).
+const readKeys = (page: Page) =>
+  page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('alerts.read.')))
+
 const readCall = (page: Page, ticketId: number) =>
   page.waitForResponse(
     (response) =>
@@ -348,6 +353,9 @@ test('mensagem que chega logo depois de ler o chamado ainda alerta', async ({
   await read
   await backToList(page)
   await expect(mineItem(page, contactName).getByTestId('unread-count')).toHaveCount(0)
+  // A reserva usa o momento da leitura que vem do servidor: não sobra chave de leitura no
+  // armazenamento para acumular (#392).
+  expect(await readKeys(page)).toEqual([])
   await setHidden(page, true)
 
   // Outra mensagem chega dentro da reserva, com a mesma quantidade de não lidas (1). A leitura
@@ -362,6 +370,64 @@ test('mensagem que chega logo depois de ler o chamado ainda alerta', async ({
   expect(claims).toHaveLength(2)
   expect(claims[0]).toBe(firstClaim)
   expect(claims[1] - claims[0]).toBeLessThan(10_000)
+})
+
+test('mensagem depois de uma leitura feita noutro aparelho ainda alerta', async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  const contactName = 'Cliente lido noutro aparelho'
+  const phone = unique().phone
+  await receive(request, sector.id, phone, contactName, 'Primeira mensagem')
+  await context.grantPermissions(['notifications'])
+  await context.addInitScript(() => {
+    localStorage.setItem('alerts.browser', 'on')
+    localStorage.setItem('alerts.sound', 'on')
+  })
+  // O aviso da leitura feita noutro aparelho é descartado, como quando a lista só recarrega na
+  // mensagem seguinte: esta aba não vê as não lidas voltarem a zero.
+  let dropping = false
+  let watchedId = 0
+  await page.routeWebSocket(/\/api\/ws$/, (ws) => {
+    const server = ws.connectToServer()
+    server.onMessage((message) => {
+      const event = JSON.parse(String(message)) as { type: string; ticketId?: number }
+      if (dropping && event.type === 'ticket' && event.ticketId === watchedId) {
+        return
+      }
+      ws.send(message)
+    })
+  })
+  await spyOnAlerts(page)
+  await signInWhenLive(page, agent, userPassword, sector.id)
+  watchedId = await assume(page, contactName)
+  await backToList(page)
+  await allowSound(page)
+  await setHidden(page, true)
+
+  // A primeira mensagem alerta e deixa a reserva do chamado guardada por 10 s.
+  await receive(request, sector.id, phone, contactName, 'Mensagem que alerta')
+  await expect.poll(() => beeps(page)).toBe(1)
+  await expect.poll(() => notified(page)).toEqual([contactName])
+
+  // A pessoa lê o chamado noutro aparelho: só a API marca a leitura, sem passar por esta aba.
+  dropping = true
+  const api = await apiRequest.newContext({ baseURL })
+  expect(
+    (await api.post('/api/auth/login', { data: { email: agent, password: userPassword } })).ok(),
+  ).toBeTruthy()
+  expect((await api.post(`/api/tickets/${watchedId}/read`)).ok()).toBeTruthy()
+  await api.dispose()
+
+  // Outra mensagem chega dentro dos 10 s, com a mesma quantidade de não lidas (1). O momento da
+  // leitura na lista é outro: a mensagem alerta de novo, em vez de ser confundida com a anterior.
+  dropping = false
+  await receive(request, sector.id, phone, contactName, 'Chegou depois da leitura de fora')
+  await expect.poll(() => beeps(page)).toBe(2)
+  await expect.poll(async () => (await notified(page)).length).toBe(2)
 })
 
 test('resposta do atendente entre as recargas não duplica o alerta da mesma mensagem', async ({

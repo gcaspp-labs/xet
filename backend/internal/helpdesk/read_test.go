@@ -32,6 +32,23 @@ func (e *testEnv) unreadOf(sectorID, ticketID int64, token string) int {
 	return 0
 }
 
+// readAtOf returns the reading instant of the ticket as the list of the sector
+// sends it to the interface.
+func (e *testEnv) readAtOf(sectorID, ticketID int64, token string) string {
+	e.T.Helper()
+	for _, item := range e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", sectorID), token) {
+		if int64(item["id"].(float64)) == ticketID {
+			at, ok := item["readAt"].(string)
+			if !ok {
+				e.T.Fatalf("ticket %d without readAt: %v", ticketID, item)
+			}
+			return at
+		}
+	}
+	e.T.Fatalf("ticket %d not in the list", ticketID)
+	return ""
+}
+
 // readAt returns assignee_read_at of the ticket.
 func (e *testEnv) readAt(ticketID int64) *time.Time {
 	e.T.Helper()
@@ -348,5 +365,35 @@ func TestMarkReadPublishesTheTicketEvent(t *testing.T) {
 	}
 	if ev := e.nextEvent(events); ev != realtime.TicketChanged(c.sector.ID, c.ticket.ID) {
 		t.Fatalf("event = %+v", ev)
+	}
+}
+
+// A lista traz o instante da leitura do responsável, que a interface usa para
+// separar a mensagem que chega depois de uma leitura feita noutro aparelho
+// (#392).
+func TestListCarriesTheReadingInstant(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+
+	listed, err := time.Parse(time.RFC3339Nano, e.readAtOf(c.sector.ID, c.ticket.ID, c.biaToken))
+	if err != nil {
+		t.Fatalf("readAt in the list: %v", err)
+	}
+	if stored := e.readAt(c.ticket.ID); stored == nil || !listed.Equal(*stored) {
+		t.Fatalf("readAt in the list = %v, in the database = %v", listed, stored)
+	}
+
+	// Ler noutro aparelho é só a ação da API: a lista seguinte já traz o instante novo.
+	if resp := e.markRead(c.ticket.ID, c.anaToken); resp.Status != http.StatusNoContent {
+		t.Fatalf("mark read: status %d", resp.Status)
+	}
+	after, err := time.Parse(time.RFC3339Nano, e.readAtOf(c.sector.ID, c.ticket.ID, c.biaToken))
+	if err != nil {
+		t.Fatalf("readAt in the list after the read: %v", err)
+	}
+	if !after.After(listed) {
+		t.Fatalf("readAt did not move forward: %v -> %v", listed, after)
 	}
 }
