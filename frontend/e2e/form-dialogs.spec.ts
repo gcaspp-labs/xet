@@ -6,6 +6,7 @@ import {
   seedDirectory,
   seedPendingWithNewTicket,
   seedSector,
+  seedTicketToMergeIntoPending,
   signIn,
   unique,
   userPassword,
@@ -107,6 +108,14 @@ test('a janela Retomar chamado tem bloqueio', async ({ page, baseURL }) => {
 
   await chooseAction(page, 'Retomar chamado')
   await expectLockedDialog(page, page.getByRole('dialog', { name: 'Retomar chamado' }))
+})
+
+test('a janela Mesclar em pendente tem bloqueio', async ({ page, baseURL }) => {
+  const seed = await seedTicketToMergeIntoPending(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await page.goto(`/atendimentos/${seed.ticketId}`)
+  await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
+  await expectLockedDialog(page, page.getByRole('dialog', { name: 'Mesclar em pendente' }))
 })
 
 test('cancelar o cadastro aberto pelo encerramento volta à janela com os dados mantidos', async ({

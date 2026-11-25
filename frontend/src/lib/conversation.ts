@@ -49,6 +49,9 @@ export type TicketDetail = {
   // em atendimento e no da fila, e no encerrado ou cancelado que o usuário pode mesclar num
   // pendente (#341) (spec #332).
   pendingTickets?: PendingChoice[]
+  // O atendimento encerrado ou cancelado que o usuário pode mesclar num pendente do contato
+  // (#341, #343): só então a ficha oferece "Mesclar em pendente", com as escolhas acima.
+  canMergeIntoPending?: boolean
   // Chamado do setor de origem, quando este veio de uma transferência entre setores.
   previous: {
     id: number
@@ -167,6 +170,7 @@ export type AssignmentLog = {
     | 'ticket_resumed'
     | 'ticket_merged'
     | 'ticket_resumed_by_merge'
+    | 'ticket_closed_by_merge'
     | 'ticket_closed'
     | 'ticket_transferred_sector'
     | 'ticket_cancelled'
@@ -686,6 +690,23 @@ export function useResumePending(ticketId: number, sectorId: number) {
     onSettled: () => invalidateTicketChange(queryClient, ticketId, sectorId),
     // O pendente retomado abre em seguida: mensagens, avisos e ficha vêm frescos.
     onSuccess: (resumed) => queryClient.invalidateQueries({ queryKey: ticketKey(resumed.id) }),
+  })
+}
+
+// Mescla o atendimento encerrado ou cancelado num pendente do mesmo contato e setor, pela ficha
+// (spec #332, #343): as mensagens deste passam para o pendente, que fica com a situação e os dados
+// do encerramento, e este vira Mesclado. Devolve o atendimento que continua, que a tela abre.
+export function useMergeIntoPending(ticketId: number, sectorId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (pendingTicketId: number) =>
+      api<{ id: number; protocol: string }>(`/tickets/${ticketId}/merge-into-pending`, {
+        method: 'POST',
+        body: { pendingTicketId },
+      }),
+    onSettled: () => invalidateTicketChange(queryClient, ticketId, sectorId),
+    // A ficha do atendimento que herdou o encerramento abre em seguida, com tudo fresco.
+    onSuccess: (merged) => queryClient.invalidateQueries({ queryKey: ticketKey(merged.id) }),
   })
 }
 
