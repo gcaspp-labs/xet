@@ -59,15 +59,14 @@ export function useDashboard(search: string, enabled: boolean) {
   })
 }
 
-// Um chamado parado no quadro Pendentes do Dashboard: o contato, o motivo, desde quando e quem o
-// marcou, com o setor para o administrador que vê todos (spec #332, #342).
+// Um chamado parado no quadro Pendentes do Dashboard: o contato, o motivo, desde quando e o
+// setor, para o administrador que vê todos (spec #332, #342).
 export type DashboardPendingTicket = {
   id: number
   protocol: string
-  contact: { id: number; name: string; phone: string | null; registered: boolean }
+  contact: { id: number; name: string }
   reason: string | null
   pendingAt: string | null
-  pendingBy: { id: number; name: string } | null
   sector: Ref
 }
 

@@ -491,13 +491,11 @@ func (q *Queries) ListDashboardAssignees(ctx context.Context, sectorID int64) ([
 const listDashboardPendingTickets = `-- name: ListDashboardPendingTickets :many
 select
     t.id, t.protocol, t.pending_reason, t.pending_at,
-    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    t.pending_by_id, pu.name as pending_by_name,
+    t.contact_id, c.name as contact_name,
     t.sector_id, s.name as sector_name
 from tickets t
 join contacts c on c.id = t.contact_id
 join sectors s on s.id = t.sector_id
-left join users pu on pu.id = t.pending_by_id
 where t.status = 'pending'
   and ($1::bigint is null or t.sector_id = $1)
 order by t.pending_at, t.id
@@ -505,18 +503,14 @@ limit 10
 `
 
 type ListDashboardPendingTicketsRow struct {
-	ID                int64
-	Protocol          string
-	PendingReason     *string
-	PendingAt         *time.Time
-	ContactID         int64
-	ContactName       string
-	ContactPhone      *string
-	ContactRegistered bool
-	PendingByID       *int64
-	PendingByName     *string
-	SectorID          int64
-	SectorName        string
+	ID            int64
+	Protocol      string
+	PendingReason *string
+	PendingAt     *time.Time
+	ContactID     int64
+	ContactName   string
+	SectorID      int64
+	SectorName    string
 }
 
 // Os pendentes de agora no recorte do Dashboard, os que estão parados há mais
@@ -538,10 +532,6 @@ func (q *Queries) ListDashboardPendingTickets(ctx context.Context, sectorID *int
 			&i.PendingAt,
 			&i.ContactID,
 			&i.ContactName,
-			&i.ContactPhone,
-			&i.ContactRegistered,
-			&i.PendingByID,
-			&i.PendingByName,
 			&i.SectorID,
 			&i.SectorName,
 		); err != nil {

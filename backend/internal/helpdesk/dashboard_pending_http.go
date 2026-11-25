@@ -9,17 +9,23 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
 
+// dashboardPendingContact is the contact of a pending row: only who the board
+// shows on the line, without the rest of the contact record.
+type dashboardPendingContact struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
 // dashboardPendingTicketResponse is a pending ticket of the Dashboard board: the
-// contact, the reason and since when it waits, the person who marked it and the
-// sector, for the admin who sees every sector (#342, spec #332).
+// contact, the reason and since when it waits, and the sector, for the admin who
+// sees every sector (#342, spec #332).
 type dashboardPendingTicketResponse struct {
-	ID        int64                 `json:"id"`
-	Protocol  string                `json:"protocol"`
-	Contact   ticketContactResponse `json:"contact"`
-	Reason    *string               `json:"reason"`
-	PendingAt *time.Time            `json:"pendingAt"`
-	PendingBy *httpx.Ref            `json:"pendingBy"`
-	Sector    httpx.Ref             `json:"sector"`
+	ID        int64                   `json:"id"`
+	Protocol  string                  `json:"protocol"`
+	Contact   dashboardPendingContact `json:"contact"`
+	Reason    *string                 `json:"reason"`
+	PendingAt *time.Time              `json:"pendingAt"`
+	Sector    httpx.Ref               `json:"sector"`
 }
 
 // dashboardPending is the Pendentes board of the Dashboard: how many tickets are
@@ -59,18 +65,13 @@ func (h *Handler) dashboardPending(w http.ResponseWriter, r *http.Request) {
 		Tickets []dashboardPendingTicketResponse `json:"tickets"`
 	}{Count: count, Tickets: make([]dashboardPendingTicketResponse, 0, len(rows))}
 	for _, row := range rows {
-		item := dashboardPendingTicketResponse{
+		out.Tickets = append(out.Tickets, dashboardPendingTicketResponse{
 			ID: row.ID, Protocol: row.Protocol,
-			Contact: ticketContactResponse{
-				ID: row.ContactID, Name: row.ContactName, Phone: row.ContactPhone, Registered: row.ContactRegistered,
-			},
-			Reason: row.PendingReason, PendingAt: row.PendingAt,
-			Sector: httpx.Ref{ID: row.SectorID, Name: row.SectorName},
-		}
-		if row.PendingByID != nil && row.PendingByName != nil {
-			item.PendingBy = &httpx.Ref{ID: *row.PendingByID, Name: *row.PendingByName}
-		}
-		out.Tickets = append(out.Tickets, item)
+			Contact:   dashboardPendingContact{ID: row.ContactID, Name: row.ContactName},
+			Reason:    row.PendingReason,
+			PendingAt: row.PendingAt,
+			Sector:    httpx.Ref{ID: row.SectorID, Name: row.SectorName},
+		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }

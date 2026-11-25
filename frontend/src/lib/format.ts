@@ -174,6 +174,11 @@ export function formatAverageTime(seconds: number) {
   if (minutes < 60) {
     return `${minutes} min`
   }
+  return formatHoursMinutes(minutes)
+}
+
+// Horas e minutos de uma duração em minutos inteiros: 65 → "1 h 05 min".
+function formatHoursMinutes(minutes: number) {
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`
 }
 
@@ -188,7 +193,7 @@ export function formatIdleTime(iso: string) {
     return `${minutes} min`
   }
   if (minutes < 24 * 60) {
-    return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`
+    return formatHoursMinutes(minutes)
   }
   const days = Math.floor(minutes / (24 * 60))
   return `${days} ${days === 1 ? 'dia' : 'dias'}`

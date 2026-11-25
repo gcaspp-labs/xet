@@ -69,8 +69,8 @@ func TestDashboardPendingBoard(t *testing.T) {
 		if row["reason"] != fmt.Sprintf("Aguardando o item %d", i) {
 			t.Errorf("row %d reason = %v", i, row["reason"])
 		}
-		if row["pendingBy"] == nil || row["pendingAt"] == nil || row["sector"] == nil {
-			t.Errorf("row %d without who, when or sector: %v", i, row)
+		if row["contact"].(map[string]any)["id"] != float64(ticket.ContactID) || row["pendingAt"] == nil || row["sector"] == nil {
+			t.Errorf("row %d without contact, when or sector: %v", i, row)
 		}
 	}
 	// Atendente não tem Dashboard, e o supervisor não pede outro setor.

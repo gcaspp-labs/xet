@@ -258,13 +258,11 @@ where t.status = 'pending'
 -- chamado (spec #332, #342). A quantidade fica na consulta de contagem.
 select
     t.id, t.protocol, t.pending_reason, t.pending_at,
-    t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
-    t.pending_by_id, pu.name as pending_by_name,
+    t.contact_id, c.name as contact_name,
     t.sector_id, s.name as sector_name
 from tickets t
 join contacts c on c.id = t.contact_id
 join sectors s on s.id = t.sector_id
-left join users pu on pu.id = t.pending_by_id
 where t.status = 'pending'
   and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
 order by t.pending_at, t.id
