@@ -417,7 +417,7 @@ test('a janela de registro por telefone tem bloqueio', async ({ page, baseURL })
   await signIn(page, agent, userPassword)
   await page.goto('/atendimentos')
   await expect(page.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
-  await page.getByRole('button', { name: 'Registrar atendimento por telefone' }).click()
+  await page.getByRole('button', { name: 'Novo atendimento' }).click()
   await expectLockedDialog(
     page,
     page.getByRole('dialog', { name: 'Registrar atendimento por telefone' }),

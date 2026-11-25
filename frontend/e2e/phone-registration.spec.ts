@@ -57,7 +57,7 @@ async function seedPhoneSector(baseURL: string) {
 }
 
 async function openWindow(page: Page) {
-  await page.getByRole('button', { name: 'Registrar atendimento por telefone' }).click()
+  await page.getByRole('button', { name: 'Novo atendimento' }).click()
   const dialog = page.getByRole('dialog', { name: 'Registrar atendimento por telefone' })
   await expect(dialog).toBeVisible()
   return dialog

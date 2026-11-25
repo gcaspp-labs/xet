@@ -1,4 +1,4 @@
-import { CircleAlert, Inbox, Phone } from 'lucide-react'
+import { CircleAlert, Inbox, Plus } from 'lucide-react'
 import { type ReactNode, useDeferredValue, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { MergedIntoLink } from '@/components/MergedIntoLink'
@@ -274,8 +274,8 @@ function Filters({ filter, onRegister }: { filter: ClosedTicketsFilter; onRegist
             ))}
           </ToggleGroup>
           <Button onClick={onRegister}>
-            <Phone strokeWidth={1.7} aria-hidden />
-            Registrar atendimento por telefone
+            <Plus strokeWidth={1.7} aria-hidden />
+            Novo atendimento
           </Button>
         </div>
       </div>
