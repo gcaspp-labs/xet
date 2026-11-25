@@ -55,8 +55,9 @@ type pendingChoiceResponse struct {
 
 // mergedTicketResponse is the ticket a merged one went to.
 type mergedTicketResponse struct {
-	ID       int64  `json:"id"`
-	Protocol string `json:"protocol"`
+	ID       int64           `json:"id"`
+	Protocol string          `json:"protocol"`
+	Status   db.TicketStatus `json:"status"`
 }
 
 // pendingDetailResponse is why the ticket is pending, who marked it and
@@ -136,8 +137,10 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 			Reason: *t.PendingReason, By: httpx.Ref{ID: *t.PendingByID, Name: *t.PendingByName}, At: *t.PendingAt,
 		}
 	}
-	if t.MergedIntoID != nil && t.MergedIntoProtocol != nil {
-		out.MergedInto = &mergedTicketResponse{ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol}
+	if t.MergedIntoID != nil && t.MergedIntoProtocol != nil && t.MergedIntoStatus.Valid {
+		out.MergedInto = &mergedTicketResponse{
+			ID: *t.MergedIntoID, Protocol: *t.MergedIntoProtocol, Status: t.MergedIntoStatus.TicketStatus,
+		}
 	}
 	// O chamado em atendimento ou na fila traz os pendentes do mesmo contato e
 	// setor, para a tela avisar e oferecer Retomar chamado (#335 e #338, spec

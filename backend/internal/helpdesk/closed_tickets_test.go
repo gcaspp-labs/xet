@@ -391,6 +391,59 @@ func TestClosedTicketsSortAndPage(t *testing.T) {
 	c.expect(c.adminToken, qs("sort", "sector", "direction", "desc"), "9001-000005", "9001-000004", "9001-000003", "9001-000002", "9001-000001")
 }
 
+func TestClosedTicketsSituationSortsTheMergedByItsOwnName(t *testing.T) {
+	t.Parallel()
+	c := newClosedList(t)
+	e := c.e
+
+	// The ticket the merged one points to, in attendance after the Retomar chamado (#335), and
+	// the closed one merged into it (#332).
+	// A contact with no other open ticket: only one ticket per contact and sector is open.
+	other := e.Contact(c.supToken, "Nina Prado", "5511955554444", c.org, c.sector.ID)
+	var originalID int64
+	if err := e.Pool.QueryRow(t.Context(), `
+		insert into tickets (protocol, sector_id, contact_id, organization_id, status, assignee_id,
+		    arrived_at, assigned_at, started_at)
+		values ('9001-000007', $1, $2, $3, 'in_progress', $4, now(), now(), now())
+		returning id`, c.sector.ID, other, c.org, c.ana.ID).Scan(&originalID); err != nil {
+		t.Fatal(err)
+	}
+	closedAt := dayStart(t, 0).Add(3 * time.Hour)
+	var mergedID int64
+	err := e.Pool.QueryRow(t.Context(), `
+		insert into tickets (protocol, sector_id, contact_id, organization_id, assignee_id, status,
+		    arrived_at, assigned_at, started_at, ended_at, closed_at, closed_by_id, closure_type,
+		    merged_into_ticket_id, channel)
+		values ('9001-000008', $1, $2, $3, $4, 'closed', $5, $5, $5, $6, $6, $4, 'merged', $7, 'whatsapp')
+		returning id`,
+		c.sector.ID, other, c.org, c.ana.ID, closedAt.Add(-72*time.Hour), closedAt, originalID).Scan(&mergedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// "mesclado" fica na posição do próprio nome, entre "encerrado" e "transferido", e não junto
+	// dos encerrados (#339, sugestão 3 da #370).
+	c.expect(c.supToken, qs("sort", "situation", "direction", "asc"),
+		"9001-000003", "9001-000001", "9001-000002", "9001-000008", "9001-000004")
+	c.expect(c.supToken, qs("sort", "situation", "direction", "desc"),
+		"9001-000004", "9001-000008", "9001-000002", "9001-000001", "9001-000003")
+
+	// A linha do mesclado leva ao chamado original, com a situação dele: ativo abre em Chamados.
+	var item map[string]any
+	for _, got := range e.DoPageItems("/api/closed-tickets", c.supToken) {
+		if got["protocol"] == "9001-000008" {
+			item = got
+		}
+	}
+	if item["closureType"] != "merged" {
+		t.Fatalf("merged ticket in the history = %v", item)
+	}
+	original, _ := item["mergedInto"].(map[string]any)
+	if original["protocol"] != "9001-000007" || original["status"] != "in_progress" || original["id"] != float64(originalID) {
+		t.Fatalf("mergedInto = %v", original)
+	}
+}
+
 func TestClosedTicketsPaginate(t *testing.T) {
 	t.Parallel()
 	c := newClosedList(t)

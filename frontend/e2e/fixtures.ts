@@ -553,6 +553,109 @@ export async function seedTransferredTicket(baseURL: string) {
   return { ticketId: ticket.id, contact, origin, destination }
 }
 
+// Um chamado mesclado num pendente do mesmo contato e setor: as mensagens foram para o pendente e
+// o mesclado fica com a situação Mesclado e o link para ele (spec #332). `resumed` usa o Retomar
+// chamado a partir do chamado novo, e o pendente volta a ser atendido; sem ele, a mesclagem pela
+// correção do encerrado, e o pendente fica encerrado com os dados do mesclado.
+export async function seedMergedTicket(
+  baseURL: string,
+  { resumed = false }: { resumed?: boolean } = {},
+) {
+  const { sector, agent } = await seedSector(baseURL)
+  const { id, phone } = unique()
+  const contact = `Cliente ${id}`
+  const [organization] = await seedDirectory(
+    baseURL,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: contact, phone, organization: 0, sector: sector.id }],
+  )
+
+  const admins = await request.newContext({ baseURL })
+  ok(
+    await admins.post('/api/auth/login', {
+      data: { email: admin.email, password: admin.password },
+    }),
+  )
+  ok(await admins.post(`/api/sectors/${sector.id}/connection`))
+  ok(await admins.post(`/api/test/messaging/sectors/${sector.id}/pair`))
+  const module = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
+  await admins.dispose()
+
+  const api = await request.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const receive = async (body: string) =>
+    ok(
+      await api.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+        data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: contact, body },
+      }),
+    )
+  const queued = async () => {
+    const tickets = await json<
+      { id: number; protocol: string; status: string; contact: { name: string } }[]
+    >(await api.get(`/api/sectors/${sector.id}/tickets`))
+    const found = tickets.find(
+      (ticket) => ticket.status === 'queued' && ticket.contact.name === contact,
+    )
+    expect(found).toBeTruthy()
+    return found!
+  }
+
+  if (resumed) {
+    // O pendente nasce primeiro; o chamado novo do contato, assumido, é retomado a partir dele.
+    await receive('Preciso da segunda via do contracheque')
+    const original = await queued()
+    ok(await api.post(`/api/tickets/${original.id}/assign`))
+    ok(
+      await api.post(`/api/tickets/${original.id}/pending`, {
+        data: { reason: 'Aguardando o cliente' },
+      }),
+    )
+    await receive('Agora preciso do comprovante de férias')
+    const merged = await queued()
+    ok(await api.post(`/api/tickets/${merged.id}/assign`))
+    ok(
+      await api.post(`/api/tickets/${merged.id}/resume-pending`, {
+        data: { pendingTicketId: original.id },
+      }),
+    )
+    await api.dispose()
+    return { sector, agent, contact, merged, original }
+  }
+
+  // O pendente nasce primeiro, com o cliente esperando. Ele volta a escrever e abre o chamado
+  // novo, que o atendente assume, encerra e mescla no pendente pela correção.
+  await receive('Preciso da segunda via do contracheque')
+  const original = await queued()
+  ok(await api.post(`/api/tickets/${original.id}/assign`))
+  ok(
+    await api.post(`/api/tickets/${original.id}/pending`, {
+      data: { reason: 'Aguardando o cliente' },
+    }),
+  )
+  await receive('Agora preciso do comprovante de férias')
+  const merged = await queued()
+  ok(await api.post(`/api/tickets/${merged.id}/assign`))
+  ok(
+    await api.post(`/api/tickets/${merged.id}/close`, {
+      data: {
+        subject: 'Segunda via',
+        resolution: 'Enviada por e-mail.',
+        moduleIds: [module.id],
+        organizationId: organization.id,
+      },
+    }),
+  )
+  ok(
+    await api.post(`/api/tickets/${merged.id}/merge-into-pending`, {
+      data: { pendingTicketId: original.id },
+    }),
+  )
+  await api.dispose()
+  return { sector, agent, contact, merged, original }
+}
+
 // Abre o menu "Mais ações" (⋯) do cabeçalho de Chamados e escolhe um item.
 export async function chooseAction(page: Page, name: string) {
   await page.getByRole('button', { name: 'Mais ações' }).click()

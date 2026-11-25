@@ -68,12 +68,14 @@ export function canReturn(ticket: TicketDetail, user: User) {
 }
 
 // Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
-// cancelado e o transferido para outro setor não são corrigidos (closing.md, regra 14).
+// cancelado, o transferido para outro setor e o mesclado num pendente não são
+// corrigidos (closing.md, regra 14; spec #332, Mesclar em pendente).
 export function canCorrect(ticket: TicketDetail, user: User) {
   return (
     ticket.status === 'closed' &&
     ticket.closureType !== 'cancelled' &&
     ticket.closureType !== 'transferred' &&
+    ticket.closureType !== 'merged' &&
     worksIn(ticket, user) &&
     (ticket.closedBy?.id === user.id || user.role !== 'agent')
   )
