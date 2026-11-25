@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { noteTicketRead } from '@/lib/alerts'
 import { api } from '@/lib/api'
 import type { Role } from '@/lib/auth'
 
@@ -26,6 +25,10 @@ export type TicketSummary = {
   organizationName: string | null
   municipalityName: string | null
   assignee: { id: number; name: string } | null
+  // Momento até onde o responsável leu o chamado; nulo quando não há responsável (na fila).
+  // Separa a mensagem que chega depois de uma leitura da reserva anterior do alerta, inclusive
+  // lida noutro aparelho.
+  readAt: string | null
   // Mensagens recebidas do cliente depois da última leitura do responsável; 0 na fila e no pendente.
   unreadCount: number
   lastMessage: {
@@ -104,10 +107,14 @@ export function useMarkTicketRead() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (ticketId: number) => api<void>(`/tickets/${ticketId}/read`, { method: 'POST' }),
-    onSuccess: (_data, ticketId) => {
-      // A leitura muda a chave da reserva das mensagens: a mensagem que chega em seguida alerta
-      // mesmo dentro dos 10 s do alerta anterior (spec #310).
-      noteTicketRead(ticketId)
+    onSuccess: async (_data, ticketId) => {
+      // A recarga traz o novo momento da leitura, que muda a chave da reserva das mensagens: a
+      // mensagem que chega depois alerta mesmo dentro dos 10 s do alerta anterior (spec #310). A
+      // lista pedida antes desta leitura é descartada, para não voltar com as não lidas antigas
+      // nem repetir o alerta de uma mensagem já lida (#392).
+      await queryClient.cancelQueries({
+        predicate: (query) => query.queryKey[0] === 'sectors' && query.queryKey[2] === 'tickets',
+      })
       return queryClient.invalidateQueries({ queryKey: ['sectors'] })
     },
   })

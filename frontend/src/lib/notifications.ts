@@ -14,12 +14,20 @@ export type QueuedTicket = TicketSummary & { sectorId: number }
 // primeira: só guarda, sem avisar.
 const knownQueue = new Map<number, Set<number>>()
 
-// Não lidas que o sino já conhecia em cada chamado meu, por setor: `setor:chamado`. Quando a
-// lista recarregada mostra mais (spec #310), chegou mensagem nova. Sem registro, a carga é a
-// primeira e só guarda, sem avisar.
-const knownUnread = new Map<string, number>()
+// Não lidas e momento da leitura que o sino já conhecia em cada chamado meu, por setor:
+// `setor:chamado`. Quando a lista recarregada mostra mais não lidas, ou a mesma quantidade depois
+// de uma leitura feita noutro aparelho, chegou mensagem nova (spec #310, #392). Sem registro, a
+// carga é a primeira e só guarda, sem avisar.
+type KnownUnread = { count: number; readAt: number }
+const knownUnread = new Map<string, KnownUnread>()
 
 const unreadKey = (sectorId: number, ticketId: number) => `${sectorId}:${ticketId}`
+
+// Momento da leitura para comparar entre as cargas e para a chave da reserva do alerta; 0 quando
+// não há leitura (fila e pendente, que não têm não lidas).
+function readAtStamp(ticket: TicketSummary) {
+  return ticket.readAt ? Date.parse(ticket.readAt) : 0
+}
 
 // Chamado aberto em Chamados, informado pela tela. Com a aba visível, a mensagem nova nele não
 // alerta: a pessoa já está vendo a conversa.
@@ -140,7 +148,7 @@ export function useNotifications(user: User) {
       for (const ticket of tickets) {
         const count = myUnread(ticket, user.id)
         if (count !== undefined) {
-          knownUnread.set(unreadKey(sectorId, ticket.id), count)
+          knownUnread.set(unreadKey(sectorId, ticket.id), { count, readAt: readAtStamp(ticket) })
         }
       }
     }
@@ -189,9 +197,22 @@ export function useNotifications(user: User) {
         const key = unreadKey(sectorId, ticket.id)
         seen.add(key)
         const previous = knownUnread.get(key)
-        knownUnread.set(key, count)
-        if (previous !== undefined && count > previous && !isOpenAndVisible(ticket.id)) {
-          alertNewMessage(ticket.id, count, ticket.contact.name, () => {
+        const current = { count, readAt: readAtStamp(ticket) }
+        // Lista pedida antes da leitura: o momento da leitura é anterior ao que o sino já viu.
+        // Ela não avisa nem volta a referência, para o alerta de uma mensagem já lida não repetir
+        // (#392).
+        if (previous !== undefined && current.readAt < previous.readAt) {
+          continue
+        }
+        knownUnread.set(key, current)
+        // Mais não lidas, ou a mesma quantidade depois de uma leitura feita noutro aparelho: nos
+        // dois casos, a mensagem que aparece é outra, e alerta (#392).
+        if (
+          previous !== undefined &&
+          (count > previous.count || (count > 0 && current.readAt > previous.readAt)) &&
+          !isOpenAndVisible(ticket.id)
+        ) {
+          alertNewMessage(ticket.id, count, ticket.readAt, ticket.contact.name, () => {
             void navigateRef.current(`/chamados/${ticket.id}`)
           })
         }
