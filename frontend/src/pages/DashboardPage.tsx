@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, CircleAlert } from 'lucide-react'
 import { useId, type ReactNode } from 'react'
 import { DashboardLists } from '@/components/DashboardLists'
+import { DashboardPending } from '@/components/DashboardPending'
 import { OrganizationPicker } from '@/components/ContactSheet'
 import { PageContent, Topbar } from '@/components/Topbar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -506,12 +507,19 @@ export default function DashboardPage() {
           </Alert>
         )}
         <Section section="now" title="Agora">
-          <DashboardLists
-            sectorId={filter.sectorId}
-            assigneeId={filter.assigneeId}
-            organizationId={filter.organization?.id}
-            showSector={filter.isAdmin && filter.sectorId === undefined}
-          />
+          <div className="flex flex-col gap-3">
+            <DashboardLists
+              sectorId={filter.sectorId}
+              assigneeId={filter.assigneeId}
+              organizationId={filter.organization?.id}
+              showSector={filter.isAdmin && filter.sectorId === undefined}
+            />
+            {/* Abaixo das listas: os pendentes são de agora e não seguem período, atendente, módulo nem órgão. */}
+            <DashboardPending
+              sectorId={filter.sectorId}
+              showSector={filter.isAdmin && filter.sectorId === undefined}
+            />
+          </div>
         </Section>
         <Section section="period" title="No período" detail={periodDetail(data?.period)}>
           {data ? (

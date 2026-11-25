@@ -10,6 +10,23 @@ import (
 	"time"
 )
 
+const countDashboardPendingTickets = `-- name: CountDashboardPendingTickets :one
+select count(*)
+from tickets t
+where t.status = 'pending'
+  and ($1::bigint is null or t.sector_id = $1)
+`
+
+// Quantos chamados estão pendentes agora no recorte do Dashboard: o setor do
+// supervisor, o setor escolhido pelo administrador ou todos (spec #332, #342).
+// O período dos números não muda o quadro: ele mostra os pendentes de agora.
+func (q *Queries) CountDashboardPendingTickets(ctx context.Context, sectorID *int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countDashboardPendingTickets, sectorID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const dashboardArrivals = `-- name: DashboardArrivals :one
 select
     count(*) filter (where a.came_in) as received,
@@ -461,6 +478,63 @@ func (q *Queries) ListDashboardAssignees(ctx context.Context, sectorID int64) ([
 	for rows.Next() {
 		var i ListDashboardAssigneesRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.Active); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardPendingTickets = `-- name: ListDashboardPendingTickets :many
+select
+    t.id, t.protocol, t.pending_reason, t.pending_at,
+    t.contact_id, c.name as contact_name,
+    t.sector_id, s.name as sector_name
+from tickets t
+join contacts c on c.id = t.contact_id
+join sectors s on s.id = t.sector_id
+where t.status = 'pending'
+  and ($1::bigint is null or t.sector_id = $1)
+order by t.pending_at, t.id
+limit 10
+`
+
+type ListDashboardPendingTicketsRow struct {
+	ID            int64
+	Protocol      string
+	PendingReason *string
+	PendingAt     *time.Time
+	ContactID     int64
+	ContactName   string
+	SectorID      int64
+	SectorName    string
+}
+
+// Os pendentes de agora no recorte do Dashboard, os que estão parados há mais
+// tempo primeiro, com o suficiente para a linha do quadro e o link para o
+// chamado (spec #332, #342). A quantidade fica na consulta de contagem.
+func (q *Queries) ListDashboardPendingTickets(ctx context.Context, sectorID *int64) ([]ListDashboardPendingTicketsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardPendingTickets, sectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardPendingTicketsRow
+	for rows.Next() {
+		var i ListDashboardPendingTicketsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Protocol,
+			&i.PendingReason,
+			&i.PendingAt,
+			&i.ContactID,
+			&i.ContactName,
+			&i.SectorID,
+			&i.SectorName,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

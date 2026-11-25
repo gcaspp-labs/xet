@@ -362,7 +362,12 @@ export default function ConversasPage() {
   const [confirming, setConfirming] = useState<number | null>(null)
   const { cancel, cancelFromQueue } = useCancelFromQueue(() => setConfirming(null))
   const navigate = useNavigate()
-  const [tab, setTab] = useState('queue')
+  const location = useLocation()
+  // Abrir a tela já na aba Pendentes (o "Ver todos" do Dashboard): /chamados?aba=pendentes.
+  // A aba padrão continua Fila, e o parâmetro não é reaplicado ao trocar de chamado.
+  const [tab, setTab] = useState(() =>
+    new URLSearchParams(location.search).get('aba') === 'pendentes' ? 'pending' : 'queue',
+  )
   // Bloco visível abaixo de xl: com chamado aberto começa em Conversa; sem chamado, em Meus.
   const [panel, setPanel] = useState<Panel>(ticketId ? 'conversation' : 'mine')
   const [previousTicketId, setPreviousTicketId] = useState(ticketId)
@@ -453,8 +458,6 @@ export default function ConversasPage() {
         onError: (err) => toast.error(err.message),
       },
     )
-  // O X da fila cancela sem janela e sem motivo (#395), com o mesmo aviso da janela.
-  const location = useLocation()
   // Chamado encerrado (cancelado e transferido incluídos) não é desta tela: vai para Atendimentos,
   // substituindo o endereço no histórico. Vale para link antigo e para quem está com o chamado aberto
   // quando outra pessoa o encerra. Mas quem encerra, cancela ou transfere pela própria tela volta a

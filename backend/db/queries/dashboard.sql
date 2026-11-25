@@ -242,3 +242,28 @@ order by lower(u.name), u.id;
 
 -- name: DashboardModuleInSector :one
 select exists (select 1 from modules m where m.id = @id and m.sector_id = @sector_id);
+
+-- name: CountDashboardPendingTickets :one
+-- Quantos chamados estão pendentes agora no recorte do Dashboard: o setor do
+-- supervisor, o setor escolhido pelo administrador ou todos (spec #332, #342).
+-- O período dos números não muda o quadro: ele mostra os pendentes de agora.
+select count(*)
+from tickets t
+where t.status = 'pending'
+  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id));
+
+-- name: ListDashboardPendingTickets :many
+-- Os pendentes de agora no recorte do Dashboard, os que estão parados há mais
+-- tempo primeiro, com o suficiente para a linha do quadro e o link para o
+-- chamado (spec #332, #342). A quantidade fica na consulta de contagem.
+select
+    t.id, t.protocol, t.pending_reason, t.pending_at,
+    t.contact_id, c.name as contact_name,
+    t.sector_id, s.name as sector_name
+from tickets t
+join contacts c on c.id = t.contact_id
+join sectors s on s.id = t.sector_id
+where t.status = 'pending'
+  and (sqlc.narg(sector_id)::bigint is null or t.sector_id = sqlc.narg(sector_id))
+order by t.pending_at, t.id
+limit 10;
