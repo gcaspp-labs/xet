@@ -1,16 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { BookUser, Plus, TriangleAlert } from 'lucide-react'
-import { type KeyboardEvent, useDeferredValue, useEffect, useRef, useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { ClosingFields } from '@/components/ClosingFields'
+import { ContactSearch, ContactSummary } from '@/components/ContactSearch'
 import { ContactSheet, RegisterContactSheet } from '@/components/ContactSheet'
 import { FormDialog } from '@/components/FormDialog'
-import { SearchBox } from '@/components/SearchBox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -24,8 +23,7 @@ import { useSectors } from '@/lib/admin'
 import { useCurrentUser } from '@/lib/auth'
 import { checkPeriod, closingShape, localInput } from '@/lib/closing'
 import { newRequestId } from '@/lib/conversation'
-import { type Contact, useContactOptions, useContactPagination } from '@/lib/directory'
-import { formatPhone, organizationLabel } from '@/lib/format'
+import { type Contact } from '@/lib/directory'
 import { usePhoneForm, useRegisterPhone } from '@/lib/phone'
 
 const schema = z.object(closingShape).superRefine(checkPeriod)
@@ -42,114 +40,6 @@ const defaults = (): FormValues => ({
   startedAt: localInput(new Date()),
   endedAt: localInput(new Date()),
 })
-
-function ContactSummary({ contact }: { contact: Contact }) {
-  return (
-    <>
-      <span className="body-strong block truncate">{contact.name}</span>
-      <span className="caption block truncate text-ink-faint">
-        {contact.phone ? (
-          <span className="mono-num">{formatPhone(contact.phone)}</span>
-        ) : (
-          'Sem telefone'
-        )}
-        {' · '}
-        {contact.organization
-          ? organizationLabel(contact.organization.name, contact.organization.municipality.name)
-          : 'Não cadastrado'}
-      </span>
-    </>
-  )
-}
-
-// Busca do contato de quem ligou: escolher um contato resumido no topo da janela.
-function ContactSearch({
-  onChoose,
-  onRegister,
-}: {
-  onChoose: (contact: Contact) => void
-  onRegister: () => void
-}) {
-  const [query, setQuery] = useState('')
-  const search = useDeferredValue(query)
-  const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useContactOptions(search)
-  const contacts = data?.pages.flatMap((page) => page.items) ?? []
-  const end = useContactPagination({
-    query: search,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
-    itemCount: contacts.length,
-  })
-
-  // As setas movem o foco entre os contatos; ao focar o último contato que dá pra escolher, vem a próxima página.
-  const moveFocus = (event: KeyboardEvent<HTMLUListElement>) => {
-    const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
-    if (step === 0) {
-      return
-    }
-    const options = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
-    )
-    const next = options[options.indexOf(document.activeElement as HTMLButtonElement) + step]
-    if (next) {
-      event.preventDefault()
-      next.focus()
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <SearchBox
-        value={query}
-        onChange={setQuery}
-        label="Buscar contato"
-        placeholder="Nome, município, telefone ou CNPJ"
-      />
-      <Button type="button" variant="outline" size="sm" className="self-start" onClick={onRegister}>
-        <Plus strokeWidth={1.7} aria-hidden />
-        Novo contato
-      </Button>
-      {contacts.length > 0 ? (
-        <ul
-          aria-label="Contatos"
-          className="flex flex-col divide-y divide-line-soft"
-          onKeyDown={moveFocus}
-        >
-          {contacts.map((contact, index) => (
-            <li key={contact.id}>
-              <button
-                type="button"
-                disabled={!contact.phone}
-                onClick={() => onChoose(contact)}
-                onFocus={() => {
-                  if (
-                    hasNextPage &&
-                    !isFetchingNextPage &&
-                    contacts.slice(index + 1).every((c) => !c.phone)
-                  ) {
-                    void fetchNextPage()
-                  }
-                }}
-                className="w-full min-w-0 rounded-(--radius-7) px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ContactSummary contact={contact} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <Empty>
-          <EmptyMedia>
-            <BookUser strokeWidth={1.7} aria-hidden />
-          </EmptyMedia>
-          <EmptyDescription>Nenhum contato encontrado.</EmptyDescription>
-        </Empty>
-      )}
-      <div ref={end} aria-hidden />
-    </div>
-  )
-}
 
 // Divisão visual entre quem ligou e o atendimento (design.md).
 function Divider({ children }: { children: string }) {
