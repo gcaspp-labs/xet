@@ -1227,3 +1227,100 @@ test('o X da lista Fila do Dashboard pede confirmação no item e cancela sem ab
   await expect(page.getByRole('heading', { name: assumed })).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
 })
+
+// O quadro Pendentes do Dashboard: quantidade, os parados há mais tempo, o clique na linha e o
+// "Ver todos" na aba Pendentes de Chamados (spec #332, #342).
+const pendingBoard = (page: Page) => page.getByRole('region', { name: /^Pendentes \(/ })
+
+// Marca o chamado do contato como pendente pela API, como o atendente informado.
+async function markPendingContact(
+  baseURL: string,
+  sectorId: number,
+  email: string,
+  contact: string,
+) {
+  await receive(baseURL, sectorId, contact)
+  const ticket = await ticketOf(baseURL, sectorId, email, contact)
+  const api = await sessionOf(baseURL, email)
+  expect((await api.post(`/api/tickets/${ticket.id}/assign`)).ok()).toBeTruthy()
+  const pending = await api.post(`/api/tickets/${ticket.id}/pending`, {
+    data: { reason: 'Aguardando o retorno do órgão' },
+  })
+  expect(pending.ok(), await pending.text()).toBeTruthy()
+  return { ticket, api }
+}
+
+test('o quadro Pendentes mostra a quantidade e os mais antigos, abre o chamado e a aba Pendentes', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const contact = `Pendente ${unique().id}`
+  const { ticket, api } = await markPendingContact(baseURL!, own.sector.id, own.agent, contact)
+  await api.dispose()
+  await signIn(page, own.supervisor, userPassword)
+  await page.goto('/dashboard')
+
+  const board = pendingBoard(page)
+  await expect(board).toContainText(`Pendentes (1)`)
+  await expect(board).toContainText('Os 10 parados há mais tempo')
+  const row = board.getByRole('row').filter({ hasText: contact })
+  await expect(row).toContainText(ticket.protocol)
+  await expect(row).toContainText('Aguardando o retorno do órgão')
+  // A coluna "Parado há" diz há quanto tempo ele espera.
+  await expect(board.getByRole('columnheader', { name: 'Parado há' })).toBeVisible()
+  await expect(row.getByRole('cell').last()).toContainText(/agora|\d+ min/)
+
+  // A linha abre o chamado pendente em Chamados.
+  await board.getByRole('link', { name: contact }).click()
+  await expect(page).toHaveURL(new RegExp(`/chamados/${ticket.id}$`))
+
+  // "Ver todos" abre Chamados já na aba Pendentes, sem mudar a aba padrão.
+  await page.goto('/dashboard')
+  await pendingBoard(page).getByRole('link', { name: 'Ver todos' }).click()
+  await expect(page).toHaveURL(/\/chamados\?aba=pendentes$/)
+  const panel = page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
+  await expect(panel.getByRole('tab', { name: /^Pendentes/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await expect(panel.getByRole('tab', { name: /^Fila/ })).toHaveAttribute('aria-selected', 'false')
+})
+
+test('sem pendentes, o quadro diz "Nenhum chamado pendente"', async ({ page, baseURL }) => {
+  const own = await seedSector(baseURL!)
+  await signIn(page, own.supervisor, userPassword)
+  await page.goto('/dashboard')
+  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente.')
+})
+
+test('o quadro Pendentes se atualiza sozinho quando outro usuário marca e retoma', async ({
+  page,
+  baseURL,
+}) => {
+  const own = await seedSector(baseURL!)
+  const contact = `Ao vivo ${unique().id}`
+  await signIn(page, own.supervisor, userPassword)
+  await page.goto('/dashboard')
+  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente.')
+
+  // A atendente marca como pendente, sem a tela do supervisor recarregar.
+  const api = await sessionOf(baseURL!, own.agent)
+  await receive(baseURL!, own.sector.id, contact)
+  const ticket = await ticketOf(baseURL!, own.sector.id, own.agent, contact)
+  expect((await api.post(`/api/tickets/${ticket.id}/assign`)).ok()).toBeTruthy()
+  expect(
+    (
+      await api.post(`/api/tickets/${ticket.id}/pending`, {
+        data: { reason: 'Aguardando o cliente' },
+      })
+    ).ok(),
+  ).toBeTruthy()
+  await expect(pendingBoard(page)).toContainText('Pendentes (1)')
+  await expect(pendingBoard(page)).toContainText(contact)
+
+  // Retomado, ele sai do quadro.
+  expect((await api.post(`/api/tickets/${ticket.id}/resume`)).ok()).toBeTruthy()
+  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente.')
+  await api.dispose()
+})

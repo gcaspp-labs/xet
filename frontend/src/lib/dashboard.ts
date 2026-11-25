@@ -59,6 +59,31 @@ export function useDashboard(search: string, enabled: boolean) {
   })
 }
 
+// Um chamado parado no quadro Pendentes do Dashboard: o contato, o motivo, desde quando e quem o
+// marcou, com o setor para o administrador que vê todos (spec #332, #342).
+export type DashboardPendingTicket = {
+  id: number
+  protocol: string
+  contact: { id: number; name: string; phone: string | null; registered: boolean }
+  reason: string | null
+  pendingAt: string | null
+  pendingBy: { id: number; name: string } | null
+  sector: Ref
+}
+
+export type DashboardPendingBoard = { count: number; tickets: DashboardPendingTicket[] }
+
+// O quadro Pendentes: os de agora, os que estão parados há mais tempo primeiro. O período dos
+// números não o muda, e o recorte de setor é o mesmo do resto do Dashboard.
+export function useDashboardPending(sectorId: number | undefined) {
+  const search = sectorId === undefined ? '' : `?sectorId=${sectorId}`
+  return useQuery({
+    queryKey: [...dashboardKey, 'pending', search],
+    queryFn: () => api<DashboardPendingBoard>(`/dashboard/pending${search}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
 // Quem é do setor, ativo ou não, e quem já foi responsável por chamado dele.
 export function useDashboardAssignees(sectorId: number | undefined) {
   return useQuery({

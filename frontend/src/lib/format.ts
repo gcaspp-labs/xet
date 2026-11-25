@@ -177,6 +177,23 @@ export function formatAverageTime(seconds: number) {
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`
 }
 
+// Há quanto tempo um chamado está parado, na coluna "Parado há" do quadro Pendentes do Dashboard:
+// "agora", "20 min", "18 h 00 min", "3 dias" (#342). Sem o "há", que o título da coluna já diz.
+export function formatIdleTime(iso: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  if (minutes < 1) {
+    return 'agora'
+  }
+  if (minutes < 60) {
+    return `${minutes} min`
+  }
+  if (minutes < 24 * 60) {
+    return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`
+  }
+  const days = Math.floor(minutes / (24 * 60))
+  return `${days} ${days === 1 ? 'dia' : 'dias'}`
+}
+
 // Dia que a API devolve como 2026-03-02, no formato pt-BR, sem passar pelo fuso do navegador.
 export function formatDay(day: string) {
   return day.split('-').reverse().join('/')
