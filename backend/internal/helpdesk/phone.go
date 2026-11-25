@@ -103,21 +103,12 @@ func (s *Service) RegisterPhone(ctx context.Context, actor auth.User, sectorID i
 	var ticket db.Ticket
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		// The registration of the contact does not change meanwhile.
-		contact, err := q.GetContactForShare(ctx, in.ContactID)
-		if errors.Is(err, pgx.ErrNoRows) {
+		// The registration of the contact does not change meanwhile. A missing
+		// contact has its own refusal in this flow.
+		if err := lockClosingContact(ctx, q, in.ContactID, in.OrganizationID); errors.Is(err, pgx.ErrNoRows) {
 			return ErrUnknownContact
-		}
-		if err != nil {
-			return fmt.Errorf("lock contact: %w", err)
-		}
-		if !contact.Registered {
-			return ErrContactNotRegistered
-		}
-		if _, err := q.GetOrganization(ctx, in.OrganizationID); errors.Is(err, pgx.ErrNoRows) {
-			return ErrInvalidOrganization
 		} else if err != nil {
-			return fmt.Errorf("get organization: %w", err)
+			return err
 		}
 		protocol, err := nextProtocol(ctx, q)
 		if err != nil {

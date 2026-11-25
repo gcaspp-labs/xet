@@ -44,9 +44,9 @@ func (s *Service) TransferToSector(ctx context.Context, actor auth.User, ticketI
 		}
 		// The organization of the contact can't change until the commit, so
 		// the new ticket gets the one the contact has now.
-		contact, err := q.GetContactForShare(ctx, t.ContactID)
+		contact, err := lockContact(ctx, q, t.ContactID)
 		if err != nil {
-			return fmt.Errorf("lock contact: %w", err)
+			return err
 		}
 
 		closed, err = db.AsTicket(q.CloseTransferredTicket(ctx, db.CloseTransferredTicketParams{ID: t.ID, TransferReason: transferReason}))

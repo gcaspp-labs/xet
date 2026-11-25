@@ -560,3 +560,33 @@ func TestClosingFormReturnsTheModulesOfTheContact(t *testing.T) {
 		t.Fatalf("inactive module marked: %v", got)
 	}
 }
+
+// The closing checks the contact before the organization: with both wrong, the
+// contact refusal prevails, and the organization is only consulted for a
+// registered contact (#452).
+func TestCloseChecksTheContactBeforeTheOrganization(t *testing.T) {
+	t.Parallel()
+	c := newClosing(t)
+	e := c.e
+	ticketsBefore := e.Count("tickets")
+
+	resp := e.closeForm(c.ticket.ID, c.anaToken, c.form(999999))
+	if resp.Status != http.StatusUnprocessableEntity ||
+		resp.Body["error"] != "Cadastre o contato e vincule-o a um órgão antes de encerrar." {
+		t.Fatalf("unregistered contact with unknown organization: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	c.register()
+	auditAfterRegister := e.Count("audit_logs")
+	resp = e.closeForm(c.ticket.ID, c.anaToken, c.form(999999))
+	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Escolha um órgão cadastrado." {
+		t.Fatalf("unknown organization: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	if got := e.assignment(c.ticket.ID); got.Status != "in_progress" {
+		t.Fatalf("ticket = %+v", got)
+	}
+	if e.Count("tickets") != ticketsBefore || e.Count("ticket_modules") != 0 || e.Count("audit_logs") != auditAfterRegister {
+		t.Fatal("a refused closing recorded something")
+	}
+}

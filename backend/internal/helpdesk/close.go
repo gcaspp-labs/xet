@@ -2,7 +2,6 @@ package helpdesk
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -154,17 +153,8 @@ func closeLocked(ctx context.Context, q *db.Queries, actor auth.User, ticketID i
 	if err := conducts(t, actor); err != nil {
 		return db.Ticket{}, nil, err
 	}
-	contact, err := q.GetContactForShare(ctx, t.ContactID)
-	if err != nil {
-		return db.Ticket{}, nil, fmt.Errorf("lock contact: %w", err)
-	}
-	if !contact.Registered {
-		return db.Ticket{}, nil, ErrContactNotRegistered
-	}
-	if _, err := q.GetOrganization(ctx, in.OrganizationID); errors.Is(err, pgx.ErrNoRows) {
-		return db.Ticket{}, nil, ErrInvalidOrganization
-	} else if err != nil {
-		return db.Ticket{}, nil, fmt.Errorf("get organization: %w", err)
+	if err := lockClosingContact(ctx, q, t.ContactID, in.OrganizationID); err != nil {
+		return db.Ticket{}, nil, err
 	}
 
 	startedAt := t.StartedAt
