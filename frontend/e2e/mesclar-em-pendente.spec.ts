@@ -59,16 +59,6 @@ async function openTicketAsContact(page: Page, seed: Seed, body: string) {
   return found!
 }
 
-// Deixa um chamado do contato aguardando: é o segundo pendente da corrida.
-async function markPending(page: Page, seed: Seed, reason: string) {
-  const ticket = await openTicketAsContact(page, seed, `Voltei: ${reason}`)
-  const response = await page.request.post(`/api/tickets/${ticket.id}/pending`, {
-    data: { reason },
-  })
-  expect(response.ok()).toBeTruthy()
-  return ticket
-}
-
 // Alguém retoma o pendente antes da mesclagem (Atendimentos, Retomar chamado). Sem `from`, o
 // cliente escreve de novo, o atendente assume o chamado novo e traz o pendente para ele; com
 // `from`, o pendente é retomado a partir de um atendimento que já está em andamento.
@@ -211,13 +201,13 @@ test('quando alguém retoma o pendente antes, a janela avisa, recarrega e cai no
   page,
   baseURL,
 }) => {
-  const seed = await seedTicketToMergeIntoPending(baseURL!)
+  const seed = await seedTicketToMergeIntoPending(baseURL!, { secondPending: true })
   await signIn(page, seed.agent, userPassword)
 
-  // Dois pendentes do contato no setor: o da semente e um segundo, mais novo.
-  const second = await markPending(page, seed, 'Aguardando o boleto do mês')
+  // Dois pendentes do contato no setor, os dois criados antes do fim do B: são as duas escolhas.
+  const secondId = seed.secondPendingId!
   const firstProtocol = await protocolOf(page, seed.pendingId)
-  const secondProtocol = await protocolOf(page, second.id)
+  const secondProtocol = await protocolOf(page, secondId)
 
   await page.goto(`/atendimentos/${seed.ticketId}`)
   await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
@@ -229,7 +219,7 @@ test('quando alguém retoma o pendente antes, a janela avisa, recarrega e cai no
   // A pessoa escolhe o segundo pendente, e outra pessoa o retoma nesse meio-tempo.
   await dialog.getByRole('radio').nth(1).check()
   await expect(dialog.getByRole('radio').nth(1)).toBeChecked()
-  await resumeElsewhere(page, seed, second.id)
+  await resumeElsewhere(page, seed, secondId)
 
   await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
   await expect(dialog).toContainText(
@@ -242,7 +232,7 @@ test('quando alguém retoma o pendente antes, a janela avisa, recarrega e cai no
   await expect(dialog).not.toContainText(secondProtocol)
 
   // Retomado também o último pendente, a janela fica sem escolhas e diz que não há mais pendente.
-  await resumeElsewhere(page, seed, seed.pendingId, second.id)
+  await resumeElsewhere(page, seed, seed.pendingId, secondId)
   await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
   await expect(dialog.getByRole('radio')).toHaveCount(0)
   await expect(dialog).toContainText('Este contato não tem mais chamado pendente.')
@@ -308,4 +298,49 @@ test('a ação não aparece para quem não pode corrigir, no transferido, no mes
   await page.goto(`/atendimentos/${closed.ticketId}`)
   await expect(page.getByRole('button', { name: 'Corrigir' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Mesclar em pendente' })).toHaveCount(0)
+})
+
+// O registro por telefone nasce encerrado como resolvido e o banco não aceita marcá-lo como
+// mesclado: a ficha não oferece "Mesclar em pendente" e a API recusa com 409, nunca com 500
+// (#440).
+test('registro por telefone não é mesclado em pendente', async ({ page, baseURL }) => {
+  const seed = await seedTicketToMergeIntoPending(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  const closed = (await (await page.request.get(`/api/tickets/${seed.ticketId}`)).json()) as {
+    contact: { id: number }
+  }
+  const endedAt = new Date(Date.now() - 30 * 60 * 1000)
+  const startedAt = new Date(endedAt.getTime() - 15 * 60 * 1000)
+  const registered = await page.request.post(`/api/sectors/${seed.sector.id}/phone-tickets`, {
+    data: {
+      contactId: closed.contact.id,
+      organizationId: seed.organization.id,
+      moduleIds: [seed.module.id],
+      subject: 'Segunda via',
+      resolution: 'Orientado por telefone.',
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+      clientRequestId: crypto.randomUUID(),
+    },
+  })
+  expect(registered.status()).toBe(201)
+  const phoneTicket = (await registered.json()) as { id: number }
+
+  const refused = await page.request.post(`/api/tickets/${phoneTicket.id}/merge-into-pending`, {
+    data: { pendingTicketId: seed.pendingId },
+  })
+  expect(refused.status()).toBe(409)
+  expect((await refused.json()).error).toBe(
+    'Registro por telefone não pode ser mesclado em pendente.',
+  )
+
+  // A ficha do registro por telefone não traz a ação, e o pendente continua pendente.
+  await page.goto(`/atendimentos/${phoneTicket.id}`)
+  const details = page.getByRole('region', { name: 'Atendimento', exact: true })
+  await expect(details).toContainText('Encerrado')
+  await expect(page.getByRole('button', { name: 'Mesclar em pendente' })).toHaveCount(0)
+  const pending = (await (await page.request.get(`/api/tickets/${seed.pendingId}`)).json()) as {
+    status: string
+  }
+  expect(pending.status).toBe('pending')
 })
