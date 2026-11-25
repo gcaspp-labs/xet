@@ -922,6 +922,7 @@ test('mensagem originada no celular do setor não tem menu', async ({ page, requ
 
   // A mensagem enviada pelo XET no mesmo chamado tem o menu: é a diferença que o teste prova.
   const xet = await sendText(page, conversation, 'Enviada pelo XET')
+  await xet.bubble.hover()
   await expect(xet.bubble.getByRole('button', { name: 'Ações da mensagem' })).toHaveCount(1)
 })
 
