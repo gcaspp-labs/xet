@@ -6,6 +6,7 @@ import {
   ok,
   seedClosedTicket,
   seedDirectory,
+  seedMergedTicket,
   seedSector,
   signIn,
   unique,
@@ -266,5 +267,66 @@ test('a ficha mostra a cadeia de transferências e o destino lê o chamado anter
   await expect(conversation(page)).toContainText('Folha de março')
   await expectReadOnly(page)
   // O destino só lê o chamado de outro setor: sem Corrigir.
+  await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toHaveCount(0)
+})
+
+// O mesclado num pendente: as mensagens foram para o original, e a ficha só avisa e leva a ele.
+test('o mesclado só avisa a mesclagem com o link, sem conversa e sem Corrigir', async ({
+  page,
+  baseURL,
+}) => {
+  const m = await seedMergedTicket(baseURL!)
+  await signIn(page, m.agent, userPassword)
+  await page.goto(`/atendimentos/${m.merged.id}`)
+
+  const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+  await expect(conversation).toContainText('Chamado mesclado')
+  await expect(conversation).toContainText(
+    'As mensagens deste chamado foram para o chamado original.',
+  )
+  const link = conversation.getByRole('link', { name: `Ver chamado ${m.original.protocol}` })
+  await expect(link).toBeVisible()
+
+  // Sem conversa (as mensagens estão no original), sem Corrigir, e a situação nos Detalhes.
+  await expect(page.getByText('Preciso da segunda via do contracheque')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+  await expect(details(page)).toContainText('Mesclado')
+  // A data é a da mesclagem, como o badge da situação.
+  await expect(details(page)).toContainText('Mesclado em')
+  await expect(details(page)).not.toContainText('Encerrado em')
+
+  // O pendente ficou encerrado com os dados do mesclado, então o link abre em Atendimentos.
+  await link.click()
+  await expect(page).toHaveURL(new RegExp(`/atendimentos/${m.original.id}$`))
+})
+
+// O aviso de mesclado vem antes do ramo do registro por telefone: a ficha do mesclado mostra o
+// aviso, e não a ficha do atendimento por telefone. Hoje o banco só aceita registro por telefone
+// encerrado como resolvido (constraint tickets_phone_closed), então a API ainda não cria esse
+// estado; o teste troca o canal na resposta do detalhe para cobrir a ordem dos ramos da ficha.
+test('o registro por telefone mesclado mostra o aviso da mesclagem, e não a ficha do telefone', async ({
+  page,
+  baseURL,
+}) => {
+  const m = await seedMergedTicket(baseURL!)
+  await signIn(page, m.agent, userPassword)
+  await page.route(`**/api/tickets/${m.merged.id}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    const response = await route.fetch()
+    const body = (await response.json()) as Record<string, unknown>
+    await route.fulfill({ response, json: { ...body, channel: 'phone' } })
+  })
+  await page.goto(`/atendimentos/${m.merged.id}`)
+
+  const card = page.getByRole('region', { name: 'Conversa', exact: true })
+  // O primeiro carregamento da ficha depois do login pode passar dos 5 s padrão do expect.
+  await expect(card).toBeVisible({ timeout: 15_000 })
+  await expect(card).toContainText('Atendimento por telefone mesclado')
+  await expect(card).toContainText('Os dados deste atendimento foram para o chamado original.')
+  await expect(card.getByRole('link', { name: `Ver chamado ${m.original.protocol}` })).toBeVisible()
+  await expect(card).toContainText('os dados do atendimento foram para o chamado original')
+
+  // Sem Correção nem a ficha do telefone.
   await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toHaveCount(0)
 })

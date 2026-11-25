@@ -12,6 +12,7 @@ import {
   login,
   ok,
   seedDirectory,
+  seedMergedTicket,
   seedSector,
   seedTransferredTicket,
   unique,
@@ -882,4 +883,24 @@ test('etapa transferida sem formulário aparece com Transferido e o destino, sem
   await page.getByRole('combobox', { name: 'Módulo' }).fill('folha')
   await page.keyboard.press('Escape')
   await expect(bodyRows(page).filter({ hasText: contact })).toHaveCount(0)
+})
+
+test('o mesclado aparece com a situação Mesclado, e o link abre o chamado original', async ({
+  page,
+  baseURL,
+}) => {
+  const m = await seedMergedTicket(baseURL!, { resumed: true })
+  await openList(page, m.agent, userPassword)
+  const search = page.getByRole('searchbox', { name: 'Buscar chamados' })
+  await search.fill(m.merged.protocol)
+  await expect(bodyRows(page)).toHaveCount(1)
+
+  const row = bodyRows(page).first()
+  await expect(row).toContainText('Mesclado')
+  await expect(row).not.toContainText('Encerrado')
+  // O original voltou a ser atendido pelo Retomar chamado, então o link abre em Chamados.
+  const link = row.getByRole('link', { name: `Ver chamado ${m.original.protocol}` })
+  await expect(link).toBeVisible()
+  await link.click()
+  await expect(page).toHaveURL(new RegExp(`/chamados/${m.original.id}$`))
 })

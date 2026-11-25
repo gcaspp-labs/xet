@@ -2,11 +2,18 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api'
 import type { FormSubject } from '@/lib/closing'
+import type { ClosureKind } from '@/lib/format'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
 import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
 import { readDraft, saveDraft } from '@/lib/message-draft'
-import { type MessageType, pendingTicketsKey, ticketsKey, workloadKey } from '@/lib/tickets'
+import {
+  type MergedInto,
+  type MessageType,
+  pendingTicketsKey,
+  ticketsKey,
+  workloadKey,
+} from '@/lib/tickets'
 
 // Limite de arquivo do backend (spec.md, Conversa).
 export const maxFileSize = 16 * 1024 * 1024
@@ -31,7 +38,10 @@ export type TicketDetail = {
   organization: { id: number; name: string; municipality: { id: number; name: string } } | null
   assignee: { id: number; name: string } | null
   closedBy: { id: number; name: string } | null
-  closureType: 'resolved' | 'transferred' | 'cancelled' | null
+  closureType: ClosureKind | null
+  // Chamado pendente em que este foi mesclado: só no mesclado, e as mensagens foram para ele
+  // (spec #332). A situação diz onde o link o abre. A API omite a chave quando não é mesclado.
+  mergedInto?: MergedInto | null
   // Por que o chamado está pendente, quem o marcou e quando; vem só no pendente (spec #332).
   pending: { reason: string; by: { id: number; name: string }; at: string } | null
   // Pendentes do mesmo contato e setor, para o aviso e a janela Retomar chamado; vem no chamado
@@ -130,7 +140,7 @@ export type HistoryEntry = {
   protocol: string
   status: 'queued' | 'in_progress' | 'pending' | 'closed'
   channel: TicketChannel
-  closureType: 'resolved' | 'transferred' | 'cancelled' | null
+  closureType: ClosureKind | null
   sectorName: string
   arrivedAt: string
   closedAt: string | null

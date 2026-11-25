@@ -1,6 +1,7 @@
 import { CircleAlert, Inbox, Phone } from 'lucide-react'
 import { type ReactNode, useDeferredValue, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { MergedIntoLink } from '@/components/MergedIntoLink'
 import { Pagination } from '@/components/Pagination'
 import { PhoneRegistrationSheet } from '@/components/PhoneRegistrationSheet'
 import { SearchBox } from '@/components/SearchBox'
@@ -345,6 +346,10 @@ function SituationCell({ ticket }: { ticket: ClosedTicket }) {
       {ticket.channel === 'phone' && <PhoneTag />}
       {ticket.transferredTo && (
         <span className="caption text-ink-faint">para {ticket.transferredTo.name}</span>
+      )}
+      {ticket.mergedInto && (
+        // Fica por cima do link da linha inteira, e leva ao chamado original (spec #332).
+        <MergedIntoLink mergedInto={ticket.mergedInto} className="relative z-10" />
       )}
     </span>
   )
