@@ -743,8 +743,11 @@ test('erro ao retomar com a janela aberta: o servidor recusa, a janela avisa e o
 
   // Com a janela aberta, a supervisão devolve o chamado novo à fila pela API: a escolha não vale mais.
   const api = await apiAs(baseURL!, seed.supervisor)
-  expect((await api.post(`/api/tickets/${seed.ticketId}/return`)).ok()).toBeTruthy()
-  await api.dispose()
+  try {
+    expect((await api.post(`/api/tickets/${seed.ticketId}/return`)).ok()).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
 
   // A janela mostra o erro do servidor e continua aberta; o chamado atrás dela se atualiza para a fila.
   await dialog.getByRole('button', { name: 'Retomar chamado' }).click()
@@ -781,29 +784,33 @@ test('a retomada pelo chamado novo tira o pendente da aba Pendentes de quem só 
 
   // O colega do setor fica parado na aba Pendentes: só assiste, sem recarregar nem navegar.
   const context = await browser.newContext()
-  const other = await context.newPage()
-  await signIn(other, colleague, userPassword)
-  await other.goto('/chamados')
-  await pendingTab(other)
-    .getByRole('tab', { name: /^Pendentes/ })
-    .click()
-  await expect(pendingRow(other, seed.contact)).toBeVisible()
+  try {
+    const other = await context.newPage()
+    await signIn(other, colleague, userPassword)
+    await other.goto('/chamados')
+    await pendingTab(other)
+      .getByRole('tab', { name: /^Pendentes/ })
+      .click()
+    await expect(pendingRow(other, seed.contact)).toBeVisible()
 
-  // O responsável retoma pelo aviso do chamado novo, que passa as mensagens para o pendente.
-  await openQueued(page, seed.contact, seed.sector.id)
-  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
-  await pendingNotice(page).getByRole('button', { name: 'Retomar chamado' }).click()
-  await page
-    .getByRole('dialog', { name: 'Retomar chamado' })
-    .getByRole('button', { name: 'Retomar chamado' })
-    .click()
-  await expect(page).toHaveURL(new RegExp(`/chamados/${seed.pendingId}$`))
+    // O responsável retoma pelo aviso do chamado novo, que passa as mensagens para o pendente.
+    await openQueued(page, seed.contact, seed.sector.id)
+    await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+    await pendingNotice(page).getByRole('button', { name: 'Retomar chamado' }).click()
+    await page
+      .getByRole('dialog', { name: 'Retomar chamado' })
+      .getByRole('button', { name: 'Retomar chamado' })
+      .click()
+    await expect(page).toHaveURL(new RegExp(`/chamados/${seed.pendingId}$`))
 
-  // Na sessão do colega, o pendente sai da lista sozinho, sem recarregar a página.
-  await expect(pendingRow(other, seed.contact)).toHaveCount(0)
-  await expect(other).toHaveURL(/\/chamados$/)
-  await context.close()
+    // Na sessão do colega, o pendente sai da lista sozinho, sem recarregar a página.
+    await expect(pendingRow(other, seed.contact)).toHaveCount(0)
+    await expect(other).toHaveURL(/\/chamados$/)
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
+  }
 
   // O chamado retomado aparece em Meus chamados de quem retomou.
   await page.goto('/chamados')
