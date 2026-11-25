@@ -376,7 +376,7 @@ test('o texto da janela de registro por telefone acompanha o tamanho escolhido',
 
   const open = async () => {
     await page.goto('/atendimentos')
-    await page.getByRole('button', { name: 'Registrar atendimento por telefone' }).click()
+    await page.getByRole('button', { name: 'Novo atendimento' }).click()
     const dialog = page.getByRole('dialog', { name: 'Registrar atendimento por telefone' })
     await expect(dialog.getByLabel('Buscar contato')).toBeVisible()
   }
@@ -662,7 +662,7 @@ for (const theme of ['light', 'dark'] as const) {
     // Janela do registro por telefone, em Atendimentos.
     await sheet.getByRole('button', { name: 'Cancelar', exact: true }).click()
     await page.goto('/atendimentos')
-    await page.getByRole('button', { name: 'Registrar atendimento por telefone' }).click()
+    await page.getByRole('button', { name: 'Novo atendimento' }).click()
     const phone = page.getByRole('dialog', { name: 'Registrar atendimento por telefone' })
     await expect(phone.getByLabel('Buscar contato')).toBeVisible()
     await expectContrast(page, 'janela de registro por telefone')
