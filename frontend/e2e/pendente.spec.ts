@@ -84,8 +84,13 @@ const pendingTab = (page: Page) => page.getByRole('region', { name: 'Fila, assun
 // Só o painel da aba Pendentes: a região também tem a Fila, e o mesmo contato pode estar nas duas.
 const pendingList = (page: Page) => pendingTab(page).locator('[role="tabpanel"]:visible')
 
+// A linha de pendente é a única com o "Retomar chamado de …": durante a troca de aba a Fila também
+// aparece como painel visível, e o mesmo contato pode estar nas duas listas.
 const pendingRow = (page: Page, contact: string) =>
-  pendingList(page).getByRole('listitem').filter({ hasText: contact })
+  pendingList(page)
+    .getByRole('listitem')
+    .filter({ hasText: contact })
+    .filter({ has: page.getByRole('button', { name: `Retomar chamado de ${contact}` }) })
 
 // Abre o chamado da fila, assume e o coloca como pendente pela janela do menu ⋯.
 async function markPending(page: Page, contact: string, reason: string) {
