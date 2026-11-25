@@ -1,5 +1,5 @@
 // Encerrar: ver features/close.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
 
 await journey('close', async (t) => {
   const { sector, organization, paulo } = await t.step(
@@ -17,7 +17,6 @@ await journey('close', async (t) => {
 
   // Os chamados encerrados ficam no histórico da tela Atendimentos; a fila, na tela Chamados.
   const history = (page) => page.getByRole('table').getByRole('row')
-  const queueOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
   // As ações menos usadas ficam no menu "Mais ações".
   const chooseAction = async (page, name) => {
     await page.getByRole('button', { name: 'Mais ações' }).click()
@@ -32,12 +31,12 @@ await journey('close', async (t) => {
   const agentPage = await t.signIn(agent)
 
   const ticketId = await t.step('Atendente assume o chamado', async () => {
-    await queueOf(agentPage)
+    await panelOf(agentPage)
       .getByRole('button', { name: `Assumir chamado de ${paulo.name}` })
       .click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     await expect(
-      agentPage.getByRole('region', { name: 'Conversa', exact: true }),
+      conversationOf(agentPage),
     ).toContainText(`${agent.name} assumiu o chamado`)
     return Number(agentPage.url().split('/').pop())
   })
@@ -103,7 +102,7 @@ await journey('close', async (t) => {
       await sheet.getByRole('button', { name: 'Não adicionar' }).click()
       await expect(agentPage.getByText('Chamado encerrado', { exact: true })).toBeVisible()
       await expect(agentPage).toHaveURL(/\/chamados$/)
-      await expect(agentPage.getByRole('region', { name: 'Conversa', exact: true })).toHaveCount(0)
+      await expect(conversationOf(agentPage)).toHaveCount(0)
       await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
       await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
       const doneRow = history(agentPage).filter({ hasText: paulo.name })
@@ -127,7 +126,7 @@ await journey('close', async (t) => {
     await agentPage.goto(`/chamados/${ticketId}`)
     await expect(agentPage).toHaveURL(new RegExp(`/atendimentos/${ticketId}$`))
     await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toContainText('Encerrado em')
-    const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+    const conversation = conversationOf(agentPage)
     // Na ficha, o aviso "Chamado encerrado." virou "Só leitura. Encerrado em ... por ...".
     await expect(conversation).toContainText('Só leitura. Encerrado em')
     await expect(
@@ -151,7 +150,7 @@ await journey('close', async (t) => {
     async () => {
       await phone.receive(paulo, 'Agora é sobre férias')
       await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
-      const queue = queueOf(agentPage)
+      const queue = panelOf(agentPage)
       await expect(queue.getByRole('listitem').filter({ hasText: paulo.name })).toHaveCount(1)
       await expect(queue).toContainText('Agora é sobre férias')
       await t.shot(agentPage, 'novo-chamado-na-fila')
@@ -170,7 +169,7 @@ await journey('close', async (t) => {
       const golpe = t.customer('Paula Golpe')
       await phone.receive(golpe, 'Seu boleto venceu')
       await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
-      const queue = queueOf(agentPage)
+      const queue = panelOf(agentPage)
       const x = queue.getByRole('button', { name: `Cancelar chamado de ${golpe.name}` })
       // O X não cancela no primeiro clique: o próprio item pede confirmação, com o Voltar em foco.
       await x.click()
@@ -189,7 +188,7 @@ await journey('close', async (t) => {
       await t.shot(agentPage, 'cancelado-no-historico')
       // O registro na conversa mostra quem cancelou e quando, sem a linha "Motivo:".
       await row.getByRole('cell', { name: 'Cancelado' }).click({ force: true })
-      const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+      const conversation = conversationOf(agentPage)
       const entry = conversation
         .getByRole('listitem', { name: 'Registro do chamado' })
         .filter({ hasText: `${agent.name} cancelou o chamado` })

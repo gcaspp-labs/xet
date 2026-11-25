@@ -1,6 +1,6 @@
 // Consultar, só para leitura, as versões e a exclusão de mensagens em Atendimentos: ver
 // features/atendimentos-message-revisions.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey } from '../scripts/journey-lib.mjs'
 
 await journey('atendimentos-message-revisions', async (t) => {
   const data = await t.step(
@@ -93,7 +93,7 @@ await journey('atendimentos-message-revisions', async (t) => {
     await expect(agentPage).toHaveURL(new RegExp(`/atendimentos/${ticket.id}$`))
     await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toBeVisible()
 
-    const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+    const conversation = conversationOf(agentPage)
     const sent = conversation.getByRole('listitem', { name: 'Mensagem enviada' })
     await expect(sent).toContainText('Segue o boleto de outubro')
     await expect(sent).toContainText('Editada')
@@ -115,7 +115,7 @@ await journey('atendimentos-message-revisions', async (t) => {
   })
 
   await t.step('As versões da mensagem do XET por teclado, com a exclusão só no XET', async () => {
-    const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+    const conversation = conversationOf(agentPage)
     const trigger = conversation
       .getByRole('listitem', { name: 'Mensagem enviada' })
       .getByRole('button', { name: 'Ver versões e exclusão' })
@@ -212,7 +212,7 @@ await journey('atendimentos-message-revisions', async (t) => {
 
   await t.step('Recarregar mantém o conteúdo, as etiquetas e as versões', async () => {
     await agentPage.reload()
-    const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+    const conversation = conversationOf(agentPage)
     await expect(
       conversation.getByRole('listitem', { name: 'Mensagem enviada' }),
     ).toContainText('Segue o boleto de outubro')

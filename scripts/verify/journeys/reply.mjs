@@ -1,5 +1,5 @@
 // Responder: ver features/reply.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey } from '../scripts/journey-lib.mjs'
 
 await journey('reply', async (t) => {
   const sector = await t.step(
@@ -15,7 +15,7 @@ await journey('reply', async (t) => {
   const phone = t.phone(sector.id)
 
   const agentPage = await t.signIn(agent)
-  const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+  const conversation = conversationOf(agentPage)
   const composer = agentPage.getByRole('textbox', { name: 'Mensagem' })
   const sent = (text) =>
     conversation.getByRole('listitem', { name: 'Mensagem enviada' }).filter({ hasText: text })
@@ -43,10 +43,7 @@ await journey('reply', async (t) => {
   })
 
   const supervisorPage = await t.signIn(sector.supervisor)
-  const supervisorConversation = supervisorPage.getByRole('region', {
-    name: 'Conversa',
-    exact: true,
-  })
+  const supervisorConversation = conversationOf(supervisorPage)
 
   await t.step('Quem não é o responsável acompanha, mas não responde', async () => {
     await supervisorPage.goto(`/chamados/${ticketId}`)

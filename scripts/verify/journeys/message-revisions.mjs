@@ -1,5 +1,5 @@
 // Edições e exclusões feitas fora do XET: ver features/message-revisions.md.
-import { expect, journey } from "../scripts/journey-lib.mjs";
+import { conversationOf, expect, journey, panelOf } from "../scripts/journey-lib.mjs";
 
 await journey("message-revisions", async (t) => {
   const sector = await t.step("Preparar setor conectado com um atendente", () =>
@@ -13,11 +13,8 @@ await journey("message-revisions", async (t) => {
     phone.receive(maria, "Preciso do balancete de setembro"),
   );
   const page = await t.signIn(agent);
-  const queue = page.getByRole("region", { name: "Fila, assuntos e pendentes" });
-  const conversation = page.getByRole("region", {
-    name: "Conversa",
-    exact: true,
-  });
+  const queue = panelOf(page);
+  const conversation = conversationOf(page);
   const received = conversation.getByRole("listitem", {
     name: "Mensagem recebida",
   });

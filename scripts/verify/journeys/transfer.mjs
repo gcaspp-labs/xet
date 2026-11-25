@@ -1,5 +1,5 @@
 // Transferir: ver features/transfer.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
 
 await journey('transfer', async (t) => {
   const { sector, destination, joana, lucia } = await t.step(
@@ -21,14 +21,11 @@ await journey('transfer', async (t) => {
     await page.getByRole('button', { name: 'Mais ações' }).click()
     await page.getByRole('menuitem', { name, exact: true }).click()
   }
-  // A fila fica na aba Fila do cartão "Fila, assuntos e pendentes" da tela Chamados.
-  const queueOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
-
   const agentPage = await t.signIn(agent)
-  const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+  const conversation = conversationOf(agentPage)
 
   const ticketId = await t.step('Atendente assume o chamado', async () => {
-    await queueOf(agentPage)
+    await panelOf(agentPage)
       .getByRole('button', { name: `Assumir chamado de ${joana.name}` })
       .click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
@@ -37,7 +34,7 @@ await journey('transfer', async (t) => {
   })
 
   const colleaguePage = await t.signIn(colleague)
-  const colleagueConversation = colleaguePage.getByRole('region', { name: 'Conversa', exact: true })
+  const colleagueConversation = conversationOf(colleaguePage)
 
   await t.step('Colega acompanha, sem poder responder nem transferir', async () => {
     await colleaguePage.goto(`/chamados/${ticketId}`)
@@ -157,7 +154,7 @@ await journey('transfer', async (t) => {
     async () => {
       await agentPage.goto('/')
       await expect(agentPage).toHaveURL(/\/chamados$/)
-      await queueOf(agentPage)
+      await panelOf(agentPage)
         .getByRole('button', { name: `Assumir chamado de ${lucia.name}` })
         .click()
       await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
@@ -199,13 +196,10 @@ await journey('transfer', async (t) => {
     )
     destinationTicketId = created.id
     await expect(
-      queueOf(destinationPage).getByRole('listitem').filter({ hasText: lucia.name }),
+      panelOf(destinationPage).getByRole('listitem').filter({ hasText: lucia.name }),
     ).toHaveCount(1)
     await destinationPage.goto(`/chamados/${destinationTicketId}`)
-    const destinationConversation = destinationPage.getByRole('region', {
-      name: 'Conversa',
-      exact: true,
-    })
+    const destinationConversation = conversationOf(destinationPage)
     await expect(destinationConversation).toContainText(
       `Transferido de ${sector.name}. Assuma o chamado e envie a primeira mensagem ao cliente.`,
     )
@@ -287,8 +281,7 @@ await journey('transfer', async (t) => {
     await expect(agentPage.getByRole('button', { name: 'Corrigir' })).toHaveCount(0)
     // O aviso da origem mostra o setor de destino, quem transferiu e o motivo.
     await expect(
-      agentPage
-        .getByRole('region', { name: 'Conversa', exact: true })
+      conversationOf(agentPage)
         .getByRole('listitem', { name: 'Registro do chamado' })
         .filter({ hasText: `${agent.name} transferiu o chamado para o setor ${destination.name}` }),
     ).toContainText('Motivo: Folha de março é com o outro setor.')
@@ -314,7 +307,7 @@ await journey('transfer', async (t) => {
     await t.shot(destinationPage, 'ficha-destino-com-origem')
     await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
     await expect(destinationPage).toHaveURL(new RegExp(`/atendimentos/${otherTicketId}$`))
-    await expect(destinationPage.getByRole('region', { name: 'Conversa', exact: true })).toContainText(
+    await expect(conversationOf(destinationPage)).toContainText(
       'Folha de março',
     )
     await t.shot(destinationPage, 'ficha-origem-pelo-destino')

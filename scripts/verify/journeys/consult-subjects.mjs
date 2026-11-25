@@ -1,5 +1,5 @@
 // Consulta de assuntos durante o atendimento: ver features/consult-subjects.md.
-import { expect, journey } from "../scripts/journey-lib.mjs";
+import { conversationOf, expect, journey, mineOf, panelOf } from "../scripts/journey-lib.mjs";
 
 await journey("consult-subjects", async (t) => {
   const sector = await t.step(
@@ -35,12 +35,9 @@ await journey("consult-subjects", async (t) => {
   );
   const page = await t.signIn(sector.agents[0]);
   // Na tela Chamados, as abas Fila e Assuntos ficam no mesmo cartão, à direita da conversa.
-  const card = page.getByRole("region", { name: "Fila, assuntos e pendentes" });
-  const mine = page.getByRole("navigation", { name: "Meus chamados" });
-  const conversation = page.getByRole("region", {
-    name: "Conversa",
-    exact: true,
-  });
+  const card = panelOf(page);
+  const mine = mineOf(page);
+  const conversation = conversationOf(page);
   const first = await t.step(
     "Assumir chamado e consultar soluções ao lado do chat",
     async () => {

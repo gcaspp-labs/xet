@@ -1,5 +1,5 @@
 // Chamado mesclado num pendente, em Atendimentos e na ficha: ver features/mesclado-no-atendimento.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey } from '../scripts/journey-lib.mjs'
 
 await journey('mesclado-no-atendimento', async (t) => {
   const data = await t.step('Preparar um atendimento encerrado mesclado num chamado pendente', async () => {
@@ -94,7 +94,7 @@ await journey('mesclado-no-atendimento', async (t) => {
 
   await t.step('A ficha do mesclado só avisa a mesclagem, com o link, sem conversa e sem Corrigir', async () => {
     await page.goto(`/atendimentos/${merged.id}`)
-    const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
+    const conversation = conversationOf(page)
     await expect(conversation).toContainText('Chamado mesclado')
     await expect(conversation).toContainText(
       'As mensagens deste chamado foram para o chamado original.',
