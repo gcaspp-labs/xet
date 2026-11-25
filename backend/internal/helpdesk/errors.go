@@ -91,6 +91,14 @@ var (
 	ErrNoChanges      = errors.New("correction changes nothing")
 	ErrCancelled      = errors.New("ticket cancelled")
 	ErrTransferred    = errors.New("ticket transferred to another sector")
+	// ErrPhoneNotMergeable refuses merging a ticket registered by phone into a
+	// pending one: it is born closed as resolved, and the merge would leave it
+	// merged (#440).
+	ErrPhoneNotMergeable = errors.New("phone ticket is not merged into a pending one")
+	// ErrPendingAfterClosed refuses merging a closed ticket into a pending one
+	// that only started after it ended: the closed ticket continues in the
+	// pending, not the other way around (#440).
+	ErrPendingAfterClosed = errors.New("pending ticket started after the closed one ended")
 	// ErrMerged refuses correcting a ticket that was merged into another: it
 	// keeps no subject nor resolution, and the link is not undone.
 	ErrMerged = errors.New("ticket merged into another")

@@ -844,3 +844,85 @@ func TestDashboardAfterMergingAClosedTicketIntoAPending(t *testing.T) {
 		t.Fatalf("A counted for Ana, who marked it pending: %v", rows)
 	}
 }
+
+// O registro por telefone nasce encerrado como resolvido e a constraint
+// tickets_phone_closed não aceita mesclado: a ficha não oferece a mesclagem e a
+// API recusa com 4xx, nunca com 500 (#440).
+func TestPhoneTicketIsNotMergedIntoAPending(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	c.markPending("Aguardando retorno")
+	a := c.ticket
+	org := e.Organization(c.supToken, "Prefeitura de Campinas", "")
+	c.registerContact(org, "5511988887777")
+	module := e.moduleOf(c.sector.ID, "Folha")
+	startedAt := time.Now().Add(-40 * time.Minute).Truncate(time.Second)
+	resp := e.registerPhone(c.sector.ID, c.anaToken, map[string]any{
+		"contactId": a.ContactID, "organizationId": org, "moduleIds": []int64{module},
+		"subject": "Contracheque", "resolution": "Orientado por telefone.",
+		"startedAt": startedAt, "endedAt": startedAt.Add(15 * time.Minute), "clientRequestId": requestA,
+	})
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("register phone: status %d, body %v", resp.Status, resp.Body)
+	}
+	bID := int64(resp.Body["id"].(float64))
+
+	// A ficha do registro por telefone não oferece "Mesclar em pendente".
+	if got := e.detailAs(bID, c.anaToken); got["canMergeIntoPending"] != nil || got["pendingTickets"] != nil {
+		t.Fatalf("phone ticket brought the merge action: %v", got)
+	}
+
+	merge := e.mergeIntoPending(bID, c.anaToken, a.ID)
+	if merge.Status != http.StatusConflict ||
+		merge.Body["error"] != "Registro por telefone não pode ser mesclado em pendente." {
+		t.Fatalf("merge phone: status %d, body %v", merge.Status, merge.Body)
+	}
+	if got := e.pendingState(a.ID); got.Status != "pending" {
+		t.Fatalf("A after the refusal = %+v", got)
+	}
+	if got := e.mergedState(bID); got.ClosureType == nil || *got.ClosureType != "resolved" || got.MergedInto != nil {
+		t.Fatalf("phone ticket after the refusal = %+v", got)
+	}
+}
+
+// B continua em A: um pendente que só começou depois do fim de B não é a
+// continuação dele. Não aparece na janela da mesclagem e é recusado pela API
+// com 4xx, em vez de estourar a constraint tickets_ended_after_started (#440).
+func TestPendingStartedAfterTheClosedTicketEndIsNotAMergeChoice(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	org := e.Organization(c.supToken, "Prefeitura de Campinas", "")
+	c.registerContact(org, "5511988887777")
+	module := e.moduleOf(c.sector.ID, "Folha")
+	if resp := e.closeForm(c.ticket.ID, c.anaToken, map[string]any{
+		"subject": "Contracheque", "resolution": "Enviada a segunda via.",
+		"moduleIds": []int64{module}, "organizationId": org,
+	}); resp.Status != http.StatusOK {
+		t.Fatalf("close B: status %d, body %v", resp.Status, resp.Body)
+	}
+	b := c.ticket
+	// O contato volta a escrever depois do fim de B: o chamado novo nasce e é
+	// marcado pendente, então começa depois de B terminar.
+	a := e.pendingOf(c.sector.ID, "MSG-2", "5511988887777", c.anaToken, "Aguardando retorno")
+
+	// A ficha de B não lista A entre os pendentes da janela.
+	if got := e.detailAs(b.ID, c.anaToken); got["pendingTickets"] != nil {
+		t.Fatalf("pending started after the end of B in the choices: %v", got["pendingTickets"])
+	}
+
+	merge := e.mergeIntoPending(b.ID, c.anaToken, a.ID)
+	if merge.Status != http.StatusConflict ||
+		merge.Body["error"] != "Este pendente começou depois deste atendimento. Escolha um pendente aberto antes do fim dele." {
+		t.Fatalf("merge: status %d, body %v", merge.Status, merge.Body)
+	}
+	if got := e.pendingState(a.ID); got.Status != "pending" {
+		t.Fatalf("A after the refusal = %+v", got)
+	}
+	if got := e.mergedState(b.ID); got.ClosureType == nil || *got.ClosureType != "resolved" || got.MergedInto != nil {
+		t.Fatalf("B after the refusal = %+v", got)
+	}
+}

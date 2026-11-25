@@ -1666,12 +1666,14 @@ select t.id, t.protocol, t.pending_reason, t.pending_at, t.pending_by_id, pu.nam
 from tickets t
 join users pu on pu.id = t.pending_by_id
 where t.contact_id = $1 and t.sector_id = $2 and t.status = 'pending'
+  and ($3::timestamptz is null or t.started_at <= $3::timestamptz)
 order by t.pending_at, t.id
 `
 
 type ListPendingTicketsOfContactInSectorParams struct {
-	ContactID int64
-	SectorID  int64
+	ContactID    int64
+	SectorID     int64
+	StartedUntil *time.Time
 }
 
 type ListPendingTicketsOfContactInSectorRow struct {
@@ -1685,8 +1687,12 @@ type ListPendingTicketsOfContactInSectorRow struct {
 
 // Pending tickets of the contact in the sector, the ones pending for longer
 // first: the choices of resuming a pending ticket from a new ticket (#335).
+// With `started_until`, only the pendings that had already started at that
+// moment: the choices of merging a closed ticket into a pending one (#440,
+// spec #332), since the closed ticket continues in a pending that started
+// before it ended.
 func (q *Queries) ListPendingTicketsOfContactInSector(ctx context.Context, arg ListPendingTicketsOfContactInSectorParams) ([]ListPendingTicketsOfContactInSectorRow, error) {
-	rows, err := q.db.Query(ctx, listPendingTicketsOfContactInSector, arg.ContactID, arg.SectorID)
+	rows, err := q.db.Query(ctx, listPendingTicketsOfContactInSector, arg.ContactID, arg.SectorID, arg.StartedUntil)
 	if err != nil {
 		return nil, err
 	}
