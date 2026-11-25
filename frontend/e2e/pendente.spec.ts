@@ -13,18 +13,29 @@ import {
   userPassword,
 } from './fixtures'
 
+// Contexto da API já autenticado, para preparar o estado do teste sem passar pela tela.
+async function apiAs(baseURL: string, email: string, password = userPassword) {
+  const api = await apiRequest.newContext({ baseURL })
+  try {
+    expect((await api.post('/api/auth/login', { data: { email, password } })).ok()).toBeTruthy()
+  } catch (error) {
+    // Login falhou: fecha o contexto aqui, porque quem chamou não recebe a conexão para fechar.
+    await api.dispose()
+    throw error
+  }
+  return api
+}
+
 // Setor conectado ao adaptador falso, para as mensagens do cliente abrirem chamados.
 async function connectedSector(baseURL: string) {
   const seed = await seedSector(baseURL)
-  const api = await apiRequest.newContext({ baseURL })
-  expect(
-    (
-      await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
-    ).ok(),
-  ).toBeTruthy()
-  expect((await api.post(`/api/sectors/${seed.sector.id}/connection`)).ok()).toBeTruthy()
-  expect((await api.post(`/api/test/messaging/sectors/${seed.sector.id}/pair`)).ok()).toBeTruthy()
-  await api.dispose()
+  const api = await apiAs(baseURL, admin.email, admin.password)
+  try {
+    expect((await api.post(`/api/sectors/${seed.sector.id}/connection`)).ok()).toBeTruthy()
+    expect((await api.post(`/api/test/messaging/sectors/${seed.sector.id}/pair`)).ok()).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
   return seed
 }
 
@@ -38,41 +49,42 @@ async function receive(
   phone = unique().phone,
 ) {
   const api = await apiRequest.newContext({ baseURL })
-  expect(
-    (
-      await api.post(`/api/test/messaging/sectors/${sectorId}/receive`, {
-        data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: contact, body },
-      })
-    ).ok(),
-  ).toBeTruthy()
-  await api.dispose()
+  try {
+    expect(
+      (
+        await api.post(`/api/test/messaging/sectors/${sectorId}/receive`, {
+          data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: contact, body },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
   return phone
 }
 
 // Segundo atendente do setor, para abrir o pendente e retomá-lo.
 async function addAgent(baseURL: string, sectorId: number) {
-  const api = await apiRequest.newContext({ baseURL })
-  expect(
-    (
-      await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
-    ).ok(),
-  ).toBeTruthy()
+  const api = await apiAs(baseURL, admin.email, admin.password)
   const { id } = unique()
   const email = `agent2.${id}@e2e.test`
-  expect(
-    (
-      await api.post('/api/users', {
-        data: {
-          name: `agent2 ${id}`,
-          email,
-          role: 'agent',
-          sectorId,
-          password: userPassword,
-        },
-      })
-    ).ok(),
-  ).toBeTruthy()
-  await api.dispose()
+  try {
+    expect(
+      (
+        await api.post('/api/users', {
+          data: {
+            name: `agent2 ${id}`,
+            email,
+            role: 'agent',
+            sectorId,
+            password: userPassword,
+          },
+        })
+      ).ok(),
+    ).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
   return email
 }
 
@@ -84,8 +96,16 @@ const agentNameOf = (email: string) => {
 
 const pendingTab = (page: Page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
 
+// Só o painel da aba Pendentes: a região também tem a Fila, e o mesmo contato pode estar nas duas.
+const pendingList = (page: Page) => pendingTab(page).locator('[role="tabpanel"]:visible')
+
+// A linha de pendente é a única com o "Retomar chamado de …": durante a troca de aba a Fila também
+// aparece como painel visível, e o mesmo contato pode estar nas duas listas.
 const pendingRow = (page: Page, contact: string) =>
-  pendingTab(page).getByRole('listitem').filter({ hasText: contact })
+  pendingList(page)
+    .getByRole('listitem')
+    .filter({ hasText: contact })
+    .filter({ has: page.getByRole('button', { name: `Retomar chamado de ${contact}` }) })
 
 // Abre o chamado da fila, assume e o coloca como pendente pela janela do menu ⋯.
 async function markPending(page: Page, contact: string, reason: string) {
@@ -491,16 +511,15 @@ test('o link do histórico para um pendente abre o chamado em Chamados', async (
   baseURL,
 }) => {
   const seed = await seedClosedTicket(baseURL!)
-  const api = await apiRequest.newContext({ baseURL })
-  expect(
-    (
-      await api.post('/api/auth/login', { data: { email: admin.email, password: admin.password } })
-    ).ok(),
-  ).toBeTruthy()
-  const closed = (await (await api.get(`/api/tickets/${seed.ticketId}`)).json()) as {
-    contact: { name: string; phone: string }
+  const api = await apiAs(baseURL!, admin.email, admin.password)
+  let closed: { contact: { name: string; phone: string } }
+  try {
+    closed = (await (await api.get(`/api/tickets/${seed.ticketId}`)).json()) as {
+      contact: { name: string; phone: string }
+    }
+  } finally {
+    await api.dispose()
   }
-  await api.dispose()
 
   // O mesmo contato volta a escrever: chamado novo, que fica pendente.
   await receive(
@@ -726,4 +745,97 @@ test('quem não é o responsável vê o aviso com o número e sem a ação', asy
   await expect(notice.getByRole('button', { name: 'Retomar chamado' })).toHaveCount(0)
   await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
   await context.close()
+})
+
+test('erro ao retomar com a janela aberta: o servidor recusa, a janela avisa e o chamado se atualiza', async ({
+  page,
+  baseURL,
+}) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  await signIn(page, seed.agent, userPassword)
+  await openQueued(page, seed.contact, seed.sector.id)
+  await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  await pendingNotice(page).getByRole('button', { name: 'Retomar chamado' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Retomar chamado' })
+  await expect(dialog.getByRole('radio')).toHaveCount(1)
+
+  // Com a janela aberta, a supervisão devolve o chamado novo à fila pela API: a escolha não vale mais.
+  const api = await apiAs(baseURL!, seed.supervisor)
+  try {
+    expect((await api.post(`/api/tickets/${seed.ticketId}/return`)).ok()).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
+
+  // A janela mostra o erro do servidor e continua aberta; o chamado atrás dela se atualiza para a fila.
+  await dialog.getByRole('button', { name: 'Retomar chamado' }).click()
+  await expect(dialog).toContainText(
+    'Este chamado está na fila. Assuma o chamado antes de retomar um pendente.',
+  )
+  await expect(dialog).toBeVisible()
+  await expect(page.getByText('Chamado retomado')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Assumir', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
+
+  // Nada se mesclou: o pendente continua pendente e na lista.
+  const pending = (await (await page.request.get(`/api/tickets/${seed.pendingId}`)).json()) as {
+    status: string
+  }
+  expect(pending.status).toBe('pending')
+  await page.goto('/chamados')
+  await pendingTab(page)
+    .getByRole('tab', { name: /^Pendentes/ })
+    .click()
+  await expect(pendingRow(page, seed.contact)).toBeVisible()
+})
+
+test('a retomada pelo chamado novo tira o pendente da aba Pendentes de quem só assiste', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const seed = await seedPendingWithNewTicket(baseURL!)
+  const colleague = await addAgent(baseURL!, seed.sector.id)
+  await signIn(page, seed.agent, userPassword)
+
+  // O colega do setor fica parado na aba Pendentes: só assiste, sem recarregar nem navegar.
+  const context = await browser.newContext()
+  try {
+    const other = await context.newPage()
+    await signIn(other, colleague, userPassword)
+    await other.goto('/chamados')
+    await pendingTab(other)
+      .getByRole('tab', { name: /^Pendentes/ })
+      .click()
+    await expect(pendingRow(other, seed.contact)).toBeVisible()
+
+    // O responsável retoma pelo aviso do chamado novo, que passa as mensagens para o pendente.
+    await openQueued(page, seed.contact, seed.sector.id)
+    await page.getByRole('button', { name: 'Assumir', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+    await pendingNotice(page).getByRole('button', { name: 'Retomar chamado' }).click()
+    await page
+      .getByRole('dialog', { name: 'Retomar chamado' })
+      .getByRole('button', { name: 'Retomar chamado' })
+      .click()
+    await expect(page).toHaveURL(new RegExp(`/chamados/${seed.pendingId}$`))
+
+    // Na sessão do colega, o pendente sai da lista sozinho, sem recarregar a página.
+    await expect(pendingRow(other, seed.contact)).toHaveCount(0)
+    await expect(other).toHaveURL(/\/chamados$/)
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
+  }
+
+  // O chamado retomado aparece em Meus chamados de quem retomou.
+  await page.goto('/chamados')
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Meus chamados' })
+      .getByRole('link', { name: new RegExp(seed.contact) }),
+  ).toHaveAttribute('href', `/chamados/${seed.pendingId}`)
 })
