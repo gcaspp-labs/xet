@@ -1,6 +1,6 @@
 import { ArrowRight, CirclePause } from 'lucide-react'
 import { Link } from 'react-router'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import {
   Table,
@@ -24,74 +24,75 @@ export function DashboardPending({
   showSector: boolean
 }) {
   const { data } = useDashboardPending(sectorId)
+  const tickets = data?.tickets ?? []
   return (
     <Card role="region" aria-labelledby="board-pending-title">
       <CardHeader className="bg-muted">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <CardTitle id="board-pending-title">
-              Pendentes{' '}
-              <span className="mono-num font-semibold text-accent-strong">
-                ({data?.count ?? 0})
-              </span>
-            </CardTitle>
-            <p className="caption text-ink-faint">Os 10 parados há mais tempo</p>
-          </div>
+        <CardTitle id="board-pending-title">
+          Pendentes{' '}
+          <span className="mono-num font-semibold text-accent-strong">({data?.count ?? 0})</span>
+        </CardTitle>
+        <CardDescription>Os 10 parados há mais tempo</CardDescription>
+        <CardAction>
           <Link
             to="/chamados?aba=pendentes"
-            className="caption inline-flex items-center gap-1 text-accent-strong underline-offset-2 hover:underline"
+            className="caption inline-flex items-center gap-1 whitespace-nowrap text-accent-strong underline-offset-2 hover:underline"
           >
             Ver todos
-            <ArrowRight strokeWidth={1.7} className="size-[14px]" aria-hidden />
+            <ArrowRight strokeWidth={1.7} className="size-3.5" aria-hidden />
           </Link>
-        </div>
+        </CardAction>
       </CardHeader>
-      {data && data.tickets.length === 0 ? (
+      {!data || tickets.length === 0 ? (
         <Empty>
           <EmptyMedia>
             <CirclePause strokeWidth={1.7} aria-hidden />
           </EmptyMedia>
-          <EmptyDescription>Nenhum chamado pendente.</EmptyDescription>
+          <EmptyDescription>Nenhum chamado pendente</EmptyDescription>
         </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-ink">Chamado</TableHead>
-              <TableHead className="text-ink">Motivo</TableHead>
-              {showSector && <TableHead className="text-ink">Setor</TableHead>}
-              <TableHead className="whitespace-nowrap text-right text-ink">Parado há</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(data?.tickets ?? []).map((ticket) => (
-              <TableRow key={ticket.id} className="relative">
-                <TableCell className="w-full max-w-0 whitespace-normal">
-                  <Link
-                    to={`/chamados/${ticket.id}`}
-                    className="body-strong underline-offset-2 after:absolute after:inset-0 hover:text-accent-strong hover:underline"
-                  >
-                    {ticket.contact.name}
-                  </Link>
-                  <p className="caption truncate text-ink-faint">
-                    <span className="mono-num">{ticket.protocol}</span>
-                  </p>
-                </TableCell>
-                <TableCell className="whitespace-normal">{ticket.reason ?? '—'}</TableCell>
-                {showSector && (
-                  <TableCell className="whitespace-nowrap">{ticket.sector.name}</TableCell>
-                )}
-                <TableCell className="whitespace-nowrap text-right">
-                  <p className="mono-num">{ticket.pendingAt && formatIdleTime(ticket.pendingAt)}</p>
-                </TableCell>
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[260px] text-ink">Chamado</TableHead>
+                <TableHead className="text-ink">Motivo</TableHead>
+                {showSector && <TableHead className="w-[180px] text-ink">Setor</TableHead>}
+                <TableHead className="w-[120px] whitespace-nowrap text-right text-ink">
+                  Parado há
+                </TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {tickets.map((ticket) => (
+                <TableRow key={ticket.id} className="relative">
+                  <TableCell className="w-[260px] max-w-0 whitespace-normal">
+                    <Link
+                      to={`/chamados/${ticket.id}`}
+                      className="body-strong underline-offset-2 after:absolute after:inset-0 hover:text-accent-strong hover:underline"
+                    >
+                      {ticket.contact.name}
+                    </Link>
+                    <p className="caption mono-num text-ink-faint">{ticket.protocol}</p>
+                  </TableCell>
+                  <TableCell className="max-w-0 whitespace-normal">
+                    <p className="body">{ticket.reason ?? '—'}</p>
+                  </TableCell>
+                  {showSector && <TableCell className="w-[180px]">{ticket.sector.name}</TableCell>}
+                  <TableCell className="w-[120px] whitespace-nowrap text-right">
+                    <p className="mono-num">
+                      {ticket.pendingAt ? formatIdleTime(ticket.pendingAt) : '—'}
+                    </p>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <p className="caption border-t border-line-soft px-5 py-3 text-ink-faint">
+            Ao vivo. O período não muda o quadro; os 10 parados há mais tempo, primeiro.
+          </p>
+        </>
       )}
-      <p className="caption border-t border-line-soft px-4 py-3 text-ink-faint">
-        Ao vivo. O período não muda o quadro; os 10 parados há mais tempo, primeiro.
-      </p>
     </Card>
   )
 }

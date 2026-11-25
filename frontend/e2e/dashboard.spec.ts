@@ -1291,7 +1291,7 @@ test('sem pendentes, o quadro diz "Nenhum chamado pendente"', async ({ page, bas
   const own = await seedSector(baseURL!)
   await signIn(page, own.supervisor, userPassword)
   await page.goto('/dashboard')
-  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente.')
+  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente')
 })
 
 test('o quadro Pendentes se atualiza sozinho quando outro usuário marca e retoma', async ({
@@ -1302,7 +1302,7 @@ test('o quadro Pendentes se atualiza sozinho quando outro usuário marca e retom
   const contact = `Ao vivo ${unique().id}`
   await signIn(page, own.supervisor, userPassword)
   await page.goto('/dashboard')
-  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente.')
+  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente')
 
   // A atendente marca como pendente, sem a tela do supervisor recarregar.
   const api = await sessionOf(baseURL!, own.agent)
@@ -1321,6 +1321,6 @@ test('o quadro Pendentes se atualiza sozinho quando outro usuário marca e retom
 
   // Retomado, ele sai do quadro.
   expect((await api.post(`/api/tickets/${ticket.id}/resume`)).ok()).toBeTruthy()
-  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente.')
+  await expect(pendingBoard(page)).toContainText('Nenhum chamado pendente')
   await api.dispose()
 })
