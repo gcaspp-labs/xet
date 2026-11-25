@@ -23,6 +23,8 @@ import { RegisterContactSheet } from '@/components/ContactSheet'
 import { PhoneCopy } from '@/components/PhoneCopy'
 import { NewConversationSheet } from '@/components/NewConversationSheet'
 import { PendingSheet } from '@/components/PendingSheet'
+import { CancelQueueButton, CancelQueueConfirm } from '@/components/QueueCancel'
+import { useCancelFromQueue } from '@/components/useCancelFromQueue'
 import { ResumePendingSheet } from '@/components/ResumePendingSheet'
 import { ReturnSheet } from '@/components/ReturnSheet'
 import { Topbar } from '@/components/Topbar'
@@ -69,14 +71,15 @@ import { useDocumentVisible } from '@/lib/visibility'
 import { SubjectsTab } from '@/pages/ticket/SubjectsTab'
 import {
   canCancel,
+  canCancelFromQueue,
   canClose,
   canMarkPending,
   canResume,
   canResumePending,
   canReturn,
   canTransfer,
-  ConversationCard,
-} from '@/pages/ticket/TicketPage'
+} from '@/lib/permissions'
+import { ConversationCard } from '@/pages/ticket/TicketPage'
 import { useConversasSearch } from '@/pages/ticket/useTicketView'
 
 import type { TicketDetail } from '@/lib/conversation'
@@ -355,6 +358,9 @@ export default function ConversasPage() {
   const queryClient = useQueryClient()
   const assign = useAssignTicket()
   const resume = useResumeTicket()
+  // O item da Fila com a confirmação do X aberta (#395). O X não cancela na hora.
+  const [confirming, setConfirming] = useState<number | null>(null)
+  const { cancel, cancelFromQueue } = useCancelFromQueue(() => setConfirming(null))
   const navigate = useNavigate()
   const [tab, setTab] = useState('queue')
   // Bloco visível abaixo de xl: com chamado aberto começa em Conversa; sem chamado, em Meus.
@@ -447,6 +453,7 @@ export default function ConversasPage() {
         onError: (err) => toast.error(err.message),
       },
     )
+  // O X da fila cancela sem janela e sem motivo (#395), com o mesmo aviso da janela.
   const location = useLocation()
   // Chamado encerrado (cancelado e transferido incluídos) não é desta tela: vai para Atendimentos,
   // substituindo o endereço no histórico. Vale para link antigo e para quem está com o chamado aberto
@@ -776,26 +783,43 @@ export default function ConversasPage() {
                             {organizationLabel(item.organizationName, item.municipalityName)}
                           </span>
                         )}
-                        <Button
-                          className="self-start"
-                          disabled={assign.isPending}
-                          aria-label={`Assumir chamado de ${item.contact.name}`}
-                          onClick={() =>
-                            assign.mutate(
-                              { ticketId: item.id, sectorId: item.sectorId },
-                              {
-                                onSuccess: () => {
-                                  setTab('queue')
-                                  setPanel('conversation')
-                                  void navigate(`/chamados/${item.id}`)
-                                },
-                              },
-                            )
-                          }
-                        >
-                          <UserCheck strokeWidth={1.7} aria-hidden />
-                          Assumir
-                        </Button>
+                        {confirming === item.id ? (
+                          <CancelQueueConfirm
+                            contactName={item.contact.name}
+                            pending={cancel.isPending && cancel.variables?.ticketId === item.id}
+                            onBack={() => setConfirming(null)}
+                            onCancel={() => cancelFromQueue(item.id, item.sectorId)}
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              disabled={assign.isPending}
+                              aria-label={`Assumir chamado de ${item.contact.name}`}
+                              onClick={() =>
+                                assign.mutate(
+                                  { ticketId: item.id, sectorId: item.sectorId },
+                                  {
+                                    onSuccess: () => {
+                                      setTab('queue')
+                                      setPanel('conversation')
+                                      void navigate(`/chamados/${item.id}`)
+                                    },
+                                  },
+                                )
+                              }
+                            >
+                              <UserCheck strokeWidth={1.7} aria-hidden />
+                              Assumir
+                            </Button>
+                            <span className="flex-1" />
+                            {user && canCancelFromQueue(item.sectorId, user) && (
+                              <CancelQueueButton
+                                contactName={item.contact.name}
+                                onClick={() => setConfirming(item.id)}
+                              />
+                            )}
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>

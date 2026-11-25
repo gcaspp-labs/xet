@@ -109,6 +109,7 @@ import {
   ticketStatusLabel,
 } from '@/lib/format'
 import { isNotFound } from '@/lib/api'
+import { canCorrect, canResumePending, conducts } from '@/lib/permissions'
 import { clearDraft, readDraft, saveDraft } from '@/lib/message-draft'
 import { type Recording, useVoiceRecorder } from '@/lib/recorder'
 import { parseTicketId } from '@/lib/tickets'
@@ -196,79 +197,6 @@ function needsRegistration(ticket: TicketDetail) {
   return ticket.status !== 'closed' && ticket.status !== 'pending' && !ticket.contact.registered
 }
 
-// Só o responsável conduz a conversa, com o chamado em atendimento; o backend confere de novo.
-function conducts(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && ticket.assignee?.id === user.id
-}
-
-// Só o responsável pelo chamado em atendimento o coloca como pendente (spec #332).
-export function canMarkPending(ticket: TicketDetail, user: User) {
-  return conducts(ticket, user)
-}
-
-// O responsável pelo chamado em atendimento retoma um pendente do contato, pela janela. Na fila
-// só o aviso aparece: a ação exige assumir antes, e o backend recusa (spec #332).
-export function canResumePending(ticket: TicketDetail, user: User) {
-  return conducts(ticket, user) && (ticket.pendingTickets?.length ?? 0) > 0
-}
-
-// O responsável transfere o próprio chamado em atendimento; supervisão e
-// administração transferem o de qualquer atendente (spec.md, Transferências).
-export function canTransfer(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')
-}
-
-// Só o responsável encerra, como responde (spec.md, Formulário de encerramento).
-export function canClose(ticket: TicketDetail, user: User) {
-  return ticket.status === 'in_progress' && conducts(ticket, user)
-}
-
-// Quem é do setor do chamado age nele; o destino de uma transferência entre
-// setores só lê os chamados anteriores (spec.md, Transferências).
-function worksIn(ticket: TicketDetail, user: User) {
-  return user.role === 'admin' || user.sectorId === ticket.sector.id
-}
-
-// Retoma o pendente quem é do setor dele (o administrador também). O backend confere de novo, e a
-// tela não pode oferecer o Retomar a quem ele recusaria (spec #332).
-export function canResume(ticket: TicketDetail, user: User) {
-  return ticket.status === 'pending' && worksIn(ticket, user)
-}
-
-// Na fila, quem é do setor cancela; em atendimento, o responsável e a
-// supervisão do setor (spec.md, Cancelamento).
-export function canCancel(ticket: TicketDetail, user: User) {
-  return (
-    worksIn(ticket, user) &&
-    (ticket.status === 'queued' ||
-      (ticket.status === 'in_progress' && (conducts(ticket, user) || user.role !== 'agent')))
-  )
-}
-
-// Devolvem à fila o chamado em atendimento o responsável e a supervisão do
-// setor (spec.md, Devolver à fila).
-export function canReturn(ticket: TicketDetail, user: User) {
-  return (
-    worksIn(ticket, user) &&
-    ticket.status === 'in_progress' &&
-    (conducts(ticket, user) || user.role !== 'agent')
-  )
-}
-
-// Corrige o atendimento encerrado quem o encerrou e a supervisão do setor; o
-// cancelado, o transferido para outro setor e o mesclado num pendente não são
-// corrigidos (closing.md, regra 14; spec #332, Mesclar em pendente).
-export function canCorrect(ticket: TicketDetail, user: User) {
-  return (
-    ticket.status === 'closed' &&
-    ticket.closureType !== 'cancelled' &&
-    ticket.closureType !== 'transferred' &&
-    ticket.closureType !== 'merged' &&
-    worksIn(ticket, user) &&
-    (ticket.closedBy?.id === user.id || user.role !== 'agent')
-  )
-}
-
 // O que cada registro do chamado mostra na conversa: o ícone e o texto da ação. Fica num mapa só
 // para uma ação nova mexer num lugar só, sem um segundo switch para o ícone.
 const assignmentActions: Record<
@@ -353,11 +281,12 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
       <Icon strokeWidth={1.7} className="size-[15px] shrink-0" aria-hidden />
       <span className="min-w-0">
         {text(log)} · <span className="mono-num">{formatMessageTime(log.createdAt)}</span>
-        {(log.action === 'ticket_cancelled' ||
-          log.action === 'ticket_pending' ||
-          (log.action === 'ticket_transferred_sector' && log.reason)) && (
-          <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
-        )}
+        {log.reason &&
+          (log.action === 'ticket_cancelled' ||
+            log.action === 'ticket_pending' ||
+            log.action === 'ticket_transferred_sector') && (
+            <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
+          )}
       </span>
     </li>
   )

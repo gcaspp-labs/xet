@@ -6,6 +6,7 @@ import type { ClosureKind } from '@/lib/format'
 import { pageParams, type Page, type PageRequest } from '@/lib/paging'
 import type { User } from '@/lib/auth'
 import { closedTicketsKey, type TicketChannel } from '@/lib/closed-tickets'
+import { dashboardKey } from '@/lib/dashboard'
 import { readDraft, saveDraft } from '@/lib/message-draft'
 import {
   type MergedInto,
@@ -752,17 +753,21 @@ export function useCloseTicket(ticketId: number, sectorId: number) {
   })
 }
 
-// Cancela o chamado aberto; o backend confere quem pode cancelar e o motivo.
-export function useCancelTicket(ticketId: number, sectorId: number) {
+// Cancela o chamado; o backend confere quem pode cancelar e o motivo é opcional (#395). A mesma
+// mutação serve à janela do menu ⋯ (com motivo) e ao X da fila (sem motivo).
+export type CancelInput = { ticketId: number; sectorId: number; reason: string }
+
+export function useCancelTicket() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (reason: string) =>
+    mutationFn: ({ ticketId, reason }: CancelInput) =>
       api<void>(`/tickets/${ticketId}/cancel`, { method: 'POST', body: { reason } }),
-    onSuccess: () =>
+    onSuccess: (_data, { ticketId, sectorId }) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ticketKey(ticketId) }),
         queryClient.invalidateQueries({ queryKey: ticketsKey(sectorId) }),
         queryClient.invalidateQueries({ queryKey: workloadKey(sectorId) }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
         queryClient.invalidateQueries({ queryKey: closedTicketsKey }),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]),

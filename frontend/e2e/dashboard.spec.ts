@@ -1183,3 +1183,47 @@ for (const viewport of [
     await context.close()
   })
 }
+
+test('o X da lista Fila do Dashboard pede confirmação no item e cancela sem abrir o chamado', async ({
+  page,
+  baseURL,
+}) => {
+  const { sector, supervisor } = await seedSector(baseURL!)
+  const name = `Cancelar ${unique().id}`
+  await receive(baseURL!, sector.id, name)
+  await signIn(page, supervisor, userPassword)
+  await page.goto('/dashboard')
+  const queue = page.getByRole('region', { name: /^Fila/ })
+  const x = queue.getByRole('button', { name: `Cancelar chamado de ${name}` })
+  await expect(x).toBeVisible()
+
+  // O clique no X não abre o chamado: a linha troca pela confirmação, com o Voltar em foco.
+  await x.click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(queue).toContainText(`Cancelar o chamado de ${name}? Ele não é reaberto.`)
+  await expect(queue.getByRole('button', { name: 'Voltar' })).toBeFocused()
+  await expect(page.getByRole('dialog', { name: 'Cancelar chamado' })).toHaveCount(0)
+
+  // A linha fora do X continua abrindo o chamado.
+  await page.keyboard.press('Escape')
+  await queue.getByRole('link', { name }).click()
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/dashboard$/)
+
+  // "Cancelar chamado" cancela direto, sem janela e sem motivo, e a linha sai da lista.
+  await x.click()
+  await queue.getByRole('button', { name: 'Cancelar chamado', exact: true }).click()
+  await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
+  await expect(queue.getByText(name)).toHaveCount(0)
+
+  // O Assumir continua na linha, ao lado do X, e assume de fato depois da mudança.
+  const assumed = `Assumir ${unique().id}`
+  await receive(baseURL!, sector.id, assumed)
+  const assume = queue.getByRole('button', { name: `Assumir chamado de ${assumed}` })
+  await expect(assume).toBeVisible()
+  await assume.click()
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  await expect(page.getByRole('heading', { name: assumed })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+})

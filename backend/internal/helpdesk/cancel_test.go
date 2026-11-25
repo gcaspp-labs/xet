@@ -162,32 +162,74 @@ func TestCancelPermissions(t *testing.T) {
 	}
 }
 
-func TestCancelRequiresReason(t *testing.T) {
+// O motivo do cancelamento é opcional (#395): a janela e o X da fila cancelam
+// sem motivo, e a auditoria grava o motivo só quando alguém escreve.
+func TestCancelReasonIsOptional(t *testing.T) {
 	t.Parallel()
-	c := newConversation(t)
-	e := c.e
 
 	for name, body := range map[string]map[string]any{
 		"no reason": {}, "empty": {"reason": ""}, "blank": {"reason": " \n "},
 	} {
-		resp := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/cancel", c.ticket.ID), c.anaToken, body)
-		if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Informe o motivo do cancelamento." {
-			t.Fatalf("%s: status %d, body %v", name, resp.Status, resp.Body)
-		}
-	}
-	if got := e.cancelled(c.ticket.ID); got.status != "queued" {
-		t.Fatalf("status = %q", got.status)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := newConversation(t)
+			e := c.e
+
+			resp := e.Do(http.MethodPost, fmt.Sprintf("/api/tickets/%d/cancel", c.ticket.ID), c.anaToken, body)
+			if resp.Status != http.StatusOK || resp.Body["status"] != "closed" {
+				t.Fatalf("cancel: status %d, body %v", resp.Status, resp.Body)
+			}
+			if got := e.cancelled(c.ticket.ID); got.status != "closed" || got.closure != "cancelled" {
+				t.Fatalf("ticket = %+v", got)
+			}
+			// Sem motivo, a auditoria fica com o motivo vazio e a conversa mostra
+			// só quem cancelou e quando.
+			if reason := e.auditReason(c.ticket.ID, "ticket_cancelled"); reason != nil && *reason != "" {
+				t.Fatalf("audit reason = %q", *reason)
+			}
+			logs := e.DoList(http.MethodGet, fmt.Sprintf("/api/tickets/%d/assignments", c.ticket.ID), c.anaToken)
+			if len(logs) != 1 || logs[0]["action"] != "ticket_cancelled" || logs[0]["reason"] != nil {
+				t.Fatalf("logs = %v", logs)
+			}
+		})
 	}
 
-	// O banco também recusa cancelamento sem motivo.
-	_, err := e.Pool.Exec(t.Context(), `
+	t.Run("with reason", func(t *testing.T) {
+		t.Parallel()
+		c := newConversation(t)
+		e := c.e
+		if resp := e.cancel(c.ticket.ID, c.anaToken, "  Spam.  "); resp.Status != http.StatusOK {
+			t.Fatalf("status %d, body %v", resp.Status, resp.Body)
+		}
+		reason := e.auditReason(c.ticket.ID, "ticket_cancelled")
+		if reason == nil || *reason != "Spam." {
+			t.Fatalf("audit reason = %v", reason)
+		}
+	})
+}
+
+// O banco também aceita o cancelamento sem motivo e continua exigindo o motivo
+// na correção e no pendente.
+func TestCancelWithoutReasonInTheDatabase(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+
+	if _, err := e.Pool.Exec(t.Context(), `
 		insert into audit_logs (ticket_id, entity_type, entity_id, action, actor_id, changes)
-		values ($1, 'ticket', $1, 'ticket_cancelled', $2, '{}')`, c.ticket.ID, c.ana.ID)
-	if err == nil {
-		t.Fatal("cancellation without reason accepted by the database")
+		values ($1, 'ticket', $1, 'ticket_cancelled', $2, '{}')`, c.ticket.ID, c.ana.ID); err != nil {
+		t.Fatalf("cancellation without reason refused: %v", err)
+	}
+	for _, action := range []string{"ticket_corrected", "ticket_pending"} {
+		_, err := e.Pool.Exec(t.Context(), `
+			insert into audit_logs (ticket_id, entity_type, entity_id, action, actor_id, changes)
+			values ($1, 'ticket', $1, $2, $3, '{}')`, c.ticket.ID, action, c.ana.ID)
+		if err == nil {
+			t.Fatalf("%s without reason accepted by the database", action)
+		}
 	}
 	// E exige os dados do encerramento de quem não foi cancelado.
-	_, err = e.Pool.Exec(t.Context(), `
+	_, err := e.Pool.Exec(t.Context(), `
 		update tickets set status = 'closed', assignee_id = $2, closed_by_id = $2, closure_type = 'resolved', closed_at = now(), ended_at = now()
 		where id = $1`, c.ticket.ID, c.ana.ID)
 	if err == nil {
