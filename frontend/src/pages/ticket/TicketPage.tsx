@@ -47,6 +47,7 @@ import { EmojiPicker } from '@/components/EmojiPicker'
 import { DeleteMessageDialog, MessageMenu } from '@/components/MessageActions'
 import { MessageChangesDialog } from '@/components/MessageChanges'
 import { MessageEditor } from '@/components/MessageEditor'
+import { MergeIntoPendingSheet } from '@/components/MergeIntoPendingSheet'
 import { MergedIntoLink } from '@/components/MergedIntoLink'
 import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
 import { ReactButton, ReactionChips } from '@/components/MessageReactions'
@@ -254,6 +255,12 @@ const assignmentActions: Record<
     icon: Ban,
     text: (log) => `${log.actor?.name ?? 'Sistema'} cancelou o chamado`,
   },
+  // No atendimento que herdou o encerramento, no ponto da mesclagem (spec #332, #343).
+  ticket_closed_by_merge: {
+    icon: Merge,
+    text: (log) =>
+      `${log.actor?.name ?? 'Sistema'} mesclou o atendimento ${log.mergedProtocol ?? 'sem protocolo'} neste chamado`,
+  },
   ticket_corrected: {
     icon: PencilLine,
     text: (log) => `${log.actor?.name ?? 'Sistema'} corrigiu o atendimento`,
@@ -284,6 +291,7 @@ function AssignmentEntry({ log, modern = false }: { log: AssignmentLog; modern?:
         {log.reason &&
           (log.action === 'ticket_cancelled' ||
             log.action === 'ticket_pending' ||
+            log.action === 'ticket_closed_by_merge' ||
             log.action === 'ticket_transferred_sector') && (
             <span className="block whitespace-pre-wrap break-words">Motivo: {log.reason}</span>
           )}
@@ -1921,6 +1929,7 @@ export default function TicketPage() {
   const { data: user } = useCurrentUser()
   const { data: ticket, error } = useTicket(ticketId, validId)
   const [correcting, setCorrecting] = useState(false)
+  const [merging, setMerging] = useState(false)
   const { data: recordedModules } = useTicketModules(ticketId, ticket?.status === 'closed')
   const [view, setView] = useTicketView(ticketId)
 
@@ -1947,6 +1956,12 @@ export default function TicketPage() {
     return null
   }
 
+  // Mesclar em pendente: o backend diz quem pode (encerrado ou cancelado, não transferido nem
+  // mesclado) e manda as escolhas; sem pendente do contato no setor, a ação não aparece. No
+  // cancelado ela aparece sem o Corrigir, que não existe para ele.
+  const mergedable = ticket.canMergeIntoPending === true && (ticket.pendingTickets ?? []).length > 0
+  const correctable = canCorrect(ticket, user)
+
   // Na ficha só existem Detalhes e Histórico (a aba Assuntos não existe aqui).
   const tab =
     new URLSearchParams(location.search).has('historico') || view.tab === 'history'
@@ -1961,19 +1976,32 @@ export default function TicketPage() {
         breadcrumb={`${ticket.sector.name} · ${ticket.protocol}`}
         title={ticket.contact.name}
         action={
-          // Única ação da ficha, visível e sem menu ⋯; nunca em chamado cancelado ou transferido.
-          canCorrect(ticket, user) && (
-            <Button onClick={() => setCorrecting(true)}>
-              <PencilLine strokeWidth={1.7} aria-hidden />
-              Corrigir
-            </Button>
+          // As ações da ficha, visíveis e sem menu ⋯: Corrigir é primária e, quando o contato tem
+          // um pendente do setor, "Mesclar em pendente" vem ao lado como secundária (spec #332,
+          // #343). Nada aparece em chamado transferido ou mesclado.
+          (correctable || mergedable) && (
+            <div className="flex items-center gap-2">
+              {mergedable && (
+                <Button variant="outline" onClick={() => setMerging(true)}>
+                  <Merge strokeWidth={1.7} aria-hidden />
+                  Mesclar em pendente
+                </Button>
+              )}
+              {correctable && (
+                <Button onClick={() => setCorrecting(true)}>
+                  <PencilLine strokeWidth={1.7} aria-hidden />
+                  Corrigir
+                </Button>
+              )}
+            </div>
           )
         }
       />
-      {/* Montado só aberto: começa com os dados atuais do atendimento. */}
+      {/* Montados só abertos: começam com os dados atuais do atendimento. */}
       {correcting && recordedModules && (
         <CorrectionSheet ticket={ticket} recorded={recordedModules} onOpenChange={setCorrecting} />
       )}
+      {merging && <MergeIntoPendingSheet ticket={ticket} open onOpenChange={setMerging} />}
       {/* A tela de conversas usa a largura toda (design.md). */}
       <div className="grid min-h-0 w-full flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 px-4 py-4 md:px-[30px] md:py-[30px] lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[minmax(0,1fr)]">
         {ticket.mergedInto ? (
