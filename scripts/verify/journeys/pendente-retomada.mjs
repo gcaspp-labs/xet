@@ -1,5 +1,5 @@
 // Chamado pendente e retomada por mesclagem: ver features/pendente-retomada.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, mineOf, panelOf } from '../scripts/journey-lib.mjs'
 
 await journey('pendente-retomada', async (t) => {
   const reason = 'Aguardando o órgão confirmar o número do protocolo antigo'
@@ -14,9 +14,6 @@ await journey('pendente-retomada', async (t) => {
   )
   const agent = sector.agents[0]
 
-  // A fila, a aba Pendentes e os Assuntos são abas da coluna da direita da tela Chamados.
-  const panelOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
-  const conversationOf = (page) => page.getByRole('region', { name: 'Conversa', exact: true })
   // A aba que não está aberta não entra na árvore de acessibilidade: a linha é sempre a da aba atual.
   const queueRowOf = (page) =>
     panelOf(page).getByRole('listitem').filter({ hasText: customer.name })
@@ -30,6 +27,10 @@ await journey('pendente-retomada', async (t) => {
       .click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     const ticketId = Number(agentPage.url().split('/').pop())
+    const [ticket] = t.sql(`select id, protocol, status from tickets where id = ${ticketId}`)
+    // O chamado assumido está em Meus chamados enquanto é um atendimento ativo.
+    await expect(mineOf(agentPage)).toContainText('Meus chamados (1)')
+    await expect(mineOf(agentPage)).toContainText(ticket.protocol)
     await expect(conversationOf(agentPage)).toContainText(
       'Preciso da segunda via do contracheque de março',
     )
@@ -39,9 +40,11 @@ await journey('pendente-retomada', async (t) => {
     await dialog.getByLabel('Motivo').fill(reason)
     await dialog.getByRole('button', { name: 'Colocar como pendente' }).click()
     await expect(agentPage.getByText('Chamado marcado como pendente')).toBeVisible()
-    // O chamado sai de Meus chamados e a tela volta para a lista, sem chamado aberto.
+    // A tela volta para a lista, sem chamado aberto, e A saiu de Meus chamados.
     await expect(agentPage).toHaveURL(/\/chamados$/)
-    const [ticket] = t.sql(`select id, protocol, status from tickets where id = ${ticketId}`)
+    await expect(mineOf(agentPage)).toContainText('Meus chamados (0)')
+    await expect(mineOf(agentPage)).toContainText('Você não tem atendimentos ativos.')
+    await expect(mineOf(agentPage)).not.toContainText(ticket.protocol)
     return ticket
   })
 
@@ -91,8 +94,10 @@ await journey('pendente-retomada', async (t) => {
     await expect(row).toContainText('Voltei com a nota fiscal')
     await t.shot(agentPage, 'b-na-fila')
     const [ticket] = t.sql(
-      `select id, protocol from tickets
-        where sector_id = ${sector.id} and status = 'queued' order by id desc limit 1`,
+      `select t.id, t.protocol from tickets t
+         join contacts c on c.id = t.contact_id
+        where t.sector_id = ${sector.id} and c.phone = '${customer.phone}'
+          and t.status = 'queued' order by t.id desc limit 1`,
     )
     return ticket
   })
@@ -210,13 +215,25 @@ await journey('pendente-retomada', async (t) => {
       `select ticket_id, action, changes from audit_logs
         where ticket_id in (${pending.id}, ${second.id}) order by id`,
     )
-    expect(audit.map((entry) => `${entry.ticket_id} ${entry.action}`)).toEqual([
+    // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
+    // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
+    const entries = audit.map((entry) => `${entry.ticket_id} ${entry.action}`)
+    const expected = [
       `${pending.id} ticket_assigned`,
       `${pending.id} ticket_pending`,
       `${second.id} ticket_assigned`,
       `${second.id} ticket_merged`,
       `${pending.id} ticket_resumed_by_merge`,
-    ])
+    ]
+    let after = 0
+    for (const entry of expected) {
+      const index = entries.indexOf(entry, after)
+      expect(
+        index,
+        `registro "${entry}" ausente ou fora de ordem; auditoria: ${entries.join(' | ')}`,
+      ).toBeGreaterThanOrEqual(0)
+      after = index + 1
+    }
     const resumed = audit.find((entry) => entry.action === 'ticket_resumed_by_merge')
     expect(resumed.changes.merged_protocol).toEqual({ from: null, to: second.protocol })
     const merged = audit.find((entry) => entry.action === 'ticket_merged')

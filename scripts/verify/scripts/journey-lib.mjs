@@ -34,6 +34,13 @@ const {
 const TIMEOUT = 20_000
 export const expect = playwrightExpect.configure({ timeout: TIMEOUT })
 
+// As três áreas da tela Chamados que as jornadas procuram pelo papel: a lista de Meus chamados,
+// a coluna da direita (Fila, Pendentes e Assuntos são abas dela) e a conversa do chamado aberto.
+export const mineOf = (page) => page.getByRole('region', { name: /^Meus chamados/ })
+export const panelOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
+export const conversationOf = (page) =>
+  page.getByRole('region', { name: 'Conversa', exact: true })
+
 let counter = Date.now() % 1_000_000
 
 // Sufixo único: uma jornada pode ser repetida no mesmo banco.
