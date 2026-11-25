@@ -292,10 +292,15 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 -- name: ListPendingTicketsOfContactInSector :many
 -- Pending tickets of the contact in the sector, the ones pending for longer
 -- first: the choices of resuming a pending ticket from a new ticket (#335).
+-- With `started_until`, only the pendings that had already started at that
+-- moment: the choices of merging a closed ticket into a pending one (#440,
+-- spec #332), since the closed ticket continues in a pending that started
+-- before it ended.
 select t.id, t.protocol, t.pending_reason, t.pending_at, t.pending_by_id, pu.name as pending_by_name
 from tickets t
 join users pu on pu.id = t.pending_by_id
 where t.contact_id = @contact_id and t.sector_id = @sector_id and t.status = 'pending'
+  and (sqlc.narg(started_until)::timestamptz is null or t.started_at <= sqlc.narg(started_until)::timestamptz)
 order by t.pending_at, t.id;
 
 -- name: MergeTicketIntoPending :one
