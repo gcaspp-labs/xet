@@ -140,6 +140,7 @@ export function SendContactDialog({
           disableUnreachable={false}
           keyboardNavigation={false}
           loadOnLastFocus={false}
+          summaryGap
           onChoose={choose}
           selectedId={contact?.id}
           selectedRow={chosenRow}

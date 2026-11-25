@@ -11,6 +11,7 @@ import {
   useContactPagination,
 } from '@/lib/directory'
 import { formatPhone, organizationLabel } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 // Nome, telefone e órgão com o município, para não confundir homônimos.
 export function ContactSummary({ contact }: { contact: Contact }) {
@@ -46,6 +47,7 @@ export function ContactSearch({
   disableUnreachable = true,
   keyboardNavigation = true,
   loadOnLastFocus = true,
+  summaryGap = false,
   selectedId,
   selectedRow,
 }: {
@@ -66,6 +68,8 @@ export function ContactSearch({
   keyboardNavigation?: boolean
   // Ao focar o último contato que dá pra escolher, vem a próxima página.
   loadOnLastFocus?: boolean
+  // O "Enviar contato" mantém o espaço de 0.5 entre o nome e o telefone, como as linhas dele eram.
+  summaryGap?: boolean
   // A linha escolhida: ao voltar da prévia, o foco de novo nela, no lugar da busca.
   selectedId?: number
   selectedRow?: Ref<HTMLButtonElement>
@@ -155,7 +159,10 @@ export function ContactSearch({
                 disabled={disableUnreachable && (checking || !contact.phone)}
                 onClick={() => onChoose(contact)}
                 onFocus={() => loadMoreOnFocus(index)}
-                className="w-full min-w-0 rounded-(--radius-7) px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                className={cn(
+                  'w-full min-w-0 rounded-(--radius-7) px-2 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
+                  summaryGap && 'flex flex-col gap-0.5',
+                )}
               >
                 <ContactSummary contact={contact} />
               </button>

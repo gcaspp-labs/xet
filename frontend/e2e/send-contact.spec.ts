@@ -167,6 +167,13 @@ test('o responsável abre o menu, escolhe Contato, busca por nome, telefone, ór
   await expect(row(page, names.alves)).toContainText(`${organizations.prefeitura} — Campinas`)
   await expect(row(page, names.prado)).toContainText(`${organizations.camara} — Itu`)
 
+  // O ticket pede nenhuma mudança visual: a linha mantém o espaço de 2 px entre o nome e o
+  // telefone (o antigo gap-0.5), que a revisão pegou faltando.
+  const [nameLine, phoneLine] = await row(page, names.alves).locator(':scope > span').all()
+  const nameBox = (await nameLine.boundingBox())!
+  const phoneBox = (await phoneLine.boundingBox())!
+  expect(phoneBox.y - (nameBox.y + nameBox.height)).toBeCloseTo(2, 0)
+
   // Busca por telefone, por órgão e por município.
   await search(page).fill(phones.alves)
   await expect(row(page, names.alves)).toBeVisible()
