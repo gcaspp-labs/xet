@@ -656,6 +656,112 @@ export async function seedMergedTicket(
   return { sector, agent, contact, merged, original }
 }
 
+// Um atendimento encerrado (ou cancelado) B e o pendente A do mesmo contato e setor, criados pela
+// API: a ficha de B oferece a janela Mesclar em pendente, que passa as mensagens de B para A
+// (spec #332, #343). `cancelled` cancela o B com o motivo, que a conversa de A mostra depois da
+// mesclagem. Fica um segundo atendente do setor, que não encerrou o B e, por isso, não mescla.
+export async function seedTicketToMergeIntoPending(
+  baseURL: string,
+  { cancelled = false }: { cancelled?: boolean } = {},
+) {
+  const { sector, agent } = await seedSector(baseURL)
+  const { id, phone } = unique()
+  const contact = `Cliente ${id}`
+  const reason = 'Aguardando a nota fiscal do serviço'
+  const [organization] = await seedDirectory(
+    baseURL,
+    [{ name: `Prefeitura ${id}` }],
+    [{ name: contact, phone, organization: 0, sector: sector.id }],
+  )
+
+  const admins = await request.newContext({ baseURL })
+  ok(
+    await admins.post('/api/auth/login', {
+      data: { email: admin.email, password: admin.password },
+    }),
+  )
+  ok(await admins.post(`/api/sectors/${sector.id}/connection`))
+  ok(await admins.post(`/api/test/messaging/sectors/${sector.id}/pair`))
+  const module = await json<{ id: number }>(
+    await admins.post(`/api/sectors/${sector.id}/modules`, { data: { name: 'Folha' } }),
+  )
+  const otherAgent = `agent2.${id}@e2e.test`
+  ok(
+    await admins.post('/api/users', {
+      data: {
+        name: `agent2 ${id}`,
+        email: otherAgent,
+        role: 'agent',
+        sectorId: sector.id,
+        password: userPassword,
+      },
+    }),
+  )
+  await admins.dispose()
+
+  const api = await request.newContext({ baseURL })
+  ok(await api.post('/api/auth/login', { data: { email: agent, password: userPassword } }))
+  const receive = async (body: string) =>
+    ok(
+      await api.post(`/api/test/messaging/sectors/${sector.id}/receive`, {
+        data: { externalMessageId: `E2E-${unique().id}`, phone, contactName: contact, body },
+      }),
+    )
+  const queued = async () => {
+    const tickets = await json<
+      { id: number; protocol: string; status: string; contact: { name: string } }[]
+    >(await api.get(`/api/sectors/${sector.id}/tickets`))
+    const found = tickets.find(
+      (ticket) => ticket.status === 'queued' && ticket.contact.name === contact,
+    )
+    expect(found).toBeTruthy()
+    return found!
+  }
+
+  // O pendente nasce primeiro, com o cliente esperando. Ele volta a escrever e abre o atendimento
+  // novo, que o mesmo atendente assume e encerra (ou cancela) — é ele que a ficha vai mesclar.
+  await receive('Preciso da segunda via do contracheque')
+  const pending = await queued()
+  ok(await api.post(`/api/tickets/${pending.id}/assign`))
+  ok(
+    await api.post(`/api/tickets/${pending.id}/pending`, {
+      data: { reason },
+    }),
+  )
+  await receive('Voltei, o comprovante veio errado')
+  const closed = await queued()
+  ok(await api.post(`/api/tickets/${closed.id}/assign`))
+  const cancelReason = 'Cliente desistiu do comprovante'
+  if (cancelled) {
+    ok(await api.post(`/api/tickets/${closed.id}/cancel`, { data: { reason: cancelReason } }))
+  } else {
+    ok(
+      await api.post(`/api/tickets/${closed.id}/close`, {
+        data: {
+          subject: 'Segunda via',
+          resolution: 'Enviada por e-mail.',
+          moduleIds: [module.id],
+          organizationId: organization.id,
+        },
+      }),
+    )
+  }
+  await api.dispose()
+  return {
+    sector,
+    agent,
+    otherAgent,
+    contact,
+    phone,
+    organization,
+    module,
+    pendingId: pending.id,
+    ticketId: closed.id,
+    reason,
+    cancelReason,
+  }
+}
+
 // Abre o menu "Mais ações" (⋯) do cabeçalho de Chamados e escolhe um item.
 export async function chooseAction(page: Page, name: string) {
   await page.getByRole('button', { name: 'Mais ações' }).click()

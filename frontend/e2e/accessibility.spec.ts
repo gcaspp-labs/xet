@@ -5,6 +5,7 @@ import {
   openQueued,
   seedPendingWithNewTicket,
   seedSector,
+  seedTicketToMergeIntoPending,
   signIn,
   unique,
   userPassword,
@@ -436,6 +437,34 @@ test('o texto da janela Retomar chamado acompanha o tamanho escolhido', async ({
   const dialog = page.getByRole('dialog', { name: 'Retomar chamado' })
   const open = async () => {
     await chooseAction(page, 'Retomar chamado')
+    await expect(dialog).toBeVisible()
+  }
+
+  await open()
+  const standard = await textSizes(page)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await chooseInMenu(page, 'menuitemradio', 'Maior')
+  await open()
+  const larger = await textSizes(page)
+  expectScaled(standard, larger, 5)
+  await context.close()
+})
+
+test('o texto da janela Mesclar em pendente acompanha o tamanho escolhido', async ({
+  browser,
+  baseURL,
+}) => {
+  test.slow()
+  const seed = await seedTicketToMergeIntoPending(baseURL!)
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await signIn(page, seed.agent, userPassword)
+  await page.goto(`/atendimentos/${seed.ticketId}`)
+
+  const dialog = page.getByRole('dialog', { name: 'Mesclar em pendente' })
+  const open = async () => {
+    await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
     await expect(dialog).toBeVisible()
   }
 

@@ -1,5 +1,5 @@
 // Receber e assumir: ver features/receive-and-assign.md.
-import { expect, journey } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, mineOf, panelOf } from '../scripts/journey-lib.mjs'
 
 await journey('receive-and-assign', async (t) => {
   const sector = await t.step('Preparar setor conectado, dois atendentes e um supervisor', () =>
@@ -11,9 +11,9 @@ await journey('receive-and-assign', async (t) => {
 
   const agentPage = await t.signIn(agent)
   // A fila é a aba Fila do cartão "Fila, assuntos e pendentes" da tela Chamados; cada chamado é um item da lista.
-  const queue = agentPage.getByRole('region', { name: 'Fila, assuntos e pendentes' })
+  const queue = panelOf(agentPage)
   const mariaRow = queue.getByRole('listitem').filter({ hasText: 'Maria Cliente' })
-  const mine = agentPage.getByRole('navigation', { name: 'Meus chamados' })
+  const mine = mineOf(agentPage)
 
   await t.step('Atendente entra na tela Chamados e vê a fila vazia', async () => {
     await expect(agentPage).toHaveURL(/\/chamados$/)
@@ -58,7 +58,7 @@ await journey('receive-and-assign', async (t) => {
 
   // A colega entra agora e fica sem tempo real: a tela dela continua mostrando o chamado na fila.
   const stalePage = await t.signIn(colleague, { blockRealtime: true })
-  const staleQueue = stalePage.getByRole('region', { name: 'Fila, assuntos e pendentes' })
+  const staleQueue = panelOf(stalePage)
   const staleAssign = staleQueue.getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
   await expect(staleAssign).toBeVisible()
 
@@ -66,7 +66,7 @@ await journey('receive-and-assign', async (t) => {
     await queue.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
-    const conversation = agentPage.getByRole('region', { name: 'Conversa', exact: true })
+    const conversation = conversationOf(agentPage)
     // O contato é de número desconhecido: a conversa avisa que falta o cadastro.
     await expect(conversation).toContainText('Contato não cadastrado')
     await expect(conversation).toContainText(`${agent.name} assumiu o chamado`)
@@ -122,7 +122,7 @@ await journey('receive-and-assign', async (t) => {
     await queue.getByRole('button', { name: 'Assumir chamado de Pessoa da fila' }).click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     await expect(
-      agentPage.getByRole('region', { name: 'Conversa', exact: true }),
+      conversationOf(agentPage),
     ).toContainText('Preciso de atendimento')
     await expect(mine.getByRole('link', { name: /Pessoa da fila/ })).toBeVisible()
     await t.shot(agentPage, 'assumido-pela-fila')
@@ -133,8 +133,7 @@ await journey('receive-and-assign', async (t) => {
     const otherPage = await t.signIn(other.agents[0])
     await expect(otherPage.getByRole('heading', { name: 'Chamados' })).toBeVisible()
     await expect(
-      otherPage
-        .getByRole('region', { name: 'Fila, assuntos e pendentes' })
+      panelOf(otherPage)
         .getByText('Nenhum chamado esperando.'),
     ).toBeVisible()
     await expect(otherPage.getByText('Maria Cliente')).toHaveCount(0)

@@ -54,7 +54,8 @@ type assignmentLogResponse struct {
 	// between sectors.
 	Reason *string `json:"reason"`
 	// MergedProtocol is the protocol of the ticket merged into this one, when
-	// this one was resumed from a new ticket (#335).
+	// this one was resumed from a new ticket (#335) or inherited the closing
+	// of one merged into it (#341).
 	MergedProtocol *string `json:"mergedProtocol"`
 }
 
