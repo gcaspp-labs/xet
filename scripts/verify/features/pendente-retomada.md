@@ -13,7 +13,7 @@ O atendente para um chamado sem encerrá-lo: ele vai para a aba **Pendentes**, o
 - [jornada] O pendente abre no lugar do chamado novo, com as mensagens dos dois na ordem do tempo, o registro de quando ficou pendente (com o motivo) e o de que voltou a partir do chamado novo.
 - [jornada] O chamado novo sai em Atendimentos como Mesclado, com o link "Ver chamado <protocolo>" para o original, que abre em Chamados porque voltou a estar em atendimento.
 - [jornada] No banco: A em atendimento com as duas mensagens, B encerrado como `merged` apontando para A, e a auditoria `ticket_pending`, `ticket_resumed_by_merge` (com o protocolo de B) e `ticket_merged` (com o destino).
-- [não coberto] Marcar um pendente como encerrado, que é a segunda jornada da spec #332 (`#344`, mesclar um encerrado no pendente pela correção em Atendimentos).
+- A segunda jornada da spec #332, encerrar o chamado novo e mesclá-lo no pendente pela correção em Atendimentos, está em [mesclar-encerrado-em-pendente.md](mesclar-encerrado-em-pendente.md).
 - [não coberto] Recusas (retomar sem permissão, pendente de outro contato ou setor, chamado devolvido à fila antes do retomar) e a atualização ao vivo para quem só assiste: ficam nos testes de `frontend/e2e/pendente.spec.ts`.
 - [não coberto] Aviso de pendentes no sino de notificações, que está fora do escopo da spec #332.
 
