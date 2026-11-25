@@ -1216,4 +1216,14 @@ test('o X da lista Fila do Dashboard pede confirmação no item e cancela sem ab
   await queue.getByRole('button', { name: 'Cancelar chamado', exact: true }).click()
   await expect(page.getByText('Chamado cancelado', { exact: true })).toBeVisible()
   await expect(queue.getByText(name)).toHaveCount(0)
+
+  // O Assumir continua na linha, ao lado do X, e assume de fato depois da mudança.
+  const assumed = `Assumir ${unique().id}`
+  await receive(baseURL!, sector.id, assumed)
+  const assume = queue.getByRole('button', { name: `Assumir chamado de ${assumed}` })
+  await expect(assume).toBeVisible()
+  await assume.click()
+  await expect(page).toHaveURL(/\/chamados\/\d+$/)
+  await expect(page.getByRole('heading', { name: assumed })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
 })
