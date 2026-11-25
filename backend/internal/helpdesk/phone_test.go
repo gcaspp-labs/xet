@@ -455,3 +455,31 @@ func TestPhoneFormReturnsTheSectorDefaults(t *testing.T) {
 		t.Fatalf("no contact: status %d, body %v", resp.Status, resp.Body)
 	}
 }
+
+// The phone registration checks the contact before the organization, as the
+// closing does: with both wrong, the contact refusal prevails (#452).
+func TestPhoneRegistrationChecksTheContactBeforeTheOrganization(t *testing.T) {
+	t.Parallel()
+	c := newPhone(t)
+	e := c.e
+	unregistered := e.queuedTicket(c.sector.ID, "MSG-9", "5511977770000").ContactID
+	ticketsBefore := e.Count("tickets")
+	auditBefore := e.Count("audit_logs")
+
+	body := with(c.phoneForm(unregistered, requestA), "organizationId", 999999)
+	resp := e.registerPhone(c.sector.ID, c.anaToken, body)
+	if resp.Status != http.StatusUnprocessableEntity ||
+		resp.Body["error"] != "Cadastre o contato e vincule-o a um órgão antes de registrar." {
+		t.Fatalf("unregistered contact with unknown organization: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	body = with(c.phoneForm(c.carla, requestB), "organizationId", 999999)
+	resp = e.registerPhone(c.sector.ID, c.anaToken, body)
+	if resp.Status != http.StatusUnprocessableEntity || resp.Body["error"] != "Escolha um órgão cadastrado." {
+		t.Fatalf("unknown organization: status %d, body %v", resp.Status, resp.Body)
+	}
+
+	if e.Count("tickets") != ticketsBefore || e.Count("audit_logs") != auditBefore {
+		t.Fatal("a refused registration recorded something")
+	}
+}

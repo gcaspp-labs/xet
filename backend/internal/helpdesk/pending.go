@@ -46,8 +46,8 @@ func (s *Service) MarkPending(ctx context.Context, actor auth.User, ticketID int
 		if err := conducts(t, actor); err != nil {
 			return err
 		}
-		if _, err := q.GetContactForShare(ctx, t.ContactID); err != nil {
-			return fmt.Errorf("lock contact: %w", err)
+		if _, err := lockContact(ctx, q, t.ContactID); err != nil {
+			return err
 		}
 
 		ticket, err = db.AsTicket(q.MarkTicketPending(ctx, db.MarkTicketPendingParams{
