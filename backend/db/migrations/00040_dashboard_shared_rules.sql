@@ -22,7 +22,7 @@ $$;
 -- +goose StatementBegin
 create function ticket_pending_seconds(p_ticket_id bigint)
 returns double precision
-language sql stable
+language sql stable parallel safe
 as $$
     select coalesce(sum(greatest(extract(epoch from next_resume - created_at), 0)), 0)::float8
     from (
