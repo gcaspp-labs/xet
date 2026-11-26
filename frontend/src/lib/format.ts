@@ -13,11 +13,12 @@ export function formatPhone(digits: string) {
   return `+55 (${match[1]}) ${match[2]}-${match[3]}`
 }
 
-// Telefone para discar: só números, 0 + DDD + número, sem o +55 (5561987654321 → 061987654321).
+// Telefone para discar: só números, 44 + 0 + DDD + número, sem o +55 (5561987654321 → 44061987654321).
+// O 44 é o código de operadora usado para ligar dentro do Brasil.
 // Número de fora do Brasil (que não casa com o padrão acima): só os dígitos, como estão.
 export function dialPhone(digits: string) {
   const match = brazilianPhone.exec(digits)
-  return match ? `0${match[1]}${match[2]}${match[3]}` : digits.replace(/\D/g, '')
+  return match ? `440${match[1]}${match[2]}${match[3]}` : digits.replace(/\D/g, '')
 }
 
 export const roleLabels: Record<Role, string> = {
