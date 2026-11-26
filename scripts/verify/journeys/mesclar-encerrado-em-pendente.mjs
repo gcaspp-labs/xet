@@ -65,9 +65,7 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
   )
 
   const second = await t.step('Cliente volta a escrever e o chamado B entra na Fila', async () => {
-    await panelOf(page)
-      .getByRole('tab', { name: /^Fila/ })
-      .click()
+    await panelOf(page).getByRole('tab', { name: /^Fila/ }).click()
     await t.phone(sector.id).receive(customer, 'Voltei com o comprovante errado')
     await expect(queueRowOf(page, customer)).toContainText('Voltei com o comprovante errado')
     await t.shot(page, 'b-na-fila')
@@ -101,35 +99,38 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
     await expect(page).toHaveURL(/\/chamados$/)
   })
 
-  await t.step('Em Atendimentos, abre o encerrado e usa Mesclar em pendente com A escolhido', async () => {
-    const row = await atendimentosRowOf(page, second.protocol)
-    await expect(row).toContainText('Encerrado')
-    await expect(row).not.toContainText('Mesclado')
-    // A linha inteira abre a ficha; o link do protocolo é o alvo de verdade.
-    await row.getByRole('link', { name: second.protocol }).click()
-    await expect(page).toHaveURL(new RegExp(`/atendimentos/${second.id}$`))
-    const details = page.getByRole('region', { name: 'Atendimento', exact: true })
-    await expect(details).toContainText('Encerrado')
-    await expect(details).toContainText(subject)
-    // A ação vem ao lado do Corrigir, como secundária (protótipo versão A).
-    await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Mesclar em pendente' })
-    await expect(dialog).toContainText(
-      'As mensagens deste atendimento passam para o pendente escolhido, que fica com a situação e os dados deste encerramento. Este atendimento fica registrado como Mesclado.',
-    )
-    // A janela lista o pendente do contato, já escolhido, com protocolo, motivo e quem marcou.
-    await expect(dialog.getByRole('radio')).toHaveCount(1)
-    await expect(dialog.getByRole('radio')).toBeChecked()
-    await expect(dialog).toContainText(pending.protocol)
-    await expect(dialog).toContainText(reason)
-    await expect(dialog).toContainText(`por ${agent.name}`)
-    await t.shot(page, 'janela-mesclar-em-pendente')
-    await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
-    await expect(page.getByText('Atendimento mesclado')).toBeVisible()
-    // O pendente abre no lugar do encerrado.
-    await expect(page).toHaveURL(new RegExp(`/atendimentos/${pending.id}$`))
-  })
+  await t.step(
+    'Em Atendimentos, abre o encerrado e usa Mesclar em pendente com A escolhido',
+    async () => {
+      const row = await atendimentosRowOf(page, second.protocol)
+      await expect(row).toContainText('Encerrado')
+      await expect(row).not.toContainText('Mesclado')
+      // A linha inteira abre a ficha; o link do protocolo é o alvo de verdade.
+      await row.getByRole('link', { name: second.protocol }).click()
+      await expect(page).toHaveURL(new RegExp(`/atendimentos/${second.id}$`))
+      const details = page.getByRole('region', { name: 'Atendimento', exact: true })
+      await expect(details).toContainText('Encerrado')
+      await expect(details).toContainText(subject)
+      // A ação vem ao lado do Corrigir, como secundária (protótipo versão A).
+      await expect(page.getByRole('button', { name: 'Corrigir', exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Mesclar em pendente' }).click()
+      const dialog = page.getByRole('dialog', { name: 'Mesclar em pendente' })
+      await expect(dialog).toContainText(
+        'As mensagens deste atendimento passam para o pendente escolhido, que fica com a situação e os dados deste encerramento. Este atendimento fica registrado como Mesclado.',
+      )
+      // A janela lista o pendente do contato, já escolhido, com protocolo, motivo e quem marcou.
+      await expect(dialog.getByRole('radio')).toHaveCount(1)
+      await expect(dialog.getByRole('radio')).toBeChecked()
+      await expect(dialog).toContainText(pending.protocol)
+      await expect(dialog).toContainText(reason)
+      await expect(dialog).toContainText(`por ${agent.name}`)
+      await t.shot(page, 'janela-mesclar-em-pendente')
+      await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
+      await expect(page.getByText('Atendimento mesclado')).toBeVisible()
+      // O pendente abre no lugar do encerrado.
+      await expect(page).toHaveURL(new RegExp(`/atendimentos/${pending.id}$`))
+    },
+  )
 
   await t.step(
     'A abre como Encerrado, com os dados de B, as mensagens dos dois na ordem e o aviso',
@@ -196,60 +197,63 @@ await journey('mesclar-encerrado-em-pendente', async (t) => {
     await t.shot(page, 'pendentes-vazio')
   })
 
-  await t.step('Estado final no banco: A encerrado com os dados de B, B mesclado em A', async () => {
-    const [a] = t.sql(
-      `select t.status, t.closure_type, t.subject, t.resolution, o.name as organization,
+  await t.step(
+    'Estado final no banco: A encerrado com os dados de B, B mesclado em A',
+    async () => {
+      const [a] = t.sql(
+        `select t.status, t.closure_type, t.subject, t.resolution, o.name as organization,
               closer.name as closed_by, t.merged_into_ticket_id,
               (select count(*) from messages m where m.ticket_id = t.id) as messages
          from tickets t join organizations o on o.id = t.organization_id
          join users closer on closer.id = t.closed_by_id
         where t.id = ${pending.id}`,
-    )
-    expect(a).toEqual({
-      status: 'closed',
-      closure_type: 'resolved',
-      subject,
-      resolution,
-      organization: organization.name,
-      closed_by: agent.name,
-      merged_into_ticket_id: null,
-      messages: 2,
-    })
-    t.observe('Chamado A encerrado com os dados de B', a)
+      )
+      expect(a).toEqual({
+        status: 'closed',
+        closure_type: 'resolved',
+        subject,
+        resolution,
+        organization: organization.name,
+        closed_by: agent.name,
+        merged_into_ticket_id: null,
+        messages: 2,
+      })
+      t.observe('Chamado A encerrado com os dados de B', a)
 
-    const [b] = t.sql(
-      `select status, closure_type, merged_into_ticket_id,
+      const [b] = t.sql(
+        `select status, closure_type, merged_into_ticket_id,
               (select count(*) from messages m where m.ticket_id = tickets.id) as messages
          from tickets where id = ${second.id}`,
-    )
-    expect(b).toEqual({
-      status: 'closed',
-      closure_type: 'merged',
-      merged_into_ticket_id: pending.id,
-      messages: 0,
-    })
-    t.observe('Chamado B mesclado', b)
+      )
+      expect(b).toEqual({
+        status: 'closed',
+        closure_type: 'merged',
+        merged_into_ticket_id: pending.id,
+        messages: 0,
+      })
+      t.observe('Chamado B mesclado', b)
 
-    const audit = t.sql(
-      `select ticket_id, action, changes, reason from audit_logs
+      const audit = t.sql(
+        `select ticket_id, action, changes, reason from audit_logs
         where ticket_id in (${pending.id}, ${second.id}) order by id`,
-    )
-    // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
-    // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
-    expectAuditOrder(audit, [
-      `${pending.id} ticket_assigned`,
-      `${pending.id} ticket_pending`,
-      `${second.id} ticket_assigned`,
-      `${second.id} ticket_closed`,
-      `${second.id} ticket_merged`,
-      `${pending.id} ticket_closed_by_merge`,
-    ])
-    const closedByMerge = audit.find((entry) => entry.action === 'ticket_closed_by_merge')
-    expect(closedByMerge.changes.merged_protocol).toEqual({ from: null, to: second.protocol })
-    // B era encerrado: o registro de A não tem motivo de cancelamento.
-    expect(closedByMerge.reason).toBeNull()
-    const merged = audit.find((entry) => entry.action === 'ticket_merged')
-    expect(merged.changes.merged_into_ticket_id).toEqual({ from: null, to: pending.id })
-    t.observe('Auditoria do pendente, do encerramento e da mesclagem', audit)
-  })
+      )
+      // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
+      // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
+      expectAuditOrder(audit, [
+        `${pending.id} ticket_assigned`,
+        `${pending.id} ticket_pending`,
+        `${second.id} ticket_assigned`,
+        `${second.id} ticket_closed`,
+        `${second.id} ticket_merged`,
+        `${pending.id} ticket_closed_by_merge`,
+      ])
+      const closedByMerge = audit.find((entry) => entry.action === 'ticket_closed_by_merge')
+      expect(closedByMerge.changes.merged_protocol).toEqual({ from: null, to: second.protocol })
+      // B era encerrado: o registro de A não tem motivo de cancelamento.
+      expect(closedByMerge.reason).toBeNull()
+      const merged = audit.find((entry) => entry.action === 'ticket_merged')
+      expect(merged.changes.merged_into_ticket_id).toEqual({ from: null, to: pending.id })
+      t.observe('Auditoria do pendente, do encerramento e da mesclagem', audit)
+    },
+  )
 })

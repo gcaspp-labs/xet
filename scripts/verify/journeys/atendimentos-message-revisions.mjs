@@ -80,32 +80,35 @@ await journey('atendimentos-message-revisions', async (t) => {
 
   const agentPage = await t.signIn(agent, { viewport: { width: 1440, height: 900 } })
 
-  await t.step('O atendimento encerrado abre em Atendimentos e mostra o conteúdo preservado', async () => {
-    await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
-    await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
-    await agentPage
-      .getByRole('table')
-      .locator('tbody')
-      .getByRole('row')
-      .filter({ hasText: customer.name })
-      .getByRole('link')
-      .click()
-    await expect(agentPage).toHaveURL(new RegExp(`/atendimentos/${ticket.id}$`))
-    await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toBeVisible()
+  await t.step(
+    'O atendimento encerrado abre em Atendimentos e mostra o conteúdo preservado',
+    async () => {
+      await agentPage.getByRole('link', { name: 'Atendimentos', exact: true }).click()
+      await expect(agentPage.getByRole('heading', { name: 'Atendimentos' })).toBeVisible()
+      await agentPage
+        .getByRole('table')
+        .locator('tbody')
+        .getByRole('row')
+        .filter({ hasText: customer.name })
+        .getByRole('link')
+        .click()
+      await expect(agentPage).toHaveURL(new RegExp(`/atendimentos/${ticket.id}$`))
+      await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toBeVisible()
 
-    const conversation = conversationOf(agentPage)
-    const sent = conversation.getByRole('listitem', { name: 'Mensagem enviada' })
-    await expect(sent).toContainText('Segue o boleto de outubro')
-    await expect(sent).toContainText('Editada')
-    await expect(sent).toContainText('Excluída')
-    // O XET oculta o conteúdo em Chamados; em Atendimentos ele continua consultável.
-    await expect(sent).not.toContainText('Mensagem excluída no XET')
-    const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
-    await expect(received).toContainText('Preciso do boleto de outubro')
-    await expect(received).toContainText('Editada')
-    await expect(received).not.toContainText('Excluída')
-    await t.shot(agentPage, 'atendimento-com-conteudo-preservado')
-  })
+      const conversation = conversationOf(agentPage)
+      const sent = conversation.getByRole('listitem', { name: 'Mensagem enviada' })
+      await expect(sent).toContainText('Segue o boleto de outubro')
+      await expect(sent).toContainText('Editada')
+      await expect(sent).toContainText('Excluída')
+      // O XET oculta o conteúdo em Chamados; em Atendimentos ele continua consultável.
+      await expect(sent).not.toContainText('Mensagem excluída no XET')
+      const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
+      await expect(received).toContainText('Preciso do boleto de outubro')
+      await expect(received).toContainText('Editada')
+      await expect(received).not.toContainText('Excluída')
+      await t.shot(agentPage, 'atendimento-com-conteudo-preservado')
+    },
+  )
 
   await t.step('Somente leitura: nenhuma ação de alterar, restaurar ou reenviar', async () => {
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem', exact: true })).toHaveCount(0)
@@ -136,9 +139,9 @@ await journey('atendimentos-message-revisions', async (t) => {
     )
     await expect(dialog.getByTestId('message-deletion')).toContainText('Excluída')
     await expect(dialog.getByTestId('message-deletion')).toContainText('Para mim (oculta no XET)')
-    await expect(dialog.getByRole('button', { name: /Editar|Excluir|Reenviar|Restaurar/ })).toHaveCount(
-      0,
-    )
+    await expect(
+      dialog.getByRole('button', { name: /Editar|Excluir|Reenviar|Restaurar/ }),
+    ).toHaveCount(0)
     await t.shot(agentPage, 'versoes-da-mensagem-do-xet')
     await agentPage.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
@@ -213,15 +216,15 @@ await journey('atendimentos-message-revisions', async (t) => {
   await t.step('Recarregar mantém o conteúdo, as etiquetas e as versões', async () => {
     await agentPage.reload()
     const conversation = conversationOf(agentPage)
-    await expect(
-      conversation.getByRole('listitem', { name: 'Mensagem enviada' }),
-    ).toContainText('Segue o boleto de outubro')
+    await expect(conversation.getByRole('listitem', { name: 'Mensagem enviada' })).toContainText(
+      'Segue o boleto de outubro',
+    )
     const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
     await expect(received).toContainText('Preciso do boleto de novembro')
     await expect(received).toContainText('Excluída')
-    await expect(
-      conversation.getByRole('button', { name: 'Ver versões e exclusão' }),
-    ).toHaveCount(2)
+    await expect(conversation.getByRole('button', { name: 'Ver versões e exclusão' })).toHaveCount(
+      2,
+    )
   })
 
   await t.step('Estado final no banco', async () => {
@@ -262,11 +265,7 @@ await journey('atendimentos-message-revisions', async (t) => {
               'edit:Preciso do boleto de novembro',
               'deletion:',
             ]
-          : [
-              'original:Segue o boleto de setembro',
-              'edit:Segue o boleto de outubro',
-              'deletion:',
-            ]
+          : ['original:Segue o boleto de setembro', 'edit:Segue o boleto de outubro', 'deletion:']
       expect(changes.map((change) => `${change.kind}:${content(change.body)}`)).toEqual(expected)
     }
     const [closed] = t.sql(`select status, closure_type from tickets where id = ${ticket.id}`)

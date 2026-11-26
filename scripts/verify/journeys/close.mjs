@@ -35,9 +35,7 @@ await journey('close', async (t) => {
       .getByRole('button', { name: `Assumir chamado de ${paulo.name}` })
       .click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
-    await expect(
-      conversationOf(agentPage),
-    ).toContainText(`${agent.name} assumiu o chamado`)
+    await expect(conversationOf(agentPage)).toContainText(`${agent.name} assumiu o chamado`)
     return Number(agentPage.url().split('/').pop())
   })
 
@@ -125,7 +123,9 @@ await journey('close', async (t) => {
     // O endereço da tela Chamados leva o chamado encerrado à ficha em Atendimentos.
     await agentPage.goto(`/chamados/${ticketId}`)
     await expect(agentPage).toHaveURL(new RegExp(`/atendimentos/${ticketId}$`))
-    await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toContainText('Encerrado em')
+    await expect(agentPage.getByRole('status', { name: 'Só leitura' })).toContainText(
+      'Encerrado em',
+    )
     const conversation = conversationOf(agentPage)
     // Na ficha, o aviso "Chamado encerrado." virou "Só leitura. Encerrado em ... por ...".
     await expect(conversation).toContainText('Só leitura. Encerrado em')
@@ -173,9 +173,7 @@ await journey('close', async (t) => {
       const x = queue.getByRole('button', { name: `Cancelar chamado de ${golpe.name}` })
       // O X não cancela no primeiro clique: o próprio item pede confirmação, com o Voltar em foco.
       await x.click()
-      await expect(queue).toContainText(
-        `Cancelar o chamado de ${golpe.name}? Ele não é reaberto.`,
-      )
+      await expect(queue).toContainText(`Cancelar o chamado de ${golpe.name}? Ele não é reaberto.`)
       await expect(queue.getByRole('button', { name: 'Voltar' })).toBeFocused()
       await t.shot(agentPage, 'cancelamento-confirmar')
       await expect(agentPage.getByRole('dialog', { name: 'Cancelar chamado' })).toHaveCount(0)
