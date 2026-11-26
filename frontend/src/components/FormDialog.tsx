@@ -39,6 +39,7 @@ export function FormDialog({
   submitLabel,
   cancelLabel = 'Cancelar',
   pending,
+  submitDisabled = false,
   error,
   onSubmit,
   children,
@@ -55,6 +56,9 @@ export function FormDialog({
   submitLabel?: string
   cancelLabel?: string
   pending: boolean
+  // Desliga o envio sem uma gravação em andamento: quando o formulário não tem o que enviar,
+  // como a mesclagem sem nenhum pendente para escolher (#448).
+  submitDisabled?: boolean
   error?: string
   onSubmit: FormEventHandler<HTMLFormElement>
   children: ReactNode
@@ -147,7 +151,7 @@ export function FormDialog({
             )}
             <DialogClose render={<Button variant="ghost" />}>{cancelLabel}</DialogClose>
             {submitLabel && (
-              <Button type="submit" form={formId} disabled={pending}>
+              <Button type="submit" form={formId} disabled={pending || submitDisabled}>
                 {submitLabel}
               </Button>
             )}
