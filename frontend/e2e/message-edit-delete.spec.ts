@@ -1,7 +1,6 @@
 import {
   expect,
   request as apiRequest,
-  test,
   type APIRequestContext,
   type Browser,
   type Locator,
@@ -17,7 +16,9 @@ import {
   seedContact,
   seedSector,
   signIn,
+  test,
   unique,
+  unrouteAfterEach,
   userPassword,
 } from './fixtures'
 
@@ -25,12 +26,8 @@ import {
 // as mudam, rodam um de cada vez.
 test.describe.configure({ mode: 'serial' })
 
-// Testes deste arquivo interceptam requisições com `page.route()`. Uma requisição que ainda esteja
-// em voo quando o teste termina faz o Playwright acusar o erro no teste seguinte, que nem roda
-// (#403): encerra as interceptações ao terminar e ignora só os erros dessas requisições tardias.
-test.afterEach(async ({ page }) => {
-  await page.unrouteAll({ behavior: 'ignoreErrors' })
-})
+// Testes deste arquivo interceptam requisições com `page.route()`.
+unrouteAfterEach()
 
 type ApiMessage = {
   id: number

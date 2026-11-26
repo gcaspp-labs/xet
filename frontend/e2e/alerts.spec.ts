@@ -13,6 +13,8 @@ import {
   test,
   trackSocket,
   unique,
+  unrouteAfterEach,
+  unrouteRoutes,
   userPassword,
 } from './fixtures'
 
@@ -31,6 +33,10 @@ declare global {
 // O headless shell, padrão do Playwright, responde sempre "denied" em Notification.permission,
 // mesmo com a permissão concedida. O Chromium completo respeita a permissão.
 test.use({ channel: 'chromium' })
+
+// Os testes deste arquivo interceptam a fila do setor com `page.route()`; as abas extras desligam
+// as suas no fim do próprio teste, com `unrouteRoutes`.
+unrouteAfterEach()
 
 async function phone(request: APIRequestContext, sectorId: number, action: string, data?: object) {
   const response = await request.post(`/api/test/messaging/sectors/${sectorId}/${action}`, { data })
@@ -558,13 +564,14 @@ test('duas abas que alertam chamados diferentes ao mesmo tempo guardam as duas r
   await expect.poll(() => notified(second)).toEqual(['Dora Cruzada'])
   await expect.poll(() => beeps(page)).toBe(1)
   await expect.poll(() => beeps(second)).toBe(1)
+  await unrouteRoutes(page, second)
   await page.close()
   await second.close()
 
   openLate()
   await expect(late.getByText('Chamado recebido: Caio Cruzado')).toBeVisible()
   await expect(late.getByText('Chamado recebido: Dora Cruzada')).toBeVisible()
-  await late.unroute(queue)
+  await unrouteRoutes(late)
 
   // O chamado seguinte prova que os alertas seguem ligados; os dois de antes, se repetissem, já
   // estariam na lista e no som.

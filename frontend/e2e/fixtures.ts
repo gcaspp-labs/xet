@@ -128,6 +128,27 @@ export async function seedPendingWithNewTicket(baseURL: string) {
   return { ...seed, contact, phone, pendingId: pending.id, ticketId: ticket.id }
 }
 
+// Uma resposta interceptada que chega depois do fim do teste faz o Playwright acusar
+// "route.fetch: Test ended" no teste seguinte, que nem roda (#403). `unrouteAfterEach()` desliga
+// as interceptações no fim de cada teste do arquivo; `unrouteRoutes` faz o mesmo para as abas
+// extras, que a fixture não alcança. Só os erros dessas respostas tardias são ignorados.
+export function unrouteAfterEach() {
+  test.afterEach(async ({ page }) => {
+    await unrouteRoutes(page)
+  })
+}
+
+export async function unrouteRoutes(...pages: Page[]) {
+  await Promise.all(
+    pages.map((page) =>
+      page.unrouteAll({ behavior: 'ignoreErrors' }).catch((error: unknown) => {
+        // O teste pode ter fechado a aba antes do fim; aí não há mais rota a desligar.
+        if (!String(error).includes('has been closed')) throw error
+      }),
+    ),
+  )
+}
+
 // O banco é compartilhado entre os testes, que rodam em paralelo e deixam números desconectados.
 // `onlySectors(...ids)` limita a lista de setores da página aos do teste, para a contagem do sino do
 // administrador ser exata. O restante, inclusive a fila e o tempo real, continua vindo do backend.
@@ -148,7 +169,7 @@ export const test = base.extend<{ onlySectors: (...ids: number[]) => Promise<voi
       })
     })
     if (routed) {
-      await page.unrouteAll({ behavior: 'ignoreErrors' })
+      await unrouteRoutes(page)
     }
   },
 })

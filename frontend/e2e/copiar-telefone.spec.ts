@@ -8,6 +8,7 @@ import {
   signIn,
   test,
   unique,
+  unrouteAfterEach,
   userPassword,
 } from './fixtures'
 
@@ -49,12 +50,8 @@ async function withoutPhone(page: Page, ticketId: number) {
 
 const copied = (page: Page) => page.evaluate(() => navigator.clipboard.readText())
 
-// O `withoutPhone` deixa uma rota respondendo até o fim do teste. Se a resposta dele chegar depois
-// do fim, o Playwright acusa "route.fetch: Test ended" no teste seguinte e esse teste nem roda
-// (#403): encerra a interceptação ao terminar e ignora só os erros dessas respostas tardias.
-test.afterEach(async ({ page }) => {
-  await page.unrouteAll({ behavior: 'ignoreErrors' })
-})
+// O `withoutPhone` deixa uma rota respondendo até o fim do teste.
+unrouteAfterEach()
 
 test('copia o telefone no cabeçalho do chamado, só números e sem o +55', async ({
   page,
