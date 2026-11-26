@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Retrato ilustrado de Maria Oliveira">
+  <rect width="160" height="160" fill="#E7D8C3"/>
+  <!-- cabelo comprido -->
+  <path d="M40 96c-6-30 6-64 40-64s46 34 40 64c-3 16-9 22-9 22l-8-52H57l-8 52s-6-6-9-22z" fill="#3A2A22"/>
+  <!-- pescoço e ombros -->
+  <path d="M64 98h32v18c12 5 24 12 27 25 1 4-1 19-1 19H38s-2-15-1-19c3-13 15-20 27-25z" fill="#2F6B63"/>
+  <path d="M68 92h24v22c0 8-6 14-12 14s-12-6-12-14z" fill="#C98E63"/>
+  <!-- rosto -->
+  <ellipse cx="80" cy="68" rx="27" ry="32" fill="#D9A177"/>
+  <!-- franja -->
+  <path d="M53 62c0-24 12-34 27-34s27 10 27 34c-6-12-14-16-27-16s-21 4-27 16z" fill="#3A2A22"/>
+  <!-- olhos, sobrancelhas, nariz e boca -->
+  <ellipse cx="69" cy="68" rx="3" ry="3.4" fill="#2B1F19"/>
+  <ellipse cx="91" cy="68" rx="3" ry="3.4" fill="#2B1F19"/>
+  <path d="M63 60c4-3 9-3 12-1" stroke="#2B1F19" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <path d="M85 59c4-2 9-2 12 1" stroke="#2B1F19" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <path d="M80 70v8c0 2 2 3 4 3" stroke="#B87C55" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M71 86c5 5 13 5 18 0" stroke="#8E4A3F" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <!-- brincos -->
+  <circle cx="52" cy="78" r="3.2" fill="#D8B15C"/>
+  <circle cx="108" cy="78" r="3.2" fill="#D8B15C"/>
+</svg>

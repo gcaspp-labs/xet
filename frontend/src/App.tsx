@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import AtendimentosPage from '@/pages/AtendimentosPage'
 import ConversasPage from '@/pages/ConversasPage'
+import Prototype482 from '@/pages/Prototype482'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
@@ -42,6 +43,14 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #482: a foto do contato conforme o WhatsApp nas quatro telas, e a
+  // foto grande. Descartável; não vai para a main.
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/chamados' &&
+    new URLSearchParams(window.location.search).get('prototype') === '482'
+  )
+    return <Prototype482 />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />

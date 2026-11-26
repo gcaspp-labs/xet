@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Retrato ilustrado de Carlos Pereira">
+  <rect width="160" height="160" fill="#DDE7D6"/>
+  <!-- cabelo curto -->
+  <path d="M52 62c0-22 12-32 28-32s28 10 28 32c-5-9-13-13-28-13s-23 4-28 13z" fill="#4A4038"/>
+  <!-- pescoço e ombros -->
+  <path d="M63 100h34v17c13 4 24 12 27 25 1 4-1 18-1 18H37s-2-14-1-18c3-13 14-21 27-25z" fill="#33475C"/>
+  <path d="M68 94h24v21c0 8-6 14-12 14s-12-6-12-14z" fill="#C99A73"/>
+  <!-- rosto -->
+  <ellipse cx="80" cy="68" rx="27" ry="32" fill="#E0B08A"/>
+  <!-- barba -->
+  <path d="M53 70c0 24 12 38 27 38s27-14 27-38c-4 20-12 27-27 27s-23-7-27-27z" fill="#57493C"/>
+  <path d="M69 88c4 3 7 4 11 4s7-1 11-4" stroke="#7A6653" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- óculos -->
+  <g stroke="#2B2621" stroke-width="2.6" fill="none">
+    <rect x="58" y="62" width="18" height="14" rx="5"/>
+    <rect x="84" y="62" width="18" height="14" rx="5"/>
+    <path d="M76 68h8"/>
+    <path d="M58 66l-7-2"/>
+    <path d="M102 66l7-2"/>
+  </g>
+  <ellipse cx="67" cy="69" rx="2.8" ry="3" fill="#2B2621"/>
+  <ellipse cx="93" cy="69" rx="2.8" ry="3" fill="#2B2621"/>
+  <path d="M80 72v7c0 2 2 3 4 3" stroke="#B98561" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M72 86c5 4 11 4 16 0" stroke="#8E5E44" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+</svg>
