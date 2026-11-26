@@ -179,7 +179,13 @@ class Journey {
           '(/api/...) ou uma RegExp.',
       )
     }
-    this.expectedStatuses.push({ status, path: pathFilter ?? null })
+    // RegExp com g ou y guarda o lastIndex entre as conferências: a segunda resposta da mesma
+    // rota poderia falhar sem motivo aparente. O filtro fica com uma cópia sem essas flags.
+    const filter =
+      pathFilter instanceof RegExp
+        ? new RegExp(pathFilter.source, pathFilter.flags.replace(/[gy]/g, ''))
+        : pathFilter
+    this.expectedStatuses.push({ status, path: filter ?? null })
   }
 
   // Entra pela tela de login, numa sessão isolada dentro do mesmo navegador.

@@ -111,6 +111,8 @@ await journey('nome-da-jornada', async (t) => {
 | `t.apiAs(usuário)`                             | Sessão de API de uma pessoa do setor (atendente ou supervisor), para preparar dados que dependem dela, como assumir e encerrar chamados. Fecha ao fim da jornada                                                                                                                                                                             |
 | `t.apiOk(requisição, descrição)`               | Espera a resposta e falha com "Pré-condição não atendida" se ela não for 2xx                                                                                                                                                                                                                                                                 |
 
+No `path` do `t.expectStatus`, uma RegExp pode vir com as flags `g` e `y`: o kit a copia sem elas, porque essas flags guardam o `lastIndex` entre uma conferência e outra e fariam a segunda resposta da mesma rota falhar sem motivo.
+
 Use papéis e nomes visíveis (`getByRole`, `getByLabel`), como em `frontend/e2e/`, nunca coordenadas. Toda jornada termina num passo que confere o estado final no banco, e não só a tela.
 
 **Se uma jornada falhar:**
