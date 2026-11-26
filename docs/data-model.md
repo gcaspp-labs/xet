@@ -12,7 +12,7 @@ Nomes de tabelas, colunas e valores estão em inglês, como no código. Todas as
 | Conexão do número | `internal/helpdesk` | — (colunas do WhatsApp em Setor) | Ligar e desligar o número de WhatsApp de cada setor |
 | Acesso | `internal/core/auth`, `internal/core/users` | Usuário, Sessão, Tentativas de login | Login, papéis e permissões; cadastro de usuários e senhas |
 | Cadastro de clientes | `internal/core/directory` | Município, Órgão, Contato | Pessoas atendidas, os órgãos a que pertencem e os municípios desses órgãos |
-| Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Contador de protocolo, Assunto, Solução | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções; listas de assuntos e soluções do formulário |
+| Atendimento | `internal/helpdesk` | Chamado, Módulos do chamado, Contador de protocolo, Assunto, Solução, Lançamento no legado, Configuração do automático | Ciclo de vida do chamado: fila, responsável, transferências, encerramento e correções; listas de assuntos e soluções do formulário; situação do lançamento no legado e configuração do automático |
 | Mensagens | `internal/helpdesk` | Mensagem, Arquivo | Histórico de mensagens e anexos |
 | Mensageria | `internal/helpdesk/messaging` | — (sessões do Whatsmeow) | Interface de envio e recebimento e implementação com Whatsmeow |
 | Auditoria | `internal/core/audit` | Registro de auditoria | Histórico de alterações relevantes |
@@ -53,6 +53,8 @@ erDiagram
     users ||--o{ message_reactions : "autor (reação pelo sistema)"
     tickets ||--o{ audit_logs : ""
     users ||--o{ audit_logs : "autor da ação"
+    tickets ||--o| legacy_launches : "lançamento no legado"
+    legacy_launch_settings
 ```
 
 ## Tipos enumerados
@@ -71,6 +73,8 @@ erDiagram
 | `message_type` | `text`, `image`, `video`, `audio`, `document`, `contact`, `unsupported`, `media_unavailable` | `contact` é o cartão de contato do WhatsApp, com os cartões em `messages.contact_cards` (#323; os contatos recebidos antes, gravados como `unsupported`, ficam como estão, sem conversão); `unsupported` cobre figurinhas, localização e outros tipos fora do piloto (as reações recebidas deixaram de ser gravadas como mensagem: vão para `message_reactions`; as antigas, já gravadas como `unsupported`, ficam como estão); `media_unavailable` é o arquivo recebido acima do limite ou que não baixou |
 | `message_status` | `pending`, `sent`, `delivered`, `read`, `failed` | Situação de entrega das mensagens enviadas |
 | `reaction_side` | `customer`, `sector` | Lado da reação: do cliente ou do número do setor |
+| `legacy_launch_status` | `pending`, `launched`, `failed` | Situação do lançamento no legado: A lançar, Lançado (com o número e a data) ou Erro (com o tipo e o motivo; spec [#410](https://github.com/gcaspp-labs/xet/issues/410)) |
+| `legacy_launch_error` | `mapping_missing`, `unavailable`, `login_refused`, `screen_unrecognized`, `field_refused`, `unknown_result` | Tipo do erro do lançamento: de-para incompleto, legado indisponível, login recusado, tela não reconhecida, campo recusado e resultado desconhecido. `unavailable` e `unknown_result` são passageiros e voltam à fila sozinhos; os outros esperam alguém corrigir e clicar em **Tentar de novo** |
 
 ## Organização interna
 
@@ -87,6 +91,7 @@ erDiagram
 | `last_connected_at` | timestamptz | Última conexão bem-sucedida |
 | `connection_error` | text | Motivo da recusa da última conexão (número já ligado a outro setor); limpo na conexão seguinte |
 | `active` | boolean | Padrão `true` |
+| `legacy_sector` | text | Opcional; setor correspondente no legado; vazio gravado como nulo e recusa texto em branco. Sem unicidade |
 
 ### `modules` — Módulo/sistema atendido pelo setor
 
@@ -111,6 +116,7 @@ Módulos não são excluídos, apenas desativados, porque encerramentos antigos 
 | `role` | user_role | Obrigatório |
 | `sector_id` | bigint → `sectors` | Obrigatório para `agent` e `supervisor`; vazio para `admin` |
 | `active` | boolean | Padrão `true`; usuário inativo não faz login |
+| `legacy_user` | text | Opcional; usuário do atendente no legado (selecionado no campo Usuário da tela); vazio gravado como nulo e recusa texto em branco. Sem unicidade |
 
 Restrição: `(role = 'admin') = (sector_id is null)`.
 
@@ -164,6 +170,7 @@ Dados de referência carregados por migração, sem tela de cadastro nem auditor
 | `name` | text | Obrigatório |
 | `cnpj` | char(14) | Opcional; sem pontuação, com letras maiúsculas e dígitos (CNPJ numérico ou alfanumérico), validado pelos dígitos verificadores; único quando informado (índice único parcial) |
 | `municipality_id` | bigint → `municipalities` | Obrigatório |
+| `legacy_code` | text | Opcional; código do órgão no legado (campo Cliente); vazio gravado como nulo e recusa texto em branco. Sem unicidade |
 
 Índice único em `(municipality_id, lower(immutable_unaccent(name)))`: o nome não se repete no município, sem diferenciar maiúsculas nem acentos.
 
@@ -300,6 +307,51 @@ Ao salvar o formulário com "adicionar", o item é gravado na mesma transação 
 | `last_value` | integer | Último número usado no ano |
 
 O protocolo é gerado na mesma transação que cria o chamado, com `insert ... on conflict (year) do update set last_value = last_value + 1 returning last_value`. A numeração é única para todos os setores e reinicia a cada ano, contado no horário de Brasília (`America/Sao_Paulo`).
+
+### `legacy_launches` — Lançamento no legado
+
+A situação de cada atendimento no sistema legado (spec [#410](https://github.com/gcaspp-labs/xet/issues/410), ticket [#412](https://github.com/gcaspp-labs/xet/issues/412)). Um por chamado, ligado ao chamado; nunca é um campo em `tickets` e nunca é refeito.
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `ticket_id` | bigint → `tickets` | Chave primária: no máximo um lançamento por chamado |
+| `status` | legacy_launch_status | Obrigatório, padrão `pending` |
+| `legacy_number` | text | Número que o legado devolveu; único quando preenchido (`legacy_launches_number_key`) |
+| `launched_at` | timestamptz | Quando o legado confirmou |
+| `error_kind` | legacy_launch_error | Tipo do erro, quando `failed` |
+| `error_reason` | text | Motivo em português, não em branco quando preenchido |
+| `attempts` | integer | Tentativas já feitas, padrão 0, não negativo; a tentativa é contada na reserva, e gravar o resultado não soma outra |
+| `claimed_at` | timestamptz | Reserva de quem está lançando agora; vazio quando ninguém está |
+| `claim_id` | uuid | Identificador da reserva entregue ao robô; vazio quando ninguém está |
+| `next_attempt_at` | timestamptz | Próxima tentativa automática; vazio enquanto a reserva está em curso ou quando não há mais tentativa possível |
+| `created_at` | timestamptz | Padrão `now()` |
+
+Restrições:
+
+- `status = 'launched'` ⇒ `legacy_number` e `launched_at` preenchidos e `error_kind` e `error_reason` vazios (`legacy_launches_launched_fields`).
+- `status = 'failed'` ⇒ `error_kind` e `error_reason` preenchidos (`legacy_launches_failed_fields`).
+- `status = 'pending'` ⇒ `error_kind` e `error_reason` vazios (`legacy_launches_pending_clear`).
+- `error_reason` preenchido ⇒ não em branco (`legacy_launches_error_reason_not_blank`).
+- `claimed_at` preenchido ⇔ `claim_id` preenchido (`legacy_launches_claim_fields`).
+
+Índice `legacy_launches_queue_idx` em `(next_attempt_at) where status in ('pending', 'failed')` para a fila, e índice parcial `legacy_launches_claimed_idx` em `(claimed_at) where claimed_at is not null` para o ramo da reserva em curso (a vencida volta para a fila e a soltura procura só por ela).
+
+Reserva. O robô pega um lançamento por vez, com `select ... for update skip locked`: `pending` com `next_attempt_at <= now()`, `failed` de erro passageiro (`unavailable`, `unknown_result`) com `next_attempt_at <= now()`, ou qualquer um dos dois com reserva vencida (`claimed_at` sem resposta do robô pelo prazo único de 10 minutos passado pelo Go — `LegacyLaunchClaimStaleAfter` —, mesmo com `next_attempt_at` vazio). A reserva grava `claimed_at`, `claim_id` e conta a tentativa, e zera `next_attempt_at`; gravar o resultado, confirmado ou com erro, não soma outra tentativa. O resultado só é aceito com o `claim_id` da reserva. Ao retomar uma reserva vencida, a consulta devolve `stale_claim` e a próxima tentativa começa procurando o lançamento antes de lançar; a reserva também pode ser solta como `failed` com `unknown_result`, pelo mesmo prazo. **Tentar de novo** devolve um `failed` para a fila, zerando as tentativas e o erro.
+
+### `legacy_launch_settings` — Configuração do automático
+
+Linha única (`id = 1`), criada pela migração.
+
+| Coluna | Tipo | Regras |
+| --- | --- | --- |
+| `id` | smallint | Chave primária; `check (id = 1)` |
+| `automatic_enabled` | boolean | Obrigatório, padrão `false` |
+| `consecutive_failures` | integer | Obrigatório, padrão 0, não negativo |
+| `paused_at` | timestamptz | Quando a fila pausou sozinha |
+| `paused_reason` | text | Por quê, não em branco quando preenchido |
+| `updated_at` | timestamptz | Padrão `now()`, atualizado a cada escrita |
+
+Restrições: `paused_at` preenchido ⇔ `paused_reason` preenchido (`legacy_launch_settings_paused_fields`); `paused_reason` não em branco quando preenchido (`legacy_launch_settings_paused_reason_not_blank`).
 
 ### Ciclo de vida do chamado
 

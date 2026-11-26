@@ -140,6 +140,137 @@ func AllConnectionStatusValues() []ConnectionStatus {
 	}
 }
 
+type LegacyLaunchError string
+
+const (
+	LegacyLaunchErrorMappingMissing     LegacyLaunchError = "mapping_missing"
+	LegacyLaunchErrorUnavailable        LegacyLaunchError = "unavailable"
+	LegacyLaunchErrorLoginRefused       LegacyLaunchError = "login_refused"
+	LegacyLaunchErrorScreenUnrecognized LegacyLaunchError = "screen_unrecognized"
+	LegacyLaunchErrorFieldRefused       LegacyLaunchError = "field_refused"
+	LegacyLaunchErrorUnknownResult      LegacyLaunchError = "unknown_result"
+)
+
+func (e *LegacyLaunchError) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LegacyLaunchError(s)
+	case string:
+		*e = LegacyLaunchError(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LegacyLaunchError: %T", src)
+	}
+	return nil
+}
+
+type NullLegacyLaunchError struct {
+	LegacyLaunchError LegacyLaunchError
+	Valid             bool // Valid is true if LegacyLaunchError is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLegacyLaunchError) Scan(value interface{}) error {
+	if value == nil {
+		ns.LegacyLaunchError, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LegacyLaunchError.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLegacyLaunchError) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LegacyLaunchError), nil
+}
+
+func (e LegacyLaunchError) Valid() bool {
+	switch e {
+	case LegacyLaunchErrorMappingMissing,
+		LegacyLaunchErrorUnavailable,
+		LegacyLaunchErrorLoginRefused,
+		LegacyLaunchErrorScreenUnrecognized,
+		LegacyLaunchErrorFieldRefused,
+		LegacyLaunchErrorUnknownResult:
+		return true
+	}
+	return false
+}
+
+func AllLegacyLaunchErrorValues() []LegacyLaunchError {
+	return []LegacyLaunchError{
+		LegacyLaunchErrorMappingMissing,
+		LegacyLaunchErrorUnavailable,
+		LegacyLaunchErrorLoginRefused,
+		LegacyLaunchErrorScreenUnrecognized,
+		LegacyLaunchErrorFieldRefused,
+		LegacyLaunchErrorUnknownResult,
+	}
+}
+
+type LegacyLaunchStatus string
+
+const (
+	LegacyLaunchStatusPending  LegacyLaunchStatus = "pending"
+	LegacyLaunchStatusLaunched LegacyLaunchStatus = "launched"
+	LegacyLaunchStatusFailed   LegacyLaunchStatus = "failed"
+)
+
+func (e *LegacyLaunchStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LegacyLaunchStatus(s)
+	case string:
+		*e = LegacyLaunchStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LegacyLaunchStatus: %T", src)
+	}
+	return nil
+}
+
+type NullLegacyLaunchStatus struct {
+	LegacyLaunchStatus LegacyLaunchStatus
+	Valid              bool // Valid is true if LegacyLaunchStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLegacyLaunchStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.LegacyLaunchStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LegacyLaunchStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLegacyLaunchStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LegacyLaunchStatus), nil
+}
+
+func (e LegacyLaunchStatus) Valid() bool {
+	switch e {
+	case LegacyLaunchStatusPending,
+		LegacyLaunchStatusLaunched,
+		LegacyLaunchStatusFailed:
+		return true
+	}
+	return false
+}
+
+func AllLegacyLaunchStatusValues() []LegacyLaunchStatus {
+	return []LegacyLaunchStatus{
+		LegacyLaunchStatusPending,
+		LegacyLaunchStatusLaunched,
+		LegacyLaunchStatusFailed,
+	}
+}
+
 type MessageActionKind string
 
 const (
@@ -921,6 +1052,29 @@ type ContactSector struct {
 	SectorID  int64
 }
 
+type LegacyLaunch struct {
+	TicketID      int64
+	Status        LegacyLaunchStatus
+	LegacyNumber  *string
+	LaunchedAt    *time.Time
+	ErrorKind     NullLegacyLaunchError
+	ErrorReason   *string
+	Attempts      int32
+	ClaimedAt     *time.Time
+	ClaimID       pgtype.UUID
+	NextAttemptAt *time.Time
+	CreatedAt     time.Time
+}
+
+type LegacyLaunchSetting struct {
+	ID                  int16
+	AutomaticEnabled    bool
+	ConsecutiveFailures int32
+	PausedAt            *time.Time
+	PausedReason        *string
+	UpdatedAt           time.Time
+}
+
 type LoginAttempt struct {
 	Scope         string
 	Subject       string
@@ -1035,6 +1189,7 @@ type Organization struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	MunicipalityID int64
+	LegacyCode     *string
 }
 
 type ProtocolCounter struct {
@@ -1055,6 +1210,7 @@ type Sector struct {
 	UpdatedAt         time.Time
 	ConnectionError   *string
 	Email             *string
+	LegacySector      *string
 }
 
 type Session struct {
@@ -1131,4 +1287,5 @@ type User struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	Nickname     string
+	LegacyUser   *string
 }
