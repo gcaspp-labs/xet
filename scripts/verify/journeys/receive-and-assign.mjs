@@ -66,11 +66,11 @@ await journey('receive-and-assign', async (t) => {
   // A colega entra agora e fica sem tempo real: a tela dela continua mostrando o chamado na fila.
   const stalePage = await t.signIn(colleague, { blockRealtime: true })
   const staleQueue = panelOf(stalePage)
-  const staleAssign = staleQueue.getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
+  const staleAssign = staleQueue.getByRole('button', { name: `Assumir chamado de ${maria.name}` })
   await expect(staleAssign).toBeVisible()
 
   const ticketId = await t.step('Atendente assume pela fila e cai no chamado', async () => {
-    await queue.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
+    await queue.getByRole('button', { name: `Assumir chamado de ${maria.name}` }).click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     await expect(agentPage.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
     const conversation = conversationOf(agentPage)
@@ -117,7 +117,7 @@ await journey('receive-and-assign', async (t) => {
   await t.step('Em Meus chamados o chamado está com o responsável, fora da fila', async () => {
     await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
     await expect(agentPage).toHaveURL(/\/chamados$/)
-    await expect(mine.getByRole('link', { name: /Maria Cliente/ })).toBeVisible()
+    await expect(mine.getByRole('link', { name: maria.name })).toBeVisible()
     await expect(mariaRow).toHaveCount(0)
     await expect(queue.getByText('Nenhum chamado esperando.')).toBeVisible()
     await t.shot(agentPage, 'meus-chamados')
@@ -126,10 +126,10 @@ await journey('receive-and-assign', async (t) => {
   await t.step('Atendente assume outro chamado pela fila, sem chamado aberto', async () => {
     const cliente = t.customer('Pessoa da fila')
     await phone.receive(cliente, 'Preciso de atendimento')
-    await queue.getByRole('button', { name: 'Assumir chamado de Pessoa da fila' }).click()
+    await queue.getByRole('button', { name: `Assumir chamado de ${cliente.name}` }).click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
     await expect(conversationOf(agentPage)).toContainText('Preciso de atendimento')
-    await expect(mine.getByRole('link', { name: /Pessoa da fila/ })).toBeVisible()
+    await expect(mine.getByRole('link', { name: cliente.name })).toBeVisible()
     await t.shot(agentPage, 'assumido-pela-fila')
   })
 
@@ -138,7 +138,7 @@ await journey('receive-and-assign', async (t) => {
     const otherPage = await t.signIn(other.agents[0])
     await expect(otherPage.getByRole('heading', { name: 'Chamados' })).toBeVisible()
     await expect(panelOf(otherPage).getByText('Nenhum chamado esperando.')).toBeVisible()
-    await expect(otherPage.getByText('Maria Cliente')).toHaveCount(0)
+    await expect(otherPage.getByText(maria.name)).toHaveCount(0)
     const response = await otherPage.request.get(`/api/tickets/${ticketId}`)
     expect(response.status()).toBe(403)
     await t.shot(otherPage, 'outro-setor-nao-ve')
