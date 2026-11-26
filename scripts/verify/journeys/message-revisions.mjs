@@ -20,7 +20,7 @@ await journey('message-revisions', async (t) => {
   })
 
   await t.step('Atendente assume e vê a mensagem original', async () => {
-    await queue.getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
+    await queue.getByRole('button', { name: `Assumir chamado de ${maria.name}` }).click()
     await expect(page).toHaveURL(/\/chamados\/\d+$/)
     await expect(received).toHaveCount(1)
     await expect(received).toContainText('Preciso do balancete de setembro')

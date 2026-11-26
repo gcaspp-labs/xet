@@ -20,7 +20,9 @@ await journey('edit-delete-messages-chamados', async (t) => {
   const menuOf = (bubble) => bubble.getByRole('button', { name: 'Ações da mensagem' })
 
   const ticketId = await t.step('Atendente assume e responde duas vezes', async () => {
-    await panelOf(page).getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
+    await panelOf(page)
+      .getByRole('button', { name: `Assumir chamado de ${maria.name}` })
+      .click()
     await expect(page).toHaveURL(/\/chamados\/\d+$/)
     for (const text of ['Segue o boleto de setembro', 'Mensagem enviada por engano']) {
       await composer.fill(text)
