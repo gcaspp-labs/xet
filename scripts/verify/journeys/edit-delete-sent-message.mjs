@@ -19,9 +19,7 @@ await journey('edit-delete-sent-message', async (t) => {
   const sent = conversation.getByRole('listitem', { name: 'Mensagem enviada' })
 
   const ticketId = await t.step('Atendente assume e responde', async () => {
-    await panelOf(page)
-      .getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
-      .click()
+    await panelOf(page).getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
     await expect(page).toHaveURL(/\/chamados\/\d+$/)
     await composer.fill('Segue o boleto de setembro')
     await composer.press('Enter')

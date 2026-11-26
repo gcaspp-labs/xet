@@ -194,14 +194,18 @@ test('sem motivo a janela avisa; cancelar não muda nada, e quem não é o respo
 
   // O colega do setor abre o chamado em atendimento e não vê a ação, nem as do chamado.
   const context = await browser.newContext()
-  const other = await context.newPage()
-  await signIn(other, colleague, userPassword)
-  await other.goto(url)
-  await expect(other.getByRole('heading', { name: contact })).toBeVisible()
-  await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
-  await expect(other.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
-  await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
-  await context.close()
+  try {
+    const other = await context.newPage()
+    await signIn(other, colleague, userPassword)
+    await other.goto(url)
+    await expect(other.getByRole('heading', { name: contact })).toBeVisible()
+    await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
+    await expect(other.getByRole('button', { name: 'Encerrar' })).toHaveCount(0)
+    await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
+  }
 })
 
 test('outro atendente abre o pendente só leitura e o retoma, e o chamado abre em Meus chamados dele', async ({
@@ -220,33 +224,37 @@ test('outro atendente abre o pendente só leitura e o retoma, e o chamado abre e
   await markPending(page, contact, reason)
 
   const context = await browser.newContext()
-  const other = await context.newPage()
-  await signIn(other, colleague, userPassword)
-  await other.goto(`/chamados/${ticketId}`)
-  await expect(other.getByRole('heading', { name: contact })).toBeVisible()
+  try {
+    const other = await context.newPage()
+    await signIn(other, colleague, userPassword)
+    await other.goto(`/chamados/${ticketId}`)
+    await expect(other.getByRole('heading', { name: contact })).toBeVisible()
 
-  // Faixa do pendente e conversa só leitura: sem campo de mensagem nem ações.
-  await expect(other.getByText(`Pendente: ${reason}`)).toBeVisible()
-  await expect(
-    other.getByText('Somente leitura. Retome o chamado para responder ao contato.'),
-  ).toBeVisible()
-  await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
-  await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
-  for (const action of ['Encerrar', 'Devolver à fila', 'Transferir', 'Outro setor']) {
-    await expect(other.getByRole('button', { name: action, exact: true })).toHaveCount(0)
+    // Faixa do pendente e conversa só leitura: sem campo de mensagem nem ações.
+    await expect(other.getByText(`Pendente: ${reason}`)).toBeVisible()
+    await expect(
+      other.getByText('Somente leitura. Retome o chamado para responder ao contato.'),
+    ).toBeVisible()
+    await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+    await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
+    for (const action of ['Encerrar', 'Devolver à fila', 'Transferir', 'Outro setor']) {
+      await expect(other.getByRole('button', { name: action, exact: true })).toHaveCount(0)
+    }
+
+    // Retomar no topo devolve o atendimento ao colega, que passa a responder.
+    await other.getByRole('button', { name: 'Retomar', exact: true }).click()
+    await expect(other.getByText('Chamado retomado')).toBeVisible()
+    await expect(other.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+    await expect(
+      other.getByRole('navigation', { name: 'Meus chamados' }).getByRole('link', {
+        name: new RegExp(contact),
+      }),
+    ).toBeVisible()
+    await expect(other.getByText('Pendente:')).toHaveCount(0)
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
   }
-
-  // Retomar no topo devolve o atendimento ao colega, que passa a responder.
-  await other.getByRole('button', { name: 'Retomar', exact: true }).click()
-  await expect(other.getByText('Chamado retomado')).toBeVisible()
-  await expect(other.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
-  await expect(
-    other.getByRole('navigation', { name: 'Meus chamados' }).getByRole('link', {
-      name: new RegExp(contact),
-    }),
-  ).toBeVisible()
-  await expect(other.getByText('Pendente:')).toHaveCount(0)
-  await context.close()
 })
 
 test('quem não é do setor do pendente não vê o Retomar, mesmo conseguindo abrir o chamado', async ({
@@ -319,34 +327,38 @@ test('retomar com outro chamado do contato aberto mostra o aviso e nada muda', a
   await receive(baseURL!, sector.id, contact, 'Voltei, consegue ver agora?', phone)
 
   const context = await browser.newContext()
-  const other = await context.newPage()
-  await signIn(other, colleague, userPassword)
-  const secondId = await queuedTicketId(other, contact)
-  await openQueued(other, contact)
-  await other.getByRole('button', { name: 'Assumir', exact: true }).click()
-  await expect(other.getByRole('button', { name: 'Encerrar' })).toBeVisible()
-  const secondProtocol = await protocolOf(other, secondId)
-  const colleagueName = agentNameOf(colleague)
+  try {
+    const other = await context.newPage()
+    await signIn(other, colleague, userPassword)
+    const secondId = await queuedTicketId(other, contact)
+    await openQueued(other, contact)
+    await other.getByRole('button', { name: 'Assumir', exact: true }).click()
+    await expect(other.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+    const secondProtocol = await protocolOf(other, secondId)
+    const colleagueName = agentNameOf(colleague)
 
-  // O pendente do mesmo contato não pode voltar enquanto o chamado novo está aberto.
-  await other.goto('/chamados')
-  await pendingTab(other)
-    .getByRole('tab', { name: /^Pendentes/ })
-    .click()
-  const row = pendingRow(other, contact)
-  await expect(row).toBeVisible()
-  await row.getByRole('button', { name: `Retomar chamado de ${contact}` }).click()
-  const notice = other.locator('[data-sonner-toast]', { hasText: 'Este contato tem o chamado' })
-  await expect(notice).toContainText(
-    `Este contato tem o chamado ${secondProtocol} aberto com ${colleagueName}`,
-  )
-  await expect(notice).toContainText('Encerre esse chamado ou use Retomar chamado a partir dele.')
-  // O erro aparece uma vez só: a aba Pendentes não repete o aviso num alerta.
-  await expect(pendingTab(other).getByRole('alert')).toHaveCount(0)
-  // Nada mudou: o pendente continua na lista.
-  await expect(row).toBeVisible()
-  await expect(other).toHaveURL(/\/chamados$/)
-  await context.close()
+    // O pendente do mesmo contato não pode voltar enquanto o chamado novo está aberto.
+    await other.goto('/chamados')
+    await pendingTab(other)
+      .getByRole('tab', { name: /^Pendentes/ })
+      .click()
+    const row = pendingRow(other, contact)
+    await expect(row).toBeVisible()
+    await row.getByRole('button', { name: `Retomar chamado de ${contact}` }).click()
+    const notice = other.locator('[data-sonner-toast]', { hasText: 'Este contato tem o chamado' })
+    await expect(notice).toContainText(
+      `Este contato tem o chamado ${secondProtocol} aberto com ${colleagueName}`,
+    )
+    await expect(notice).toContainText('Encerre esse chamado ou use Retomar chamado a partir dele.')
+    // O erro aparece uma vez só: a aba Pendentes não repete o aviso num alerta.
+    await expect(pendingTab(other).getByRole('alert')).toHaveCount(0)
+    // Nada mudou: o pendente continua na lista.
+    await expect(row).toBeVisible()
+    await expect(other).toHaveURL(/\/chamados$/)
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
+  }
 })
 
 test('o erro ao retomar o pendente aberto aparece uma vez só', async ({
@@ -366,42 +378,46 @@ test('o erro ao retomar o pendente aberto aparece uma vez só', async ({
   // O cliente volta a escrever: chamado novo, que o colega assume e deixa aberto.
   await receive(baseURL!, sector.id, contact, 'Voltei, consegue ver agora?', phone)
   const context = await browser.newContext()
-  const other = await context.newPage()
-  const toasts = await recordToasts(other)
-  await signIn(other, colleague, userPassword)
-  const secondId = await queuedTicketId(other, contact)
-  const secondProtocol = await protocolOf(other, secondId)
-  await openQueued(other, contact)
-  await other.getByRole('button', { name: 'Assumir', exact: true }).click()
-  await expect(other.getByRole('button', { name: 'Encerrar' })).toBeVisible()
+  try {
+    const other = await context.newPage()
+    const toasts = await recordToasts(other)
+    await signIn(other, colleague, userPassword)
+    const secondId = await queuedTicketId(other, contact)
+    const secondProtocol = await protocolOf(other, secondId)
+    await openQueued(other, contact)
+    await other.getByRole('button', { name: 'Assumir', exact: true }).click()
+    await expect(other.getByRole('button', { name: 'Encerrar' })).toBeVisible()
 
-  // Abre o pendente pela aba Pendentes (que fica aberta na coluna da direita) e tenta retomar.
-  await other.goto('/chamados')
-  await pendingTab(other)
-    .getByRole('tab', { name: /^Pendentes/ })
-    .click()
-  await pendingRow(other, contact).getByRole('button', { name: contact, exact: true }).click()
-  await expect(other).toHaveURL(new RegExp(`/chamados/${pendingId}$`))
-  await other.getByRole('button', { name: 'Retomar', exact: true }).click()
+    // Abre o pendente pela aba Pendentes (que fica aberta na coluna da direita) e tenta retomar.
+    await other.goto('/chamados')
+    await pendingTab(other)
+      .getByRole('tab', { name: /^Pendentes/ })
+      .click()
+    await pendingRow(other, contact).getByRole('button', { name: contact, exact: true }).click()
+    await expect(other).toHaveURL(new RegExp(`/chamados/${pendingId}$`))
+    await other.getByRole('button', { name: 'Retomar', exact: true }).click()
 
-  // Um aviso só: nem o toast se repete no alerta da aba Pendentes, nem um segundo toast.
-  await expect(other.getByText(/Este contato tem o chamado/)).toHaveCount(1)
-  await expect(
-    other.locator('[data-sonner-toast]', {
-      hasText: `Este contato tem o chamado ${secondProtocol} aberto`,
-    }),
-  ).toBeVisible()
-  await expect(other.getByRole('alert')).toHaveCount(0)
-  await expect
-    .poll(
-      async () =>
-        (await toasts()).filter((text) => text.includes('Este contato tem o chamado')).length,
-    )
-    .toBe(1)
-  // Nada mudou: o chamado continua pendente e só leitura.
-  await expect(other.getByText('Somente leitura. Retome o chamado')).toBeVisible()
-  await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
-  await context.close()
+    // Um aviso só: nem o toast se repete no alerta da aba Pendentes, nem um segundo toast.
+    await expect(other.getByText(/Este contato tem o chamado/)).toHaveCount(1)
+    await expect(
+      other.locator('[data-sonner-toast]', {
+        hasText: `Este contato tem o chamado ${secondProtocol} aberto`,
+      }),
+    ).toBeVisible()
+    await expect(other.getByRole('alert')).toHaveCount(0)
+    await expect
+      .poll(
+        async () =>
+          (await toasts()).filter((text) => text.includes('Este contato tem o chamado')).length,
+      )
+      .toBe(1)
+    // Nada mudou: o chamado continua pendente e só leitura.
+    await expect(other.getByText('Somente leitura. Retome o chamado')).toBeVisible()
+    await expect(other.getByRole('textbox', { name: 'Mensagem' })).toHaveCount(0)
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
+  }
 })
 
 test('a aba Pendentes se atualiza sozinha para o setor, e o administrador vê o setor na linha', async ({
@@ -423,47 +439,55 @@ test('a aba Pendentes se atualiza sozinha para o setor, e o administrador vê o 
 
   // O colega assiste à aba Pendentes vazia.
   const colleagueContext = await browser.newContext()
-  const other = await colleagueContext.newPage()
-  await signIn(other, colleague, userPassword)
-  await pendingTab(other)
-    .getByRole('tab', { name: /^Pendentes/ })
-    .click()
-  await expect(pendingRow(other, contact)).toHaveCount(0)
+  try {
+    const other = await colleagueContext.newPage()
+    await signIn(other, colleague, userPassword)
+    await pendingTab(other)
+      .getByRole('tab', { name: /^Pendentes/ })
+      .click()
+    await expect(pendingRow(other, contact)).toHaveCount(0)
 
-  // O administrador também, com a lista de todos os setores.
-  const adminContext = await browser.newContext()
-  const adminPage = await adminContext.newPage()
-  await signIn(adminPage, admin.email, admin.password)
-  await pendingTab(adminPage)
-    .getByRole('tab', { name: /^Pendentes/ })
-    .click()
-  await expect(pendingRow(adminPage, contact)).toHaveCount(0)
+    // O administrador também, com a lista de todos os setores.
+    const adminContext = await browser.newContext()
+    try {
+      const adminPage = await adminContext.newPage()
+      await signIn(adminPage, admin.email, admin.password)
+      await pendingTab(adminPage)
+        .getByRole('tab', { name: /^Pendentes/ })
+        .click()
+      await expect(pendingRow(adminPage, contact)).toHaveCount(0)
 
-  // A pessoa marca como pendente e volta para Chamados, com a aba aberta.
-  await chooseAction(page, 'Colocar como pendente')
-  const dialog = page.getByRole('dialog', { name: 'Colocar como pendente' })
-  await dialog.getByLabel('Motivo').fill(reason)
-  await dialog.getByRole('button', { name: 'Colocar como pendente' }).click()
-  await expect(page).toHaveURL(/\/chamados$/)
-  await pendingTab(page)
-    .getByRole('tab', { name: /^Pendentes/ })
-    .click()
+      // A pessoa marca como pendente e volta para Chamados, com a aba aberta.
+      await chooseAction(page, 'Colocar como pendente')
+      const dialog = page.getByRole('dialog', { name: 'Colocar como pendente' })
+      await dialog.getByLabel('Motivo').fill(reason)
+      await dialog.getByRole('button', { name: 'Colocar como pendente' }).click()
+      await expect(page).toHaveURL(/\/chamados$/)
+      await pendingTab(page)
+        .getByRole('tab', { name: /^Pendentes/ })
+        .click()
 
-  // Sem recarregar, o colega e o administrador veem o pendente; o administrador, com o setor.
-  await expect(pendingRow(other, contact)).toBeVisible()
-  const adminRow = pendingRow(adminPage, contact)
-  await expect(adminRow).toBeVisible()
-  await expect(adminRow).toContainText(sector.name)
+      // Sem recarregar, o colega e o administrador veem o pendente; o administrador, com o setor.
+      await expect(pendingRow(other, contact)).toBeVisible()
+      const adminRow = pendingRow(adminPage, contact)
+      await expect(adminRow).toBeVisible()
+      await expect(adminRow).toContainText(sector.name)
 
-  // O colega retoma; sem recarregar, o pendente some da lista de quem marcou.
-  await pendingRow(other, contact)
-    .getByRole('button', { name: `Retomar chamado de ${contact}` })
-    .click()
-  await expect(other.getByText('Chamado retomado')).toBeVisible()
-  await expect(pendingRow(page, contact)).toHaveCount(0)
-  await expect(pendingRow(adminPage, contact)).toHaveCount(0)
-  await colleagueContext.close()
-  await adminContext.close()
+      // O colega retoma; sem recarregar, o pendente some da lista de quem marcou.
+      await pendingRow(other, contact)
+        .getByRole('button', { name: `Retomar chamado de ${contact}` })
+        .click()
+      await expect(other.getByText('Chamado retomado')).toBeVisible()
+      await expect(pendingRow(page, contact)).toHaveCount(0)
+      await expect(pendingRow(adminPage, contact)).toHaveCount(0)
+    } finally {
+      // Fecha a janela do administrador mesmo se uma asserção falhar no meio do teste.
+      await adminContext.close()
+    }
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await colleagueContext.close()
+  }
 })
 
 test('a conversa mostra os avisos de pendente com o motivo e de retomada, na ordem do tempo', async ({
@@ -482,12 +506,16 @@ test('a conversa mostra os avisos de pendente com o motivo e de retomada, na ord
   await markPending(page, contact, reason)
 
   const context = await browser.newContext()
-  const other = await context.newPage()
-  await signIn(other, colleague, userPassword)
-  await other.goto(`/chamados/${ticketId}`)
-  await other.getByRole('button', { name: 'Retomar', exact: true }).click()
-  await expect(other.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
-  await context.close()
+  try {
+    const other = await context.newPage()
+    await signIn(other, colleague, userPassword)
+    await other.goto(`/chamados/${ticketId}`)
+    await other.getByRole('button', { name: 'Retomar', exact: true }).click()
+    await expect(other.getByRole('textbox', { name: 'Mensagem' })).toBeVisible()
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
+  }
 
   // Quem marcou abre o chamado retomado e vê os dois avisos, na ordem do tempo.
   await page.goto(`/chamados/${ticketId}`)
@@ -735,16 +763,20 @@ test('quem não é o responsável vê o aviso com o número e sem a ação', asy
   const url = page.url()
 
   const context = await browser.newContext()
-  const other = await context.newPage()
-  await signIn(other, colleague, userPassword)
-  await other.goto(url)
-  await expect(other.getByRole('heading', { name: seed.contact })).toBeVisible()
-  const notice = pendingNotice(other)
-  await expect(notice).toContainText('Este contato tem 1 chamado pendente.')
-  await expect(notice).toContainText('Só quem atende este chamado pode retomar o pendente.')
-  await expect(notice.getByRole('button', { name: 'Retomar chamado' })).toHaveCount(0)
-  await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
-  await context.close()
+  try {
+    const other = await context.newPage()
+    await signIn(other, colleague, userPassword)
+    await other.goto(url)
+    await expect(other.getByRole('heading', { name: seed.contact })).toBeVisible()
+    const notice = pendingNotice(other)
+    await expect(notice).toContainText('Este contato tem 1 chamado pendente.')
+    await expect(notice).toContainText('Só quem atende este chamado pode retomar o pendente.')
+    await expect(notice.getByRole('button', { name: 'Retomar chamado' })).toHaveCount(0)
+    await expect(other.getByRole('button', { name: 'Mais ações' })).toHaveCount(0)
+  } finally {
+    // Fecha a segunda janela mesmo se uma asserção falhar no meio do teste.
+    await context.close()
+  }
 })
 
 test('erro ao retomar com a janela aberta: o servidor recusa, a janela avisa e o chamado se atualiza', async ({

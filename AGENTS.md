@@ -76,7 +76,7 @@ Executados na raiz do repositório:
 - `make sqlc`: gera o código Go das queries.
 - `make check-generated`: confere se o código do sqlc e o `go.mod` estão em dia com o commit (também roda no CI).
 - `make test`: testes de integração do backend (`go test -race`, PostgreSQL via testcontainers) e ponta a ponta (Playwright, em portas próprias 18080, 18081 (API de CNPJ falsa) e 15173, com banco próprio em `:15432` criado e removido a cada execução).
-- `make lint`: golangci-lint (via Docker) no backend; oxlint e Prettier no frontend.
+- `make lint`: golangci-lint (via Docker) no backend; oxlint e Prettier no frontend e Prettier em `scripts/verify/`.
 - `make up` / `make down` / `make logs`: sistema completo com Docker Compose; requer `deploy/.env` (copiar de `deploy/.env.example`).
 - `make create-admin NAME="Nome" EMAIL=email` (sistema do Compose) ou `make dev-create-admin NAME="Nome" EMAIL=email` (banco de desenvolvimento): cria um administrador; a senha é lida da entrada padrão.
 

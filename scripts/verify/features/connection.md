@@ -33,13 +33,13 @@ O supervisor liga o número do setor por QR code e é avisado quando a ligação
 scripts/verify/scripts/drive.sh connection
 ```
 
-| Ação do celular | Chamada | Rota |
-| --- | --- | --- |
-| Ler o QR code | `t.phone(setor).pair(conta?)` | `POST .../pair` |
-| Trocar o QR code | `t.phone(setor).nextQR()` | `POST .../qr` |
-| Queda de conexão | `t.phone(setor).drop()` | `POST .../drop` |
-| Desvincular pelo celular | `t.phone(setor).logOut()` | `POST .../logout` |
-| Aparelho inalcançável | `t.phone(setor).unreachable()` | `POST .../unreachable` |
+| Ação do celular          | Chamada                        | Rota                   |
+| ------------------------ | ------------------------------ | ---------------------- |
+| Ler o QR code            | `t.phone(setor).pair(conta?)`  | `POST .../pair`        |
+| Trocar o QR code         | `t.phone(setor).nextQR()`      | `POST .../qr`          |
+| Queda de conexão         | `t.phone(setor).drop()`        | `POST .../drop`        |
+| Desvincular pelo celular | `t.phone(setor).logOut()`      | `POST .../logout`      |
+| Aparelho inalcançável    | `t.phone(setor).unreachable()` | `POST .../unreachable` |
 
 - QR code: `getByRole('img', { name: 'QR code para conectar o número' })`.
 - Sino: `getByRole('banner').getByRole('button', { name: /^Notificações/ })`; o nome traz o total, como em "Notificações, 1 pendente".

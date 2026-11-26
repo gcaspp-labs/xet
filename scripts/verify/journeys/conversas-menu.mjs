@@ -17,7 +17,9 @@ await journey('conversas-menu', async (t) => {
   await t.step('Abrir um chamado e conferir os temas', async () => {
     const customer = t.customer('Cliente de teste')
     await t.phone(sector.id).receive(customer, 'Bom dia, preciso de ajuda')
-    await expect(page.getByRole('button', { name: 'Assumir chamado de Cliente de teste' })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Assumir chamado de Cliente de teste' }),
+    ).toBeVisible()
     await t.shot(page, 'fila-com-chamado')
     await page.getByRole('button', { name: 'Assumir chamado de Cliente de teste' }).click()
     await page.getByRole('textbox', { name: 'Mensagem' }).fill('Olá, como posso ajudar?')
@@ -38,7 +40,9 @@ await journey('conversas-menu', async (t) => {
   })
 
   await t.step('Estado final do setor', async () => {
-    const [result] = t.sql(`select count(*) as n from tickets where sector_id = ${sector.id} and status = 'in_progress'`)
+    const [result] = t.sql(
+      `select count(*) as n from tickets where sector_id = ${sector.id} and status = 'in_progress'`,
+    )
     expect(Number(result.n)).toBe(1)
     t.observe('Chamados em atendimento no setor', { quantidade: Number(result.n) })
   })

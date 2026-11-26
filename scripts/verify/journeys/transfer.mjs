@@ -173,7 +173,9 @@ await journey('transfer', async (t) => {
     await t.shot(agentPage, 'janela-outro-setor')
     await sheet.getByLabel('Setor de destino').click()
     await agentPage.getByRole('option', { name: destination.name }).click()
-    await sheet.getByLabel('Motivo da transferência (opcional)').fill('Folha de março é com o outro setor.')
+    await sheet
+      .getByLabel('Motivo da transferência (opcional)')
+      .fill('Folha de março é com o outro setor.')
     await sheet.getByRole('button', { name: 'Transferir' }).click()
     await expect(agentPage.getByText('Chamado transferido para outro setor')).toBeVisible()
     await expect(agentPage).toHaveURL(/\/chamados$/)
@@ -191,9 +193,7 @@ await journey('transfer', async (t) => {
 
   await t.step('Destino recebe na fila, assume e responde', async () => {
     // O chamado novo está na fila do destino e só abre pelo endereço, até alguém assumir.
-    const [created] = t.sql(
-      `select id from tickets where previous_ticket_id = ${otherTicketId}`,
-    )
+    const [created] = t.sql(`select id from tickets where previous_ticket_id = ${otherTicketId}`)
     destinationTicketId = created.id
     await expect(
       panelOf(destinationPage).getByRole('listitem').filter({ hasText: lucia.name }),
@@ -307,9 +307,7 @@ await journey('transfer', async (t) => {
     await t.shot(destinationPage, 'ficha-destino-com-origem')
     await previous.getByRole('link', { name: 'Ver chamado anterior' }).click()
     await expect(destinationPage).toHaveURL(new RegExp(`/atendimentos/${otherTicketId}$`))
-    await expect(conversationOf(destinationPage)).toContainText(
-      'Folha de março',
-    )
+    await expect(conversationOf(destinationPage)).toContainText('Folha de março')
     await t.shot(destinationPage, 'ficha-origem-pelo-destino')
   })
 
