@@ -26,48 +26,54 @@ await journey('pendente-retomada', async (t) => {
   const agentPage = await t.signIn(agent)
 
   // O responsável assume o chamado da fila pelo próprio botão, como o atendente faz.
-  const pending = await t.step('Atendente assume o chamado A e o coloca como pendente, com motivo', async () => {
-    await panelOf(agentPage)
-      .getByRole('button', { name: `Assumir chamado de ${customer.name}` })
-      .click()
-    await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
-    const ticketId = Number(agentPage.url().split('/').pop())
-    const [ticket] = t.sql(`select id, protocol, status from tickets where id = ${ticketId}`)
-    // O chamado assumido está em Meus chamados enquanto é um atendimento ativo.
-    await expect(mineOf(agentPage)).toContainText('Meus chamados (1)')
-    await expect(mineOf(agentPage)).toContainText(ticket.protocol)
-    await expect(conversationOf(agentPage)).toContainText(
-      'Preciso da segunda via do contracheque de março',
-    )
-    await agentPage.getByRole('button', { name: 'Mais ações' }).click()
-    await agentPage.getByRole('menuitem', { name: 'Colocar como pendente', exact: true }).click()
-    const dialog = agentPage.getByRole('dialog', { name: 'Colocar como pendente' })
-    await dialog.getByLabel('Motivo').fill(reason)
-    await dialog.getByRole('button', { name: 'Colocar como pendente' }).click()
-    await expect(agentPage.getByText('Chamado marcado como pendente')).toBeVisible()
-    // A tela volta para a lista, sem chamado aberto, e A saiu de Meus chamados.
-    await expect(agentPage).toHaveURL(/\/chamados$/)
-    await expect(mineOf(agentPage)).toContainText('Meus chamados (0)')
-    await expect(mineOf(agentPage)).toContainText('Você não tem atendimentos ativos.')
-    await expect(mineOf(agentPage)).not.toContainText(ticket.protocol)
-    return ticket
-  })
+  const pending = await t.step(
+    'Atendente assume o chamado A e o coloca como pendente, com motivo',
+    async () => {
+      await panelOf(agentPage)
+        .getByRole('button', { name: `Assumir chamado de ${customer.name}` })
+        .click()
+      await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
+      const ticketId = Number(agentPage.url().split('/').pop())
+      const [ticket] = t.sql(`select id, protocol, status from tickets where id = ${ticketId}`)
+      // O chamado assumido está em Meus chamados enquanto é um atendimento ativo.
+      await expect(mineOf(agentPage)).toContainText('Meus chamados (1)')
+      await expect(mineOf(agentPage)).toContainText(ticket.protocol)
+      await expect(conversationOf(agentPage)).toContainText(
+        'Preciso da segunda via do contracheque de março',
+      )
+      await agentPage.getByRole('button', { name: 'Mais ações' }).click()
+      await agentPage.getByRole('menuitem', { name: 'Colocar como pendente', exact: true }).click()
+      const dialog = agentPage.getByRole('dialog', { name: 'Colocar como pendente' })
+      await dialog.getByLabel('Motivo').fill(reason)
+      await dialog.getByRole('button', { name: 'Colocar como pendente' }).click()
+      await expect(agentPage.getByText('Chamado marcado como pendente')).toBeVisible()
+      // A tela volta para a lista, sem chamado aberto, e A saiu de Meus chamados.
+      await expect(agentPage).toHaveURL(/\/chamados$/)
+      await expect(mineOf(agentPage)).toContainText('Meus chamados (0)')
+      await expect(mineOf(agentPage)).toContainText('Você não tem atendimentos ativos.')
+      await expect(mineOf(agentPage)).not.toContainText(ticket.protocol)
+      return ticket
+    },
+  )
 
-  await t.step('A aparece na aba Pendentes com protocolo, motivo, quem marcou e o Retomar', async () => {
-    await panelOf(agentPage)
-      .getByRole('tab', { name: /^Pendentes/ })
-      .click()
-    const row = queueRowOf(agentPage, customer)
-    await expect(row).toBeVisible()
-    await expect(row).toContainText(pending.protocol)
-    await expect(row).toContainText(reason)
-    await expect(row).toContainText(`por ${agent.name}`)
-    await expect(row).toContainText('agora')
-    await expect(
-      row.getByRole('button', { name: `Retomar chamado de ${customer.name}` }),
-    ).toBeVisible()
-    await t.shot(agentPage, 'aba-pendentes')
-  })
+  await t.step(
+    'A aparece na aba Pendentes com protocolo, motivo, quem marcou e o Retomar',
+    async () => {
+      await panelOf(agentPage)
+        .getByRole('tab', { name: /^Pendentes/ })
+        .click()
+      const row = queueRowOf(agentPage, customer)
+      await expect(row).toBeVisible()
+      await expect(row).toContainText(pending.protocol)
+      await expect(row).toContainText(reason)
+      await expect(row).toContainText(`por ${agent.name}`)
+      await expect(row).toContainText('agora')
+      await expect(
+        row.getByRole('button', { name: `Retomar chamado de ${customer.name}` }),
+      ).toBeVisible()
+      await t.shot(agentPage, 'aba-pendentes')
+    },
+  )
 
   // O supervisor vê o mesmo pendente no quadro do Dashboard, que não segue o período dos números.
   const supervisorPage = await t.signIn(sector.supervisor)
@@ -91,9 +97,7 @@ await journey('pendente-retomada', async (t) => {
 
   // O cliente volta a escrever: o pendente não recebe a mensagem, e sim um chamado novo na fila.
   const second = await t.step('Cliente volta a escrever e o chamado B entra na Fila', async () => {
-    await panelOf(agentPage)
-      .getByRole('tab', { name: /^Fila/ })
-      .click()
+    await panelOf(agentPage).getByRole('tab', { name: /^Fila/ }).click()
     await t.phone(sector.id).receive(customer, 'Voltei com a nota fiscal')
     const row = queueRowOf(agentPage, customer)
     await expect(row).toContainText('Voltei com a nota fiscal')
@@ -183,51 +187,54 @@ await journey('pendente-retomada', async (t) => {
     await t.shot(agentPage, 'link-para-o-original')
   })
 
-  await t.step('Estado final no banco: A em atendimento com as mensagens dos dois, B mesclado nele', async () => {
-    const [a] = t.sql(
-      `select t.status, t.closure_type, u.name as assignee,
+  await t.step(
+    'Estado final no banco: A em atendimento com as mensagens dos dois, B mesclado nele',
+    async () => {
+      const [a] = t.sql(
+        `select t.status, t.closure_type, u.name as assignee,
               (select count(*) from messages m where m.ticket_id = t.id) as messages
          from tickets t left join users u on u.id = t.assignee_id
         where t.id = ${pending.id}`,
-    )
-    expect(a).toMatchObject({
-      status: 'in_progress',
-      closure_type: null,
-      assignee: agent.name,
-      messages: 2,
-    })
-    t.observe('Chamado A retomado', a)
+      )
+      expect(a).toMatchObject({
+        status: 'in_progress',
+        closure_type: null,
+        assignee: agent.name,
+        messages: 2,
+      })
+      t.observe('Chamado A retomado', a)
 
-    const [b] = t.sql(
-      `select status, closure_type, merged_into_ticket_id,
+      const [b] = t.sql(
+        `select status, closure_type, merged_into_ticket_id,
               (select count(*) from messages m where m.ticket_id = tickets.id) as messages
          from tickets where id = ${second.id}`,
-    )
-    expect(b).toEqual({
-      status: 'closed',
-      closure_type: 'merged',
-      merged_into_ticket_id: pending.id,
-      messages: 0,
-    })
-    t.observe('Chamado B mesclado', b)
+      )
+      expect(b).toEqual({
+        status: 'closed',
+        closure_type: 'merged',
+        merged_into_ticket_id: pending.id,
+        messages: 0,
+      })
+      t.observe('Chamado B mesclado', b)
 
-    const audit = t.sql(
-      `select ticket_id, action, changes from audit_logs
+      const audit = t.sql(
+        `select ticket_id, action, changes from audit_logs
         where ticket_id in (${pending.id}, ${second.id}) order by id`,
-    )
-    // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
-    // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
-    expectAuditOrder(audit, [
-      `${pending.id} ticket_assigned`,
-      `${pending.id} ticket_pending`,
-      `${second.id} ticket_assigned`,
-      `${second.id} ticket_merged`,
-      `${pending.id} ticket_resumed_by_merge`,
-    ])
-    const resumed = audit.find((entry) => entry.action === 'ticket_resumed_by_merge')
-    expect(resumed.changes.merged_protocol).toEqual({ from: null, to: second.protocol })
-    const merged = audit.find((entry) => entry.action === 'ticket_merged')
-    expect(merged.changes.merged_into_ticket_id).toEqual({ from: null, to: pending.id })
-    t.observe('Auditoria do pendente e da mesclagem', audit)
-  })
+      )
+      // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
+      // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
+      expectAuditOrder(audit, [
+        `${pending.id} ticket_assigned`,
+        `${pending.id} ticket_pending`,
+        `${second.id} ticket_assigned`,
+        `${second.id} ticket_merged`,
+        `${pending.id} ticket_resumed_by_merge`,
+      ])
+      const resumed = audit.find((entry) => entry.action === 'ticket_resumed_by_merge')
+      expect(resumed.changes.merged_protocol).toEqual({ from: null, to: second.protocol })
+      const merged = audit.find((entry) => entry.action === 'ticket_merged')
+      expect(merged.changes.merged_into_ticket_id).toEqual({ from: null, to: pending.id })
+      t.observe('Auditoria do pendente e da mesclagem', audit)
+    },
+  )
 })

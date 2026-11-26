@@ -67,19 +67,25 @@ await journey('final-routes', async (t) => {
     await expectNotFound('/qualquer-coisa-que-nao-existe', 'endereco-desconhecido')
   })
 
-  await t.step('Chamado inexistente em /chamados/:id mostra Não encontrado, com Voltar', async () => {
-    await expectNotFound('/chamados/99999999', 'chamado-inexistente')
-    await expectNotFound('/chamados/abc')
-  })
+  await t.step(
+    'Chamado inexistente em /chamados/:id mostra Não encontrado, com Voltar',
+    async () => {
+      await expectNotFound('/chamados/99999999', 'chamado-inexistente')
+      await expectNotFound('/chamados/abc')
+    },
+  )
 
-  await t.step('/chamados/:id de um chamado encerrado leva à ficha em /atendimentos/:id', async () => {
-    await page.goto(`/chamados/${closed.id}`)
-    await expect(page).toHaveURL(new RegExp(`/atendimentos/${closed.id}$`))
-    await expect(page.getByRole('heading', { name: closed.name })).toBeVisible()
-    await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText('Encerrado em')
-    await expect(notFound).toHaveCount(0)
-    await t.shot(page, 'encerrado-leva-a-ficha')
-  })
+  await t.step(
+    '/chamados/:id de um chamado encerrado leva à ficha em /atendimentos/:id',
+    async () => {
+      await page.goto(`/chamados/${closed.id}`)
+      await expect(page).toHaveURL(new RegExp(`/atendimentos/${closed.id}$`))
+      await expect(page.getByRole('heading', { name: closed.name })).toBeVisible()
+      await expect(page.getByRole('status', { name: 'Só leitura' })).toContainText('Encerrado em')
+      await expect(notFound).toHaveCount(0)
+      await t.shot(page, 'encerrado-leva-a-ficha')
+    },
+  )
 
   await t.step('Estado final: navegar pelos endereços não mudou nenhum chamado', async () => {
     const tickets = t.sql(

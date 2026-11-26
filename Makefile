@@ -20,7 +20,7 @@ export DOCKER_HOST ?= unix:///var/run/docker.sock
 endif
 endif
 
-.PHONY: frontend-deps dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated check-emoji-catalog test test-backend test-e2e lint lint-backend lint-frontend ci-ffmpeg up down logs create-admin dev-create-admin
+.PHONY: frontend-deps dev dev-db dev-db-stop dev-restart dev-backend dev-frontend sqlc check-generated check-emoji-catalog test test-backend test-e2e lint lint-backend lint-frontend lint-verify ci-ffmpeg up down logs create-admin dev-create-admin
 
 ## Desenvolvimento: banco em :5440, backend em :8090 e frontend em :5173 (com proxy para o backend).
 ## Portas fora das padrão (5432/5433/8080/8081) para conviver com outros projetos rodando na mesma máquina.
@@ -108,8 +108,8 @@ test-e2e:
 	@cd frontend && DATABASE_URL="$(E2E_DATABASE_URL)" npm run test:e2e; \
 		status=$$?; docker stop $(E2E_DB_CONTAINER) >/dev/null; exit $$status
 
-## Lint: golangci-lint (via Docker) no backend; oxlint e Prettier no frontend.
-lint: lint-backend lint-frontend
+## Lint: golangci-lint (via Docker) no backend; oxlint e Prettier no frontend e no kit de verificação.
+lint: lint-backend lint-frontend lint-verify
 
 lint-backend:
 	@mkdir -p "$(LINT_CACHE_DIR)"
@@ -119,6 +119,11 @@ lint-backend:
 
 lint-frontend: frontend-deps
 	cd frontend && npm run lint
+
+## O kit de verificação fica fora do frontend: confere com o Prettier do frontend e a
+## .prettierrc.json da raiz, que vale para os arquivos de scripts/verify/.
+lint-verify: frontend-deps
+	cd frontend && npx prettier --check ../scripts/verify
 
 ## Instala o ffmpeg do CI em /usr/local/bin, copiado da imagem estática (mais rápido e estável que o apt).
 ci-ffmpeg:
