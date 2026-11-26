@@ -1,5 +1,5 @@
 // Transferir: ver features/transfer.md.
-import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, panelOf, queueRowOf } from '../scripts/journey-lib.mjs'
 
 await journey('transfer', async (t) => {
   const { sector, destination, joana, lucia } = await t.step(
@@ -195,9 +195,7 @@ await journey('transfer', async (t) => {
     // O chamado novo está na fila do destino e só abre pelo endereço, até alguém assumir.
     const [created] = t.sql(`select id from tickets where previous_ticket_id = ${otherTicketId}`)
     destinationTicketId = created.id
-    await expect(
-      panelOf(destinationPage).getByRole('listitem').filter({ hasText: lucia.name }),
-    ).toHaveCount(1)
+    await expect(queueRowOf(destinationPage, lucia)).toHaveCount(1)
     await destinationPage.goto(`/chamados/${destinationTicketId}`)
     const destinationConversation = conversationOf(destinationPage)
     await expect(destinationConversation).toContainText(

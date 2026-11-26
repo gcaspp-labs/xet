@@ -1,5 +1,5 @@
 // Encerrar: ver features/close.md.
-import { conversationOf, expect, journey, panelOf } from '../scripts/journey-lib.mjs'
+import { conversationOf, expect, journey, panelOf, queueRowOf } from '../scripts/journey-lib.mjs'
 
 await journey('close', async (t) => {
   const { sector, organization, paulo } = await t.step(
@@ -150,9 +150,8 @@ await journey('close', async (t) => {
     async () => {
       await phone.receive(paulo, 'Agora é sobre férias')
       await agentPage.getByRole('link', { name: 'Chamados', exact: true }).click()
-      const queue = panelOf(agentPage)
-      await expect(queue.getByRole('listitem').filter({ hasText: paulo.name })).toHaveCount(1)
-      await expect(queue).toContainText('Agora é sobre férias')
+      await expect(queueRowOf(agentPage, paulo)).toHaveCount(1)
+      await expect(panelOf(agentPage)).toContainText('Agora é sobre férias')
       await t.shot(agentPage, 'novo-chamado-na-fila')
       const rows = t.sql(
         `select t.id, t.status from tickets t join contacts c on c.id = t.contact_id
