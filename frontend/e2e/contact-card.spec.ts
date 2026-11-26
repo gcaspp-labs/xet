@@ -206,7 +206,11 @@ test('cartão recebido copia o telefone pelo teclado e tem nome acessível', asy
   await expect(copy).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.getByText('Telefone copiado')).toBeVisible()
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('011988881234')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('44011988881234')
+
+  // O fixo do Brasil, com 8 dígitos, também ganha o 44 na frente do zero do DDD.
+  await joao.getByRole('button', { name: 'Copiar telefone +55 (11) 3333-4444' }).click()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('4401133334444')
 })
 
 test('cartão enviado mostra a situação de entrega, falha com o número desconectado e reenvia sem duplicar', async ({
