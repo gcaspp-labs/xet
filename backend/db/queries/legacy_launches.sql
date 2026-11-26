@@ -8,22 +8,22 @@ on conflict (ticket_id) do nothing;
 -- name: ClaimLegacyLaunch :one
 -- Reserva um lançamento por vez: a lançar na hora da próxima tentativa, com
 -- erro passageiro (legado indisponível, resultado desconhecido) cuja próxima
--- tentativa chegou, ou com reserva vencida (mais de 10 minutos sem resposta do
--- robô), mesmo que a reserva tenha zerado next_attempt_at. O for update skip
--- locked faz dois robôs pegarem lançamentos diferentes. A reserva conta a
--- tentativa e zera next_attempt_at; stale_claim avisa quem chamou que o robô
--- anterior não respondeu.
+-- tentativa chegou, ou com reserva vencida (sem resposta do robô por
+-- stale_after, o prazo único que o Go passa), mesmo que a reserva tenha zerado
+-- next_attempt_at. O for update skip locked faz dois robôs pegarem lançamentos
+-- diferentes. A reserva conta a tentativa e zera next_attempt_at; stale_claim
+-- avisa quem chamou que o robô anterior não respondeu.
 with candidate as (
     select l.ticket_id,
-           l.claimed_at is not null and l.claimed_at < now() - interval '10 minutes' as stale_claim
+           l.claimed_at is not null and l.claimed_at < now() - sqlc.arg('stale_after')::interval as stale_claim
     from legacy_launches l
     where (l.status = 'pending'
            or (l.status = 'failed' and l.error_kind in ('unavailable', 'unknown_result')))
       and (
           (l.next_attempt_at is not null and l.next_attempt_at <= now())
-          or (l.claimed_at is not null and l.claimed_at < now() - interval '10 minutes')
+          or (l.claimed_at is not null and l.claimed_at < now() - sqlc.arg('stale_after')::interval)
       )
-    order by coalesce(l.next_attempt_at, l.claimed_at + interval '10 minutes'), l.ticket_id
+    order by coalesce(l.next_attempt_at, l.claimed_at + sqlc.arg('stale_after')::interval), l.ticket_id
     limit 1
     for update skip locked
 )
@@ -37,8 +37,9 @@ where l.ticket_id = c.ticket_id
 returning l.*, c.stale_claim;
 
 -- name: ReleaseStaleLegacyLaunchClaim :execrows
--- Solta a reserva vencida (mais de 10 minutos sem resposta do robô) como
--- resultado desconhecido: a próxima tentativa procura antes de lançar.
+-- Solta a reserva vencida (sem resposta do robô por stale_after, o mesmo prazo
+-- da reserva) como resultado desconhecido: a próxima tentativa procura antes de
+-- lançar.
 update legacy_launches
 set status = 'failed',
     error_kind = 'unknown_result',
@@ -47,7 +48,7 @@ set status = 'failed',
     claim_id = null,
     next_attempt_at = now()
 where claimed_at is not null
-  and claimed_at < now() - interval '10 minutes';
+  and claimed_at < now() - sqlc.arg('stale_after')::interval;
 
 -- name: RecordLegacyLaunchLaunched :one
 -- O legado confirmou: guarda o número e a data e limpa erro e reserva. Só vale

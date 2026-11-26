@@ -15,15 +15,15 @@ import (
 const claimLegacyLaunch = `-- name: ClaimLegacyLaunch :one
 with candidate as (
     select l.ticket_id,
-           l.claimed_at is not null and l.claimed_at < now() - interval '10 minutes' as stale_claim
+           l.claimed_at is not null and l.claimed_at < now() - $1::interval as stale_claim
     from legacy_launches l
     where (l.status = 'pending'
            or (l.status = 'failed' and l.error_kind in ('unavailable', 'unknown_result')))
       and (
           (l.next_attempt_at is not null and l.next_attempt_at <= now())
-          or (l.claimed_at is not null and l.claimed_at < now() - interval '10 minutes')
+          or (l.claimed_at is not null and l.claimed_at < now() - $1::interval)
       )
-    order by coalesce(l.next_attempt_at, l.claimed_at + interval '10 minutes'), l.ticket_id
+    order by coalesce(l.next_attempt_at, l.claimed_at + $1::interval), l.ticket_id
     limit 1
     for update skip locked
 )
@@ -54,13 +54,13 @@ type ClaimLegacyLaunchRow struct {
 
 // Reserva um lançamento por vez: a lançar na hora da próxima tentativa, com
 // erro passageiro (legado indisponível, resultado desconhecido) cuja próxima
-// tentativa chegou, ou com reserva vencida (mais de 10 minutos sem resposta do
-// robô), mesmo que a reserva tenha zerado next_attempt_at. O for update skip
-// locked faz dois robôs pegarem lançamentos diferentes. A reserva conta a
-// tentativa e zera next_attempt_at; stale_claim avisa quem chamou que o robô
-// anterior não respondeu.
-func (q *Queries) ClaimLegacyLaunch(ctx context.Context) (ClaimLegacyLaunchRow, error) {
-	row := q.db.QueryRow(ctx, claimLegacyLaunch)
+// tentativa chegou, ou com reserva vencida (sem resposta do robô por
+// stale_after, o prazo único que o Go passa), mesmo que a reserva tenha zerado
+// next_attempt_at. O for update skip locked faz dois robôs pegarem lançamentos
+// diferentes. A reserva conta a tentativa e zera next_attempt_at; stale_claim
+// avisa quem chamou que o robô anterior não respondeu.
+func (q *Queries) ClaimLegacyLaunch(ctx context.Context, staleAfter time.Duration) (ClaimLegacyLaunchRow, error) {
+	row := q.db.QueryRow(ctx, claimLegacyLaunch, staleAfter)
 	var i ClaimLegacyLaunchRow
 	err := row.Scan(
 		&i.TicketID,
@@ -360,13 +360,14 @@ set status = 'failed',
     claim_id = null,
     next_attempt_at = now()
 where claimed_at is not null
-  and claimed_at < now() - interval '10 minutes'
+  and claimed_at < now() - $1::interval
 `
 
-// Solta a reserva vencida (mais de 10 minutos sem resposta do robô) como
-// resultado desconhecido: a próxima tentativa procura antes de lançar.
-func (q *Queries) ReleaseStaleLegacyLaunchClaim(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, releaseStaleLegacyLaunchClaim)
+// Solta a reserva vencida (sem resposta do robô por stale_after, o mesmo prazo
+// da reserva) como resultado desconhecido: a próxima tentativa procura antes de
+// lançar.
+func (q *Queries) ReleaseStaleLegacyLaunchClaim(ctx context.Context, staleAfter time.Duration) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseStaleLegacyLaunchClaim, staleAfter)
 	if err != nil {
 		return 0, err
 	}

@@ -247,7 +247,7 @@ func TestLegacyLaunchClaimSkipsLockedRows(t *testing.T) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	first, err := db.New(pool).WithTx(tx).ClaimLegacyLaunch(ctx)
+	first, err := db.New(pool).WithTx(tx).ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatalf("first claim: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestLegacyLaunchClaimSkipsLockedRows(t *testing.T) {
 	}
 
 	// Com a linha de first travada, a segunda reserva pega outra.
-	second, err := q.ClaimLegacyLaunch(ctx)
+	second, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatalf("second claim: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestLegacyLaunchClaimSkipsLockedRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	third, err := q.ClaimLegacyLaunch(ctx)
+	third, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatalf("third claim: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestLegacyLaunchClaimSkipsLockedRows(t *testing.T) {
 		t.Fatalf("claims took %v, want three different tickets", seen)
 	}
 
-	if _, err := q.ClaimLegacyLaunch(ctx); !errors.Is(err, pgx.ErrNoRows) {
+	if _, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("claim with an empty queue = %v, want no rows", err)
 	}
 }
@@ -297,7 +297,7 @@ func TestLegacyLaunchClaimDoesNotStealLiveClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	claimed, err := q.ClaimLegacyLaunch(ctx)
+	claimed, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestLegacyLaunchClaimDoesNotStealLiveClaim(t *testing.T) {
 		t.Fatalf("claim kept next_attempt_at: %v", claimed.NextAttemptAt)
 	}
 
-	if _, err := q.ClaimLegacyLaunch(ctx); !errors.Is(err, pgx.ErrNoRows) {
+	if _, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("claim while the reservation is in course = %v, want no rows", err)
 	}
 }
@@ -333,7 +333,7 @@ func TestLegacyLaunchStaleClaimIsReclaimed(t *testing.T) {
 	if _, err := q.EnqueueLegacyLaunch(ctx, ticket); err != nil {
 		t.Fatal(err)
 	}
-	claimed, err := q.ClaimLegacyLaunch(ctx)
+	claimed, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +349,13 @@ func TestLegacyLaunchStaleClaimIsReclaimed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reclaimed, err := q.ClaimLegacyLaunch(ctx)
+	// O prazo é parâmetro, não um número solto na consulta: com um prazo maior
+	// que a idade da reserva, ela ainda não venceu.
+	if _, err := q.ClaimLegacyLaunch(ctx, time.Hour); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("claim with a longer stale_after = %v, want no rows", err)
+	}
+
+	reclaimed, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
@@ -418,12 +424,12 @@ func TestReleaseStaleLegacyLaunchClaim(t *testing.T) {
 	if _, err := q.EnqueueLegacyLaunch(ctx, ticket); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := q.ClaimLegacyLaunch(ctx); err != nil {
+	if _, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter); err != nil {
 		t.Fatal(err)
 	}
 
 	// Reserva em curso ainda não venceu: nada a soltar.
-	if released, err := q.ReleaseStaleLegacyLaunchClaim(ctx); err != nil || released != 0 {
+	if released, err := q.ReleaseStaleLegacyLaunchClaim(ctx, db.LegacyLaunchClaimStaleAfter); err != nil || released != 0 {
 		t.Fatalf("release of a live claim = %d, %v", released, err)
 	}
 
@@ -432,7 +438,12 @@ func TestReleaseStaleLegacyLaunchClaim(t *testing.T) {
 		update legacy_launches set claimed_at = now() - interval '11 minutes' where ticket_id = $1`, ticket); err != nil {
 		t.Fatal(err)
 	}
-	released, err := q.ReleaseStaleLegacyLaunchClaim(ctx)
+	// O mesmo prazo é parâmetro aqui: com um prazo maior que a idade da
+	// reserva, nada a soltar.
+	if released, err := q.ReleaseStaleLegacyLaunchClaim(ctx, time.Hour); err != nil || released != 0 {
+		t.Fatalf("release with a longer stale_after = %d, %v", released, err)
+	}
+	released, err := q.ReleaseStaleLegacyLaunchClaim(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatalf("release: %v", err)
 	}
@@ -456,13 +467,13 @@ func TestReleaseStaleLegacyLaunchClaim(t *testing.T) {
 	if got.NextAttemptAt == nil {
 		t.Fatal("stale claim released without a next attempt")
 	}
-	if released, err := q.ReleaseStaleLegacyLaunchClaim(ctx); err != nil || released != 0 {
+	if released, err := q.ReleaseStaleLegacyLaunchClaim(ctx, db.LegacyLaunchClaimStaleAfter); err != nil || released != 0 {
 		t.Fatalf("release without stale claims = %d, %v", released, err)
 	}
 
 	// Solto, o chamado volta a ser reservado normalmente, sem aviso de reserva
 	// antiga.
-	reclaimed, err := q.ClaimLegacyLaunch(ctx)
+	reclaimed, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatalf("claim after release: %v", err)
 	}
@@ -481,7 +492,7 @@ func TestLegacyLaunchRecordLaunched(t *testing.T) {
 	if _, err := q.EnqueueLegacyLaunch(ctx, ticket); err != nil {
 		t.Fatal(err)
 	}
-	claimed, err := q.ClaimLegacyLaunch(ctx)
+	claimed, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,7 +537,7 @@ func TestLegacyLaunchQueueAndReads(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	claimed, err := q.ClaimLegacyLaunch(ctx)
+	claimed, err := q.ClaimLegacyLaunch(ctx, db.LegacyLaunchClaimStaleAfter)
 	if err != nil {
 		t.Fatal(err)
 	}

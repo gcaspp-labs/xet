@@ -51,6 +51,11 @@ create unique index legacy_launches_number_key on legacy_launches (legacy_number
     where legacy_number is not null;
 create index legacy_launches_queue_idx on legacy_launches (next_attempt_at)
     where status in ('pending', 'failed');
+-- A escolha do próximo lançamento também olha a reserva em curso: a vencida
+-- volta para a fila (e a soltura procura só por ela). Sem este índice, esse
+-- ramo do `or` varre a tabela.
+create index legacy_launches_claimed_idx on legacy_launches (claimed_at)
+    where claimed_at is not null;
 
 create table legacy_launch_settings (
     id smallint primary key default 1,
