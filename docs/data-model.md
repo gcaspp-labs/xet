@@ -320,7 +320,7 @@ A situação de cada atendimento no sistema legado (spec [#410](https://github.c
 | `launched_at` | timestamptz | Quando o legado confirmou |
 | `error_kind` | legacy_launch_error | Tipo do erro, quando `failed` |
 | `error_reason` | text | Motivo em português, não em branco quando preenchido |
-| `attempts` | integer | Tentativas já feitas, padrão 0, não negativo |
+| `attempts` | integer | Tentativas já feitas, padrão 0, não negativo; a tentativa é contada na reserva, e gravar o resultado não soma outra |
 | `claimed_at` | timestamptz | Reserva de quem está lançando agora; vazio quando ninguém está |
 | `claim_id` | uuid | Identificador da reserva entregue ao robô; vazio quando ninguém está |
 | `next_attempt_at` | timestamptz | Próxima tentativa automática; vazio enquanto a reserva está em curso ou quando não há mais tentativa possível |
@@ -336,7 +336,7 @@ Restrições:
 
 Índice `legacy_launches_queue_idx` em `(next_attempt_at) where status in ('pending', 'failed')` para a fila, e índice parcial `legacy_launches_claimed_idx` em `(claimed_at) where claimed_at is not null` para o ramo da reserva em curso (a vencida volta para a fila e a soltura procura só por ela).
 
-Reserva. O robô pega um lançamento por vez, com `select ... for update skip locked`: `pending` com `next_attempt_at <= now()`, `failed` de erro passageiro (`unavailable`, `unknown_result`) com `next_attempt_at <= now()`, ou qualquer um dos dois com reserva vencida (`claimed_at` sem resposta do robô pelo prazo único de 10 minutos passado pelo Go — `LegacyLaunchClaimStaleAfter` —, mesmo com `next_attempt_at` vazio). A reserva grava `claimed_at`, `claim_id` e conta a tentativa, e zera `next_attempt_at`; o resultado só é aceito com o `claim_id` da reserva. Ao retomar uma reserva vencida, a consulta devolve `stale_claim` e a próxima tentativa começa procurando o lançamento antes de lançar; a reserva também pode ser solta como `failed` com `unknown_result`, pelo mesmo prazo. **Tentar de novo** devolve um `failed` para a fila, zerando as tentativas e o erro.
+Reserva. O robô pega um lançamento por vez, com `select ... for update skip locked`: `pending` com `next_attempt_at <= now()`, `failed` de erro passageiro (`unavailable`, `unknown_result`) com `next_attempt_at <= now()`, ou qualquer um dos dois com reserva vencida (`claimed_at` sem resposta do robô pelo prazo único de 10 minutos passado pelo Go — `LegacyLaunchClaimStaleAfter` —, mesmo com `next_attempt_at` vazio). A reserva grava `claimed_at`, `claim_id` e conta a tentativa, e zera `next_attempt_at`; gravar o resultado, confirmado ou com erro, não soma outra tentativa. O resultado só é aceito com o `claim_id` da reserva. Ao retomar uma reserva vencida, a consulta devolve `stale_claim` e a próxima tentativa começa procurando o lançamento antes de lançar; a reserva também pode ser solta como `failed` com `unknown_result`, pelo mesmo prazo. **Tentar de novo** devolve um `failed` para a fila, zerando as tentativas e o erro.
 
 ### `legacy_launch_settings` — Configuração do automático
 
