@@ -81,7 +81,7 @@ await journey('edit-delete-messages-chamados', async (t) => {
     const field = page.getByRole('textbox', { name: 'Editar mensagem' })
     await field.fill('Segue o boleto de novembro')
     await phone.failNextChange('refused')
-    t.expectStatus(502)
+    t.expectStatus(502, { path: /^\/api\/messages\/\d+\/edit$/ })
     await page.getByRole('button', { name: 'Salvar edição' }).click()
     await expect(
       page.getByRole('alert').filter({ hasText: 'O WhatsApp não aceitou' }),

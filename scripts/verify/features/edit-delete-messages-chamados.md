@@ -33,7 +33,7 @@ scripts/verify/scripts/drive.sh edit-delete-messages-chamados
 
 - Achar a mensagem pela posição (`nth`), não pelo texto: o texto muda com a edição e some com a exclusão.
 - Com a janela de exclusão aberta, o resto da página sai da árvore de acessibilidade: confira a mensagem com `locator('li[id^="message-"]')`.
-- A recusa do WhatsApp volta como 502: a jornada declara `t.expectStatus(502)` antes de salvar, e só aquela resposta deixa de contar como falha; as demais 5xx continuam falhando a jornada. `failNextChange` arma a recusa da próxima alteração para todos do setor.
+- A recusa do WhatsApp volta como 502: a jornada declara `t.expectStatus(502, { path: /^\/api\/messages\/\d+\/edit$/ })` antes de salvar, e só a resposta daquela rota deixa de contar como falha; um 502 de outra rota, ou de outro código, continua falhando a jornada. `failNextChange` arma a recusa da próxima alteração para todos do setor.
 - Os prazos (15 minutos e dois dias) vêm do relógio do servidor; a jornada não os percorre.
 - O adaptador falso não prova o WhatsApp real: a edição de legenda e a revogação reais são `[manual]`.
 
