@@ -18,5 +18,6 @@ O Designer usa a branch de interface da `prototype` para entregar o **resultado 
 - **Aprovação:** a pessoa aprova a tela antes de o ticket virar `ready-for-agent`.
 - **Mudanças depois:** volte à mesma branch, edite e tire novas capturas.
 - **Dados:** só dados fictícios. O repositório é público, e as capturas abrem para qualquer pessoa.
+- **Instalação:** cada worktree da branch `prototype/*` usa a sua própria instalação do frontend, com o design system que o `frontend/package-lock.json` dele resolve. Não reaproveite, copie nem linke o `node_modules` de outro worktree, e não trate a versão do `package.json` como prova do que está instalado. Antes de subir a tela, prepare e confira a instalação pelo procedimento de `commands.md` › Protótipo de interface.
 
 O comando que sobe o protótipo está em `commands.md`.
