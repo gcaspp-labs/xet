@@ -121,9 +121,7 @@ await journey('receive-and-assign', async (t) => {
     await phone.receive(cliente, 'Preciso de atendimento')
     await queue.getByRole('button', { name: 'Assumir chamado de Pessoa da fila' }).click()
     await expect(agentPage).toHaveURL(/\/chamados\/\d+$/)
-    await expect(
-      conversationOf(agentPage),
-    ).toContainText('Preciso de atendimento')
+    await expect(conversationOf(agentPage)).toContainText('Preciso de atendimento')
     await expect(mine.getByRole('link', { name: /Pessoa da fila/ })).toBeVisible()
     await t.shot(agentPage, 'assumido-pela-fila')
   })
@@ -132,10 +130,7 @@ await journey('receive-and-assign', async (t) => {
     const other = await t.seedSector({ connected: false })
     const otherPage = await t.signIn(other.agents[0])
     await expect(otherPage.getByRole('heading', { name: 'Chamados' })).toBeVisible()
-    await expect(
-      panelOf(otherPage)
-        .getByText('Nenhum chamado esperando.'),
-    ).toBeVisible()
+    await expect(panelOf(otherPage).getByText('Nenhum chamado esperando.')).toBeVisible()
     await expect(otherPage.getByText('Maria Cliente')).toHaveCount(0)
     const response = await otherPage.request.get(`/api/tickets/${ticketId}`)
     expect(response.status()).toBe(403)

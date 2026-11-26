@@ -38,8 +38,7 @@ export const expect = playwrightExpect.configure({ timeout: TIMEOUT })
 // a coluna da direita (Fila, Pendentes e Assuntos são abas dela) e a conversa do chamado aberto.
 export const mineOf = (page) => page.getByRole('region', { name: /^Meus chamados/ })
 export const panelOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
-export const conversationOf = (page) =>
-  page.getByRole('region', { name: 'Conversa', exact: true })
+export const conversationOf = (page) => page.getByRole('region', { name: 'Conversa', exact: true })
 
 // A linha do contato na aba aberta da coluna da direita. A aba que não está aberta não entra na
 // árvore de acessibilidade: a linha é sempre a da aba atual (Fila, Pendentes ou Assuntos).
@@ -74,6 +73,18 @@ export function expectAuditOrder(audit, expected) {
 
 let counter = Date.now() % 1_000_000
 
+// O caminho da resposta (sem a origem) bate com o filtro declarado em expectStatus: um trecho
+// de texto ou uma RegExp.
+function pathMatches(filter, url) {
+  let pathname
+  try {
+    pathname = new URL(url).pathname
+  } catch {
+    pathname = url
+  }
+  return typeof filter === 'string' ? pathname.includes(filter) : filter.test(pathname)
+}
+
 // Sufixo único: uma jornada pode ser repetida no mesmo banco.
 export function uniqueId() {
   counter += 1
@@ -95,6 +106,8 @@ class Journey {
     this.steps = []
     this.observations = []
     this.problems = []
+    // Respostas 5xx que a jornada espera, uma por declaração de expectStatus.
+    this.expectedStatuses = []
     this.sessions = []
     this.apiSessions = []
     this.shotCount = 0
@@ -143,6 +156,38 @@ class Journey {
     return value
   }
 
+  // Declara que a próxima resposta com este status é esperada, como a recusa do WhatsApp (502):
+  // ela não conta como falha da jornada. Só vale 5xx: um status de sucesso ou de erro do cliente
+  // declarado aqui esconderia um problema de verdade, então a chamada falha na hora.
+  // Com `path` (trecho do caminho ou RegExp), só a resposta daquela rota é liberada; as outras
+  // continuam falhando. Vale por uma resposta; no fim, uma espera que não chegou também vira
+  // problema, para a jornada não passar sem provar o que dizia.
+  expectStatus(status, { path: pathFilter } = {}) {
+    if (!Number.isInteger(status) || status < 500 || status > 599) {
+      throw new Error(
+        `t.expectStatus(${status}): só status 5xx são esperados numa jornada; ` +
+          'um 4xx ou 2xx declarado aqui esconderia um problema de verdade.',
+      )
+    }
+    if (
+      pathFilter !== undefined &&
+      !(typeof pathFilter === 'string' && pathFilter.length > 0) &&
+      !(pathFilter instanceof RegExp)
+    ) {
+      throw new Error(
+        `t.expectStatus(${status}, { path: ... }): path deve ser um trecho do caminho ` +
+          '(/api/...) ou uma RegExp.',
+      )
+    }
+    // RegExp com g ou y guarda o lastIndex entre as conferências: a segunda resposta da mesma
+    // rota poderia falhar sem motivo aparente. O filtro fica com uma cópia sem essas flags.
+    const filter =
+      pathFilter instanceof RegExp
+        ? new RegExp(pathFilter.source, pathFilter.flags.replace(/[gy]/g, ''))
+        : pathFilter
+    this.expectedStatuses.push({ status, path: filter ?? null })
+  }
+
   // Entra pela tela de login, numa sessão isolada dentro do mesmo navegador.
   async signIn(user, { blockRealtime = false, viewport = { width: 1280, height: 800 } } = {}) {
     const context = await this.browser.newContext({
@@ -160,11 +205,20 @@ class Journey {
       this.problems.push(`Erro de JavaScript na tela: ${error.message}`),
     )
     page.on('response', (response) => {
-      if (response.status() >= 500) {
-        this.problems.push(
-          `${response.status()} em ${response.request().method()} ${response.url()}`,
-        )
+      const status = response.status()
+      if (status < 500) return
+      // A resposta que a jornada esperava (ex.: a recusa do WhatsApp) não é falha. Com path,
+      // só a resposta daquela rota é liberada; as outras continuam contando.
+      const index = this.expectedStatuses.findIndex(
+        (expected) =>
+          expected.status === status &&
+          (expected.path === null || pathMatches(expected.path, response.url())),
+      )
+      if (index >= 0) {
+        this.expectedStatuses.splice(index, 1)
+        return
       }
+      this.problems.push(`${status} em ${response.request().method()} ${response.url()}`)
     })
     if (blockRealtime) {
       // Sem o WebSocket, a tela fica desatualizada: é como se chega a uma disputa perdida.
@@ -375,6 +429,10 @@ class Journey {
   }
 
   writeSummary() {
+    for (const { status, path: pathFilter } of this.expectedStatuses) {
+      const where = pathFilter === null ? '' : ` em ${String(pathFilter)}`
+      this.problems.push(`Status ${status} esperado${where} com t.expectStatus e não recebido`)
+    }
     const passed = !this.error && this.problems.length === 0
     const seconds = Math.round((Date.now() - this.startedAt.getTime()) / 1000)
     const lines = [

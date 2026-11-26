@@ -15,7 +15,7 @@ Como cada funcionário entra no sistema e o que cada papel pode fazer. Vale para
 9. A sessão expira após 12 horas sem uso, e cada acesso renova o prazo. Sair encerra a sessão imediatamente. Sessões expiradas são apagadas periodicamente, mesmo de quem não volta a entrar.
 10. Cada usuário pertence a um único setor, como atendente ou supervisor, e vê apenas as filas e os atendimentos do próprio setor.
 11. O administrador funciona como supervisor global: acessa todos os setores, além da administração do sistema.
-12. As permissões de cada papel seguem a tabela abaixo. Toda permissão é conferida no backend; a tela só reflete a regra. Editar ou excluir uma mensagem exige ser o responsável atual do chamado em atendimento e ter acesso ao setor dele; consultar as versões e a exclusão de uma mensagem é só leitura e segue o acesso ao chamado.
+12. As permissões de cada papel seguem a tabela abaixo. Toda permissão é conferida no backend; a tela só reflete a regra. Enviar, editar, excluir, reagir e encerrar exigem o chamado em atendimento com o usuário como responsável. O pendente é só leitura até ser retomado: não recebe envio, edição, exclusão, reação, encerramento, cancelamento, devolução à fila nem transferência. Editar ou excluir uma mensagem exige ser o responsável atual do chamado em atendimento e ter acesso ao setor dele; consultar as versões e a exclusão de uma mensagem é só leitura e segue o acesso ao chamado.
 
 ## Permissões
 
@@ -23,6 +23,10 @@ Como cada funcionário entra no sistema e o que cada papel pode fazer. Vale para
 | --- | --- | --- | --- |
 | Ver fila e chamados | Próprio setor | Próprio setor | Todos os setores |
 | Assumir, responder, transferir, encerrar | Próprio setor | Próprio setor | Todos os setores |
+| Colocar como pendente | Só sendo o responsável | Só sendo o responsável | Só sendo o responsável |
+| Retomar pendente | Próprio setor | Próprio setor | Todos os setores |
+| Retomar chamado a partir de um chamado novo | Só sendo o responsável | Só sendo o responsável | Só sendo o responsável |
+| Mesclar atendimento encerrado em pendente | Só os que encerrou | Próprio setor | Todos os setores |
 | Editar ou excluir mensagem enviada pelo XET | Só sendo o responsável | Só sendo o responsável | Só sendo o responsável |
 | Consultar versões e exclusão de uma mensagem | Próprio setor | Próprio setor | Todos os setores |
 | Cancelar chamado na fila | Próprio setor | Próprio setor | Todos os setores |
@@ -46,6 +50,8 @@ Transferir entre atendentes: o responsável transfere o próprio chamado; superv
 
 Encerrar: somente o responsável pelo chamado em atendimento, inclusive quando é supervisor ou administrador.
 
+Pendente: colocar como pendente é só para o responsável pelo chamado em atendimento; retomar pela lista é para quem pode assumir um chamado na fila do setor (o administrador, em todos); retomar a partir de um chamado novo é só para o responsável por ele; e mesclar um atendimento encerrado num pendente é para quem pode corrigir esse atendimento (regra 14 de [closing.md](closing.md)).
+
 Editar e excluir mensagem: somente o responsável atual do chamado em atendimento, sobre mensagem enviada pelo XET, inclusive uma enviada por um responsável anterior; supervisor e administrador também precisam ser o responsável. As regras de prazo, estado e alcance estão em [conversation.md](conversation.md), regras 30 a 35.
 
 ## Fora do escopo / limites conhecidos
@@ -61,3 +67,4 @@ Editar e excluir mensagem: somente o responsável atual do chamado em atendiment
 - 2026-11-11: regras migradas do `spec.md` (Usuários e acesso). A tabela de permissões veio de `docs/data-model.md`.
 - 2026-11-19: troca da própria senha em Configurações (regras 2 e 5, tabela de permissões) ([#259](https://github.com/gcaspp-labs/xet/issues/259)).
 - 2026-11-20: regra 12 e tabela de permissões alteradas (editar e excluir mensagem exige ser o responsável e ter acesso ao setor; consulta de versões é só leitura); spec [#290](https://github.com/gcaspp-labs/xet/issues/290), tickets [#292](https://github.com/gcaspp-labs/xet/issues/292) e [#294](https://github.com/gcaspp-labs/xet/issues/294), PRs [#301](https://github.com/gcaspp-labs/xet/pull/301) e [#305](https://github.com/gcaspp-labs/xet/pull/305).
+- 2026-11-25: regra 12 e tabela de permissões alteradas (pendente: colocar, retomar pela lista, retomar a partir de um chamado novo e mesclar em pendente; envio, edição, exclusão e reação só em chamado em atendimento); spec [#332](https://github.com/gcaspp-labs/xet/issues/332), tickets [#333](https://github.com/gcaspp-labs/xet/issues/333), [#334](https://github.com/gcaspp-labs/xet/issues/334), [#335](https://github.com/gcaspp-labs/xet/issues/335) e [#341](https://github.com/gcaspp-labs/xet/issues/341), PRs [#369](https://github.com/gcaspp-labs/xet/pull/369), [#386](https://github.com/gcaspp-labs/xet/pull/386), [#397](https://github.com/gcaspp-labs/xet/pull/397) e [#401](https://github.com/gcaspp-labs/xet/pull/401). A regra 12 dizia "As permissões de cada papel seguem a tabela abaixo. Toda permissão é conferida no backend; a tela só reflete a regra. Editar ou excluir uma mensagem exige ser o responsável atual do chamado em atendimento e ter acesso ao setor dele; consultar as versões e a exclusão de uma mensagem é só leitura e segue o acesso ao chamado.".

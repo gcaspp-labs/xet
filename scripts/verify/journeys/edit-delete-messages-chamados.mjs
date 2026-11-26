@@ -20,9 +20,7 @@ await journey('edit-delete-messages-chamados', async (t) => {
   const menuOf = (bubble) => bubble.getByRole('button', { name: 'Ações da mensagem' })
 
   const ticketId = await t.step('Atendente assume e responde duas vezes', async () => {
-    await panelOf(page)
-      .getByRole('button', { name: 'Assumir chamado de Maria Cliente' })
-      .click()
+    await panelOf(page).getByRole('button', { name: 'Assumir chamado de Maria Cliente' }).click()
     await expect(page).toHaveURL(/\/chamados\/\d+$/)
     for (const text of ['Segue o boleto de setembro', 'Mensagem enviada por engano']) {
       await composer.fill(text)
@@ -33,8 +31,7 @@ await journey('edit-delete-messages-chamados', async (t) => {
     return Number(page.url().split('/').pop())
   })
   await second.goto(page.url())
-  const secondSent = conversationOf(second)
-    .getByRole('listitem', { name: 'Mensagem enviada' })
+  const secondSent = conversationOf(second).getByRole('listitem', { name: 'Mensagem enviada' })
   await expect(secondSent).toHaveCount(2)
 
   await t.step('O menu da mensagem oferece Responder, Editar e Excluir', async () => {
@@ -74,6 +71,28 @@ await journey('edit-delete-messages-chamados', async (t) => {
     await expect(secondSent.first()).toContainText('Editada')
     await expect(sent).toHaveCount(2)
     await t.shot(page, 'mensagem-editada')
+  })
+
+  await t.step('Recusa do WhatsApp: aviso, texto preservado e faixa aberta', async () => {
+    await sent.first().hover()
+    await menuOf(sent.first()).click()
+    await page.getByRole('menuitem', { name: 'Editar', exact: true }).click()
+    const banner = page.getByRole('group', { name: 'Editando mensagem' })
+    const field = page.getByRole('textbox', { name: 'Editar mensagem' })
+    await field.fill('Segue o boleto de novembro')
+    await phone.failNextChange('refused')
+    t.expectStatus(502, { path: /^\/api\/messages\/\d+\/edit$/ })
+    await page.getByRole('button', { name: 'Salvar edição' }).click()
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'O WhatsApp não aceitou' }),
+    ).toContainText('O WhatsApp não aceitou a alteração. Tente novamente.')
+    await expect(banner).toBeVisible()
+    await expect(field).toHaveValue('Segue o boleto de novembro')
+    await expect(sent.first()).toContainText('Segue o boleto de outubro')
+    await expect(sent.first()).not.toContainText('novembro')
+    await t.shot(page, 'recusa-do-whatsapp')
+    await banner.getByRole('button', { name: 'Cancelar' }).click()
+    await expect(banner).toHaveCount(0)
   })
 
   await t.step('Excluir: a janela oferece as duas opções e Cancelar não exclui', async () => {
@@ -131,9 +150,7 @@ await journey('edit-delete-messages-chamados', async (t) => {
     t.observe('Mensagens do chamado', messages)
     t.observe(
       'Ações (message_actions)',
-      t.sql(
-        `select kind, status from message_actions where ticket_id = ${ticketId} order by id`,
-      ),
+      t.sql(`select kind, status from message_actions where ticket_id = ${ticketId} order by id`),
     )
   })
 })
