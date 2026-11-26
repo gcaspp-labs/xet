@@ -38,8 +38,7 @@ export const expect = playwrightExpect.configure({ timeout: TIMEOUT })
 // a coluna da direita (Fila, Pendentes e Assuntos são abas dela) e a conversa do chamado aberto.
 export const mineOf = (page) => page.getByRole('region', { name: /^Meus chamados/ })
 export const panelOf = (page) => page.getByRole('region', { name: 'Fila, assuntos e pendentes' })
-export const conversationOf = (page) =>
-  page.getByRole('region', { name: 'Conversa', exact: true })
+export const conversationOf = (page) => page.getByRole('region', { name: 'Conversa', exact: true })
 
 // A linha do contato na aba aberta da coluna da direita. A aba que não está aberta não entra na
 // árvore de acessibilidade: a linha é sempre a da aba atual (Fila, Pendentes ou Assuntos).
@@ -95,6 +94,8 @@ class Journey {
     this.steps = []
     this.observations = []
     this.problems = []
+    // Respostas 5xx que a jornada espera, uma por declaração de expectStatus.
+    this.expectedStatuses = []
     this.sessions = []
     this.apiSessions = []
     this.shotCount = 0
@@ -143,6 +144,13 @@ class Journey {
     return value
   }
 
+  // Declara que a próxima resposta com este status é esperada, como a recusa do WhatsApp (502):
+  // ela não conta como falha da jornada. Vale por uma resposta; no fim, uma espera que não
+  // chegou também vira problema, para a jornada não passar sem provar o que dizia.
+  expectStatus(status) {
+    this.expectedStatuses.push(status)
+  }
+
   // Entra pela tela de login, numa sessão isolada dentro do mesmo navegador.
   async signIn(user, { blockRealtime = false, viewport = { width: 1280, height: 800 } } = {}) {
     const context = await this.browser.newContext({
@@ -160,11 +168,15 @@ class Journey {
       this.problems.push(`Erro de JavaScript na tela: ${error.message}`),
     )
     page.on('response', (response) => {
-      if (response.status() >= 500) {
-        this.problems.push(
-          `${response.status()} em ${response.request().method()} ${response.url()}`,
-        )
+      const status = response.status()
+      if (status < 500) return
+      // A resposta que a jornada esperava (ex.: a recusa do WhatsApp) não é falha.
+      const expected = this.expectedStatuses.indexOf(status)
+      if (expected >= 0) {
+        this.expectedStatuses.splice(expected, 1)
+        return
       }
+      this.problems.push(`${status} em ${response.request().method()} ${response.url()}`)
     })
     if (blockRealtime) {
       // Sem o WebSocket, a tela fica desatualizada: é como se chega a uma disputa perdida.
@@ -375,6 +387,9 @@ class Journey {
   }
 
   writeSummary() {
+    for (const status of this.expectedStatuses) {
+      this.problems.push(`Status ${status} esperado com t.expectStatus e não recebido`)
+    }
     const passed = !this.error && this.problems.length === 0
     const seconds = Math.round((Date.now() - this.startedAt.getTime()) / 1000)
     const lines = [

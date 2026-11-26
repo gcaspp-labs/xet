@@ -10,7 +10,7 @@ O responsável do chamado aberto edita o texto ou a legenda de uma mensagem envi
 - [jornada] A janela de exclusão mostra "Excluir para todos", "Excluir para mim" e "Cancelar"; Cancelar não exclui.
 - [jornada] Excluir para mim troca o conteúdo por "Mensagem excluída no XET" nas duas sessões e depois de recarregar.
 - [jornada] Edição e exclusão do cliente mostram o conteúdo conhecido com "Editada" e "Excluída".
-- [não coberto] Recusa e resultado incerto do WhatsApp na tela, prazo de 15 minutos e de exclusão para todos, mensagem enviando ou com falha, áudio, temas, teclado e foco, confirmação duplicada, prévia na lista (inclusive excluir para todos), citação em preparo que some quando a mensagem citada é excluída, supervisor já conectado, mensagem do celular sem menu e perda de responsável durante a edição (testes ponta a ponta em `frontend/e2e/message-edit-delete.spec.ts`).
+- [não coberto] Resultado incerto do WhatsApp na tela, prazo de 15 minutos e de exclusão para todos, mensagem enviando ou com falha, áudio, temas, teclado e foco, confirmação duplicada, prévia na lista (inclusive excluir para todos), citação em preparo que some quando a mensagem citada é excluída, supervisor já conectado, mensagem do celular sem menu e perda de responsável durante a edição (testes ponta a ponta em `frontend/e2e/message-edit-delete.spec.ts`).
 - [manual] Edição de texto e legenda e exclusão para todos chegando num celular real pelo Whatsmeow.
 
 ## How to get to it
@@ -33,7 +33,7 @@ scripts/verify/scripts/drive.sh edit-delete-messages-chamados
 
 - Achar a mensagem pela posição (`nth`), não pelo texto: o texto muda com a edição e some com a exclusão.
 - Com a janela de exclusão aberta, o resto da página sai da árvore de acessibilidade: confira a mensagem com `locator('li[id^="message-"]')`.
-- A recusa do WhatsApp volta como 502, e o kit conta toda resposta 5xx como falha da jornada: por isso a recusa fica nos testes ponta a ponta, e `failNextChange` não entra aqui.
+- A recusa do WhatsApp volta como 502: a jornada declara `t.expectStatus(502)` antes de salvar, e só aquela resposta deixa de contar como falha; as demais 5xx continuam falhando a jornada. `failNextChange` arma a recusa da próxima alteração para todos do setor.
 - Os prazos (15 minutos e dois dias) vêm do relógio do servidor; a jornada não os percorre.
 - O adaptador falso não prova o WhatsApp real: a edição de legenda e a revogação reais são `[manual]`.
 

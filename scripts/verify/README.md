@@ -27,12 +27,12 @@ scripts/verify/scripts/launch.sh
 
 Parte do zero e leva menos de 1 minuto, ou mais se precisar baixar dependências. Pronto quando imprimir `Execução run-... no ar` e terminar com saída 0.
 
-| Peça | Como sobe | Porta |
-| --- | --- | --- |
-| Banco PostgreSQL | Contêiner `xet-verify-db-<execução>`, vazio, descartado no Cleanup | `127.0.0.1:25440` |
-| API de CNPJ falsa | `frontend/e2e/fake-cnpj-api.mjs`, para nunca chamar o serviço real | `:28091` |
-| Backend | Binário próprio com `MESSAGING_PROVIDER=fake`, que monta `/api/test/messaging` | `127.0.0.1:28090` |
-| Frontend | Build de produção com `vite preview`, com proxy de `/api` para o backend | `127.0.0.1:25173` |
+| Peça              | Como sobe                                                                      | Porta             |
+| ----------------- | ------------------------------------------------------------------------------ | ----------------- |
+| Banco PostgreSQL  | Contêiner `xet-verify-db-<execução>`, vazio, descartado no Cleanup             | `127.0.0.1:25440` |
+| API de CNPJ falsa | `frontend/e2e/fake-cnpj-api.mjs`, para nunca chamar o serviço real             | `:28091`          |
+| Backend           | Binário próprio com `MESSAGING_PROVIDER=fake`, que monta `/api/test/messaging` | `127.0.0.1:28090` |
+| Frontend          | Build de produção com `vite preview`, com proxy de `/api` para o backend       | `127.0.0.1:25173` |
 
 - Também cria o administrador da execução pelo `create-admin`, como na implantação, e instala `frontend/node_modules` e o Chromium do Playwright, se faltarem.
 - Tudo fica em `.verify-app/runs/<execução>/`, ignorado pelo git: `evidence/`, `logs/`, `state/` e `build/`.
@@ -80,30 +80,36 @@ await journey('nome-da-jornada', async (t) => {
   const page = await t.signIn(sector.agents[0])
   await t.step('Mensagem chega à fila sem recarregar', async () => {
     await phone.receive(t.customer('Maria Cliente'), 'Bom dia')
-    await expect(page.getByRole('region', { name: 'Fila, assuntos e pendentes' })).toContainText('Bom dia')
+    await expect(page.getByRole('region', { name: 'Fila, assuntos e pendentes' })).toContainText(
+      'Bom dia',
+    )
     await t.shot(page, 'mensagem-na-fila')
   })
   await t.step('Estado final no banco', async () => {
-    t.observe('Chamados do setor', t.sql(`select status from tickets where sector_id = ${sector.id}`))
+    t.observe(
+      'Chamados do setor',
+      t.sql(`select status from tickets where sector_id = ${sector.id}`),
+    )
   })
 })
 ```
 
-| Do objeto `t` | O que faz |
-| --- | --- |
-| `t.step(título, função)` | Um passo da jornada; a primeira falha encerra a jornada |
-| `t.signIn(usuário, opções)` | Entra pela tela de login em sessão própria e devolve a página. `blockRealtime: true` deixa a tela desatualizada, e `viewport` muda o tamanho |
-| `t.closeSession(página)` | Fecha a sessão, para liberar memória |
-| `t.seedSector({ agents, connected, modules })` | Cria setor, supervisor e atendentes pela API. Devolve `{ id, name, supervisor, agents }`; cada pessoa tem `id`, `name` e `email` |
-| `t.seedOrganization(município)` | Cria um órgão e devolve `{ name, municipality }` |
-| `t.customer(nome)` | Um contato com telefone único |
-| `t.phone(setor)` | O celular simulado: `receive(contato, texto, id?)`, `pair(conta?)`, `nextQR()`, `drop()`, `logOut()`, `unreachable()`, `status(situação, ids)` |
-| `t.sql(consulta)` | Lê o banco em transação só de leitura e devolve as linhas |
-| `t.shot(página, nome)` | Captura de tela numerada, ligada ao passo |
-| `t.observe(título, valor)` | Registra um estado final no resumo |
-| `t.admin` | Sessão de API do administrador, para preparar dados |
-| `t.apiAs(usuário)` | Sessão de API de uma pessoa do setor (atendente ou supervisor), para preparar dados que dependem dela, como assumir e encerrar chamados. Fecha ao fim da jornada |
-| `t.apiOk(requisição, descrição)` | Espera a resposta e falha com "Pré-condição não atendida" se ela não for 2xx |
+| Do objeto `t`                                  | O que faz                                                                                                                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `t.step(título, função)`                       | Um passo da jornada; a primeira falha encerra a jornada                                                                                                                                           |
+| `t.signIn(usuário, opções)`                    | Entra pela tela de login em sessão própria e devolve a página. `blockRealtime: true` deixa a tela desatualizada, e `viewport` muda o tamanho                                                      |
+| `t.closeSession(página)`                       | Fecha a sessão, para liberar memória                                                                                                                                                              |
+| `t.seedSector({ agents, connected, modules })` | Cria setor, supervisor e atendentes pela API. Devolve `{ id, name, supervisor, agents }`; cada pessoa tem `id`, `name` e `email`                                                                  |
+| `t.seedOrganization(município)`                | Cria um órgão e devolve `{ name, municipality }`                                                                                                                                                  |
+| `t.customer(nome)`                             | Um contato com telefone único                                                                                                                                                                     |
+| `t.phone(setor)`                               | O celular simulado: `receive(contato, texto, id?)`, `pair(conta?)`, `nextQR()`, `drop()`, `logOut()`, `unreachable()`, `status(situação, ids)`                                                    |
+| `t.sql(consulta)`                              | Lê o banco em transação só de leitura e devolve as linhas                                                                                                                                         |
+| `t.shot(página, nome)`                         | Captura de tela numerada, ligada ao passo                                                                                                                                                         |
+| `t.observe(título, valor)`                     | Registra um estado final no resumo                                                                                                                                                                |
+| `t.expectStatus(status)`                       | Declara que a próxima resposta com esse status 5xx é esperada, como a recusa do WhatsApp (502), e não conta como falha; as demais continuam falhando a jornada, e uma espera que não chega também |
+| `t.admin`                                      | Sessão de API do administrador, para preparar dados                                                                                                                                               |
+| `t.apiAs(usuário)`                             | Sessão de API de uma pessoa do setor (atendente ou supervisor), para preparar dados que dependem dela, como assumir e encerrar chamados. Fecha ao fim da jornada                                  |
+| `t.apiOk(requisição, descrição)`               | Espera a resposta e falha com "Pré-condição não atendida" se ela não for 2xx                                                                                                                      |
 
 Use papéis e nomes visíveis (`getByRole`, `getByLabel`), como em `frontend/e2e/`, nunca coordenadas. Toda jornada termina num passo que confere o estado final no banco, e não só a tela.
 
@@ -124,14 +130,14 @@ scripts/verify/scripts/evidence.sh
 
 Gera e imprime `evidence/SUMMARY.md`, com o commit, o resultado de cada fluxo do mapa, o que ficou como verificação manual ou sem cobertura, as linhas de erro no log do backend e o detalhe das jornadas.
 
-| O que | Onde, em `.verify-app/runs/<execução>/` |
-| --- | --- |
-| Capturas de tela de cada passo | `evidence/<jornada>/NN-*.png` |
-| Passos, estado final no banco e falhas | `evidence/<jornada>/summary.md` |
-| Resumo da execução | `evidence/SUMMARY.md` |
-| Vídeo, com `drive.sh --video <jornada>` | `evidence/<jornada>/video-*.webm` |
-| Rastro do Playwright, só na falha | `evidence/<jornada>/falha-*-trace.zip` |
-| Logs dos serviços | `logs/` |
+| O que                                   | Onde, em `.verify-app/runs/<execução>/` |
+| --------------------------------------- | --------------------------------------- |
+| Capturas de tela de cada passo          | `evidence/<jornada>/NN-*.png`           |
+| Passos, estado final no banco e falhas  | `evidence/<jornada>/summary.md`         |
+| Resumo da execução                      | `evidence/SUMMARY.md`                   |
+| Vídeo, com `drive.sh --video <jornada>` | `evidence/<jornada>/video-*.webm`       |
+| Rastro do Playwright, só na falha       | `evidence/<jornada>/falha-*-trace.zip`  |
+| Logs dos serviços                       | `logs/`                                 |
 
 A evidência fica nesta cópia do repositório: apagar o worktree apaga a evidência local junto.
 
@@ -163,14 +169,14 @@ Rode `evidence.sh` de novo depois do Cleanup para o resultado dele entrar no res
 
 Todos em `scripts/verify/scripts/`, executáveis, sem depender de ferramentas de um agente específico.
 
-| Script | Uso | O que faz |
-| --- | --- | --- |
-| `launch.sh` | `launch.sh` | Sobe a instância isolada |
-| `doctor.sh` | `doctor.sh [execução]` | Confere a instância, só lendo |
-| `drive.sh` | `drive.sh [--video] <jornada\|arquivo.mjs\|all> ...` | Conduz jornadas, uma de cada vez |
-| `evidence.sh` | `evidence.sh [execução]` | Gera e imprime o resumo |
-| `cleanup.sh` | `cleanup.sh [execução]` | Encerra o que a execução iniciou e confere |
-| `publish-evidence.sh` | `publish-evidence.sh <PR> [execução]` | Leva a evidência ao PR |
+| Script                | Uso                                                  | O que faz                                  |
+| --------------------- | ---------------------------------------------------- | ------------------------------------------ |
+| `launch.sh`           | `launch.sh`                                          | Sobe a instância isolada                   |
+| `doctor.sh`           | `doctor.sh [execução]`                               | Confere a instância, só lendo              |
+| `drive.sh`            | `drive.sh [--video] <jornada\|arquivo.mjs\|all> ...` | Conduz jornadas, uma de cada vez           |
+| `evidence.sh`         | `evidence.sh [execução]`                             | Gera e imprime o resumo                    |
+| `cleanup.sh`          | `cleanup.sh [execução]`                              | Encerra o que a execução iniciou e confere |
+| `publish-evidence.sh` | `publish-evidence.sh <PR> [execução]`                | Leva a evidência ao PR                     |
 
 Sem `[execução]`, vale a última criada nesta cópia do repositório. `common.sh` e `journey-lib.mjs` são carregados pelos outros e não são executados diretamente. As jornadas só rodam pelo `drive.sh`, que passa as variáveis e as senhas a elas.
 
