@@ -8,11 +8,12 @@ import {
   signIn,
   test,
   unique,
+  unrouteAfterEach,
   userPassword,
 } from './fixtures'
 
 // Botão de copiar o telefone do cliente: no cabeçalho de /chamados/:id e na linha Contato da ficha
-// de /atendimentos/:id. Copia só números, 0 + DDD + número, sem o +55; número de fora do Brasil
+// de /atendimentos/:id. Copia só números, 44 + 0 + DDD + número, sem o +55; número de fora do Brasil
 // copia só os dígitos. Sem telefone, sem botão.
 
 type Ticket = { id: number; contact: { name: string; phone: string | null } }
@@ -49,21 +50,17 @@ async function withoutPhone(page: Page, ticketId: number) {
 
 const copied = (page: Page) => page.evaluate(() => navigator.clipboard.readText())
 
-// O `withoutPhone` deixa uma rota respondendo até o fim do teste. Se a resposta dele chegar depois
-// do fim, o Playwright acusa "route.fetch: Test ended" no teste seguinte e esse teste nem roda
-// (#403): encerra a interceptação ao terminar e ignora só os erros dessas respostas tardias.
-test.afterEach(async ({ page }) => {
-  await page.unrouteAll({ behavior: 'ignoreErrors' })
-})
+// O `withoutPhone` deixa uma rota respondendo até o fim do teste.
+unrouteAfterEach()
 
-test('copia o telefone no cabeçalho do chamado, só números e sem o +55', async ({
+test('copia o telefone no cabeçalho do chamado, com o 44, só números e sem o +55', async ({
   page,
   context,
   baseURL,
 }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   const { sector, agent } = await seedSector(baseURL!)
-  // 55 + DDD 61 + número de 9 dígitos → 0 + DDD + número.
+  // 55 + DDD 61 + número de 9 dígitos → 44 + 0 + DDD + número.
   const phone = `5561${unique().id}`
   const { ticketId, name } = await seedActiveTicket(baseURL!, sector.id, agent, phone)
   await signIn(page, agent, userPassword)
@@ -81,7 +78,7 @@ test('copia o telefone no cabeçalho do chamado, só números e sem o +55', asyn
   await expect(button).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.getByText('Telefone copiado')).toBeVisible()
-  expect(await copied(page)).toBe(`061${phone.slice(4)}`)
+  expect(await copied(page)).toBe(`44061${phone.slice(4)}`)
 })
 
 test('número fora do Brasil copia só os dígitos, como estão', async ({
@@ -160,8 +157,8 @@ test('a ficha do atendimento copia o telefone na linha Contato, e sem telefone n
   await expect(details).toContainText('Contato')
   await details.getByRole('button', { name: 'Copiar telefone' }).click()
   await expect(page.getByText('Telefone copiado')).toBeVisible()
-  // 5511NNNNNNNNN → 011NNNNNNNNN, sem o nome do contato.
-  expect(await copied(page)).toBe(`0${contact.phone!.slice(2)}`)
+  // 5511NNNNNNNNN → 44011NNNNNNNNN, sem o nome do contato.
+  expect(await copied(page)).toBe(`440${contact.phone!.slice(2)}`)
 
   await withoutPhone(page, ticketId)
   await page.goto(`/atendimentos/${ticketId}`)

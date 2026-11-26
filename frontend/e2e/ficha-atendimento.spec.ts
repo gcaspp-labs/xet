@@ -1,4 +1,4 @@
-import { expect, request as apiRequest, type Page, test } from '@playwright/test'
+import { expect, request as apiRequest, type Page } from '@playwright/test'
 import {
   admin,
   clearSession,
@@ -9,9 +9,14 @@ import {
   seedMergedTicket,
   seedSector,
   signIn,
+  test,
   unique,
+  unrouteAfterEach,
   userPassword,
 } from './fixtures'
+
+// O teste do registro por telefone intercepta o detalhe do chamado com `page.route()`.
+unrouteAfterEach()
 
 const sidebar = '[data-slot=sidebar-inner]'
 const conversation = (page: Page) => page.getByRole('region', { name: 'Conversa', exact: true })

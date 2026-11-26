@@ -1,5 +1,16 @@
-import { expect, test } from '@playwright/test'
-import { admin, seedDirectory, seedSector, signIn, unique, userPassword } from './fixtures'
+import { expect } from '@playwright/test'
+import {
+  admin,
+  seedDirectory,
+  seedSector,
+  signIn,
+  test,
+  unique,
+  unrouteAfterEach,
+  userPassword,
+} from './fixtures'
+
+unrouteAfterEach()
 
 test('abre e cancela novo chamado na tela Chamados vazia', async ({ page, baseURL }) => {
   const { agent } = await seedSector(baseURL!)
@@ -119,12 +130,6 @@ test('administrador escolhe o setor para iniciar o chamado', async ({ page, base
     'Mensagem do setor escolhido',
   )
   await expect(page.getByText(sector.name).first()).toBeVisible()
-})
-
-// A rota do contato sem telefone responde até o fim do teste: encerra a interceptação para nenhuma
-// resposta chegar depois do fim ("route.fetch: Test ended", como na #403).
-test.afterEach(async ({ page }) => {
-  await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 
 test('contato sem telefone aparece na busca, mas não pode ser escolhido', async ({
