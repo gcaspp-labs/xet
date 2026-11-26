@@ -34,8 +34,8 @@ declare global {
 // mesmo com a permissão concedida. O Chromium completo respeita a permissão.
 test.use({ channel: 'chromium' })
 
-// Os testes deste arquivo interceptam a fila do setor com `page.route()`; as abas extras desligam
-// as suas no fim do próprio teste, com `unrouteRoutes`.
+// Os testes deste arquivo interceptam a fila do setor com `page.route()`; o hook do arquivo
+// desliga as rotas de todas as abas do contexto no fim de cada teste.
 unrouteAfterEach()
 
 async function phone(request: APIRequestContext, sectorId: number, action: string, data?: object) {

@@ -130,11 +130,12 @@ export async function seedPendingWithNewTicket(baseURL: string) {
 
 // Uma resposta interceptada que chega depois do fim do teste faz o Playwright acusar
 // "route.fetch: Test ended" no teste seguinte, que nem roda (#403). `unrouteAfterEach()` desliga
-// as interceptações no fim de cada teste do arquivo; `unrouteRoutes` faz o mesmo para as abas
-// extras, que a fixture não alcança. Só os erros dessas respostas tardias são ignorados.
+// as interceptações de todas as abas do contexto no fim de cada teste do arquivo, inclusive das
+// abas extras, mesmo quando o teste falha antes de desligá-las por conta própria. Só os erros
+// dessas respostas tardias são ignorados.
 export function unrouteAfterEach() {
-  test.afterEach(async ({ page }) => {
-    await unrouteRoutes(page)
+  test.afterEach(async ({ context }) => {
+    await unrouteRoutes(...context.pages())
   })
 }
 
