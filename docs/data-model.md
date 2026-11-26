@@ -336,7 +336,7 @@ Restrições:
 
 Índice `legacy_launches_queue_idx` em `(next_attempt_at) where status in ('pending', 'failed')` para a fila.
 
-Reserva. O robô pega um lançamento por vez, com `select ... for update skip locked`: `pending` com `next_attempt_at <= now()` ou `failed` de erro passageiro (`unavailable`, `unknown_result`) com `next_attempt_at <= now()`. A reserva grava `claimed_at`, `claim_id` e conta a tentativa, e zera `next_attempt_at`; o resultado só é aceito com o `claim_id` da reserva. Uma reserva sem resposta por mais de 10 minutos pode ser retomada — nesse caso, a próxima tentativa começa procurando o lançamento antes de lançar — ou ser solta como `failed` com `unknown_result`. **Tentar de novo** devolve um `failed` para a fila, zerando as tentativas e o erro.
+Reserva. O robô pega um lançamento por vez, com `select ... for update skip locked`: `pending` com `next_attempt_at <= now()`, `failed` de erro passageiro (`unavailable`, `unknown_result`) com `next_attempt_at <= now()`, ou qualquer um dos dois com reserva vencida (`claimed_at` há mais de 10 minutos, mesmo com `next_attempt_at` vazio). A reserva grava `claimed_at`, `claim_id` e conta a tentativa, e zera `next_attempt_at`; o resultado só é aceito com o `claim_id` da reserva. Ao retomar uma reserva vencida, a consulta devolve `stale_claim` e a próxima tentativa começa procurando o lançamento antes de lançar; a reserva também pode ser solta como `failed` com `unknown_result`. **Tentar de novo** devolve um `failed` para a fila, zerando as tentativas e o erro.
 
 ### `legacy_launch_settings` — Configuração do automático
 

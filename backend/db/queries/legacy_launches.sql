@@ -6,22 +6,24 @@ values (@ticket_id, now())
 on conflict (ticket_id) do nothing;
 
 -- name: ClaimLegacyLaunch :one
--- Reserva um lançamento por vez: a lançar na hora da próxima tentativa, ou com
+-- Reserva um lançamento por vez: a lançar na hora da próxima tentativa, com
 -- erro passageiro (legado indisponível, resultado desconhecido) cuja próxima
--- tentativa chegou. O for update skip locked faz dois robôs pegarem
--- lançamentos diferentes. A reserva conta a tentativa e zera next_attempt_at;
--- uma reserva com mais de 10 minutos pode ser retomada, e stale_claim avisa
--- quem chamou que o robô anterior não respondeu.
+-- tentativa chegou, ou com reserva vencida (mais de 10 minutos sem resposta do
+-- robô), mesmo que a reserva tenha zerado next_attempt_at. O for update skip
+-- locked faz dois robôs pegarem lançamentos diferentes. A reserva conta a
+-- tentativa e zera next_attempt_at; stale_claim avisa quem chamou que o robô
+-- anterior não respondeu.
 with candidate as (
     select l.ticket_id,
            l.claimed_at is not null and l.claimed_at < now() - interval '10 minutes' as stale_claim
     from legacy_launches l
-    where l.next_attempt_at is not null
-      and l.next_attempt_at <= now()
-      and (l.status = 'pending'
+    where (l.status = 'pending'
            or (l.status = 'failed' and l.error_kind in ('unavailable', 'unknown_result')))
-      and (l.claimed_at is null or l.claimed_at < now() - interval '10 minutes')
-    order by l.next_attempt_at, l.ticket_id
+      and (
+          (l.next_attempt_at is not null and l.next_attempt_at <= now())
+          or (l.claimed_at is not null and l.claimed_at < now() - interval '10 minutes')
+      )
+    order by coalesce(l.next_attempt_at, l.claimed_at + interval '10 minutes'), l.ticket_id
     limit 1
     for update skip locked
 )

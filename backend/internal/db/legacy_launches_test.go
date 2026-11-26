@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gcaspp-labs/xet/backend/internal/db"
@@ -286,9 +285,46 @@ func TestLegacyLaunchClaimSkipsLockedRows(t *testing.T) {
 	}
 }
 
-// A reserva vencida vira resultado desconhecido; a retomada avisa quem chamou;
-// e o resultado só é gravado com o claim_id da reserva.
-func TestLegacyLaunchStaleClaimAndResult(t *testing.T) {
+// Uma reserva em curso não é roubada: o chamado sai da fila enquanto o robô
+// não responde e não vence o prazo.
+func TestLegacyLaunchClaimDoesNotStealLiveClaim(t *testing.T) {
+	t.Parallel()
+	pool, q, b := newLaunchBase(t)
+	ctx := t.Context()
+	contact := newContact(t, pool, b, "Maria", "5511999990000")
+	ticket := newClosedTicket(t, pool, b, "2026-000019", contact, "resolved", time.Now(), nil, "whatsapp")
+	if _, err := q.EnqueueLegacyLaunch(ctx, ticket); err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := q.ClaimLegacyLaunch(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed.TicketID != ticket || !claimed.ClaimID.Valid || claimed.ClaimedAt == nil {
+		t.Fatalf("claim = %+v, want ticket %d", claimed, ticket)
+	}
+	if claimed.StaleClaim == nil || *claimed.StaleClaim {
+		t.Fatalf("first claim stale_claim = %v, want false", claimed.StaleClaim)
+	}
+	if claimed.Attempts != 1 {
+		t.Fatalf("attempts after the first claim = %d, want 1", claimed.Attempts)
+	}
+	if claimed.NextAttemptAt != nil {
+		t.Fatalf("claim kept next_attempt_at: %v", claimed.NextAttemptAt)
+	}
+
+	if _, err := q.ClaimLegacyLaunch(ctx); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("claim while the reservation is in course = %v, want no rows", err)
+	}
+}
+
+// A reserva vencida é retomada pela própria consulta que reserva, pelo caminho
+// real: reservar, deixar vencer e reservar de novo. Como a reserva zera
+// next_attempt_at, a escolha do próximo chamado precisa olhar o claimed_at
+// vencido, e não só a próxima tentativa. O resultado só é gravado com o
+// claim_id da reserva certa.
+func TestLegacyLaunchStaleClaimIsReclaimed(t *testing.T) {
 	t.Parallel()
 	pool, q, b := newLaunchBase(t)
 	ctx := t.Context()
@@ -303,6 +339,92 @@ func TestLegacyLaunchStaleClaimAndResult(t *testing.T) {
 	}
 	if claimed.TicketID != ticket || !claimed.ClaimID.Valid {
 		t.Fatalf("claim = %+v, want ticket %d", claimed, ticket)
+	}
+	oldClaimID := claimed.ClaimID
+
+	// Passaram-se mais de 10 minutos sem o robô responder. O teste adianta o
+	// relógio da reserva; o estado é o mesmo que o tempo cria.
+	if _, err := pool.Exec(ctx, `
+		update legacy_launches set claimed_at = now() - interval '11 minutes' where ticket_id = $1`, ticket); err != nil {
+		t.Fatal(err)
+	}
+
+	reclaimed, err := q.ClaimLegacyLaunch(ctx)
+	if err != nil {
+		t.Fatalf("reclaim: %v", err)
+	}
+	if reclaimed.TicketID != ticket {
+		t.Fatalf("reclaim took ticket %d, want %d", reclaimed.TicketID, ticket)
+	}
+	if reclaimed.StaleClaim == nil || !*reclaimed.StaleClaim {
+		t.Fatalf("stale claim flag = %v, want true", reclaimed.StaleClaim)
+	}
+	if reclaimed.Attempts != 2 {
+		t.Fatalf("attempts after reclaim = %d, want 2", reclaimed.Attempts)
+	}
+	if reclaimed.ClaimID == oldClaimID {
+		t.Fatal("reclaim kept the previous claim_id")
+	}
+	if reclaimed.NextAttemptAt != nil {
+		t.Fatalf("reclaim kept next_attempt_at: %v", reclaimed.NextAttemptAt)
+	}
+
+	// O resultado com o claim_id da reserva antiga não grava nada.
+	_, err = q.RecordLegacyLaunchFailed(ctx, db.RecordLegacyLaunchFailedParams{
+		TicketID:    ticket,
+		ClaimID:     oldClaimID,
+		ErrorKind:   db.NullLegacyLaunchError{LegacyLaunchError: db.LegacyLaunchErrorUnavailable, Valid: true},
+		ErrorReason: ptr("Legado fora do ar."),
+	})
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("result with the old claim_id = %v, want no rows", err)
+	}
+	untouched, err := q.GetLegacyLaunch(ctx, ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if untouched.Status != db.LegacyLaunchStatusPending || untouched.Attempts != 2 ||
+		untouched.ClaimID != reclaimed.ClaimID || untouched.ErrorKind.Valid {
+		t.Fatalf("old claim_id changed the launch: %+v", untouched)
+	}
+
+	// Com o claim_id da reserva nova, o erro grava e solta a reserva.
+	next := time.Now().Add(time.Minute)
+	failed, err := q.RecordLegacyLaunchFailed(ctx, db.RecordLegacyLaunchFailedParams{
+		TicketID:      ticket,
+		ClaimID:       reclaimed.ClaimID,
+		ErrorKind:     db.NullLegacyLaunchError{LegacyLaunchError: db.LegacyLaunchErrorUnavailable, Valid: true},
+		ErrorReason:   ptr("Legado fora do ar."),
+		NextAttemptAt: &next,
+	})
+	if err != nil {
+		t.Fatalf("record failed: %v", err)
+	}
+	if failed.Status != db.LegacyLaunchStatusFailed ||
+		failed.ErrorKind.LegacyLaunchError != db.LegacyLaunchErrorUnavailable ||
+		failed.ClaimID.Valid || failed.NextAttemptAt == nil {
+		t.Fatalf("failed launch = %+v", failed)
+	}
+}
+
+// A soltura da reserva vencida marca resultado desconhecido e devolve o
+// chamado à fila; o resultado nunca é gravado sem a reserva.
+func TestReleaseStaleLegacyLaunchClaim(t *testing.T) {
+	t.Parallel()
+	pool, q, b := newLaunchBase(t)
+	ctx := t.Context()
+	contact := newContact(t, pool, b, "Maria", "5511999990000")
+	ticket := newClosedTicket(t, pool, b, "2026-000021", contact, "resolved", time.Now(), nil, "whatsapp")
+	if _, err := q.EnqueueLegacyLaunch(ctx, ticket); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.ClaimLegacyLaunch(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reserva em curso ainda não venceu: nada a soltar.
+	if released, err := q.ReleaseStaleLegacyLaunchClaim(ctx); err != nil || released != 0 {
+		t.Fatalf("release of a live claim = %d, %v", released, err)
 	}
 
 	// Passaram-se mais de 10 minutos sem o robô responder.
@@ -338,78 +460,40 @@ func TestLegacyLaunchStaleClaimAndResult(t *testing.T) {
 		t.Fatalf("release without stale claims = %d, %v", released, err)
 	}
 
-	// Uma reserva antiga pode ser retomada, e o chamador fica sabendo.
-	if _, err := pool.Exec(ctx, `
-		update legacy_launches set claimed_at = now() - interval '11 minutes', claim_id = gen_random_uuid()
-		where ticket_id = $1`, ticket); err != nil {
-		t.Fatal(err)
-	}
+	// Solto, o chamado volta a ser reservado normalmente, sem aviso de reserva
+	// antiga.
 	reclaimed, err := q.ClaimLegacyLaunch(ctx)
 	if err != nil {
-		t.Fatalf("reclaim: %v", err)
+		t.Fatalf("claim after release: %v", err)
 	}
-	if reclaimed.StaleClaim == nil || !*reclaimed.StaleClaim {
-		t.Fatalf("stale claim flag = %v, want true", reclaimed.StaleClaim)
+	if reclaimed.TicketID != ticket || reclaimed.StaleClaim == nil || *reclaimed.StaleClaim {
+		t.Fatalf("claim after release = %+v, want ticket %d without stale_claim", reclaimed, ticket)
 	}
-	if reclaimed.Attempts != 2 {
-		t.Fatalf("attempts after reclaim = %d, want 2", reclaimed.Attempts)
-	}
+}
 
-	// O resultado com outro claim_id não grava nada.
-	wrong := pgtype.UUID{Bytes: [16]byte{1}, Valid: true}
-	_, err = q.RecordLegacyLaunchFailed(ctx, db.RecordLegacyLaunchFailedParams{
-		TicketID:    ticket,
-		ClaimID:     wrong,
-		ErrorKind:   db.NullLegacyLaunchError{LegacyLaunchError: db.LegacyLaunchErrorUnavailable, Valid: true},
-		ErrorReason: ptr("Legado fora do ar."),
-	})
-	if !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("result with a wrong claim_id = %v, want no rows", err)
+// O sucesso grava o número e a data e limpa erro e reserva.
+func TestLegacyLaunchRecordLaunched(t *testing.T) {
+	t.Parallel()
+	pool, q, b := newLaunchBase(t)
+	ctx := t.Context()
+	contact := newContact(t, pool, b, "Maria", "5511999990000")
+	ticket := newClosedTicket(t, pool, b, "2026-000022", contact, "resolved", time.Now(), nil, "whatsapp")
+	if _, err := q.EnqueueLegacyLaunch(ctx, ticket); err != nil {
+		t.Fatal(err)
 	}
-	untouched, err := q.GetLegacyLaunch(ctx, ticket)
+	claimed, err := q.ClaimLegacyLaunch(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if untouched.ErrorKind.LegacyLaunchError != db.LegacyLaunchErrorUnknownResult ||
-		untouched.Attempts != 2 || !untouched.ClaimID.Valid {
-		t.Fatalf("wrong claim_id changed the launch: %+v", untouched)
+	if claimed.TicketID != ticket {
+		t.Fatalf("claimed ticket %d, want %d", claimed.TicketID, ticket)
 	}
 
-	// Com o claim_id certo, o erro grava e solta a reserva.
-	next := time.Now().Add(time.Minute)
-	failed, err := q.RecordLegacyLaunchFailed(ctx, db.RecordLegacyLaunchFailedParams{
-		TicketID:      ticket,
-		ClaimID:       reclaimed.ClaimID,
-		ErrorKind:     db.NullLegacyLaunchError{LegacyLaunchError: db.LegacyLaunchErrorUnavailable, Valid: true},
-		ErrorReason:   ptr("Legado fora do ar."),
-		NextAttemptAt: &next,
-	})
-	if err != nil {
-		t.Fatalf("record failed: %v", err)
-	}
-	if failed.Status != db.LegacyLaunchStatusFailed ||
-		failed.ErrorKind.LegacyLaunchError != db.LegacyLaunchErrorUnavailable ||
-		failed.ClaimID.Valid || failed.NextAttemptAt == nil {
-		t.Fatalf("failed launch = %+v", failed)
-	}
-
-	// O sucesso grava o número e limpa erro e reserva.
-	secondTicket := newClosedTicket(t, pool, b, "2026-000021", contact, "resolved", time.Now(), nil, "whatsapp")
-	if _, err := q.EnqueueLegacyLaunch(ctx, secondTicket); err != nil {
-		t.Fatal(err)
-	}
-	successClaim, err := q.ClaimLegacyLaunch(ctx)
-	if err != nil {
-		t.Fatalf("claim for the success: %v", err)
-	}
-	if successClaim.TicketID != secondTicket {
-		t.Fatalf("claimed ticket %d, want %d", successClaim.TicketID, secondTicket)
-	}
 	number := "2026-000123"
 	launchedAt := time.Now()
 	launched, err := q.RecordLegacyLaunchLaunched(ctx, db.RecordLegacyLaunchLaunchedParams{
-		TicketID:     secondTicket,
-		ClaimID:      successClaim.ClaimID,
+		TicketID:     ticket,
+		ClaimID:      claimed.ClaimID,
 		LegacyNumber: &number,
 		LaunchedAt:   &launchedAt,
 	})
