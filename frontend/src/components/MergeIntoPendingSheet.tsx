@@ -66,6 +66,7 @@ export function MergeIntoPendingSheet({
       description="As mensagens deste atendimento passam para o pendente escolhido, que fica com a situação e os dados deste encerramento. Este atendimento fica registrado como Mesclado."
       submitLabel="Mesclar em pendente"
       pending={merge.isPending}
+      submitDisabled={pendings.length === 0}
       error={merge.error?.message}
       onSubmit={submit}
     >

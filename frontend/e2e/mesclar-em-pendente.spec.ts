@@ -98,6 +98,7 @@ test('quem encerrou mescla o atendimento num pendente e o pendente abre com as m
   await expect(dialog).toContainText(pendingProtocol)
   await expect(dialog).toContainText(seed.reason)
   await expect(dialog).toContainText(`por ${agentName}`)
+  await expect(dialog.getByRole('button', { name: 'Mesclar em pendente' })).toBeEnabled()
 
   await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
   await expect(page.getByText('Atendimento mesclado')).toBeVisible()
@@ -231,11 +232,13 @@ test('quando alguém retoma o pendente antes, a janela avisa, recarrega e cai no
   await expect(dialog).toContainText(firstProtocol)
   await expect(dialog).not.toContainText(secondProtocol)
 
-  // Retomado também o último pendente, a janela fica sem escolhas e diz que não há mais pendente.
+  // Retomado também o último pendente, a janela fica sem escolhas, avisa que não há mais pendente
+  // e desabilita o envio (#448).
   await resumeElsewhere(page, seed, seed.pendingId, secondId)
   await dialog.getByRole('button', { name: 'Mesclar em pendente' }).click()
   await expect(dialog.getByRole('radio')).toHaveCount(0)
   await expect(dialog).toContainText('Este contato não tem mais chamado pendente.')
+  await expect(dialog.getByRole('button', { name: 'Mesclar em pendente' })).toBeDisabled()
 
   // Nada foi mesclado: o atendimento continua encerrado e o último pendente voltou para a pessoa.
   const closed = (await (await page.request.get(`/api/tickets/${seed.ticketId}`)).json()) as {
