@@ -221,8 +221,6 @@ await journey('pendente-retomada', async (t) => {
         `select ticket_id, action, changes from audit_logs
         where ticket_id in (${pending.id}, ${second.id}) order by id`,
       )
-      // A auditoria pode ganhar registros novos ao lado destes. O que se prova é que os esperados
-      // aparecem nesta ordem relativa, sem a checagem quebrar por uma ação a mais no meio.
       expectAuditOrder(audit, [
         `${pending.id} ticket_assigned`,
         `${pending.id} ticket_pending`,

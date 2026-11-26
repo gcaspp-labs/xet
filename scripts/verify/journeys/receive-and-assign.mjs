@@ -1,5 +1,12 @@
 // Receber e assumir: ver features/receive-and-assign.md.
-import { conversationOf, expect, journey, mineOf, panelOf } from '../scripts/journey-lib.mjs'
+import {
+  conversationOf,
+  expect,
+  journey,
+  mineOf,
+  panelOf,
+  queueRowOf,
+} from '../scripts/journey-lib.mjs'
 
 await journey('receive-and-assign', async (t) => {
   const sector = await t.step('Preparar setor conectado, dois atendentes e um supervisor', () =>
@@ -12,7 +19,7 @@ await journey('receive-and-assign', async (t) => {
   const agentPage = await t.signIn(agent)
   // A fila é a aba Fila do cartão "Fila, assuntos e pendentes" da tela Chamados; cada chamado é um item da lista.
   const queue = panelOf(agentPage)
-  const mariaRow = queue.getByRole('listitem').filter({ hasText: 'Maria Cliente' })
+  const mariaRow = queueRowOf(agentPage, maria)
   const mine = mineOf(agentPage)
 
   await t.step('Atendente entra na tela Chamados e vê a fila vazia', async () => {
