@@ -225,6 +225,7 @@ type ContactResponse struct {
 	Name         string                  `json:"name"`
 	Phone        *string                 `json:"phone"`
 	Registered   bool                    `json:"registered"`
+	PhotoVersion *string                 `json:"photoVersion"`
 	Organization *organizationResponse   `json:"organization"`
 	Sectors      []httpx.Ref             `json:"sectors"`
 	Modules      []contactModuleResponse `json:"modules"`
@@ -233,8 +234,11 @@ type ContactResponse struct {
 func ToContactResponse(c Contact) ContactResponse {
 	out := ContactResponse{
 		ID: c.ID, Name: c.Name, Phone: c.Phone, Registered: c.Registered,
-		Sectors: make([]httpx.Ref, len(c.Sectors)),
-		Modules: make([]contactModuleResponse, len(c.Modules)),
+		// A versão da foto muda quando ela muda, para o navegador não usar a
+		// imagem velha do cache; sem foto, fica vazia.
+		PhotoVersion: c.PhotoExternalID,
+		Sectors:      make([]httpx.Ref, len(c.Sectors)),
+		Modules:      make([]contactModuleResponse, len(c.Modules)),
 	}
 	if c.OrganizationID != nil && c.OrganizationName != nil && c.MunicipalityID != nil && c.MunicipalityName != nil {
 		out.Organization = &organizationResponse{

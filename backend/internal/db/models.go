@@ -1034,14 +1034,18 @@ type AuditLog struct {
 }
 
 type Contact struct {
-	ID                int64
-	Name              string
-	Phone             *string
-	ExternalContactID *string
-	OrganizationID    *int64
-	Registered        bool
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                    int64
+	Name                  string
+	Phone                 *string
+	ExternalContactID     *string
+	OrganizationID        *int64
+	Registered            bool
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	PhotoMediaID          *int64
+	PhotoThumbnailMediaID *int64
+	PhotoExternalID       *string
+	PhotoCheckedAt        *time.Time
 }
 
 type ContactModule struct {
