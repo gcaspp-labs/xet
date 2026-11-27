@@ -59,8 +59,12 @@ test('a formatação do WhatsApp aparece no balão, como no WhatsApp Web', async
   await receive('```veja https://x.com/a_b_c e *forte*```')
   await receive('use `npm ci` agora')
   await receive('*a\nb*')
-  await receive('Legenda com *forte* e _calma_', 'image', { data: png, mimeType: 'image/png' })
+  await receive('Legenda com *forte*, _calma_, ~antiga~ e ```código```', 'image', {
+    data: png,
+    mimeType: 'image/png',
+  })
   await receive('Bom dia!\n\nTudo bem?  Sim.')
+  await receive('_joao@x.com_')
 
   await signIn(page, agent, userPassword)
   await openQueued(page, 'Lia Cliente')
@@ -69,7 +73,7 @@ test('a formatação do WhatsApp aparece no balão, como no WhatsApp Web', async
 
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
-  await expect(received).toHaveCount(11)
+  await expect(received).toHaveCount(12)
 
   // Negrito, itálico e riscado: os símbolos somem e o texto continua o mesmo.
   const bold = received.nth(0)
@@ -131,11 +135,17 @@ test('a formatação do WhatsApp aparece no balão, como no WhatsApp Web', async
   ).toBe('*a\nb*')
   await expect(acrossLines.locator('strong')).toHaveCount(0)
 
-  // A legenda de mídia formata como o texto do balão.
+  // A legenda de mídia formata como o texto do balão, com o bloco de monoespacado e o riscado.
   const caption = received.nth(9)
-  await expect(caption.locator('p.whitespace-pre-wrap')).toHaveText('Legenda com forte e calma')
+  await expect(caption.locator('p.whitespace-pre-wrap')).toHaveText(
+    'Legenda com forte, calma, antiga e código',
+  )
   await expect(caption.locator('strong')).toHaveText('forte')
   await expect(caption.locator('em')).toHaveText('calma')
+  await expect(caption.locator('s')).toHaveText('antiga')
+  const captionCode = caption.locator('code')
+  await expect(captionCode).toHaveText('código')
+  expect(await captionCode.evaluate((element) => getComputedStyle(element).display)).toBe('block')
 
   // Texto sem marcador sai igual a hoje, com as quebras e os espaços.
   const plain = received.nth(10)
@@ -143,6 +153,15 @@ test('a formatação do WhatsApp aparece no balão, como no WhatsApp Web', async
     await plain.locator('p.whitespace-pre-wrap').evaluate((element) => element.textContent),
   ).toBe('Bom dia!\n\nTudo bem?  Sim.')
   await expect(plain.locator('strong')).toHaveCount(0)
+
+  // O "_" do marcador não entra no e-mail nem sobra solto: sai o e-mail em itálico, como no WhatsApp.
+  const italicEmail = received.nth(11)
+  const emailLink = italicEmail.getByRole('link')
+  await expect(italicEmail.locator('p.whitespace-pre-wrap')).toHaveText('joao@x.com')
+  await expect(italicEmail.locator('em')).toHaveText('joao@x.com')
+  await expect(emailLink).toHaveCount(1)
+  await expect(emailLink).toHaveAttribute('href', 'mailto:joao@x.com')
+  await expect(emailLink).toHaveText('joao@x.com')
 
   // Mensagem enviada: o texto guardado e enviado não muda, mas o balão mostra a formatação.
   const sentText = 'Mensagem *importante*, _calma_ e ~antiga~.'
@@ -167,6 +186,21 @@ test('a formatação do WhatsApp aparece no balão, como no WhatsApp Web', async
   await expect(sentBubble.locator('em')).toHaveText('calma')
   await expect(sentBubble.locator('s')).toHaveText('antiga')
 
+  // O bloco de três crases também aparece no balão enviado, e o texto enviado continua igual.
+  const sentBlockText = '```bloco\nenviado```'
+  const sendingBlock = page.waitForRequest(
+    (req) => req.url().endsWith('/messages') && req.method() === 'POST',
+  )
+  await page.getByRole('textbox', { name: 'Mensagem' }).fill(sentBlockText)
+  await page.getByRole('button', { name: 'Enviar mensagem' }).click()
+  expect(((await sendingBlock).postDataJSON() as { body: string }).body).toBe(sentBlockText)
+  const sentBlockCode = conversation
+    .getByRole('listitem', { name: 'Mensagem enviada' })
+    .filter({ hasText: 'bloco' })
+    .locator('code')
+  await expect(sentBlockCode).toHaveText('bloco\nenviado')
+  expect(await sentBlockCode.evaluate((element) => getComputedStyle(element).display)).toBe('block')
+
   // Recarregar não muda o que a conversa mostra.
   await page.reload()
   await expect(
@@ -176,6 +210,13 @@ test('a formatação do WhatsApp aparece no balão, como no WhatsApp Web', async
       .locator('strong')
       .nth(1),
   ).toHaveText('importante')
+  // O bloco enviado continua desenhado depois de recarregar.
+  await expect(
+    conversation
+      .getByRole('listitem', { name: 'Mensagem enviada' })
+      .filter({ hasText: 'bloco' })
+      .locator('code'),
+  ).toHaveText('bloco\nenviado')
 })
 
 // Uma mensagem longa sem espaços (um hash, um base64, uma chave colada) já congelou a

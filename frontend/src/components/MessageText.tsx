@@ -1,5 +1,8 @@
 import { Fragment } from 'react'
-import { linkify, type TextPart } from '@/lib/linkify'
+import { parseMessageText, type TextPart } from '@/lib/message-text'
+
+// Os marcadores simples são o mesmo pedaço com outra etiqueta: negrito, itálico e riscado.
+const markerTag = { bold: 'strong', italic: 'em', strike: 's' } as const
 
 // Pedaços do texto de uma mensagem, com os links clicáveis e a formatação do WhatsApp.
 // O link abre numa aba nova e o e-mail abre o programa de e-mail; o clique não chega às
@@ -27,23 +30,15 @@ function Parts({ parts }: { parts: TextPart[] }) {
               </a>
             )
           case 'bold':
-            return (
-              <strong key={index}>
-                <Parts parts={part.parts} />
-              </strong>
-            )
           case 'italic':
+          case 'strike': {
+            const Tag = markerTag[part.kind]
             return (
-              <em key={index}>
+              <Tag key={index}>
                 <Parts parts={part.parts} />
-              </em>
+              </Tag>
             )
-          case 'strike':
-            return (
-              <s key={index}>
-                <Parts parts={part.parts} />
-              </s>
-            )
+          }
           case 'code':
             return (
               <code key={index} className="[font-family:var(--font-mono)]">
@@ -65,5 +60,5 @@ function Parts({ parts }: { parts: TextPart[] }) {
 // Texto de uma mensagem como no WhatsApp Web: links, negrito, itálico, riscado e
 // monoespaçado. O texto recebido e enviado não muda; só a tela mostra a formatação.
 export function MessageText({ text }: { text: string }) {
-  return <Parts parts={linkify(text)} />
+  return <Parts parts={parseMessageText(text)} />
 }

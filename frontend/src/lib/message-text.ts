@@ -113,7 +113,9 @@ function closeOf(text: string, open: number, marker: string) {
   return -1
 }
 
-function parse(text: string): TextPart[] {
+// Lê o texto de uma mensagem e devolve os pedaços que a tela desenha: texto puro,
+// links clicáveis e a formatação do WhatsApp.
+export function parseMessageText(text: string): TextPart[] {
   const parts: TextPart[] = []
   let plain = ''
   let index = 0
@@ -144,7 +146,21 @@ function parse(text: string): TextPart[] {
         continue
       }
     }
-    // Link antes de marcador: o "https://x.com/a_b_c" sai inteiro, sem o "_" virar itálico.
+    // Marcador antes de link: assim `_joao@x.com_` vira o e-mail em itálico, como no
+    // WhatsApp, sem o "_" entrar no endereço nem sobrar solto. O link que começa nesta
+    // posição continua saindo inteiro, então o "_" dentro de `https://x.com/a_b_c` nunca
+    // é examinado como marcador.
+    const kind = markers[text[index] as keyof typeof markers]
+    // O marcador abre colado no começo de uma palavra: antes dele não pode vir letra nem número.
+    if (kind && !isWordChar(text[index - 1])) {
+      const end = closeOf(text, index, text[index])
+      if (end !== -1) {
+        flush()
+        parts.push({ kind, parts: parseMessageText(text.slice(index + 1, end)) })
+        index = end + 1
+        continue
+      }
+    }
     const link = linkAt(text, index)
     if (link) {
       flush()
@@ -152,24 +168,9 @@ function parse(text: string): TextPart[] {
       index += link.length
       continue
     }
-    const kind = markers[text[index] as keyof typeof markers]
-    // O marcador abre colado no começo de uma palavra: antes dele não pode vir letra nem número.
-    if (kind && !isWordChar(text[index - 1])) {
-      const end = closeOf(text, index, text[index])
-      if (end !== -1) {
-        flush()
-        parts.push({ kind, parts: parse(text.slice(index + 1, end)) })
-        index = end + 1
-        continue
-      }
-    }
     plain += text[index]
     index += 1
   }
   flush()
   return parts
-}
-
-export function linkify(text: string): TextPart[] {
-  return parse(text)
 }

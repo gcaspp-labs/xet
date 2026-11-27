@@ -116,6 +116,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   await expect(sent.locator('strong')).toHaveText(/agent \d+:/)
   await expect(file.locator('strong')).toHaveText(/agent \d+:/)
   await expect(received).toContainText('Cliente:')
+  await expect(received.locator('strong')).toHaveText('Cliente:')
   await expect(file.getByRole('link', { name: /balancete\.pdf/ })).toHaveAttribute(
     'href',
     /^\/api\/media\/\d+$/,
