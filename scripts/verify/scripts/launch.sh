@@ -22,6 +22,7 @@ for port in $ALL_PORTS; do
 done
 
 RUN_ID="run-$(date +%Y%m%d-%H%M%S)"
+STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S %z')"
 RUN_DIR="$RUNS_DIR/$RUN_ID"
 STATE_DIR="$RUN_DIR/state"
 BUILD_DIR="$RUN_DIR/build"
@@ -70,32 +71,87 @@ echo "== Banco próprio em :$DB_PORT"
 POSTGRES_IMAGE="$(sed -n 's/^POSTGRES_IMAGE := //p' "$ROOT/Makefile")"
 [ -n "$POSTGRES_IMAGE" ] || fail "POSTGRES_IMAGE não encontrada no Makefile."
 # --rm leva junto o volume anônimo; fsync desligado alivia a máquina, e os dados são descartáveis.
-CONTAINER_ID="$(docker run -d --rm --name "xet-verify-db-$RUN_ID" \
-  --label "xet.verify-app.run=$RUN_ID" \
-  -e POSTGRES_USER=xet -e POSTGRES_PASSWORD=xet -e POSTGRES_DB=xet \
-  -p "127.0.0.1:$DB_PORT:5432" "$POSTGRES_IMAGE" -c fsync=off -c full_page_writes=off)"
-DATABASE_URL="postgres://xet:xet@127.0.0.1:$DB_PORT/xet?sslmode=disable"
+DB_COMMON_ARGS=(
+  -d --rm --name "xet-verify-db-$RUN_ID"
+  --label "xet.verify-app.run=$RUN_ID"
+  -e POSTGRES_USER=xet -e POSTGRES_PASSWORD=xet -e POSTGRES_DB=xet
+)
+DB_IMAGE_ARGS=("$POSTGRES_IMAGE" -c fsync=off -c full_page_writes=off)
 
-cat >"$STATE_DIR/run.env" <<EOF
+# Confere a porta do host de verdade, e não só se o TCP abre: no Docker do snap sem a regra
+# de iptables, a conexão é aceita e nada volta. Manda o StartupMessage do Postgres
+# (user=xet, database=xet) e espera o primeiro byte da resposta.
+db_answers() {
+  local port="$1" _
+  timeout 3 bash -c '
+    exec 3<>"/dev/tcp/127.0.0.1/$1" || exit 1
+    printf "\x00\x00\x00\x1f\x00\x03\x00\x00user\x00xet\x00database\x00xet\x00\x00" >&3 || exit 1
+    [ "$(dd bs=1 count=1 <&3 2>/dev/null | wc -c)" -ge 1 ]
+  ' _ "$port" 2>/dev/null
+}
+
+db_answers_within() {
+  local port="$1"
+  for _ in $(seq 5); do
+    db_answers "$port" && return 0
+    sleep 1
+  done
+  return 1
+}
+
+# Espera o Postgres aceitar conexão por dentro do contêiner, na porta em que ele escuta lá.
+db_ready_inside() {
+  local port="$1"
+  for _ in $(seq 60); do
+    # Pelo TCP interno: durante a inicialização, a imagem só atende pelo socket local.
+    if docker exec "$CONTAINER_ID" psql -U xet -d xet -h 127.0.0.1 -p "$port" -Atc 'select 1' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# O run.env nasce logo depois de cada docker run, antes da espera do banco (até 60 s): se
+# alguém interromper com Ctrl+C nesse meio, o contêiner já está de pé e o cleanup.sh precisa
+# do CONTAINER_ID para achá-lo e pará-lo. Grava em arquivo temporário e renomeia, para a
+# limpeza nunca ler um run.env pela metade se a interrupção cair no meio da gravação.
+write_run_env() {
+  cat >"$STATE_DIR/run.env.tmp" <<EOF
 RUN_ID=$RUN_ID
 CONTAINER_ID=$CONTAINER_ID
 ADMIN_EMAIL=$ADMIN_EMAIL
 COMMIT=$(git -C "$ROOT" rev-parse HEAD)
 BRANCH=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)
 CHANGED_FILES=$(git -C "$ROOT" status --porcelain | wc -l)
-STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S %z')"
+STARTED_AT="$STARTED_AT"
 EOF
+  mv "$STATE_DIR/run.env.tmp" "$STATE_DIR/run.env"
+}
 
-ready=false
-for _ in $(seq 60); do
-  # Pelo TCP interno: durante a inicialização, a imagem só atende pelo socket local.
-  if docker exec "$CONTAINER_ID" psql -U xet -d xet -h 127.0.0.1 -Atc 'select 1' >/dev/null 2>&1; then
-    ready=true
-    break
+# Jeito padrão, igual ao make dev: publica a porta no host. O Docker do snap do Ubuntu, sem
+# iptables, aceita a conexão e não encaminha; nesse caso o banco é refeito na rede do host,
+# que dispensa a publicação. Fora do Linux a rede do host não vale, mas é justamente onde a
+# porta publicada funciona, então este desvio não é usado.
+CONTAINER_ID="$(docker run "${DB_COMMON_ARGS[@]}" -p "127.0.0.1:$DB_PORT:5432" "${DB_IMAGE_ARGS[@]}")" \
+  || fail "o Docker não subiu o banco."
+write_run_env
+if ! db_ready_inside 5432; then
+  docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
+  fail "o banco não respondeu em 60 s."
+fi
+if ! db_answers_within "$DB_PORT"; then
+  echo "AVISO: o Docker não encaminha a porta publicada; refazendo o banco na rede do host."
+  docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
+  CONTAINER_ID="$(docker run "${DB_COMMON_ARGS[@]}" --network host -e PGPORT="$DB_PORT" \
+    "${DB_IMAGE_ARGS[@]}" -c port="$DB_PORT")" || fail "o Docker não subiu o banco na rede do host."
+  write_run_env
+  if ! db_ready_inside "$DB_PORT" || ! db_answers_within "$DB_PORT"; then
+    docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
+    fail "o banco não respondeu em 127.0.0.1:$DB_PORT nem pela rede do host."
   fi
-  sleep 1
-done
-[ "$ready" = true ] || fail "o banco não respondeu em 60 s."
+fi
+DATABASE_URL="postgres://xet:xet@127.0.0.1:$DB_PORT/xet?sslmode=disable"
 
 # Inicia um serviço em sessão própria, com a marca da execução e o PID gravado por ele mesmo.
 start_service() {
