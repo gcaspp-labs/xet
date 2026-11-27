@@ -49,6 +49,14 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
     data: png,
     mimeType: 'image/png',
   })
+  await receive('veja o arquivo.pdf, a v1.2 e data:text/html,<b>oi</b>')
+  await receive(
+    'https://x.com/p1. https://x.com/p2, https://x.com/p3; https://x.com/p4: ' +
+      'https://x.com/p5! https://x.com/p6? https://x.com/p7)',
+  )
+  await receive('(https://x.com/a)')
+  await receive('https://a.com, fulano@b.com e www.c.com')
+  await receive('Bom dia!\n\nTudo bem?  Sim.')
 
   await signIn(page, agent, userPassword)
   await openQueued(page, 'Lia Cliente')
@@ -57,7 +65,7 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
 
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
-  await expect(received).toHaveCount(4)
+  await expect(received).toHaveCount(9)
 
   // Endereço com esquema, www. e e-mail: cada um com o seu destino, e a frase sem alteração.
   const first = received.nth(0)
@@ -86,6 +94,56 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
   await expect(
     received.nth(3).getByRole('link', { name: 'https://exemplo.com/recibo', exact: true }),
   ).toHaveAttribute('href', 'https://exemplo.com/recibo')
+
+  // Extensão de arquivo, número de versão e esquema que não abre site continuam texto.
+  const plain = received.nth(4)
+  await expect(plain.locator('p.whitespace-pre-wrap')).toHaveText(
+    'veja o arquivo.pdf, a v1.2 e data:text/html,<b>oi</b>',
+  )
+  await expect(plain.getByRole('link')).toHaveCount(0)
+
+  // A pontuação do fim fica fora do link, uma a uma.
+  const punctuation = received.nth(5)
+  await expect(punctuation.locator('p.whitespace-pre-wrap')).toHaveText(
+    'https://x.com/p1. https://x.com/p2, https://x.com/p3; https://x.com/p4: ' +
+      'https://x.com/p5! https://x.com/p6? https://x.com/p7)',
+  )
+  const punctuated = punctuation.getByRole('link')
+  await expect(punctuated).toHaveCount(7)
+  const addresses = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'].map(
+    (path) => `https://x.com/${path}`,
+  )
+  for (const [index, address] of addresses.entries()) {
+    await expect(punctuated.nth(index)).toHaveText(address)
+    await expect(punctuated.nth(index)).toHaveAttribute('href', address)
+  }
+
+  // O parêntese que abre a frase não entra no link, nem o que fecha.
+  const parentheses = received.nth(6)
+  await expect(parentheses.locator('p.whitespace-pre-wrap')).toHaveText('(https://x.com/a)')
+  await expect(parentheses.getByRole('link')).toHaveCount(1)
+  await expect(parentheses.getByRole('link')).toHaveText('https://x.com/a')
+  await expect(parentheses.getByRole('link')).toHaveAttribute('href', 'https://x.com/a')
+
+  // Vários links na mesma frase, na ordem em que aparecem.
+  const many = received.nth(7)
+  const manyLinks = many.getByRole('link')
+  await expect(manyLinks).toHaveCount(3)
+  for (const [index, [label, href]] of [
+    ['https://a.com', 'https://a.com'],
+    ['fulano@b.com', 'mailto:fulano@b.com'],
+    ['www.c.com', 'https://www.c.com'],
+  ].entries()) {
+    await expect(manyLinks.nth(index)).toHaveText(label)
+    await expect(manyLinks.nth(index)).toHaveAttribute('href', href)
+  }
+
+  // Linha em branco e espaço duplo saem como vieram, sem link nenhum.
+  const spacing = received.nth(8)
+  expect(
+    await spacing.locator('p.whitespace-pre-wrap').evaluate((element) => element.textContent),
+  ).toBe('Bom dia!\n\nTudo bem?  Sim.')
+  await expect(spacing.getByRole('link')).toHaveCount(0)
 
   // Clicar abre numa aba nova, com o endereço do link, e não dispara ação do balão.
   // O site de exemplo não existe: a resposta é servida aqui, sem sair para a internet.
