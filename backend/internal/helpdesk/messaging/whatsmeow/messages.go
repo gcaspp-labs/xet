@@ -14,6 +14,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
@@ -34,6 +35,9 @@ type downloadable interface {
 func (s *session) message(evt *events.Message) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), eventTimeout)
 	defer cancel()
+	if enc := evt.Message.GetSecretEncryptedMessage(); enc != nil {
+		return s.secretEncrypted(ctx, evt, enc)
+	}
 	if reaction := evt.Message.GetReactionMessage(); reaction != nil && !evt.IsEdit {
 		return s.reaction(ctx, evt, reaction)
 	}
@@ -139,6 +143,46 @@ func (s *session) edit(ctx context.Context, evt *events.Message, pm *waE2E.Proto
 	}) == nil
 }
 
+// secretEncrypted emits the new text or caption of an edit Whatsmeow delivers
+// encrypted with the secret of the original message, the format WhatsApp uses
+// today, instead of the protocol message. Other kinds carried the same way
+// (event and poll edits) are outside the system and are skipped; an edit that
+// cannot be decrypted, such as one of a message from before the connection, is
+// logged and skipped. None of them becomes a new unsupported message.
+func (s *session) secretEncrypted(ctx context.Context, evt *events.Message, enc *waE2E.SecretEncryptedMessage) bool {
+	info := evt.Info
+	if enc.GetSecretEncType() != waE2E.SecretEncryptedMessage_MESSAGE_EDIT {
+		s.adapter.logger.Debug("secret encrypted message ignored", "sector_id", s.sectorID, "type", enc.GetSecretEncType().String())
+		return true
+	}
+	target := enc.GetTargetMessageKey().GetID()
+	if target == "" || info.Chat == types.StatusBroadcastJID {
+		return true
+	}
+	content, err := s.client.DecryptSecretEncryptedMessage(ctx, evt)
+	if err != nil {
+		s.adapter.logger.Warn("secret encrypted edit not decrypted", "sector_id", s.sectorID, "target", target, "error", err)
+		return true
+	}
+	body, ok := editedBody(content)
+	if !ok {
+		return true
+	}
+	ev := messaging.MessageEdited{
+		SectorID:                s.sectorID,
+		ExternalEventID:         info.ID,
+		TargetExternalMessageID: target,
+		Group:                   info.IsGroup,
+		FromSector:              info.IsFromMe,
+		Body:                    body,
+		At:                      info.Timestamp,
+	}
+	if !info.IsGroup {
+		ev.ExternalContactID, ev.Phone = s.chatContact(ctx, info)
+	}
+	return s.adapter.emit(ev) == nil
+}
+
 // revoke emits a message deleted for everyone by the contact or from the
 // phone of the sector.
 func (s *session) revoke(ctx context.Context, evt *events.Message, pm *waE2E.ProtocolMessage) bool {
@@ -237,9 +281,24 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 		sharedContacts(&msg, m.GetContactsArrayMessage().GetContacts())
 	default:
 		msg.Type = messaging.TypeUnsupported
+		s.adapter.logger.Warn("whatsapp message unsupported", "sector_id", s.sectorID, "message_id", info.ID, "fields", messageFields(m))
 	}
 	msg.Quote = quote(m)
 	return msg, true
+}
+
+// messageFields names the fields set in a message, without their content, so a
+// log says which kind of message became unsupported. The context info is left
+// out: Whatsmeow copies it into every message.
+func messageFields(m *waE2E.Message) string {
+	var names []string
+	m.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+		if fd.Name() != "messageContextInfo" {
+			names = append(names, string(fd.Name()))
+		}
+		return true
+	})
+	return strings.Join(names, ",")
 }
 
 // sharedContacts makes the message a contact message with the cards of its vCards.
