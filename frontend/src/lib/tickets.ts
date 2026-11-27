@@ -23,7 +23,13 @@ export type TicketSummary = {
   status: TicketStatus
   arrivedAt: string
   assignedAt: string | null
-  contact: { id: number; name: string; phone: string | null; registered: boolean }
+  contact: {
+    id: number
+    name: string
+    phone: string | null
+    registered: boolean
+    photoVersion: string | null
+  }
   organizationName: string | null
   municipalityName: string | null
   assignee: { id: number; name: string } | null
@@ -57,7 +63,13 @@ export const ticketPath = (ticket: { id: number; status: TicketStatus }) =>
 export type PendingTicket = {
   id: number
   protocol: string
-  contact: { id: number; name: string; phone: string | null; registered: boolean }
+  contact: {
+    id: number
+    name: string
+    phone: string | null
+    registered: boolean
+    photoVersion: string | null
+  }
   organizationName: string | null
   municipalityName: string | null
   reason: string | null

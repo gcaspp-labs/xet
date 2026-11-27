@@ -34,6 +34,7 @@ where t.status = 'closed'
 select
     t.id, t.protocol, t.closure_type, t.channel, t.closed_at, t.subject,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     t.sector_id, s.name as sector_name,
     t.assignee_id, u.name as assignee_name,

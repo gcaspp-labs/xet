@@ -44,7 +44,7 @@ func (h *Handler) listPendingTickets(w http.ResponseWriter, r *http.Request) {
 		out[i] = pendingTicketResponse{
 			ID:               t.ID,
 			Protocol:         t.Protocol,
-			Contact:          ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},
+			Contact:          ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered, PhotoVersion: t.ContactPhotoExternalID},
 			OrganizationName: organization,
 			MunicipalityName: municipality,
 			Reason:           t.PendingReason,

@@ -12,6 +12,10 @@ type ticketContactResponse struct {
 	Name       string  `json:"name"`
 	Phone      *string `json:"phone"`
 	Registered bool    `json:"registered"`
+	// PhotoVersion muda quando a foto do contato muda; as telas montam o
+	// endereço da imagem com ele para não mostrar a foto velha do cache.
+	// Nulo quando o contato não tem foto (spec #482).
+	PhotoVersion *string `json:"photoVersion"`
 }
 
 // urlTicketID parses the ticket ID of the route; on failure it answers 404.
