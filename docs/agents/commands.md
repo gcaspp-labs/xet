@@ -26,12 +26,18 @@ Numa branch `prototype/*`, o protótipo só mostra o design system que o `fronte
      case "$real" in
        "$root/frontend/node_modules") echo "instalação local: siga para o npm ci" ;;
        *)
-         echo "instalação fora do worktree ($real): pare e avise a pessoa; não apague nem mexa nela"
+         if [ -e "$real" ]; then
+           echo "instalação fora do worktree ($real): pare e avise a pessoa; não apague nem mexa nela"
+         else
+           echo "link quebrado ($real): pare e avise a pessoa; não apague nem mexa nela"
+         fi
          false # sai com código diferente de 0, para não encadear com o npm ci
          ;;
      esac
    fi
    ```
+
+   Quando o link está quebrado (o destino não existe), a mensagem é `link quebrado (<destino>)`, com o mesmo alerta de parar e o mesmo código 1: o `-e` falha no destino, mas o `-L` já garantiu que o caminho é um link, e o caso continua sendo de instalação fora do worktree.
 
    Um `npm link` feito só no pacote do design system (`node_modules/@gcaspp-labs/glab-design-system` apontando para outro lugar), com o resto do `node_modules` local, passa como "instalação local": o `npm ci` do passo 3 remove só o link, e é o passo 4 que mostra a diferença.
 
