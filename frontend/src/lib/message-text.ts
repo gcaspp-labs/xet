@@ -22,8 +22,13 @@ export type TextPart =
 // caractere do texto, e sem ela o "exec" procuraria o link até o fim do texto a cada
 // chamada — numa mensagem longa sem espaços (um hash colado, um base64) isso trava a
 // tela por segundos. Com "y", cada chamada só testa a posição pedida.
+// A parte antes do "@" de um e-mail vai só até 64 caracteres (o limite do padrão) e o
+// e-mail não começa no meio de uma palavra: sem isso, um texto colado só de letras e "_"
+// (base64, hash) fazia a busca de e-mail varrer o resto da linha a partir de cada letra.
+// Com os dois, cada tentativa custa no máximo 64 caracteres, e uma linha de 60.000 volta a
+// desenhar em dezenas de milissegundos.
 const tokenPattern =
-  /(?:(?<![\w@])https?:\/\/[^\s<>"'`]+)|(?:(?<![\w@.\/-])www\.[^\s<>"'`]+)|(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/giy
+  /(?:(?<![\w@])https?:\/\/[^\s<>"'`]+)|(?:(?<![\w@.\/-])www\.[^\s<>"'`]+)|(?:(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/giy
 
 // Pontuação da frase logo depois do link não faz parte dele. Um ")" só fica dentro
 // do link quando a URL abriu o par (ex.: https://x.com/a_(b)).
@@ -82,6 +87,15 @@ function linkAt(text: string, index: number) {
 // linha (uma crase) são tratados à parte, porque o conteúdo deles não formata nem vira link.
 const markers = { '*': 'bold', _: 'italic', '~': 'strike' } as const
 
+// Acima deste tamanho de linha, a formatação não é examinada e a linha sai como texto
+// puro (os links continuam). Procurar o fechamento de um marcador varre a linha até o fim,
+// e numa linha cheia de marcador solto (um "-_a-_a..." colado) isso custa o quadrado do
+// tamanho: 10.000 caracteres levavam ~220 ms e 45.000, ~4 s, travando a tela. O limite põe
+// o pior caso em ~25 ms por linha (medido no Node 24), e acima de 2.000 caracteres numa
+// linha só o que costuma haver é texto colado (hash, base64, log), sem formatação a
+// preservar.
+const FORMAT_LIMIT = 2000
+
 const wordChar = /[\p{L}\p{N}]/u
 
 function isWordChar(char: string | undefined) {
@@ -119,6 +133,14 @@ export function parseMessageText(text: string): TextPart[] {
   const parts: TextPart[] = []
   let plain = ''
   let index = 0
+  // Limites da linha atual: o fechamento de um marcador nunca passa da quebra, e é daqui
+  // que sai o tamanho do trecho que a formatação ainda pode examinar.
+  let lineStart = 0
+  let lineEnd = text.indexOf('\n')
+  if (lineEnd === -1) {
+    lineEnd = text.length
+  }
+  let longLine = lineEnd - lineStart > FORMAT_LIMIT
   const flush = () => {
     if (plain) {
       parts.push({ kind: 'text', text: plain })
@@ -126,8 +148,17 @@ export function parseMessageText(text: string): TextPart[] {
     }
   }
   while (index < text.length) {
+    // Um salto (o bloco de três crases) pode cair em outra linha: os limites são recalculados.
+    if (index > lineEnd) {
+      lineStart = text.lastIndexOf('\n', index - 1) + 1
+      const next = text.indexOf('\n', index)
+      lineEnd = next === -1 ? text.length : next
+      longLine = lineEnd - lineStart > FORMAT_LIMIT
+    }
+    // Linha longa demais: formatação fora (na linha toda), links e texto puro continuam.
+    const formatting = !longLine
     // Bloco de monoespacado: pode ter várias linhas, e dentro dele nada formata nem vira link.
-    if (text.startsWith('```', index)) {
+    if (formatting && text.startsWith('```', index)) {
       const end = text.indexOf('```', index + 3)
       if (end > index + 3) {
         flush()
@@ -137,7 +168,7 @@ export function parseMessageText(text: string): TextPart[] {
       }
     }
     // Código em linha: uma crase de cada lado, na mesma linha.
-    if (text[index] === '`') {
+    if (formatting && text[index] === '`') {
       const end = text.indexOf('`', index + 1)
       if (end > index + 1 && !text.slice(index + 1, end).includes('\n')) {
         flush()
@@ -152,7 +183,7 @@ export function parseMessageText(text: string): TextPart[] {
     // é examinado como marcador.
     const kind = markers[text[index] as keyof typeof markers]
     // O marcador abre colado no começo de uma palavra: antes dele não pode vir letra nem número.
-    if (kind && !isWordChar(text[index - 1])) {
+    if (formatting && kind && !isWordChar(text[index - 1])) {
       const end = closeOf(text, index, text[index])
       if (end !== -1) {
         flush()

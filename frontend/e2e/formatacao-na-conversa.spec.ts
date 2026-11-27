@@ -259,3 +259,51 @@ test('texto longo sem espaços abre a conversa em tempo normal', async ({
   await expect(bubble.locator('strong')).toHaveCount(0)
   await expect(bubble.locator('em')).toHaveCount(0)
 })
+
+// Uma linha longa cheia de marcador solto (um "-_a-_a..." colado) também congelava a
+// conversa: a busca do fechamento de cada marcador varria a linha até o fim, e o custo
+// crescia com o quadrado do tamanho. Acima do limite, a linha sai como texto puro, mas o
+// texto todo aparece e o link continua clicável.
+test('linha longa com marcadores soltos aparece rápido e sem formatação', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { phone: number } = unique()
+  // 60.000 caracteres numa linha: cada "_" abre um itálico que nunca fecha, que é o pior
+  // caso do parser. Sem o limite, este texto levava ~8 s no Node 24 (medido com o próprio
+  // arquivo da PR); com o limite, alguns milissegundos.
+  const body = `${'-_a'.repeat(20_000)} https://x.com/a_b_c`
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: number,
+    contactName: 'Lia Marcada',
+    type: 'text',
+    body,
+  })
+
+  await signIn(page, agent, userPassword)
+  const ticketId = await queuedTicketId(page, 'Lia Marcada', sector.id)
+
+  const started = Date.now()
+  await page.goto(`/chamados/${ticketId}`)
+  const bubble = page
+    .getByRole('region', { name: 'Conversa', exact: true })
+    .getByRole('listitem', { name: 'Mensagem recebida' })
+    .locator('p.whitespace-pre-wrap')
+  await expect(bubble).toHaveText(body, { timeout: 10_000 })
+  const elapsed = Date.now() - started
+  expect(elapsed, 'linha longa com marcadores tem que desenhar em tempo normal').toBeLessThan(4_000)
+  // Nada formata na linha: os marcadores ficam visíveis, como vieram.
+  await expect(bubble.locator('em')).toHaveCount(0)
+  await expect(bubble.locator('strong')).toHaveCount(0)
+  await expect(bubble.locator('s')).toHaveCount(0)
+  // O limite tira a formatação, mas o link da mesma linha continua funcionando.
+  await expect(bubble.getByRole('link', { name: 'https://x.com/a_b_c' })).toHaveAttribute(
+    'href',
+    'https://x.com/a_b_c',
+  )
+})
