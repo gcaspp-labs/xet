@@ -23,6 +23,9 @@ Numa branch `prototype/*`, o protótipo só mostra o design system que o `fronte
      echo "sem instalação: siga para o npm ci"
    else
      real=$(readlink -f "$root/frontend/node_modules")
+     if [ -z "$real" ]; then
+       real=$(readlink "$root/frontend/node_modules") # link quebrado: o -f não resolve, o destino cru ainda aparece na mensagem
+     fi
      case "$real" in
        "$root/frontend/node_modules") echo "instalação local: siga para o npm ci" ;;
        *)
