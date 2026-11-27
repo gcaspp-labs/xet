@@ -47,6 +47,7 @@ import { EmojiPicker } from '@/components/EmojiPicker'
 import { DeleteMessageDialog, MessageMenu } from '@/components/MessageActions'
 import { MessageChangesDialog } from '@/components/MessageChanges'
 import { MessageEditor } from '@/components/MessageEditor'
+import { MessageText } from '@/components/MessageText'
 import { MergeIntoPendingSheet } from '@/components/MergeIntoPendingSheet'
 import { MergedIntoLink } from '@/components/MergedIntoLink'
 import { DraftQuote, QuoteBlock, ReplyButton } from '@/components/MessageQuote'
@@ -447,11 +448,15 @@ function MessageBubble({
                 {prefix ? (
                   <>
                     <strong>{prefix[1]}</strong>
-                    {message.body.slice(prefix[0].length) &&
-                      `\n${message.body.slice(prefix[0].length)}`}
+                    {message.body.slice(prefix[0].length) && (
+                      <>
+                        {'\n'}
+                        <MessageText text={message.body.slice(prefix[0].length)} />
+                      </>
+                    )}
                   </>
                 ) : (
-                  message.body
+                  <MessageText text={message.body} />
                 )}
               </p>
             )
