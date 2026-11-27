@@ -64,9 +64,16 @@ func (b *syncBuffer) String() string {
 
 func newTestAdapter(t *testing.T) (*Adapter, *recorder, *syncBuffer) {
 	t.Helper()
+	return newTestAdapterAt(t, slog.LevelInfo)
+}
+
+// newTestAdapterAt builds the adapter with the given log level, so a test can
+// read the debug lines too.
+func newTestAdapterAt(t *testing.T, level slog.Level) (*Adapter, *recorder, *syncBuffer) {
+	t.Helper()
 	logs := &syncBuffer{}
 	rec := &recorder{}
-	a, err := New(t.Context(), testdb.New(t), rec.handle, slog.New(slog.NewTextHandler(logs, nil)))
+	a, err := New(t.Context(), testdb.New(t), rec.handle, slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: level})))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package whatsmeow
 
 import (
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -31,7 +32,7 @@ var messageSecret = []byte("0123456789abcdef0123456789abcdef")
 func secretEdit(t *testing.T, cli *whatsmeow.Client, info types.MessageInfo, target string, content *waE2E.Message) *events.Message {
 	t.Helper()
 	origSender := info.Chat
-	if info.IsFromMe {
+	if info.IsFromMe || info.IsGroup {
 		origSender = info.Sender
 	}
 	base, _, err := cli.Store.MsgSecrets.GetMessageSecret(t.Context(), info.Chat, origSender, target)
@@ -51,20 +52,31 @@ func secretEdit(t *testing.T, cli *whatsmeow.Client, info types.MessageInfo, tar
 		t.Fatal(err)
 	}
 	raw := &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{
-		TargetMessageKey: &waCommon.MessageKey{
-			RemoteJID: proto.String(info.Chat.String()),
-			FromMe:    proto.Bool(info.IsFromMe),
-			ID:        proto.String(target),
-		},
-		EncPayload:    payload,
-		EncIV:         iv,
-		SecretEncType: waE2E.SecretEncryptedMessage_MESSAGE_EDIT.Enum(),
+		TargetMessageKey: secretEditKey(info, target),
+		EncPayload:       payload,
+		EncIV:            iv,
+		SecretEncType:    waE2E.SecretEncryptedMessage_MESSAGE_EDIT.Enum(),
 	}}
 	return (&events.Message{Info: info, RawMessage: raw}).UnwrapRaw()
 }
 
+// secretEditKey is the key of the original message, as the app includes it in
+// the encrypted edit: in a group it names the participant who sent it.
+func secretEditKey(info types.MessageInfo, target string) *waCommon.MessageKey {
+	key := &waCommon.MessageKey{
+		RemoteJID: proto.String(info.Chat.String()),
+		FromMe:    proto.Bool(info.IsFromMe),
+		ID:        proto.String(target),
+	}
+	if info.IsGroup {
+		key.Participant = proto.String(info.Sender.String())
+	}
+	return key
+}
+
 func TestSecretEncryptedEditsBecomeNeutralEvents(t *testing.T) {
-	a, rec, logs := newTestAdapter(t)
+	// Debug on: the log of a skipped kind is what tells why it stayed out.
+	a, rec, logs := newTestAdapterAt(t, slog.LevelDebug)
 	sector := storeDevice(t, a, "5511900001111", 3)
 	device, err := a.container.GetDevice(t.Context(), sector)
 	if err != nil || device == nil {
@@ -163,24 +175,92 @@ func TestSecretEncryptedEditsBecomeNeutralEvents(t *testing.T) {
 		t.Fatalf("undecryptable edit not logged; logs:\n%s", logs)
 	}
 
-	// Other kinds carried the same way (event and poll edits) stay out, with
-	// no event of any kind.
-	for name, kind := range map[string]waE2E.SecretEncryptedMessage_SecretEncType{
-		"event edit": waE2E.SecretEncryptedMessage_EVENT_EDIT,
-		"poll edit":  waE2E.SecretEncryptedMessage_POLL_EDIT,
-	} {
+	// Other kinds carried the same way (event and poll edits, an option added
+	// to a poll) stay out, with no event of any kind.
+	skipped := []struct {
+		name string
+		kind waE2E.SecretEncryptedMessage_SecretEncType
+	}{
+		{"event edit", waE2E.SecretEncryptedMessage_EVENT_EDIT},
+		{"poll edit", waE2E.SecretEncryptedMessage_POLL_EDIT},
+		{"poll add option", waE2E.SecretEncryptedMessage_POLL_ADD_OPTION},
+	}
+	for _, c := range skipped {
 		rec.reset()
-		evt := secretEditRaw(t, contactInfo("SEC-"+name), "ORIG-TEXT", &waE2E.Message{Conversation: proto.String("ignorada")})
-		evt.Message.GetSecretEncryptedMessage().SecretEncType = kind.Enum()
+		content := &waE2E.Message{Conversation: proto.String("ignorada")}
+		if c.kind == waE2E.SecretEncryptedMessage_POLL_ADD_OPTION {
+			content = pollWithAddedOption()
+		}
+		evt := secretEditRaw(t, contactInfo("SEC-"+strings.ReplaceAll(c.name, " ", "-")), "ORIG-TEXT", content)
+		evt.Message.GetSecretEncryptedMessage().SecretEncType = c.kind.Enum()
 		if !s.message(evt) {
-			t.Fatalf("%s: not acknowledged", name)
+			t.Fatalf("%s: not acknowledged", c.name)
 		}
 		rec.mu.Lock()
 		n := len(rec.events)
 		rec.mu.Unlock()
 		if n != 0 {
-			t.Fatalf("%s: %d events, want none", name, n)
+			t.Fatalf("%s: %d events, want none", c.name, n)
 		}
+	}
+	// Each skipped kind is logged by name, so the pilot shows why it stayed out.
+	for _, kind := range []waE2E.SecretEncryptedMessage_SecretEncType{
+		waE2E.SecretEncryptedMessage_EVENT_EDIT,
+		waE2E.SecretEncryptedMessage_POLL_EDIT,
+		waE2E.SecretEncryptedMessage_POLL_ADD_OPTION,
+	} {
+		if !strings.Contains(logs.String(), "type="+kind.String()) {
+			t.Fatalf("%s not logged as ignored; logs:\n%s", kind, logs)
+		}
+	}
+}
+
+// pollWithAddedOption is the content of the edit that adds an option to a poll:
+// the poll again, with the new option.
+func pollWithAddedOption() *waE2E.Message {
+	return &waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{
+		Name: proto.String("qual horário?"),
+		Options: []*waE2E.PollCreationMessage_Option{
+			{OptionName: proto.String("manhã")},
+			{OptionName: proto.String("tarde")},
+			{OptionName: proto.String("noite")},
+		},
+	}}
+}
+
+// An edit in a group goes with Group set and no contact: there is no single
+// contact in a group, and the chat itself is the destination.
+func TestSecretEncryptedEditInGroup(t *testing.T) {
+	a, rec, _ := newTestAdapter(t)
+	sector := storeDevice(t, a, "5511900001111", 3)
+	device, err := a.container.GetDevice(t.Context(), sector)
+	if err != nil || device == nil {
+		t.Fatalf("device: %v", err)
+	}
+	cli := whatsmeow.NewClient(device, nil)
+	s := &session{sectorID: 7, adapter: a, client: cli}
+	at := time.Date(2026, 11, 26, 18, 34, 0, 0, time.UTC)
+	group := types.NewJID("120363000000000001", types.GroupServer)
+	info := types.MessageInfo{
+		MessageSource: types.MessageSource{Chat: group, Sender: contactChat, IsGroup: true},
+		ID:            "SEC-G1",
+		Timestamp:     at,
+	}
+	if err := device.MsgSecrets.PutMessageSecret(t.Context(), group, contactChat, "ORIG-G", messageSecret); err != nil {
+		t.Fatal(err)
+	}
+
+	if !s.message(secretEdit(t, cli, info, "ORIG-G", &waE2E.Message{Conversation: proto.String("texto novo")})) {
+		t.Fatal("event not acknowledged")
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	want := messaging.MessageEdited{
+		SectorID: 7, ExternalEventID: "SEC-G1", TargetExternalMessageID: "ORIG-G",
+		Group: true, Body: "texto novo", At: at,
+	}
+	if len(rec.events) != 1 || !reflect.DeepEqual(rec.events[0], want) {
+		t.Fatalf("events = %#v\nwant [%#v]", rec.events, want)
 	}
 }
 
@@ -199,14 +279,10 @@ func secretEditRaw(t *testing.T, info types.MessageInfo, target string, content 
 		t.Fatal(err)
 	}
 	raw := &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{
-		TargetMessageKey: &waCommon.MessageKey{
-			RemoteJID: proto.String(info.Chat.String()),
-			FromMe:    proto.Bool(info.IsFromMe),
-			ID:        proto.String(target),
-		},
-		EncPayload:    payload,
-		EncIV:         iv,
-		SecretEncType: waE2E.SecretEncryptedMessage_MESSAGE_EDIT.Enum(),
+		TargetMessageKey: secretEditKey(info, target),
+		EncPayload:       payload,
+		EncIV:            iv,
+		SecretEncType:    waE2E.SecretEncryptedMessage_MESSAGE_EDIT.Enum(),
 	}}
 	return (&events.Message{Info: info, RawMessage: raw}).UnwrapRaw()
 }
