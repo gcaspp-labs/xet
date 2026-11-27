@@ -9,7 +9,65 @@ Os comandos do xet que as skills rodam, a partir da raiz do repositório. Este a
 | Testes | `make test` (integração do backend com `go test -race` e ponta a ponta com Playwright); separados: `make test-backend` e `make test-e2e` |
 | Lint e formatação | `make lint` |
 | Conferência do código gerado | `make check-generated` (sqlc, `go.mod` e a tabela de emojis das reações, que pede `npm ci` no frontend e o roda sozinho; depois de mudar `backend/db/queries`, rode `make sqlc` antes) |
-| Protótipo de interface | `make dev-restart` na branch `prototype/*`, com a tela aberta em `http://localhost:5173` |
+| Protótipo de interface | `make dev-restart` na branch `prototype/*`, com a tela aberta em `http://localhost:5173`, depois do preparo isolado descrito abaixo |
+
+## Protótipo de interface
+
+Numa branch `prototype/*`, o protótipo só mostra o design system que o `frontend/package-lock.json` **daquele worktree** resolve. O `make dev-restart` continua sendo o comando que sobe a tela, mas ele reaproveita o `frontend/node_modules` que já estiver lá: o alvo `frontend-deps` só compara datas (`node_modules/.package-lock.json` mais novo que o `package.json` e o lockfile), e uma instalação copiada, linkada ou apontada de outro worktree passa nessa checagem sem ser o pacote certo. A versão declarada no `package.json` também não prova qual pacote está instalado. Por isso, prepare o ambiente antes de abrir a tela, na raiz do worktree atual:
+
+1. Confirme que a instalação pertence a este worktree, e não a um link ou caminho de outro. O `readlink -f` devolve o próprio caminho mesmo quando o `node_modules` não existe, então a falta da pasta vem antes do `case`; um link quebrado não conta como falta (o `-e` falha nos dois casos), por isso o teste também exige que não seja link:
+
+   ```bash
+   root=$(git rev-parse --show-toplevel)
+   if [ ! -e "$root/frontend/node_modules" ] && [ ! -L "$root/frontend/node_modules" ]; then
+     echo "sem instalação: siga para o npm ci"
+   else
+     real=$(readlink -f "$root/frontend/node_modules")
+     if [ -z "$real" ]; then
+       real=$(readlink "$root/frontend/node_modules") # link quebrado: o -f não resolve, o destino cru ainda aparece na mensagem
+     fi
+     case "$real" in
+       "$root/frontend/node_modules") echo "instalação local: siga para o npm ci" ;;
+       *)
+         if [ -e "$real" ]; then
+           echo "instalação fora do worktree ($real): pare e avise a pessoa; não apague nem mexa nela"
+         else
+           echo "link quebrado ($real): pare e avise a pessoa; não apague nem mexa nela"
+         fi
+         false # sai com código diferente de 0, para não encadear com o npm ci
+         ;;
+     esac
+   fi
+   ```
+
+   Quando o link está quebrado (o destino não existe), a mensagem é `link quebrado (<destino>)`, com o mesmo alerta de parar e o mesmo código 1: o `-e` falha no destino, mas o `-L` já garantiu que o caminho é um link, e o caso continua sendo de instalação fora do worktree.
+
+   Um `npm link` feito só no pacote do design system (`node_modules/@gcaspp-labs/glab-design-system` apontando para outro lugar), com o resto do `node_modules` local, passa como "instalação local": o `npm ci` do passo 3 remove só o link, e é o passo 4 que mostra a diferença.
+
+2. Leia no lockfile a URL resolvida e o commit efetivo do design system (o commit é o que vem depois do `#`):
+
+   ```bash
+   grep -A4 '"node_modules/@gcaspp-labs/glab-design-system"' frontend/package-lock.json
+   ```
+
+3. Com o passo 1 sem alerta, recrie a árvore instalada a partir do lockfile. O `npm ci` descarta o `node_modules` **deste** worktree:
+
+   ```bash
+   cd frontend && npm ci
+   ```
+
+4. Confira o que ficou instalado, ainda em `frontend/`:
+
+   ```bash
+   npm ls @gcaspp-labs/glab-design-system --depth=0
+   node -p "require('./node_modules/@gcaspp-labs/glab-design-system/package.json').version"
+   ```
+
+   O `npm ls` imprime a versão e a URL resolvida com o commit (ex.: `@gcaspp-labs/glab-design-system@2.0.0 (git+ssh://git@github.com/gcaspp-labs/glab-design-system.git#a583ac3e…)`), e é ele que prova o commit instalado; o `package.json` de dentro do pacote traz só nome e versão. Se a URL, o commit ou a versão não forem os do passo 2, pare sem subir o protótipo e avise a pessoa.
+
+5. Só então suba a tela, a partir da raiz do worktree: `make dev-restart`, em `http://localhost:5173`.
+
+Nunca aponte, copie ou linke o `node_modules` de outro worktree para o atual: cada branch `prototype/*` usa a sua própria instalação, e a preparação nunca altera, apaga nem aponta para a instalação de outra branch.
 
 ## Branch principal
 
