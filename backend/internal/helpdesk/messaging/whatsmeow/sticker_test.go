@@ -2,7 +2,9 @@ package whatsmeow
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +29,7 @@ func (d downloads) Download(context.Context, whatsmeow.DownloadableMessage) ([]b
 // a Lottie sticker, which is not an image, stays the notice of an unsupported
 // message. Not parallel: New sets package globals.
 func TestStickerBecomesImageMessage(t *testing.T) {
-	a, rec, _ := newTestAdapter(t)
+	a, rec, logs := newTestAdapter(t)
 	at := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
 	webp := []byte("RIFF\x00\x00\x00\x00WEBPVP8 ")
 	sticker := &waE2E.StickerMessage{Mimetype: proto.String("image/webp"), FileLength: proto.Uint64(uint64(len(webp)))}
@@ -56,6 +58,7 @@ func TestStickerBecomesImageMessage(t *testing.T) {
 	}
 
 	// A Lottie sticker is not an image: it stays unsupported, without download.
+	before := logs.String()
 	rec.reset()
 	lottie := &waE2E.StickerMessage{IsLottie: proto.Bool(true), Mimetype: proto.String("application/was")}
 	if !s.message(incoming("STK-2", false, at, &waE2E.Message{StickerMessage: lottie})) {
@@ -66,6 +69,12 @@ func TestStickerBecomesImageMessage(t *testing.T) {
 	gotLottie, ok := rec.events[0].(messaging.MessageReceived)
 	if !ok || gotLottie.Message.Type != messaging.TypeUnsupported || gotLottie.Message.Media != nil {
 		t.Fatalf("lottie event = %#v", rec.events[0])
+	}
+	// The notice names the field the message came in, as it did for every
+	// sticker before one became an image message.
+	notice := strings.TrimPrefix(logs.String(), before)
+	if !strings.Contains(notice, "whatsapp message unsupported") || !strings.Contains(notice, "fields=stickerMessage") {
+		t.Fatalf("lottie log = %q, want the unsupported notice with fields=stickerMessage", notice)
 	}
 }
 
@@ -82,6 +91,30 @@ func TestStickerAboveTheLimitBecomesMediaUnavailable(t *testing.T) {
 
 	rec.reset()
 	if !s.message(incoming("STK-3", false, at, &waE2E.Message{StickerMessage: big})) {
+		t.Fatal("event not acknowledged")
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	got, ok := rec.events[0].(messaging.MessageReceived)
+	if !ok || got.Message.Type != messaging.TypeMediaUnavailable || got.Message.Media != nil {
+		t.Fatalf("event = %#v", rec.events[0])
+	}
+}
+
+// The size limit is checked before the download; a download that fails on its
+// own still ends as media_unavailable, through the retries, like the other
+// media.
+func TestStickerDownloadFailureBecomesMediaUnavailable(t *testing.T) {
+	a, rec, _ := newTestAdapter(t)
+	at := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+	sticker := &waE2E.StickerMessage{
+		Mimetype:   proto.String("image/webp"),
+		FileLength: proto.Uint64(2048),
+	}
+	s := &session{sectorID: 7, adapter: a, downloads: downloads{err: errors.New("connection reset by peer")}}
+
+	rec.reset()
+	if !s.message(incoming("STK-4", false, at, &waE2E.Message{StickerMessage: sticker})) {
 		t.Fatal("event not acknowledged")
 	}
 	rec.mu.Lock()

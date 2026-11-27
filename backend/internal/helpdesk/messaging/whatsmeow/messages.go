@@ -291,18 +291,24 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 		sticker := m.GetStickerMessage()
 		if sticker.GetIsLottie() {
 			// A Lottie sticker is not an image WhatsApp Web shows; it stays a notice.
-			msg.Type = messaging.TypeUnsupported
-			s.adapter.logger.Warn("whatsapp message unsupported", "sector_id", s.sectorID, "message_id", info.ID, "fields", messageFields(m))
+			s.unsupported(&msg, m)
 			break
 		}
 		msg.Type = messaging.TypeSticker
 		s.attach(ctx, &msg, sticker, "image/webp", "", 0)
 	default:
-		msg.Type = messaging.TypeUnsupported
-		s.adapter.logger.Warn("whatsapp message unsupported", "sector_id", s.sectorID, "message_id", info.ID, "fields", messageFields(m))
+		s.unsupported(&msg, m)
 	}
 	msg.Quote = quote(m)
 	return msg, true
+}
+
+// unsupported makes the message the notice of an unsupported kind and logs
+// which fields it carried, without their content, so the same notice is
+// written in one place only.
+func (s *session) unsupported(msg *messaging.Message, m *waE2E.Message) {
+	msg.Type = messaging.TypeUnsupported
+	s.adapter.logger.Warn("whatsapp message unsupported", "sector_id", s.sectorID, "message_id", msg.ExternalMessageID, "fields", messageFields(m))
 }
 
 // messageFields names the fields set in a message, without their content, so a
