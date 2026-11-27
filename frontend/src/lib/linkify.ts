@@ -1,14 +1,16 @@
 // Pedaços do texto de uma mensagem: o texto puro, como veio, e os links clicáveis.
-// A formatação do WhatsApp vai se apoiar nesta mesma função, então os pedaços são
-// identificados por tipo e o texto sem link continua saindo inteiro num pedaço só.
+// Cada pedaço diz o seu tipo, e o texto sem link continua saindo inteiro num pedaço só.
 export type TextPart =
   { kind: 'text'; text: string } | { kind: 'link'; href: string; label: string }
 
 // Só o que dá para clicar com segurança vira link: um endereço de site (com esquema
 // http/https ou começando em www.) ou um e-mail. Domínio solto (exemplo.com) e
 // esquema perigoso (javascript:, data:) ficam como texto.
+// O "www." só começa um link no início de uma palavra: antes dele tem que haver o
+// começo do texto, um espaço ou uma pontuação de abertura, nunca uma letra, um
+// número ou um ponto. Assim, em "abc.www.x.com" o texto todo continua texto.
 const tokenPattern =
-  /(?:(?<![\w@])(?:https?:\/\/|www\.)[^\s<>"'`]+)|(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi
+  /(?:(?<![\w@])https?:\/\/[^\s<>"'`]+)|(?:(?<![\w@.])www\.[^\s<>"'`]+)|(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi
 
 // Pontuação da frase logo depois do link não faz parte dele. Um ")" só fica dentro
 // do link quando a URL abriu o par (ex.: https://x.com/a_(b)).

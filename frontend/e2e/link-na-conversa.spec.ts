@@ -57,6 +57,7 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
   await receive('(https://x.com/a)')
   await receive('https://a.com, fulano@b.com e www.c.com')
   await receive('Bom dia!\n\nTudo bem?  Sim.')
+  await receive('abc.www.x.com fica texto e (www.x.com) vira link')
 
   await signIn(page, agent, userPassword)
   await openQueued(page, 'Lia Cliente')
@@ -65,7 +66,7 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
 
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
-  await expect(received).toHaveCount(9)
+  await expect(received).toHaveCount(10)
 
   // Endereço com esquema, www. e e-mail: cada um com o seu destino, e a frase sem alteração.
   const first = received.nth(0)
@@ -144,6 +145,17 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
     await spacing.locator('p.whitespace-pre-wrap').evaluate((element) => element.textContent),
   ).toBe('Bom dia!\n\nTudo bem?  Sim.')
   await expect(spacing.getByRole('link')).toHaveCount(0)
+
+  // "www." no meio de uma palavra não começa link, e o texto todo continua texto;
+  // depois de pontuação de abertura, como o "(", ele começa.
+  const glued = received.nth(9)
+  await expect(glued.locator('p.whitespace-pre-wrap')).toHaveText(
+    'abc.www.x.com fica texto e (www.x.com) vira link',
+  )
+  const afterParen = glued.getByRole('link')
+  await expect(afterParen).toHaveCount(1)
+  await expect(afterParen).toHaveText('www.x.com')
+  await expect(afterParen).toHaveAttribute('href', 'https://www.x.com')
 
   // Clicar abre numa aba nova, com o endereço do link, e não dispara ação do balão.
   // O site de exemplo não existe: a resposta é servida aqui, sem sair para a internet.
