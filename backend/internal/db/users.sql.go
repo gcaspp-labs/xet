@@ -30,7 +30,7 @@ func (q *Queries) CountUsers(ctx context.Context, searchPattern string) (int64, 
 const createUser = `-- name: CreateUser :one
 insert into users (name, nickname, email, password_hash, role, sector_id)
 values ($1, $2, $3, $4, $5, $6)
-returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname
+returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname, legacy_user
 `
 
 type CreateUserParams struct {
@@ -63,12 +63,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Nickname,
+		&i.LegacyUser,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname, legacy_user from users
 where lower(email) = lower($1)
 `
 
@@ -86,12 +87,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Nickname,
+		&i.LegacyUser,
 	)
 	return i, err
 }
 
 const getUserForShare = `-- name: GetUserForShare :one
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname, legacy_user from users
 where id = $1
 for share
 `
@@ -112,12 +114,13 @@ func (q *Queries) GetUserForShare(ctx context.Context, id int64) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Nickname,
+		&i.LegacyUser,
 	)
 	return i, err
 }
 
 const getUserForUpdate = `-- name: GetUserForUpdate :one
-select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname from users
+select id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname, legacy_user from users
 where id = $1
 for update
 `
@@ -136,6 +139,7 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id int64) (User, error) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Nickname,
+		&i.LegacyUser,
 	)
 	return i, err
 }
@@ -153,7 +157,7 @@ func (q *Queries) GetUserNickname(ctx context.Context, id int64) (string, error)
 }
 
 const searchUsers = `-- name: SearchUsers :many
-select u.id, u.name, u.email, u.password_hash, u.role, u.sector_id, u.active, u.created_at, u.updated_at, u.nickname
+select u.id, u.name, u.email, u.password_hash, u.role, u.sector_id, u.active, u.created_at, u.updated_at, u.nickname, u.legacy_user
 from users u
 left join sectors s on s.id = u.sector_id
 where ($1::text = ''
@@ -224,6 +228,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Sea
 			&i.User.CreatedAt,
 			&i.User.UpdatedAt,
 			&i.User.Nickname,
+			&i.User.LegacyUser,
 		); err != nil {
 			return nil, err
 		}
@@ -239,7 +244,7 @@ const updateUser = `-- name: UpdateUser :one
 update users
 set name = $1, nickname = $2, email = $3, role = $4, sector_id = $5, active = $6
 where id = $7
-returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname
+returning id, name, email, password_hash, role, sector_id, active, created_at, updated_at, nickname, legacy_user
 `
 
 type UpdateUserParams struct {
@@ -274,6 +279,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Nickname,
+		&i.LegacyUser,
 	)
 	return i, err
 }

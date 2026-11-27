@@ -19,3 +19,7 @@ sql:
             go_type:
               type: time.Time
               pointer: true
+          # Intervalos vão como duração do Go (time.Duration), e não como texto:
+          # os prazos do domínio, como o da reserva do legado, chegam tipados.
+          - db_type: pg_catalog.interval
+            go_type: time.Duration

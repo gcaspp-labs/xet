@@ -14,6 +14,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 )
@@ -34,6 +35,9 @@ type downloadable interface {
 func (s *session) message(evt *events.Message) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), eventTimeout)
 	defer cancel()
+	if enc := evt.Message.GetSecretEncryptedMessage(); enc != nil {
+		return s.secretEncrypted(ctx, evt, enc)
+	}
 	if reaction := evt.Message.GetReactionMessage(); reaction != nil && !evt.IsEdit {
 		return s.reaction(ctx, evt, reaction)
 	}
@@ -86,13 +90,18 @@ type changeEvent struct {
 	at                                time.Time
 }
 
-// receivedChange reads the common data of an edit or a deletion of a message,
-// from the contact or from the phone of the sector. A protocol message without
-// a target, or in a status broadcast, is not followed; there is no contact in
-// a group.
+// receivedChange reads the common data of an edit or a deletion of a message
+// carried by a protocol message, which points at the target by its key.
 func (s *session) receivedChange(ctx context.Context, evt *events.Message, pm *waE2E.ProtocolMessage) (changeEvent, bool) {
+	return s.messageChange(ctx, evt, pm.GetKey().GetID())
+}
+
+// messageChange reads the common data of an edit or a deletion of the message
+// with the given id, from the contact or from the phone of the sector, for
+// every format that carries the target. A change without a target, or in a
+// status broadcast, is not followed; there is no contact in a group.
+func (s *session) messageChange(ctx context.Context, evt *events.Message, target string) (changeEvent, bool) {
 	info := evt.Info
-	target := pm.GetKey().GetID()
 	if target == "" || info.Chat == types.StatusBroadcastJID {
 		return changeEvent{}, false
 	}
@@ -109,6 +118,22 @@ func (s *session) receivedChange(ctx context.Context, evt *events.Message, pm *w
 	return c, true
 }
 
+// emitEdit emits the new text or caption of a message already turned into a
+// change event, whatever format delivered the edit.
+func (s *session) emitEdit(c changeEvent, body string) bool {
+	return s.adapter.emit(messaging.MessageEdited{
+		SectorID:                s.sectorID,
+		ExternalEventID:         c.eventID,
+		TargetExternalMessageID: c.target,
+		Group:                   c.group,
+		FromSector:              c.fromSector,
+		ExternalContactID:       c.contactID,
+		Phone:                   c.phone,
+		Body:                    body,
+		At:                      c.at,
+	}) == nil
+}
+
 // edit emits the new text or caption of a message, made by the contact or
 // from the phone of the sector. Whatsmeow delivers it as a protocol message
 // with the key of the target, unwrapped from the edited message. An edit
@@ -122,21 +147,42 @@ func (s *session) edit(ctx context.Context, evt *events.Message, pm *waE2E.Proto
 	if !ok {
 		return true
 	}
-	at := c.at
+	// The protocol message carries the moment of the edit itself.
 	if ms := pm.GetTimestampMS(); ms > 0 {
-		at = time.UnixMilli(ms)
+		c.at = time.UnixMilli(ms)
 	}
-	return s.adapter.emit(messaging.MessageEdited{
-		SectorID:                s.sectorID,
-		ExternalEventID:         c.eventID,
-		TargetExternalMessageID: c.target,
-		Group:                   c.group,
-		FromSector:              c.fromSector,
-		ExternalContactID:       c.contactID,
-		Phone:                   c.phone,
-		Body:                    body,
-		At:                      at,
-	}) == nil
+	return s.emitEdit(c, body)
+}
+
+// secretEncrypted emits the new text or caption of an edit Whatsmeow delivers
+// encrypted with the secret of the original message, the format WhatsApp uses
+// today, instead of the protocol message. Other kinds carried the same way
+// (event and poll edits, an option added to a poll) are outside the system and
+// are skipped; an edit that cannot be decrypted, such as one of a message from
+// before the connection, is logged and skipped. None of them becomes a new
+// unsupported message.
+//
+// The encrypted format has no time of its own: the edit is stamped with the
+// time it arrived, while the protocol message carries the moment of the edit.
+func (s *session) secretEncrypted(ctx context.Context, evt *events.Message, enc *waE2E.SecretEncryptedMessage) bool {
+	if enc.GetSecretEncType() != waE2E.SecretEncryptedMessage_MESSAGE_EDIT {
+		s.adapter.logger.Debug("secret encrypted message ignored", "sector_id", s.sectorID, "type", enc.GetSecretEncType().String())
+		return true
+	}
+	c, ok := s.messageChange(ctx, evt, enc.GetTargetMessageKey().GetID())
+	if !ok {
+		return true
+	}
+	content, err := s.client.DecryptSecretEncryptedMessage(ctx, evt)
+	if err != nil {
+		s.adapter.logger.Warn("secret encrypted edit not decrypted", "sector_id", s.sectorID, "target", c.target, "error", err)
+		return true
+	}
+	body, ok := editedBody(content)
+	if !ok {
+		return true
+	}
+	return s.emitEdit(c, body)
 }
 
 // revoke emits a message deleted for everyone by the contact or from the
@@ -237,9 +283,24 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 		sharedContacts(&msg, m.GetContactsArrayMessage().GetContacts())
 	default:
 		msg.Type = messaging.TypeUnsupported
+		s.adapter.logger.Warn("whatsapp message unsupported", "sector_id", s.sectorID, "message_id", info.ID, "fields", messageFields(m))
 	}
 	msg.Quote = quote(m)
 	return msg, true
+}
+
+// messageFields names the fields set in a message, without their content, so a
+// log says which kind of message became unsupported. The context info is left
+// out: Whatsmeow copies it into every message.
+func messageFields(m *waE2E.Message) string {
+	var names []string
+	m.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+		if fd.Name() != "messageContextInfo" {
+			names = append(names, string(fd.Name()))
+		}
+		return true
+	})
+	return strings.Join(names, ",")
 }
 
 // sharedContacts makes the message a contact message with the cards of its vCards.

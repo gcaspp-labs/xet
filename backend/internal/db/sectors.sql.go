@@ -12,7 +12,7 @@ import (
 const createSector = `-- name: CreateSector :one
 insert into sectors (name, email, provider)
 values ($1, $2, $3)
-returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email
+returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email, legacy_sector
 `
 
 type CreateSectorParams struct {
@@ -37,12 +37,13 @@ func (q *Queries) CreateSector(ctx context.Context, arg CreateSectorParams) (Sec
 		&i.UpdatedAt,
 		&i.ConnectionError,
 		&i.Email,
+		&i.LegacySector,
 	)
 	return i, err
 }
 
 const getSector = `-- name: GetSector :one
-select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email from sectors
+select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email, legacy_sector from sectors
 where id = $1
 `
 
@@ -62,12 +63,13 @@ func (q *Queries) GetSector(ctx context.Context, id int64) (Sector, error) {
 		&i.UpdatedAt,
 		&i.ConnectionError,
 		&i.Email,
+		&i.LegacySector,
 	)
 	return i, err
 }
 
 const getSectorForUpdate = `-- name: GetSectorForUpdate :one
-select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email from sectors
+select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email, legacy_sector from sectors
 where id = $1
 for update
 `
@@ -88,6 +90,7 @@ func (q *Queries) GetSectorForUpdate(ctx context.Context, id int64) (Sector, err
 		&i.UpdatedAt,
 		&i.ConnectionError,
 		&i.Email,
+		&i.LegacySector,
 	)
 	return i, err
 }
@@ -118,7 +121,7 @@ func (q *Queries) ListActiveSectorIDs(ctx context.Context, ids []int64) ([]int64
 }
 
 const listSectors = `-- name: ListSectors :many
-select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email from sectors
+select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email, legacy_sector from sectors
 order by lower(name)
 `
 
@@ -144,6 +147,7 @@ func (q *Queries) ListSectors(ctx context.Context) ([]Sector, error) {
 			&i.UpdatedAt,
 			&i.ConnectionError,
 			&i.Email,
+			&i.LegacySector,
 		); err != nil {
 			return nil, err
 		}
@@ -156,7 +160,7 @@ func (q *Queries) ListSectors(ctx context.Context) ([]Sector, error) {
 }
 
 const listSectorsToReconnect = `-- name: ListSectorsToReconnect :many
-select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email from sectors
+select id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email, legacy_sector from sectors
 where active and provider = $1 and external_account_id is not null
 order by id
 `
@@ -183,6 +187,7 @@ func (q *Queries) ListSectorsToReconnect(ctx context.Context, provider string) (
 			&i.UpdatedAt,
 			&i.ConnectionError,
 			&i.Email,
+			&i.LegacySector,
 		); err != nil {
 			return nil, err
 		}
@@ -199,7 +204,7 @@ update sectors
 set name = $1,
     email = $2
 where id = $3
-returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email
+returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email, legacy_sector
 `
 
 type UpdateSectorParams struct {
@@ -224,6 +229,7 @@ func (q *Queries) UpdateSector(ctx context.Context, arg UpdateSectorParams) (Sec
 		&i.UpdatedAt,
 		&i.ConnectionError,
 		&i.Email,
+		&i.LegacySector,
 	)
 	return i, err
 }
@@ -236,7 +242,7 @@ set connection_status = $1,
     connection_error = $4,
     last_connected_at = case when $1 = 'connected'::connection_status then now() else last_connected_at end
 where id = $5
-returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email
+returning id, name, phone, provider, external_account_id, connection_status, last_connected_at, active, created_at, updated_at, connection_error, email, legacy_sector
 `
 
 type UpdateSectorConnectionParams struct {
@@ -269,6 +275,7 @@ func (q *Queries) UpdateSectorConnection(ctx context.Context, arg UpdateSectorCo
 		&i.UpdatedAt,
 		&i.ConnectionError,
 		&i.Email,
+		&i.LegacySector,
 	)
 	return i, err
 }

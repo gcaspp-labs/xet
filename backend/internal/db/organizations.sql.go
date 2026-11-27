@@ -40,7 +40,7 @@ func (q *Queries) CountOrganizations(ctx context.Context, arg CountOrganizations
 const createOrganization = `-- name: CreateOrganization :one
 insert into organizations (name, cnpj, municipality_id)
 values ($1, $2, $3)
-returning id, name, cnpj, created_at, updated_at, municipality_id
+returning id, name, cnpj, created_at, updated_at, municipality_id, legacy_code
 `
 
 type CreateOrganizationParams struct {
@@ -59,12 +59,13 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MunicipalityID,
+		&i.LegacyCode,
 	)
 	return i, err
 }
 
 const getOrganization = `-- name: GetOrganization :one
-select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, m.name as municipality_name
+select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, o.legacy_code, m.name as municipality_name
 from organizations o
 join municipalities m on m.id = o.municipality_id
 where o.id = $1
@@ -85,13 +86,14 @@ func (q *Queries) GetOrganization(ctx context.Context, id int64) (GetOrganizatio
 		&i.Organization.CreatedAt,
 		&i.Organization.UpdatedAt,
 		&i.Organization.MunicipalityID,
+		&i.Organization.LegacyCode,
 		&i.MunicipalityName,
 	)
 	return i, err
 }
 
 const getOrganizationForUpdate = `-- name: GetOrganizationForUpdate :one
-select id, name, cnpj, created_at, updated_at, municipality_id from organizations
+select id, name, cnpj, created_at, updated_at, municipality_id, legacy_code from organizations
 where id = $1
 for update
 `
@@ -106,6 +108,7 @@ func (q *Queries) GetOrganizationForUpdate(ctx context.Context, id int64) (Organ
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MunicipalityID,
+		&i.LegacyCode,
 	)
 	return i, err
 }
@@ -144,7 +147,7 @@ func (q *Queries) ListOrganizationNames(ctx context.Context, ids []int64) ([]Lis
 }
 
 const searchOrganizations = `-- name: SearchOrganizations :many
-select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, m.name as municipality_name
+select o.id, o.name, o.cnpj, o.created_at, o.updated_at, o.municipality_id, o.legacy_code, m.name as municipality_name
 from organizations o
 join municipalities m on m.id = o.municipality_id
 where not exists (
@@ -221,6 +224,7 @@ func (q *Queries) SearchOrganizations(ctx context.Context, arg SearchOrganizatio
 			&i.Organization.CreatedAt,
 			&i.Organization.UpdatedAt,
 			&i.Organization.MunicipalityID,
+			&i.Organization.LegacyCode,
 			&i.MunicipalityName,
 		); err != nil {
 			return nil, err
@@ -237,7 +241,7 @@ const updateOrganization = `-- name: UpdateOrganization :one
 update organizations
 set name = $1, cnpj = $2, municipality_id = $3
 where id = $4
-returning id, name, cnpj, created_at, updated_at, municipality_id
+returning id, name, cnpj, created_at, updated_at, municipality_id, legacy_code
 `
 
 type UpdateOrganizationParams struct {
@@ -262,6 +266,7 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MunicipalityID,
+		&i.LegacyCode,
 	)
 	return i, err
 }
