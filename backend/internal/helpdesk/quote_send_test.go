@@ -17,6 +17,7 @@ const (
 	requestQ3 = "e3f40516-2c3d-4e4f-a051-62738495a6b7"
 	requestQ4 = "f4051627-3d4e-4f50-b162-738495a6b7c8"
 	requestQ5 = "05162738-4e5f-4061-8273-8495a6b7c8d9"
+	requestQ6 = "16273849-5f60-4172-9384-95a6b7c8d9ea"
 )
 
 // sendQuoting posts a text that replies to a message of the ticket.
@@ -318,4 +319,31 @@ func TestRetryAndRepeatedRequestKeepTheQuote(t *testing.T) {
 	if got := e.outbound(c.ticket.ID); len(got) != 1 || got[0].Status == nil || *got[0].Status != string(db.MessageStatusSent) {
 		t.Fatalf("outbound = %+v", got)
 	}
+}
+
+// A figurinha recebida é citada como as outras mídias (#494): a citação vai
+// para o provedor com o tipo sticker e sem texto, e fica gravada ligada à
+// figurinha, também sem texto.
+func TestStickerIsQuotedWithoutText(t *testing.T) {
+	t.Parallel()
+	c := newConversation(t)
+	e := c.e
+	c.assign()
+	contact := "5511988887777@s.whatsapp.net"
+	const phone = "5511988887777"
+
+	sticker := text("IN-STK", contact, phone, "")
+	sticker.Type, sticker.Media = messaging.TypeSticker, &messaging.Media{Data: []byte("RIFF\x00\x00\x00\x00WEBPVP8 "), MimeType: "image/webp"}
+	e.receive(c.sector.ID, sticker)
+	received := e.messages(c.ticket.ID)[1]
+	if received.Type != "sticker" {
+		t.Fatalf("received sticker = %+v", received)
+	}
+
+	r := e.sendQuoting(c.ticket.ID, c.anaToken, requestQ6, "Que figurinha!", received.ID)
+	if r.Status != http.StatusOK || r.Body["status"] != "sent" {
+		t.Fatalf("quoting sticker: status %d, body %v", r.Status, r.Body)
+	}
+	wantSentQuote(t, e.lastSentQuote(), messaging.Quote{ExternalMessageID: "IN-STK", Snippet: quoteSnippet(messaging.TypeSticker, "")})
+	wantQuote(t, e.apiQuote(c.ticket.ID, id(r.Body), c.anaToken), float64(received.ID), "sticker", nil)
 }

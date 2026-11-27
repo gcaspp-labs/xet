@@ -237,7 +237,7 @@ func (s *Service) saveMedia(ctx context.Context, msg messaging.Message, now time
 		return nil, fmt.Errorf("unknown message type %q", msg.Type)
 	}
 	switch msg.Type {
-	case messaging.TypeImage, messaging.TypeVideo, messaging.TypeAudio, messaging.TypeDocument:
+	case messaging.TypeImage, messaging.TypeVideo, messaging.TypeAudio, messaging.TypeDocument, messaging.TypeSticker:
 	default:
 		return nil, nil
 	}

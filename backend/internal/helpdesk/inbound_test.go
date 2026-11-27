@@ -633,6 +633,41 @@ func TestMediaIsSavedOnArrival(t *testing.T) {
 	}
 }
 
+// A figurinha recebida (#494) entra como mensagem do tipo sticker com o
+// arquivo webp gravado; a que não baixou entra como media_unavailable, como as
+// outras mídias.
+func TestStickerIsSavedOnArrival(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	contab := e.Sector("Contabilidade")
+	const contact, phone = "5511988887777@s.whatsapp.net", "5511988887777"
+	webp := []byte("RIFF\x00\x00\x00\x00WEBPVP8 ")
+
+	sticker := text("STK-1", contact, phone, "")
+	sticker.Type = messaging.TypeSticker
+	sticker.Media = &messaging.Media{Data: webp, MimeType: "image/webp"}
+	e.receive(contab.ID, sticker)
+
+	unavailable := text("STK-2", contact, phone, "")
+	unavailable.Type = messaging.TypeMediaUnavailable
+	e.receive(contab.ID, unavailable)
+
+	msgs := e.messages(e.tickets(contab.ID)[0].ID)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d, want 2", len(msgs))
+	}
+	if m := msgs[0]; m.Type != "sticker" || m.Body != nil || m.MediaID == nil {
+		t.Fatalf("sticker message = %+v", m)
+	}
+	file := e.media(*msgs[0].MediaID)
+	if file.MimeType != "image/webp" || file.SizeBytes != int64(len(webp)) {
+		t.Fatalf("sticker file = %+v", file)
+	}
+	if m := msgs[1]; m.Type != "media_unavailable" || m.MediaID != nil {
+		t.Fatalf("unavailable sticker = %+v", m)
+	}
+}
+
 // contactSectors lists the sectors linked to the contact.
 func (e *testEnv) contactSectors(contactID int64) []int64 {
 	e.T.Helper()
