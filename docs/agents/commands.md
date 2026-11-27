@@ -15,11 +15,11 @@ Os comandos do xet que as skills rodam, a partir da raiz do repositório. Este a
 
 Numa branch `prototype/*`, o protótipo só mostra o design system que o `frontend/package-lock.json` **daquele worktree** resolve. O `make dev-restart` continua sendo o comando que sobe a tela, mas ele reaproveita o `frontend/node_modules` que já estiver lá: o alvo `frontend-deps` só compara datas (`node_modules/.package-lock.json` mais novo que o `package.json` e o lockfile), e uma instalação copiada, linkada ou apontada de outro worktree passa nessa checagem sem ser o pacote certo. A versão declarada no `package.json` também não prova qual pacote está instalado. Por isso, prepare o ambiente antes de abrir a tela, na raiz do worktree atual:
 
-1. Confirme que a instalação pertence a este worktree, e não a um link ou caminho de outro. O `readlink -f` devolve o próprio caminho mesmo quando o `node_modules` não existe, então a falta da pasta vem antes do `case`:
+1. Confirme que a instalação pertence a este worktree, e não a um link ou caminho de outro. O `readlink -f` devolve o próprio caminho mesmo quando o `node_modules` não existe, então a falta da pasta vem antes do `case`; um link quebrado não conta como falta (o `-e` falha nos dois casos), por isso o teste também exige que não seja link:
 
    ```bash
    root=$(git rev-parse --show-toplevel)
-   if [ ! -e "$root/frontend/node_modules" ]; then
+   if [ ! -e "$root/frontend/node_modules" ] && [ ! -L "$root/frontend/node_modules" ]; then
      echo "sem instalação: siga para o npm ci"
    else
      real=$(readlink -f "$root/frontend/node_modules")
