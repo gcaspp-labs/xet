@@ -1,7 +1,14 @@
-// Pedaços do texto de uma mensagem: o texto puro, como veio, e os links clicáveis.
-// Cada pedaço diz o seu tipo, e o texto sem link continua saindo inteiro num pedaço só.
+// Pedaços do texto de uma mensagem: o texto puro, como veio, os links clicáveis e a
+// formatação do WhatsApp. Cada pedaço diz o seu tipo, e o texto sem link nem formatação
+// continua saindo inteiro num pedaço só.
 export type TextPart =
-  { kind: 'text'; text: string } | { kind: 'link'; href: string; label: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'link'; href: string; label: string }
+  | { kind: 'bold'; parts: TextPart[] }
+  | { kind: 'italic'; parts: TextPart[] }
+  | { kind: 'strike'; parts: TextPart[] }
+  | { kind: 'code'; text: string }
+  | { kind: 'codeBlock'; text: string }
 
 // Só o que dá para clicar com segurança vira link: um endereço de site (com esquema
 // http/https ou começando em www.) ou um e-mail. Domínio solto (exemplo.com) e
@@ -50,24 +57,114 @@ function linkOf(token: string): { href: string; label: string } | null {
   return { href, label: token }
 }
 
-export function linkify(text: string): TextPart[] {
-  const parts: TextPart[] = []
-  let lastIndex = 0
-  for (const match of text.matchAll(tokenPattern)) {
-    const token = trimTrailing(match[0])
-    const link = linkOf(token)
-    if (!link) {
+// O link que começa exatamente nesta posição do texto, se houver: um endereço no meio
+// de uma palavra não é procurado, porque o scanner avança caractere a caractere.
+function linkAt(text: string, index: number) {
+  tokenPattern.lastIndex = index
+  const match = tokenPattern.exec(text)
+  if (!match || match.index !== index) {
+    return null
+  }
+  const token = trimTrailing(match[0])
+  const link = linkOf(token)
+  if (!link) {
+    return null
+  }
+  return { ...link, length: token.length }
+}
+
+// Marcadores simples da formatação do WhatsApp. O bloco de três crases e o código em
+// linha (uma crase) são tratados à parte, porque o conteúdo deles não formata nem vira link.
+const markers = { '*': 'bold', _: 'italic', '~': 'strike' } as const
+
+const wordChar = /[\p{L}\p{N}]/u
+
+function isWordChar(char: string | undefined) {
+  return char !== undefined && wordChar.test(char)
+}
+
+// Acha o marcador que fecha o trecho aberto em "open", seguindo as regras do WhatsApp:
+// o trecho não começa nem termina com espaço (o marcador fica colado no texto), não
+// atravessa quebra de linha e o marcador de fechamento não encosta na palavra seguinte
+// (é o que deixa "2*3*4" como texto). Devolve -1 quando não há fechamento válido.
+function closeOf(text: string, open: number, marker: string) {
+  const first = open + 1
+  if (first >= text.length || /\s/.test(text[first])) {
+    return -1
+  }
+  for (let index = first + 1; index < text.length; index += 1) {
+    const char = text[index]
+    if (char === '\n') {
+      return -1
+    }
+    if (char !== marker) {
       continue
     }
-    const start = match.index
-    if (start > lastIndex) {
-      parts.push({ kind: 'text', text: text.slice(lastIndex, start) })
+    if (/\s/.test(text[index - 1]) || isWordChar(text[index + 1])) {
+      continue
     }
-    parts.push({ kind: 'link', href: link.href, label: link.label })
-    lastIndex = start + token.length
+    return index
   }
-  if (lastIndex < text.length) {
-    parts.push({ kind: 'text', text: text.slice(lastIndex) })
+  return -1
+}
+
+function parse(text: string): TextPart[] {
+  const parts: TextPart[] = []
+  let plain = ''
+  let index = 0
+  const flush = () => {
+    if (plain) {
+      parts.push({ kind: 'text', text: plain })
+      plain = ''
+    }
   }
+  while (index < text.length) {
+    // Bloco de monoespacado: pode ter várias linhas, e dentro dele nada formata nem vira link.
+    if (text.startsWith('```', index)) {
+      const end = text.indexOf('```', index + 3)
+      if (end > index + 3) {
+        flush()
+        parts.push({ kind: 'codeBlock', text: text.slice(index + 3, end) })
+        index = end + 3
+        continue
+      }
+    }
+    // Código em linha: uma crase de cada lado, na mesma linha.
+    if (text[index] === '`') {
+      const end = text.indexOf('`', index + 1)
+      if (end > index + 1 && !text.slice(index + 1, end).includes('\n')) {
+        flush()
+        parts.push({ kind: 'code', text: text.slice(index + 1, end) })
+        index = end + 1
+        continue
+      }
+    }
+    // Link antes de marcador: o "https://x.com/a_b_c" sai inteiro, sem o "_" virar itálico.
+    const link = linkAt(text, index)
+    if (link) {
+      flush()
+      parts.push({ kind: 'link', href: link.href, label: link.label })
+      index += link.length
+      continue
+    }
+    const kind = markers[text[index] as keyof typeof markers]
+    // O marcador abre colado no começo de uma palavra: antes dele não pode vir letra nem número.
+    if (kind && !isWordChar(text[index - 1])) {
+      const end = closeOf(text, index, text[index])
+      if (end !== -1) {
+        flush()
+        parts.push({ kind, parts: parse(text.slice(index + 1, end)) })
+        index = end + 1
+        continue
+      }
+    }
+    plain += text[index]
+    index += 1
+  }
+  flush()
   return parts
+}
+
+export function linkify(text: string): TextPart[] {
+  return parse(text)
 }
