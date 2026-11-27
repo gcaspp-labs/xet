@@ -315,6 +315,10 @@ func profilePicture(ctx context.Context, lookup profilePictureInfo, jid types.JI
 		return profilePictureError(err)
 	}
 	if full == nil {
+		// Rare case: the preview came back new but the full picture came empty,
+		// which only happens if the picture changes between the two queries.
+		// With an existing ID the empty answer reads as unchanged, so the swap
+		// just waits for the next fetch.
 		return profilePictureEmpty(existingID)
 	}
 	return messaging.ProfilePicture{
