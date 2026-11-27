@@ -22,6 +22,7 @@ for port in $ALL_PORTS; do
 done
 
 RUN_ID="run-$(date +%Y%m%d-%H%M%S)"
+STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S %z')"
 RUN_DIR="$RUNS_DIR/$RUN_ID"
 STATE_DIR="$RUN_DIR/state"
 BUILD_DIR="$RUN_DIR/build"
@@ -111,12 +112,30 @@ db_ready_inside() {
   return 1
 }
 
+# O run.env nasce logo depois de cada docker run, antes da espera do banco (até 60 s): se
+# alguém interromper com Ctrl+C nesse meio, o contêiner já está de pé e o cleanup.sh precisa
+# do CONTAINER_ID para achá-lo e pará-lo. Grava em arquivo temporário e renomeia, para a
+# limpeza nunca ler um run.env pela metade se a interrupção cair no meio da gravação.
+write_run_env() {
+  cat >"$STATE_DIR/run.env.tmp" <<EOF
+RUN_ID=$RUN_ID
+CONTAINER_ID=$CONTAINER_ID
+ADMIN_EMAIL=$ADMIN_EMAIL
+COMMIT=$(git -C "$ROOT" rev-parse HEAD)
+BRANCH=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)
+CHANGED_FILES=$(git -C "$ROOT" status --porcelain | wc -l)
+STARTED_AT="$STARTED_AT"
+EOF
+  mv "$STATE_DIR/run.env.tmp" "$STATE_DIR/run.env"
+}
+
 # Jeito padrão, igual ao make dev: publica a porta no host. O Docker do snap do Ubuntu, sem
 # iptables, aceita a conexão e não encaminha; nesse caso o banco é refeito na rede do host,
 # que dispensa a publicação. Fora do Linux a rede do host não vale, mas é justamente onde a
 # porta publicada funciona, então este desvio não é usado.
 CONTAINER_ID="$(docker run "${DB_COMMON_ARGS[@]}" -p "127.0.0.1:$DB_PORT:5432" "${DB_IMAGE_ARGS[@]}")" \
   || fail "o Docker não subiu o banco."
+write_run_env
 if ! db_ready_inside 5432; then
   docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
   fail "o banco não respondeu em 60 s."
@@ -126,22 +145,13 @@ if ! db_answers_within "$DB_PORT"; then
   docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
   CONTAINER_ID="$(docker run "${DB_COMMON_ARGS[@]}" --network host -e PGPORT="$DB_PORT" \
     "${DB_IMAGE_ARGS[@]}" -c port="$DB_PORT")" || fail "o Docker não subiu o banco na rede do host."
+  write_run_env
   if ! db_ready_inside "$DB_PORT" || ! db_answers_within "$DB_PORT"; then
     docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
     fail "o banco não respondeu em 127.0.0.1:$DB_PORT nem pela rede do host."
   fi
 fi
 DATABASE_URL="postgres://xet:xet@127.0.0.1:$DB_PORT/xet?sslmode=disable"
-
-cat >"$STATE_DIR/run.env" <<EOF
-RUN_ID=$RUN_ID
-CONTAINER_ID=$CONTAINER_ID
-ADMIN_EMAIL=$ADMIN_EMAIL
-COMMIT=$(git -C "$ROOT" rev-parse HEAD)
-BRANCH=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)
-CHANGED_FILES=$(git -C "$ROOT" status --porcelain | wc -l)
-STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S %z')"
-EOF
 
 # Inicia um serviço em sessão própria, com a marca da execução e o PID gravado por ele mesmo.
 start_service() {
