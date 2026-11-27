@@ -3,6 +3,7 @@ import { api } from '@/lib/api'
 import type { Role } from '@/lib/auth'
 
 // 'contact' é o cartão de contato, mostrado como cartão na conversa (spec #312).
+// 'sticker' é a figurinha recebida, mostrada como imagem pequena (#494).
 export type MessageType =
   | 'text'
   | 'image'
@@ -10,6 +11,7 @@ export type MessageType =
   | 'audio'
   | 'document'
   | 'contact'
+  | 'sticker'
   | 'unsupported'
   | 'media_unavailable'
 
@@ -143,6 +145,7 @@ const mediaLabels: Record<Exclude<MessageType, 'text'>, string> = {
   audio: 'Áudio',
   document: 'Documento',
   contact: 'Contato',
+  sticker: 'Figurinha',
   unsupported: 'Tipo de mensagem não suportado',
   media_unavailable: 'Arquivo não pôde ser baixado',
 }

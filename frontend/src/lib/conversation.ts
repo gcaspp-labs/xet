@@ -390,9 +390,9 @@ export function canReactTo(message: Message) {
 }
 
 // Só a mensagem que o WhatsApp conhece é citada, como na reação, e a exibida como não suportada
-// (figurinha, localização, aviso antigo de reação) fica de fora. O cartão de contato é citado como
-// os outros tipos, e a citação mostra o nome do primeiro cartão. Só o responsável cita; o backend
-// confere de novo.
+// (localização, aviso antigo de reação) fica de fora. O cartão de contato e a figurinha são
+// citados como os outros tipos: a citação do cartão mostra o nome do primeiro cartão, e a da
+// figurinha, "Figurinha". Só o responsável cita; o backend confere de novo.
 export function canQuoteMessage(message: Message) {
   return canReactTo(message) && message.type !== 'unsupported'
 }
