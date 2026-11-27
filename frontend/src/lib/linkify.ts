@@ -17,8 +17,13 @@ export type TextPart =
 // começo do texto, um espaço ou uma pontuação de abertura, nunca uma letra, um
 // número, um ponto, um hífen ou uma barra. Assim, em "abc.www.x.com",
 // "abc-www.x.com" e "a/www.x.com" o texto todo continua texto.
+//
+// A flag "y" (sticky) é obrigatória: o scanner chama esta expressão uma vez por
+// caractere do texto, e sem ela o "exec" procuraria o link até o fim do texto a cada
+// chamada — numa mensagem longa sem espaços (um hash colado, um base64) isso trava a
+// tela por segundos. Com "y", cada chamada só testa a posição pedida.
 const tokenPattern =
-  /(?:(?<![\w@])https?:\/\/[^\s<>"'`]+)|(?:(?<![\w@.\/-])www\.[^\s<>"'`]+)|(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi
+  /(?:(?<![\w@])https?:\/\/[^\s<>"'`]+)|(?:(?<![\w@.\/-])www\.[^\s<>"'`]+)|(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/giy
 
 // Pontuação da frase logo depois do link não faz parte dele. Um ")" só fica dentro
 // do link quando a URL abriu o par (ex.: https://x.com/a_(b)).

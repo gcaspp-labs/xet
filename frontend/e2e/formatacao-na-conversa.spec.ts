@@ -1,5 +1,14 @@
 import { expect, request as apiRequest, type APIRequestContext } from '@playwright/test'
-import { admin, openQueued, seedSector, signIn, test, unique, userPassword } from './fixtures'
+import {
+  admin,
+  openQueued,
+  queuedTicketId,
+  seedSector,
+  signIn,
+  test,
+  unique,
+  userPassword,
+} from './fixtures'
 
 // PNG de 1×1 pixel, para a legenda de uma imagem de verdade.
 const png =
@@ -167,4 +176,45 @@ test('a formatação do WhatsApp aparece no balão, como no WhatsApp Web', async
       .locator('strong')
       .nth(1),
   ).toHaveText('importante')
+})
+
+// Uma mensagem longa sem espaços (um hash, um base64, uma chave colada) já congelou a
+// conversa: o scanner de link procurava o resto do texto a partir de cada letra e a tela
+// ficava parada por segundos a cada desenho. Aqui a conversa tem que abrir em tempo normal
+// e mostrar o texto inteiro, sem formatar nada.
+test('texto longo sem espaços abre a conversa em tempo normal', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await seedSector(baseURL!)
+  await connectSector(baseURL!, sector.id)
+  await phone(request, sector.id, 'pair')
+  const { phone: number } = unique()
+  const long = 'a1b2c3d4'.repeat(1000) // 8.000 caracteres, sem espaço nem marcador
+  await phone(request, sector.id, 'receive', {
+    externalMessageId: `E2E-${unique().id}`,
+    phone: number,
+    contactName: 'Lia Longa',
+    type: 'text',
+    body: long,
+  })
+
+  await signIn(page, agent, userPassword)
+  const ticketId = await queuedTicketId(page, 'Lia Longa', sector.id)
+
+  // A conversa desenha todas as mensagens ao abrir o chamado. O teto de 10 s é folgado para
+  // a máquina de desenvolvimento e para o CI, e muito abaixo dos 98 s que o defeito levava
+  // com este mesmo texto (medido no Node 24, com a expressão sem a flag "y").
+  const started = Date.now()
+  await page.goto(`/chamados/${ticketId}`)
+  const bubble = page
+    .getByRole('region', { name: 'Conversa', exact: true })
+    .getByRole('listitem', { name: 'Mensagem recebida' })
+    .locator('p.whitespace-pre-wrap')
+  await expect(bubble).toHaveText(long, { timeout: 10_000 })
+  const elapsed = Date.now() - started
+  expect(elapsed, 'texto longo sem espaços tem que desenhar em tempo normal').toBeLessThan(10_000)
+  await expect(bubble.locator('strong')).toHaveCount(0)
+  await expect(bubble.locator('em')).toHaveCount(0)
 })
