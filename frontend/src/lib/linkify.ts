@@ -8,9 +8,10 @@ export type TextPart =
 // esquema perigoso (javascript:, data:) ficam como texto.
 // O "www." só começa um link no início de uma palavra: antes dele tem que haver o
 // começo do texto, um espaço ou uma pontuação de abertura, nunca uma letra, um
-// número ou um ponto. Assim, em "abc.www.x.com" o texto todo continua texto.
+// número, um ponto, um hífen ou uma barra. Assim, em "abc.www.x.com",
+// "abc-www.x.com" e "a/www.x.com" o texto todo continua texto.
 const tokenPattern =
-  /(?:(?<![\w@])https?:\/\/[^\s<>"'`]+)|(?:(?<![\w@.])www\.[^\s<>"'`]+)|(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi
+  /(?:(?<![\w@])https?:\/\/[^\s<>"'`]+)|(?:(?<![\w@.\/-])www\.[^\s<>"'`]+)|(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi
 
 // Pontuação da frase logo depois do link não faz parte dele. Um ")" só fica dentro
 // do link quando a URL abriu o par (ex.: https://x.com/a_(b)).

@@ -57,7 +57,7 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
   await receive('(https://x.com/a)')
   await receive('https://a.com, fulano@b.com e www.c.com')
   await receive('Bom dia!\n\nTudo bem?  Sim.')
-  await receive('abc.www.x.com fica texto e (www.x.com) vira link')
+  await receive('abc.www.x.com, abc-www.x.com e a/www.x.com ficam texto; (www.x.com) vira link')
 
   await signIn(page, agent, userPassword)
   await openQueued(page, 'Lia Cliente')
@@ -146,11 +146,12 @@ test('link e e-mail no balão abrem como no WhatsApp Web, e o resto do texto fic
   ).toBe('Bom dia!\n\nTudo bem?  Sim.')
   await expect(spacing.getByRole('link')).toHaveCount(0)
 
-  // "www." no meio de uma palavra não começa link, e o texto todo continua texto;
-  // depois de pontuação de abertura, como o "(", ele começa.
+  // "www." no meio de uma palavra não começa link, e o texto todo continua texto:
+  // colado depois de letra e ponto, de hífen ou de barra. Depois de pontuação de
+  // abertura, como o "(", ele começa.
   const glued = received.nth(9)
   await expect(glued.locator('p.whitespace-pre-wrap')).toHaveText(
-    'abc.www.x.com fica texto e (www.x.com) vira link',
+    'abc.www.x.com, abc-www.x.com e a/www.x.com ficam texto; (www.x.com) vira link',
   )
   const afterParen = glued.getByRole('link')
   await expect(afterParen).toHaveCount(1)
