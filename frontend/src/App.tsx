@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import AtendimentosPage from '@/pages/AtendimentosPage'
 import ConversasPage from '@/pages/ConversasPage'
+import Prototype415 from '@/pages/Prototype415'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
@@ -42,6 +43,14 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #415: o campo "Usuário no legado" no cadastro de usuário.
+  // Descartável; não vai para a main.
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/admin/usuarios' &&
+    new URLSearchParams(window.location.search).get('prototype') === '415'
+  )
+    return <Prototype415 />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
