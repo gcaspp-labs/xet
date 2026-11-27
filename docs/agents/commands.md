@@ -15,17 +15,25 @@ Os comandos do xet que as skills rodam, a partir da raiz do repositório. Este a
 
 Numa branch `prototype/*`, o protótipo só mostra o design system que o `frontend/package-lock.json` **daquele worktree** resolve. O `make dev-restart` continua sendo o comando que sobe a tela, mas ele reaproveita o `frontend/node_modules` que já estiver lá: o alvo `frontend-deps` só compara datas (`node_modules/.package-lock.json` mais novo que o `package.json` e o lockfile), e uma instalação copiada, linkada ou apontada de outro worktree passa nessa checagem sem ser o pacote certo. A versão declarada no `package.json` também não prova qual pacote está instalado. Por isso, prepare o ambiente antes de abrir a tela, na raiz do worktree atual:
 
-1. Confirme que a instalação pertence a este worktree, e não a um link ou caminho de outro:
+1. Confirme que a instalação pertence a este worktree, e não a um link ou caminho de outro. O `readlink -f` devolve o próprio caminho mesmo quando o `node_modules` não existe, então a falta da pasta vem antes do `case`:
 
    ```bash
    root=$(git rev-parse --show-toplevel)
-   real=$(readlink -f "$root/frontend/node_modules" 2>/dev/null || true)
-   case "$real" in
-     "") echo "sem instalação: siga para o npm ci" ;;
-     "$root/frontend/node_modules") echo "instalação local: siga para o npm ci" ;;
-     *) echo "instalação fora do worktree ($real): pare e avise a pessoa; não apague nem mexa nela" ;;
-   esac
+   if [ ! -e "$root/frontend/node_modules" ]; then
+     echo "sem instalação: siga para o npm ci"
+   else
+     real=$(readlink -f "$root/frontend/node_modules")
+     case "$real" in
+       "$root/frontend/node_modules") echo "instalação local: siga para o npm ci" ;;
+       *)
+         echo "instalação fora do worktree ($real): pare e avise a pessoa; não apague nem mexa nela"
+         false # sai com código diferente de 0, para não encadear com o npm ci
+         ;;
+     esac
+   fi
    ```
+
+   Um `npm link` feito só no pacote do design system (`node_modules/@gcaspp-labs/glab-design-system` apontando para outro lugar), com o resto do `node_modules` local, passa como "instalação local": o `npm ci` do passo 3 remove só o link, e é o passo 4 que mostra a diferença.
 
 2. Leia no lockfile a URL resolvida e o commit efetivo do design system (o commit é o que vem depois do `#`):
 
@@ -33,7 +41,7 @@ Numa branch `prototype/*`, o protótipo só mostra o design system que o `fronte
    grep -A4 '"node_modules/@gcaspp-labs/glab-design-system"' frontend/package-lock.json
    ```
 
-3. Recrie a árvore instalada a partir do lockfile. O `npm ci` descarta o `node_modules` **deste** worktree e não toca no de outro:
+3. Com o passo 1 sem alerta, recrie a árvore instalada a partir do lockfile. O `npm ci` descarta o `node_modules` **deste** worktree:
 
    ```bash
    cd frontend && npm ci
