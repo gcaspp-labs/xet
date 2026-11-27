@@ -89,7 +89,7 @@ func (q *Queries) CountContacts(ctx context.Context, arg CountContactsParams) (i
 const createContact = `-- name: CreateContact :one
 insert into contacts (name, phone, organization_id, registered)
 values ($1, $2, $3, true)
-returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at
 `
 
 type CreateContactParams struct {
@@ -110,6 +110,10 @@ func (q *Queries) CreateContact(ctx context.Context, arg CreateContactParams) (C
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
@@ -118,7 +122,7 @@ const createImportedContact = `-- name: CreateImportedContact :one
 insert into contacts (name, phone, organization_id, registered)
 values ($1, $2, $3, $4)
 on conflict do nothing
-returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at
 `
 
 type CreateImportedContactParams struct {
@@ -147,6 +151,10 @@ func (q *Queries) CreateImportedContact(ctx context.Context, arg CreateImportedC
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
@@ -155,7 +163,7 @@ const createUnregisteredContact = `-- name: CreateUnregisteredContact :one
 insert into contacts (name, phone, external_contact_id, registered)
 values ($1, $2, $3, false)
 on conflict do nothing
-returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at
 `
 
 type CreateUnregisteredContactParams struct {
@@ -178,12 +186,16 @@ func (q *Queries) CreateUnregisteredContact(ctx context.Context, arg CreateUnreg
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
 
 const getContactByExternalID = `-- name: GetContactByExternalID :one
-select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at from contacts where external_contact_id = $1
+select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at from contacts where external_contact_id = $1
 `
 
 func (q *Queries) GetContactByExternalID(ctx context.Context, externalContactID *string) (Contact, error) {
@@ -198,12 +210,16 @@ func (q *Queries) GetContactByExternalID(ctx context.Context, externalContactID 
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
 
 const getContactByPhone = `-- name: GetContactByPhone :one
-select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at from contacts
+select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at from contacts
 where phone = any($1::text[])
 order by phone <> ($1::text[])[1], id
 limit 1
@@ -223,12 +239,16 @@ func (q *Queries) GetContactByPhone(ctx context.Context, phones []string) (Conta
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
 
 const getContactForShare = `-- name: GetContactForShare :one
-select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at from contacts where id = $1 for share
+select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at from contacts where id = $1 for share
 `
 
 // Keeps the registration of the contact from changing until the transaction ends.
@@ -244,12 +264,16 @@ func (q *Queries) GetContactForShare(ctx context.Context, id int64) (Contact, er
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
 
 const getContactWithOrganization = `-- name: GetContactWithOrganization :one
-select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj,
+select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, c.photo_media_id, c.photo_thumbnail_media_id, c.photo_external_id, c.photo_checked_at, o.name as organization_name, o.cnpj as organization_cnpj,
     o.municipality_id, m.name as municipality_name
 from contacts c
 left join organizations o on o.id = c.organization_id
@@ -277,6 +301,10 @@ func (q *Queries) GetContactWithOrganization(ctx context.Context, id int64) (Get
 		&i.Contact.Registered,
 		&i.Contact.CreatedAt,
 		&i.Contact.UpdatedAt,
+		&i.Contact.PhotoMediaID,
+		&i.Contact.PhotoThumbnailMediaID,
+		&i.Contact.PhotoExternalID,
+		&i.Contact.PhotoCheckedAt,
 		&i.OrganizationName,
 		&i.OrganizationCnpj,
 		&i.MunicipalityID,
@@ -446,7 +474,7 @@ func (q *Queries) RemoveContactSectors(ctx context.Context, arg RemoveContactSec
 }
 
 const searchContacts = `-- name: SearchContacts :many
-select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, o.name as organization_name, o.cnpj as organization_cnpj,
+select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, c.photo_media_id, c.photo_thumbnail_media_id, c.photo_external_id, c.photo_checked_at, o.name as organization_name, o.cnpj as organization_cnpj,
     o.municipality_id, m.name as municipality_name
 from contacts c
 left join organizations o on o.id = c.organization_id
@@ -533,6 +561,10 @@ func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) 
 			&i.Contact.Registered,
 			&i.Contact.CreatedAt,
 			&i.Contact.UpdatedAt,
+			&i.Contact.PhotoMediaID,
+			&i.Contact.PhotoThumbnailMediaID,
+			&i.Contact.PhotoExternalID,
+			&i.Contact.PhotoCheckedAt,
 			&i.OrganizationName,
 			&i.OrganizationCnpj,
 			&i.MunicipalityID,
@@ -566,7 +598,7 @@ const setUnregisteredContactName = `-- name: SetUnregisteredContactName :one
 update contacts
 set name = $1
 where id = $2 and not registered
-returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at
 `
 
 type SetUnregisteredContactNameParams struct {
@@ -588,6 +620,10 @@ func (q *Queries) SetUnregisteredContactName(ctx context.Context, arg SetUnregis
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
@@ -596,7 +632,7 @@ const updateContact = `-- name: UpdateContact :one
 update contacts
 set name = $1, phone = $2, organization_id = $3, registered = true
 where id = $4
-returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at
+returning id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at
 `
 
 type UpdateContactParams struct {
@@ -624,6 +660,10 @@ func (q *Queries) UpdateContact(ctx context.Context, arg UpdateContactParams) (C
 		&i.Registered,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+		&i.PhotoCheckedAt,
 	)
 	return i, err
 }
