@@ -57,6 +57,7 @@ func TestContactPhotoColumns(t *testing.T) {
 		{"identificador sem arquivos", nil, nil, externalID("PHOTO-1"), false, true},
 		{"arquivos sem identificador", &full, &thumbnail, nil, false, true},
 		{"identificador em branco", &full, &thumbnail, externalID("  "), false, true},
+		{"identificador vazio", &full, &thumbnail, externalID(""), false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
