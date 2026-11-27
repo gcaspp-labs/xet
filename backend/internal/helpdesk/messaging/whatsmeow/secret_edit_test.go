@@ -289,13 +289,14 @@ func secretEditRaw(t *testing.T, info types.MessageInfo, target string, content 
 
 // An unsupported kind becomes a message as before, and the log names the
 // fields set in it, without the content: a format that still shows up as
-// "mensagem não suportada" can be identified from the pilot.
+// "mensagem não suportada" can be identified from the pilot. The sticker left
+// this list in #494.
 func TestUnsupportedKindIsLoggedByField(t *testing.T) {
 	a, rec, logs := newTestAdapter(t)
 	s := &session{sectorID: 7, adapter: a}
 	at := time.Date(2026, 11, 26, 18, 34, 0, 0, time.UTC)
 
-	if !s.message(incoming("UN-1", false, at, &waE2E.Message{StickerMessage: &waE2E.StickerMessage{}})) {
+	if !s.message(incoming("UN-1", false, at, &waE2E.Message{LocationMessage: &waE2E.LocationMessage{}})) {
 		t.Fatal("event not acknowledged")
 	}
 	rec.mu.Lock()
@@ -307,7 +308,7 @@ func TestUnsupportedKindIsLoggedByField(t *testing.T) {
 	if !ok || got.Message.Type != messaging.TypeUnsupported {
 		t.Fatalf("events = %#v\nwant an unsupported MessageReceived", rec.events)
 	}
-	if !strings.Contains(logs.String(), "whatsapp message unsupported") || !strings.Contains(logs.String(), "fields=stickerMessage") {
+	if !strings.Contains(logs.String(), "whatsapp message unsupported") || !strings.Contains(logs.String(), "fields=locationMessage") {
 		t.Fatalf("unsupported kind not logged by field; logs:\n%s", logs)
 	}
 }

@@ -155,6 +155,9 @@ function MessageMedia({ message }: { message: Message }) {
   switch (message.type) {
     case 'image':
       return <ImageViewer src={src} />
+    case 'sticker':
+      // Como no WhatsApp Web: uma imagem pequena, sem abrir em tela cheia e sem legenda.
+      return <img src={src} alt="Figurinha" className="size-40 max-w-full object-contain" />
     case 'video':
       return (
         <video

@@ -204,8 +204,8 @@ type recordedQuote struct {
 // quoteFor checks the message the agent quotes and returns what to record of
 // it; the zero value when there is no quote. Only a message of the same
 // ticket that WhatsApp knows (received, or sent with its ID) is quoted, and
-// not one shown as unsupported (stickers, locations, old reaction notices).
-// Any other is refused the same way, without telling whether it exists.
+// not one shown as unsupported (locations, old reaction notices). Any other
+// is refused the same way, without telling whether it exists.
 func quoteFor(ctx context.Context, q *db.Queries, ticketID int64, quotedID *int64) (recordedQuote, error) {
 	if quotedID == nil {
 		return recordedQuote{}, nil
@@ -222,11 +222,11 @@ func quoteFor(ctx context.Context, q *db.Queries, ticketID int64, quotedID *int6
 	}
 	// The snippet follows the rule of received quotes: the text, the caption
 	// of an image or video, the name of a document (its caption without a
-	// name), nothing for audio, the name of the first card of a contact;
-	// media_unavailable keeps its caption or name.
+	// name), nothing for audio and stickers, the name of the first card of a
+	// contact; media_unavailable keeps its caption or name.
 	text := m.Body
 	switch m.Type {
-	case db.MessageTypeAudio:
+	case db.MessageTypeAudio, db.MessageTypeSticker:
 		text = nil
 	case db.MessageTypeContact:
 		name, err := firstCardName(m.ContactCards)

@@ -31,6 +31,12 @@ type downloadable interface {
 	GetFileLength() uint64
 }
 
+// mediaDownloader fetches a file of a media message; *whatsmeow.Client is the
+// real one.
+type mediaDownloader interface {
+	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
+}
+
 // message emits a received message, or one sent from the phone of the sector.
 func (s *session) message(evt *events.Message) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), eventTimeout)
@@ -281,12 +287,28 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 		sharedContacts(&msg, []*waE2E.ContactMessage{m.GetContactMessage()})
 	case m.GetContactsArrayMessage() != nil:
 		sharedContacts(&msg, m.GetContactsArrayMessage().GetContacts())
+	case m.GetStickerMessage() != nil:
+		sticker := m.GetStickerMessage()
+		if sticker.GetIsLottie() {
+			// A Lottie sticker is not an image WhatsApp Web shows; it stays a notice.
+			s.unsupported(&msg, m)
+			break
+		}
+		msg.Type = messaging.TypeSticker
+		s.attach(ctx, &msg, sticker, "image/webp", "", 0)
 	default:
-		msg.Type = messaging.TypeUnsupported
-		s.adapter.logger.Warn("whatsapp message unsupported", "sector_id", s.sectorID, "message_id", info.ID, "fields", messageFields(m))
+		s.unsupported(&msg, m)
 	}
 	msg.Quote = quote(m)
 	return msg, true
+}
+
+// unsupported makes the message the notice of an unsupported kind and logs
+// which fields it carried, without their content, so the same notice is
+// written in one place only.
+func (s *session) unsupported(msg *messaging.Message, m *waE2E.Message) {
+	msg.Type = messaging.TypeUnsupported
+	s.adapter.logger.Warn("whatsapp message unsupported", "sector_id", s.sectorID, "message_id", msg.ExternalMessageID, "fields", messageFields(m))
 }
 
 // messageFields names the fields set in a message, without their content, so a
@@ -325,6 +347,7 @@ func quote(m *waE2E.Message) *messaging.Quote {
 	for _, c := range []interface{ GetContextInfo() *waE2E.ContextInfo }{
 		m.GetExtendedTextMessage(), m.GetImageMessage(), m.GetVideoMessage(),
 		m.GetAudioMessage(), m.GetDocumentMessage(), m.GetContactMessage(), m.GetContactsArrayMessage(),
+		m.GetStickerMessage(),
 	} {
 		if info = c.GetContextInfo(); info != nil {
 			break
@@ -367,6 +390,9 @@ func snippet(m *waE2E.Message) *messaging.QuoteSnippet {
 		return contactSnippet([]*waE2E.ContactMessage{m.GetContactMessage()})
 	case m.GetContactsArrayMessage() != nil:
 		return contactSnippet(m.GetContactsArrayMessage().GetContacts())
+	case m.GetStickerMessage() != nil:
+		// A sticker has no text of its own, like audio.
+		return &messaging.QuoteSnippet{Type: messaging.TypeSticker}
 	default:
 		return &messaging.QuoteSnippet{Type: messaging.TypeUnsupported}
 	}
@@ -451,6 +477,9 @@ func (s *session) download(ctx context.Context, file downloadable) ([]byte, erro
 func (s *session) downloadOnce(ctx context.Context, file downloadable) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), downloadTimeout)
 	defer cancel()
+	if s.downloads != nil {
+		return s.downloads.Download(ctx, file)
+	}
 	return s.client.Download(ctx, file)
 }
 
@@ -529,6 +558,9 @@ func quotedMessage(sn *messaging.QuoteSnippet) *waE2E.Message {
 	case messaging.TypeContact:
 		// The bubble of the quote shows the name of the card.
 		return &waE2E.Message{ContactMessage: &waE2E.ContactMessage{DisplayName: text}}
+	case messaging.TypeSticker:
+		// The bubble of the quote shows the sticker itself; the file is not sent.
+		return &waE2E.Message{StickerMessage: &waE2E.StickerMessage{}}
 	default:
 		// Text, and a file that could not be downloaded, whose original kind
 		// is unknown: its caption or name goes as text.

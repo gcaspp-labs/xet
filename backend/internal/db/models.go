@@ -712,6 +712,7 @@ const (
 	MessageTypeUnsupported      MessageType = "unsupported"
 	MessageTypeMediaUnavailable MessageType = "media_unavailable"
 	MessageTypeContact          MessageType = "contact"
+	MessageTypeSticker          MessageType = "sticker"
 )
 
 func (e *MessageType) Scan(src interface{}) error {
@@ -758,7 +759,8 @@ func (e MessageType) Valid() bool {
 		MessageTypeDocument,
 		MessageTypeUnsupported,
 		MessageTypeMediaUnavailable,
-		MessageTypeContact:
+		MessageTypeContact,
+		MessageTypeSticker:
 		return true
 	}
 	return false
@@ -774,6 +776,7 @@ func AllMessageTypeValues() []MessageType {
 		MessageTypeUnsupported,
 		MessageTypeMediaUnavailable,
 		MessageTypeContact,
+		MessageTypeSticker,
 	}
 }
 

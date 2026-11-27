@@ -49,9 +49,12 @@ const (
 	// TypeContact is a contact card, or several sent at once, with the cards
 	// in Message.ContactCards and no Body.
 	TypeContact MessageType = "contact"
-	// TypeUnsupported covers stickers, locations and other types outside the
-	// pilot, kept as a notice in the history. Reactions are not messages: they
-	// arrive as ReactionReceived.
+	// TypeSticker is a received sticker, downloaded as an image/webp file and
+	// delivered without Body. Sending stickers is outside the pilot.
+	TypeSticker MessageType = "sticker"
+	// TypeUnsupported covers locations and other types outside the pilot, kept
+	// as a notice in the history. Reactions are not messages: they arrive as
+	// ReactionReceived.
 	TypeUnsupported MessageType = "unsupported"
 	// TypeMediaUnavailable is a received file above MaxReceivedFileSize or that
 	// did not download, delivered without content. Body holds the caption or
@@ -150,7 +153,7 @@ type Quote struct {
 // QuoteSnippet is what the provider tells of the quoted content, without its
 // media: the type and the text, the caption (image and video) or the file name
 // (document, or its caption when it has no name), or the name of the first
-// card (contact). Text may be empty, as in audio.
+// card (contact). Text may be empty, as in audio and stickers.
 type QuoteSnippet struct {
 	Type MessageType
 	Text string

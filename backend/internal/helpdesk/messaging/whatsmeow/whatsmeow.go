@@ -327,6 +327,9 @@ type session struct {
 	sectorID int64
 	adapter  *Adapter
 	client   *whatsmeow.Client
+	// downloads fetches the file of a media message; nil uses the client. Tests
+	// set their own, since a real download needs the WhatsApp connection.
+	downloads mediaDownloader
 
 	mu     sync.Mutex
 	status messaging.ConnectionStatus

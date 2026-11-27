@@ -940,3 +940,64 @@ func TestCancelReasonBecomesOptional(t *testing.T) {
 		t.Fatalf("up again: %v", err)
 	}
 }
+
+// A figurinha (#494) chega sem mudar as mensagens existentes: a antiga
+// 'unsupported' continua 'unsupported', e o valor novo 'sticker' pode ser
+// gravado depois da migração.
+func TestStickerMessageTypeKeepsExistingMessages(t *testing.T) {
+	db, err := sql.Open("pgx", testdb.NewEmptyDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := migrations.NewProvider(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	if _, err := p.UpTo(ctx, 41); err != nil {
+		t.Fatalf("up to 41: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		insert into sectors (name, provider) values ('Contabilidade', 'whatsmeow');
+		insert into contacts (name, registered) values ('Maria', false);
+		insert into tickets (protocol, sector_id, contact_id, status, arrived_at, started_at)
+		values ('2026-000001', 1, 1, 'queued', now(), now());
+		insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, body, external_message_id, sent_at)
+		values (1, 1, 1, 'inbound', 'customer', 'text', 'Oi', 'IN-1', now()),
+		       (1, 1, 1, 'inbound', 'customer', 'unsupported', null, 'IN-2', now());`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	const snapshot = `select string_agg(row_to_json(m)::text, '|' order by id) from (
+		select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id,
+		    client_request_id, status, failure_reason, sent_at, created_at, quoted_external_message_id, quoted_message_id,
+		    quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards from messages) m`
+	var before, after string
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 42); err != nil {
+		t.Fatalf("up to 42: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, snapshot).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatalf("messages changed:\nbefore %s\nafter  %s", before, after)
+	}
+
+	// O valor novo existe e é aceito; o antigo 'unsupported' continua válido.
+	if _, err := db.ExecContext(ctx, `
+		insert into messages (ticket_id, sector_id, contact_id, direction, origin, type, external_message_id, sent_at)
+		values (1, 1, 1, 'inbound', 'customer', 'sticker', 'IN-3', now())`); err != nil {
+		t.Fatalf("sticker message: %v", err)
+	}
+	var stickers, unsupported int
+	if err := db.QueryRowContext(ctx, `
+		select count(*) filter (where type = 'sticker'), count(*) filter (where type = 'unsupported') from messages`).Scan(&stickers, &unsupported); err != nil {
+		t.Fatal(err)
+	}
+	if stickers != 1 || unsupported != 1 {
+		t.Fatalf("stickers = %d, unsupported = %d", stickers, unsupported)
+	}
+}

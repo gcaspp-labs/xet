@@ -17,6 +17,9 @@ function describe(type: MessageType | null, text: string | null, seconds?: numbe
       return `📎 ${text ?? 'Arquivo'}`
     case 'image':
       return text ? `🖼️ Imagem · ${text}` : '🖼️ Imagem'
+    case 'sticker':
+      // A figurinha não tem legenda: a citação mostra só o tipo, como o áudio.
+      return '🖼️ Figurinha'
     case 'video':
       return text ? `🎬 Vídeo · ${text}` : '🎬 Vídeo'
     case 'media_unavailable':
