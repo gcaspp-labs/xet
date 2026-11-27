@@ -297,6 +297,14 @@ Acompanha a spec [#374](https://github.com/gcaspp-labs/xet/issues/374) (tarefa [
 | M7 | No celular do setor, editar um texto enviado pelo painel | O painel mostra o texto novo na mesma mensagem, com a alteração registrada como feita pelo celular do setor | Pendente |
 | M8 | No celular do setor, editar a legenda de uma imagem enviada pelo painel | O painel mostra a legenda nova, sem reenviar a imagem | Pendente |
 
+### Edição pelo celular do cliente (celular → painel)
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| M18 | No celular do cliente, editar uma mensagem de texto que ele enviou | O painel mostra o texto novo na mesma mensagem, com a marca de editada, e nenhuma mensagem "não suportada" aparece | Pendente |
+| M19 | No celular do cliente, editar a legenda de uma imagem que ele enviou | O painel mostra a legenda nova na mesma imagem, com a marca de editada, e nenhuma mensagem "não suportada" aparece | Pendente |
+| M20 | Editar no celular do cliente uma mensagem de antes da conexão do número no sistema | O painel não cria mensagem nova; o sistema só registra no log que não conseguiu descriptografar a edição | Pendente |
+
 ### Exclusão
 
 | # | O que fazer | O que esperar | Data, versão e resultado |
