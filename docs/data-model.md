@@ -47,6 +47,7 @@ erDiagram
     tickets ||--o{ messages : contém
     users ||--o{ messages : "autor (envio pelo sistema)"
     media_files ||--o| messages : anexo
+    media_files ||--o| contacts : "foto e miniatura"
     messages ||--o{ message_reactions : "reação atual (uma por lado)"
     messages |o--o{ message_changes : "versões e exclusão"
     messages |o--o{ messages : "citação (só do mesmo chamado)"
@@ -183,8 +184,14 @@ Dados de referência carregados por migração, sem tela de cadastro nem auditor
 | `external_contact_id` | text | Identificador do contato no provedor, usado para casar mensagens recebidas; único quando preenchido |
 | `organization_id` | bigint → `organizations` | Órgão principal; vazio para contato ainda não vinculado |
 | `registered` | boolean | `false` para contatos criados automaticamente a partir de número desconhecido, mesmo com o nome já salvo pelo atendente; `true` após cadastro pelo atendente com órgão ou importação com órgão |
+| `photo_media_id` | bigint → `media_files` | Foto de perfil do WhatsApp, completa; vazio quando o contato não tem foto |
+| `photo_thumbnail_media_id` | bigint → `media_files` | Miniatura da foto de perfil; vazia junto com `photo_media_id` |
+| `photo_external_id` | text | Identificador da foto no WhatsApp, que muda quando a foto muda; não vazio quando preenchido; vazio junto com `photo_media_id` |
+| `photo_checked_at` | timestamptz | Última tentativa de busca da foto, com ou sem foto; vazio antes da primeira |
 
-Restrições: `registered` ⇒ `organization_id` e `phone` preenchidos (contato cadastrado pelo atendente sempre tem órgão e telefone).
+Restrições: `registered` ⇒ `organization_id` e `phone` preenchidos (contato cadastrado pelo atendente sempre tem órgão e telefone). `photo_media_id`, `photo_thumbnail_media_id` e `photo_external_id` são todos vazios (sem foto) ou todos preenchidos; `photo_checked_at` pode estar preenchido sem foto, porque registra também a última busca que não achou nenhuma.
+
+A foto de perfil vem do WhatsApp (spec [#482](https://github.com/gcaspp-labs/xet/issues/482)): o backend baixa a imagem pela conexão do setor e guarda a miniatura e a foto completa em `media_files`, porque o link que o WhatsApp devolve expira. O contato guarda as referências aos dois arquivos, o identificador da foto e a data da última busca; sem foto, as referências são limpas e o contato volta às iniciais. A API devolve o `photo_external_id` como `photoVersion`, para o navegador não reaproveitar uma foto velha do cache. Nenhum índice novo: a foto não é filtro nem ordenação da lista.
 
 O cadastro de contatos e órgãos é único para todos os setores. Os órgãos são pré-cadastrados por supervisores e administradores; no atendimento, o atendente apenas vincula a pessoa a um órgão existente.
 
@@ -557,7 +564,7 @@ Regras de gravação (`helpdesk/message_actions.go`):
 | `sha256` | text | Obrigatório |
 | `duration_seconds` | integer | Áudio e vídeo |
 
-O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banco.
+O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banco. Também guarda a foto de perfil do contato (`contacts.photo_media_id` e `contacts.photo_thumbnail_media_id`), gravada antes de o contato ser atualizado.
 
 ## Auditoria
 
