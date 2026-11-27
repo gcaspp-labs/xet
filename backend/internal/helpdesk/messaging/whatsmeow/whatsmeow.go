@@ -278,6 +278,71 @@ func (a *Adapter) ResolveContact(ctx context.Context, sectorID int64, phone stri
 	return resp[0].JID.String(), nil
 }
 
+// profilePictureInfo asks WhatsApp for the picture of a JID, as
+// whatsmeow.Client.GetProfilePictureInfo; tests pass their own.
+type profilePictureInfo func(ctx context.Context, jid types.JID, params *whatsmeow.GetProfilePictureParams) (*types.ProfilePictureInfo, error)
+
+// ProfilePicture asks WhatsApp for the picture of the contact. Two queries
+// are needed: the preview gives the thumbnail, the normal one the full image.
+// Both carry the existing ID, so WhatsApp answers nil, without error, when the
+// picture has not changed.
+func (a *Adapter) ProfilePicture(ctx context.Context, sectorID int64, contactID, existingID string) (messaging.ProfilePicture, error) {
+	cli, err := a.client(sectorID)
+	if err != nil {
+		return messaging.ProfilePicture{}, err
+	}
+	jid, err := types.ParseJID(contactID)
+	if err != nil {
+		return messaging.ProfilePicture{}, fmt.Errorf("parse contact %q: %w", contactID, err)
+	}
+	return profilePicture(ctx, cli.GetProfilePictureInfo, jid, existingID)
+}
+
+// profilePicture fetches the preview and the full picture and translates the
+// provider answer into the neutral result. A nil answer with an existing ID
+// means the picture has not changed. "Not set" and "hidden" are no picture,
+// not an error; any other failure is an error and the result is unknown.
+func profilePicture(ctx context.Context, lookup profilePictureInfo, jid types.JID, existingID string) (messaging.ProfilePicture, error) {
+	preview, err := lookup(ctx, jid, &whatsmeow.GetProfilePictureParams{Preview: true, ExistingID: existingID})
+	if err != nil {
+		return profilePictureError(err)
+	}
+	if preview == nil {
+		return profilePictureEmpty(existingID)
+	}
+	full, err := lookup(ctx, jid, &whatsmeow.GetProfilePictureParams{ExistingID: existingID})
+	if err != nil {
+		return profilePictureError(err)
+	}
+	if full == nil {
+		return profilePictureEmpty(existingID)
+	}
+	return messaging.ProfilePicture{
+		Kind:         messaging.ProfilePictureFound,
+		ID:           full.ID,
+		ThumbnailURL: preview.URL,
+		FullURL:      full.URL,
+	}, nil
+}
+
+// profilePictureEmpty reads an empty answer of WhatsApp: with an existing ID
+// the picture is the same one, without it nothing was found.
+func profilePictureEmpty(existingID string) (messaging.ProfilePicture, error) {
+	if existingID != "" {
+		return messaging.ProfilePicture{Kind: messaging.ProfilePictureUnchanged}, nil
+	}
+	return messaging.ProfilePicture{}, errors.New("profile picture: empty answer")
+}
+
+// profilePictureError translates the two "no picture" answers of WhatsApp into
+// None, without error, and lets any other failure through.
+func profilePictureError(err error) (messaging.ProfilePicture, error) {
+	if errors.Is(err, whatsmeow.ErrProfilePictureNotSet) || errors.Is(err, whatsmeow.ErrProfilePictureUnauthorized) {
+		return messaging.ProfilePicture{Kind: messaging.ProfilePictureNone}, nil
+	}
+	return messaging.ProfilePicture{}, fmt.Errorf("get profile picture: %w", err)
+}
+
 // SavedContacts reads the address book synced from the phone. A contact known
 // by LID gets its phone from the LID mappings of the store, and one without a
 // saved name or a known phone is left out.
