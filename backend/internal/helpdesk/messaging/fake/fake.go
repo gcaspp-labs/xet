@@ -5,9 +5,16 @@
 package fake
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -20,6 +27,8 @@ var (
 	ErrNotPairing = errors.New("sector is not pairing")
 	// ErrDeviceUnreachable simulates a device that cannot be told of the unlink.
 	ErrDeviceUnreachable = errors.New("device unreachable")
+	// ErrProfilePictureUnreachable simulates a profile picture lookup that fails.
+	ErrProfilePictureUnreachable = errors.New("profile picture lookup failed")
 )
 
 var phoneAccount = regexp.MustCompile(`^[0-9]{10,15}$`)
@@ -33,6 +42,13 @@ type session struct {
 type revokedAccount struct {
 	sectorID  int64
 	accountID string
+}
+
+// profilePicture is a generated profile picture of a contact, kept in memory.
+type profilePicture struct {
+	id        string
+	thumbnail []byte
+	full      []byte
 }
 
 type Adapter struct {
@@ -60,6 +76,14 @@ type Adapter struct {
 	capabilities messaging.Capabilities
 	sent         map[string]string
 	outbox       []sentEntry
+	// Generated profile picture of each contact, by provider contact ID.
+	pictures     map[string]*profilePicture
+	pictureCount int
+	// Absolute base of the image URLs returned by ProfilePicture. The HTTP
+	// control route sets it from the request; tests may set it themselves.
+	pictureBase string
+	// Sectors whose next profile picture lookup fails with the error.
+	failPicture map[int64]error
 }
 
 // sentEntry is one of what was handed to the provider, with the ID it returned
@@ -88,6 +112,8 @@ func New(handler messaging.EventHandler) *Adapter {
 		failSend:       map[int64]error{},
 		held:           map[int64]chan struct{}{},
 		capabilities:   DefaultCapabilities,
+		pictures:       map[string]*profilePicture{},
+		failPicture:    map[int64]error{},
 	}
 }
 
@@ -504,4 +530,107 @@ func (a *Adapter) ResolveContact(_ context.Context, sectorID int64, phone string
 		return "", messaging.ErrNotConnected
 	}
 	return phone + "@fake", nil
+}
+
+// SetProfilePicture gives the contact a generated picture and returns its new
+// provider ID. It changes on every call, so a later lookup with the old ID
+// reports unchanged.
+func (a *Adapter) SetProfilePicture(contactID string) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pictureCount++
+	p := &profilePicture{
+		id:        fmt.Sprintf("fake-photo-%d", a.pictureCount),
+		thumbnail: generatedPicture(contactID+"-thumbnail", 32),
+		full:      generatedPicture(contactID+"-full", 96),
+	}
+	a.pictures[contactID] = p
+	return p.id
+}
+
+// ClearProfilePicture removes the picture of the contact.
+func (a *Adapter) ClearProfilePicture(contactID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.pictures, contactID)
+}
+
+// SetProfilePictureBaseURL sets the absolute base of the URLs returned by
+// ProfilePicture. The HTTP control route sets it from the request, for the
+// end-to-end tests; an integration test may set it to its own server.
+func (a *Adapter) SetProfilePictureBaseURL(base string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pictureBase = strings.TrimRight(base, "/")
+}
+
+// FailNextProfilePicture makes the next lookup of the sector fail with err.
+func (a *Adapter) FailNextProfilePicture(sectorID int64, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failPicture[sectorID] = err
+}
+
+// ProfilePicture returns the generated picture of the contact with the same
+// three results of the real provider: found, none and unchanged.
+func (a *Adapter) ProfilePicture(_ context.Context, sectorID int64, contactID, existingID string) (messaging.ProfilePicture, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.session(sectorID).status != messaging.StatusConnected {
+		return messaging.ProfilePicture{}, messaging.ErrNotConnected
+	}
+	if err := a.failPicture[sectorID]; err != nil {
+		delete(a.failPicture, sectorID)
+		return messaging.ProfilePicture{}, err
+	}
+	p := a.pictures[contactID]
+	if p == nil {
+		return messaging.ProfilePicture{Kind: messaging.ProfilePictureNone}, nil
+	}
+	if existingID != "" && existingID == p.id {
+		return messaging.ProfilePicture{Kind: messaging.ProfilePictureUnchanged}, nil
+	}
+	return messaging.ProfilePicture{
+		Kind:         messaging.ProfilePictureFound,
+		ID:           p.id,
+		ThumbnailURL: a.pictureURL(contactID, "thumbnail"),
+		FullURL:      a.pictureURL(contactID, "full"),
+	}, nil
+}
+
+// ProfilePictureImage returns the generated image of the contact, "thumbnail"
+// or "full", for the HTTP route that serves it.
+func (a *Adapter) ProfilePictureImage(contactID, size string) ([]byte, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p := a.pictures[contactID]
+	if p == nil {
+		return nil, false
+	}
+	switch size {
+	case "thumbnail":
+		return append([]byte(nil), p.thumbnail...), true
+	case "full":
+		return append([]byte(nil), p.full...), true
+	}
+	return nil, false
+}
+
+func (a *Adapter) pictureURL(contactID, size string) string {
+	if a.pictureBase == "" {
+		return ""
+	}
+	return a.pictureBase + "/profile-pictures/" + url.PathEscape(contactID) + "/" + size
+}
+
+// generatedPicture draws a small image for the fake photo, so the tests never
+// use a real one.
+func generatedPicture(seed string, size int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	sum := sha256.Sum256([]byte(seed))
+	shade := color.RGBA{R: sum[0], G: sum[1], B: sum[2], A: 255}
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: shade}, image.Point{}, draw.Src)
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
 }
