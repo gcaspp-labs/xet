@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import AtendimentosPage from '@/pages/AtendimentosPage'
 import ConversasPage from '@/pages/ConversasPage'
+import Prototype414 from '@/pages/Prototype414'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
@@ -42,6 +43,14 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #414: os três campos do de-para do robô do legado nos cadastros.
+  // Descartável; não vai para a main.
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/orgaos' &&
+    new URLSearchParams(window.location.search).get('prototype') === '414'
+  )
+    return <Prototype414 />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
