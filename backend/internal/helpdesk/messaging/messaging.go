@@ -134,6 +134,36 @@ type ContactPhone struct {
 	WhatsAppID string
 }
 
+// ProfilePictureKind tells what a profile picture lookup found. The three
+// results are explicit, so "unchanged" is never confused with "no picture".
+type ProfilePictureKind string
+
+const (
+	// ProfilePictureFound means the contact has a picture to fetch.
+	ProfilePictureFound ProfilePictureKind = "found"
+	// ProfilePictureNone means the contact has no picture or hides it from the
+	// sector number; it is not an error.
+	ProfilePictureNone ProfilePictureKind = "none"
+	// ProfilePictureUnchanged means the existingID sent is still the current
+	// picture, so there is nothing to fetch.
+	ProfilePictureUnchanged ProfilePictureKind = "unchanged"
+)
+
+// ProfilePicture is the current profile picture of a contact in the provider.
+// The URLs expire (spec.md, Armazenamento), so the caller downloads the images
+// right away and stores them.
+type ProfilePicture struct {
+	// Kind tells which of the three results this is.
+	Kind ProfilePictureKind
+	// ID is the provider identifier of the picture, which changes when the
+	// picture changes. Set with ProfilePictureFound.
+	ID string
+	// ThumbnailURL and FullURL are the provider URLs of the small preview and
+	// of the full image. Set with ProfilePictureFound.
+	ThumbnailURL string
+	FullURL      string
+}
+
 // Quote is the message a reply cites, in a received message or in one to
 // send. It points at it only by its provider message ID, which every provider
 // has; the rest is optional.
@@ -419,6 +449,14 @@ type Provider interface {
 	RevokeMessage(ctx context.Context, revoke MessageRevoke) (string, error)
 	// ResolveContact returns the provider contact ID of a phone with country code.
 	ResolveContact(ctx context.Context, sectorID int64, phone string) (string, error)
+	// ProfilePicture returns the current profile picture of a contact. The
+	// existingID is the provider identifier of the picture already stored;
+	// when it is still current, the result is Unchanged, so nothing is
+	// downloaded again. A contact without a picture, or that hides it, is
+	// None, not an error. Without a session it returns ErrNotConnected; any
+	// other failure is an error, and the result is unknown, so nothing may
+	// change.
+	ProfilePicture(ctx context.Context, sectorID int64, contactID, existingID string) (ProfilePicture, error)
 	// Capabilities reports what the provider supports on a message already sent.
 	Capabilities() Capabilities
 }

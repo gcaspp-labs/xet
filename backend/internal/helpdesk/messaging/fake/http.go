@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -263,6 +264,51 @@ func (a *Adapter) Handler() http.Handler {
 			return nil
 		})
 	})
+	// Profile picture of a contact: POST sets a generated picture, DELETE
+	// removes it, and GET serves the image. The provider builds the absolute
+	// image URLs from the Host of the request that sets the picture, so the
+	// backend can download them.
+	r.Post("/messaging/sectors/{sectorID}/profile-picture", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ContactID string `json:"contactId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ContactID == "" {
+			http.Error(w, "contactId is required", http.StatusBadRequest)
+			return
+		}
+		a.control(w, r, func(int64) error {
+			a.SetProfilePictureBaseURL(requestBaseURL(r))
+			a.SetProfilePicture(body.ContactID)
+			return nil
+		})
+	})
+	r.Delete("/messaging/sectors/{sectorID}/profile-picture", func(w http.ResponseWriter, r *http.Request) {
+		contactID := r.URL.Query().Get("contactId")
+		if contactID == "" {
+			http.Error(w, "contactId is required", http.StatusBadRequest)
+			return
+		}
+		a.control(w, r, func(int64) error {
+			a.ClearProfilePicture(contactID)
+			return nil
+		})
+	})
+	r.Get("/messaging/profile-pictures/{contactID}/{size}", func(w http.ResponseWriter, r *http.Request) {
+		data, ok := a.ProfilePictureImage(chi.URLParam(r, "contactID"), chi.URLParam(r, "size"))
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(data)
+	})
+	// The next profile picture lookup of the sector fails.
+	r.Post("/messaging/sectors/{sectorID}/fail-next-profile-picture", func(w http.ResponseWriter, r *http.Request) {
+		a.control(w, r, func(sectorID int64) error {
+			a.FailNextProfilePicture(sectorID, ErrProfilePictureUnreachable)
+			return nil
+		})
+	})
 	// The provider refuses the next reaction of the sector.
 	r.Post("/messaging/sectors/{sectorID}/fail-next-reaction", func(w http.ResponseWriter, r *http.Request) {
 		a.control(w, r, func(sectorID int64) error {
@@ -405,6 +451,21 @@ type changeBody struct {
 	Phone                   string    `json:"phone"`
 	FromSector              bool      `json:"fromSector"`
 	At                      time.Time `json:"at"`
+}
+
+// requestBaseURL builds the absolute base of the image routes from the
+// request: the scheme, the Host that reached the server and the path up to
+// the sectors, which is where this handler is mounted.
+func requestBaseURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	prefix := r.URL.Path
+	if i := strings.LastIndex(prefix, "/sectors/"); i >= 0 {
+		prefix = prefix[:i]
+	}
+	return scheme + "://" + r.Host + prefix
 }
 
 func (a *Adapter) control(w http.ResponseWriter, r *http.Request, action func(sectorID int64) error) {
