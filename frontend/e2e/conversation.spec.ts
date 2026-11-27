@@ -49,8 +49,8 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   await expect(page.getByRole('heading', { name: 'Maria Cliente' })).toBeVisible()
   const conversation = page.getByRole('region', { name: 'Conversa', exact: true })
   const received = conversation.getByRole('listitem', { name: 'Mensagem recebida' })
-  await expect(received).toContainText('*Cliente:*')
-  await expect(received.locator('strong')).toHaveCount(0)
+  await expect(received).toContainText('Cliente:')
+  await expect(received.locator('strong')).toHaveText('Cliente:')
   await expect(conversation).toContainText('Chamado na fila. Assuma o chamado para responder.')
   await page.getByRole('button', { name: 'Assumir', exact: true }).click()
   await expect(page.getByText('Chamado assumido')).toBeVisible()
@@ -115,7 +115,7 @@ test('responsável conversa com o cliente pelo painel e outro atendente é bloqu
   await page.reload()
   await expect(sent.locator('strong')).toHaveText(/agent \d+:/)
   await expect(file.locator('strong')).toHaveText(/agent \d+:/)
-  await expect(received).toContainText('*Cliente:*')
+  await expect(received).toContainText('Cliente:')
   await expect(file.getByRole('link', { name: /balancete\.pdf/ })).toHaveAttribute(
     'href',
     /^\/api\/media\/\d+$/,
