@@ -120,6 +120,17 @@ func TestLinkPreviewIsRecordedAndServed(t *testing.T) {
 		}
 	}
 
+	// The ticket list keeps only the text of the last message: no card there.
+	for _, row := range c.e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", c.sector.ID), c.anaToken) {
+		if row["id"] != float64(ticket) {
+			continue
+		}
+		last := row["lastMessage"].(map[string]any)
+		if last["preview"] != nil || last["body"] != msg.Body {
+			t.Fatalf("last message = %v", last)
+		}
+	}
+
 	status, header, body := c.e.get(fmt.Sprintf("/api/media/%d", *stored.MediaID), c.anaToken)
 	if status != http.StatusOK || !bytes.Equal(body, linkThumbnail) || header.Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("thumbnail = %d %s %x", status, header.Get("Content-Type"), body)
