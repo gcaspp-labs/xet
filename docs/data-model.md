@@ -46,7 +46,7 @@ erDiagram
     modules ||--o{ ticket_modules : ""
     tickets ||--o{ messages : contém
     users ||--o{ messages : "autor (envio pelo sistema)"
-    media_files ||--o| messages : anexo
+    media_files ||--o| messages : "anexo e miniatura da prévia"
     media_files ||--o| contacts : "foto e miniatura"
     messages ||--o{ message_reactions : "reação atual (uma por lado)"
     messages |o--o{ message_changes : "versões e exclusão"
@@ -436,6 +436,10 @@ Chamados não são reabertos: o pendente não foi encerrado, e o mesclado não �
 | `deletion_scope` | message_deletion_scope | `everyone` ou `local`; preenchido junto com `deleted_at`. Uma exclusão para todos — vinda de fora ou do próprio XET — amplia um `local` já gravado para `everyone` |
 | `deletion_origin` | message_origin | Quem excluiu (cliente, celular do setor ou atendente); preenchido junto com `deleted_at` |
 | `contact_cards` | jsonb | Cartões da mensagem `contact`, em ordem: lista não vazia de `{"name", "organization", "phones": [{"phone", "wa_id"}]}`; vazio (`null`) nos demais tipos |
+| `preview_url` | text | Endereço do cartão de prévia do link, sempre `http` ou `https`; preenchido só na mensagem recebida do contato que trouxe título e endereço ([#511](https://github.com/gcaspp-labs/xet/issues/511)) |
+| `preview_title` | text | Título da página, como o WhatsApp entregou, cortado em 200 caracteres; preenchido junto com `preview_url` |
+| `preview_description` | text | Resumo da página, quando o WhatsApp entrega, cortado em 500 caracteres; vazio é `null` |
+| `preview_media_id` | bigint → `media_files` | Miniatura JPEG do cartão, quando o WhatsApp entrega e ela tem até 64 KB; vazia quando não há imagem |
 
 Restrições:
 
@@ -446,6 +450,7 @@ Restrições:
 - `type in ('image', 'video', 'audio', 'document')` ⇒ `media_id` preenchido. `media_unavailable` não tem `media_id`; `body` guarda a legenda ou o nome do arquivo.
 - Ligação, tipo ou texto da citação ⇒ `quoted_external_message_id` preenchido (`messages_quote_external_id`); `quoted_body` ⇒ `quoted_type` (`messages_quote_body_type`).
 - `deleted_at`, `deletion_scope` e `deletion_origin` são preenchidos juntos ou ficam todos vazios (`messages_deletion_state`).
+- `preview_url` e `preview_title` são preenchidos juntos, só em mensagem `inbound`; `preview_description` e `preview_media_id` só existem com os dois; título nunca em branco (`messages_preview_fields`, `messages_preview_title_not_blank`).
 - Chave estrangeira `(quoted_message_id, ticket_id)` → `messages (id, ticket_id)` (`messages_quote_same_ticket`, com o único `messages_id_ticket_id_key`): a ligação só aponta para mensagem do mesmo chamado, para a citação nunca expor o conteúdo de outro chamado.
 
 Índice: `(ticket_id, sent_at)` para exibir a conversa.
@@ -461,6 +466,8 @@ Uma exclusão para todos **amplia** uma exclusão `local` já gravada (#375): `M
 A mesma regra vale quando a ampliação de `local` para `everyone` é feita pelo próprio XET, não só pelo celular: a exclusão para todos pedida no sistema sobre uma mensagem já excluída "para mim" (por exemplo, quando o provedor confirma tarde uma ação que ficou incerta e o eco chega depois) também passa o alcance a `everyone` e mantém `deleted_at` e `deletion_origin` da primeira exclusão. Aí a origem é `agent` nas duas.
 
 A imutabilidade da mensagem foi revista pela spec #290: o texto e a legenda podem ser revistos, pelo WhatsApp e pelo XET, e o que cai é a regra antiga de que a mensagem nunca é editada ou excluída. Nada é apagado nem sobrescrito sem registro: cada versão anterior fica em `message_changes`, o conteúdo excluído continua gravado em `body` e em `media_id`, e `status` segue a situação de entrega sem representar a exclusão.
+
+Prévia do link ([#496](https://github.com/gcaspp-labs/xet/issues/496), spec [#511](https://github.com/gcaspp-labs/xet/issues/511)). A mensagem recebida com link guarda o cartão que o próprio WhatsApp entrega: o servidor nunca abre o site, então nada aqui faz requisição ao endereço. `preview_url`, `preview_title` e `preview_description` guardam os textos, e a miniatura (JPEG) é um arquivo de `media_files` ligado por `preview_media_id`, gravado antes do commit da mensagem como as outras mídias. Título e endereço vêm juntos, só na mensagem recebida do contato; sem título, sem endereço `http`/`https` ou sem cartão do provedor, as quatro colunas ficam vazias e a mensagem mostra só o texto. Título é cortado em 200 caracteres e descrição em 500, sem partir caractere; descrição vazia é `null`; miniatura acima de 64 KB é descartada (o cartão fica sem imagem). Mensagem enviada pelo setor, pelo sistema ou pelo celular do setor, e mensagem antiga ou importada, ficam sem prévia: não há reprocessamento. A API da conversa devolve `preview` (`url`, `title`, `description`, `thumbnailMediaId`), e a miniatura abre pela rota de mídia existente (`/api/media/{id}`), com o acesso de quem pode ver o chamado.
 
 Citação (resposta citada, #201). Escolha de armazenamento: colunas em `messages`, em vez de tabela própria, porque a citação é no máximo uma por mensagem, nasce com ela e nunca muda (a citação não é refeita quando a mensagem é editada). A citação inteira é opcional, e o trecho também: o provedor pode entregar a mensagem sem citação, só com o identificador da citada, ou com identificador e trecho, e as três são gravadas normalmente. Regras de gravação (`helpdesk/inbound.go`), para a mensagem recebida e a enviada pelo celular do setor: com o chamado travado, a ligação procura a citada pelo identificador externo **no mesmo chamado**; se ela não está lá (de antes do XET, de outro chamado, mesmo do mesmo contato, ou ainda não chegou), fica sem ligação e com o trecho do provedor, se houver. O trecho é o que o provedor entrega, não uma cópia da mensagem ligada; a mídia da citação não é baixada nem guardada. Na resposta citada enviada pelo responsável (`helpdesk/send.go`, #202), com o chamado travado, a citada precisa ser do mesmo chamado, ter `external_message_id` (recebida, ou enviada com situação `sent`, `delivered` ou `read`) e não ser `unsupported`; a ligação é sempre gravada, e o trecho é tirado da mensagem citada pela mesma regra do trecho recebido (o texto como o cliente o viu, com o apelido, se for do setor; a legenda; o nome do documento; nada no áudio nem na figurinha; a legenda ou o nome em `media_unavailable`). A API devolve a ligação, o tipo e o texto do trecho; sem trecho e com ligação, a tela usa a mensagem ligada, e sem os dois mostra "mensagem indisponível". Editar ou excluir a mensagem citada não reescreve o trecho retroativamente: o `quoted_body` das respostas que a citaram e o da própria resposta ficam como foram gravados, porque a citação é o que o cliente viu quando a resposta saiu.
 
@@ -564,7 +571,7 @@ Regras de gravação (`helpdesk/message_actions.go`):
 | `sha256` | text | Obrigatório |
 | `duration_seconds` | integer | Áudio e vídeo |
 
-O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banco. Também guarda a foto de perfil do contato (`contacts.photo_media_id` e `contacts.photo_thumbnail_media_id`), gravada antes de o contato ser atualizado. Quando a foto é trocada ou o contato fica sem foto, as linhas antigas de `media_files` saem na mesma transação da troca, e os arquivos correspondentes são removidos depois do commit; uma falha nessa remoção só deixa um arquivo sem dono.
+O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banco. Também guarda a foto de perfil do contato (`contacts.photo_media_id` e `contacts.photo_thumbnail_media_id`), gravada antes de o contato ser atualizado, e a miniatura da prévia do link (`messages.preview_media_id`), gravada antes da mensagem. Quando a foto é trocada ou o contato fica sem foto, as linhas antigas de `media_files` saem na mesma transação da troca, e os arquivos correspondentes são removidos depois do commit; uma falha nessa remoção só deixa um arquivo sem dono.
 
 ## Auditoria
 
