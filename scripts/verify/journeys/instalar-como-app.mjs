@@ -93,12 +93,28 @@ await journey('instalar-como-app', async (t) => {
   await t.step('Estado final: nada guardado no aparelho e nenhum chamado mexido', async () => {
     const stored = await page.evaluate(async () => ({
       caches: await caches.keys(),
-      serviceWorkers: (await navigator.serviceWorker.getRegistrations()).map(
-        (registration) => new URL(registration.active?.scriptURL ?? '').pathname,
+      controlling: navigator.serviceWorker.controller !== null,
+      serviceWorkers: (await navigator.serviceWorker.getRegistrations()).map((registration) =>
+        registration.active ? new URL(registration.active.scriptURL).pathname : null,
       ),
     }))
-    expect(stored).toEqual({ caches: [], serviceWorkers: ['/sw.js'] })
-    t.observe('Guardado no aparelho', stored)
+    expect(
+      stored.controlling,
+      'o service worker registrou mas não controla a página: o app não abriria como app instalado nem pegaria a versão nova',
+    ).toBe(true)
+    expect(
+      stored.serviceWorkers,
+      'registro de service worker sem worker ativo: o app não abriria como app instalado nem pegaria a versão nova',
+    ).not.toContain(null)
+    expect({ caches: stored.caches, serviceWorkers: stored.serviceWorkers }).toEqual({
+      caches: [],
+      serviceWorkers: ['/sw.js'],
+    })
+    t.observe('Guardado no aparelho', {
+      caches: stored.caches,
+      controlling: stored.controlling,
+      serviceWorkers: stored.serviceWorkers,
+    })
 
     const tickets = t.sql(`select status from tickets where sector_id = ${sector.id}`)
     expect(tickets).toEqual([])
