@@ -9,21 +9,9 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
-// photoFile stores a test image and returns its id.
-func photoFile(t *testing.T, e *testEnv, key string) int64 {
-	t.Helper()
-	var id int64
-	if err := e.Pool.QueryRow(t.Context(), `
-		insert into media_files (storage_key, mime_type, size_bytes, sha256)
-		values ($1, 'image/jpeg', 10, repeat('a', 64)) returning id`, key).Scan(&id); err != nil {
-		t.Fatalf("media file %s: %v", key, err)
-	}
-	return id
-}
-
-// insertTicket inserts a ticket of the sector for the contact with the given
-// status, enough for the lists and the detail of the photo version test.
-func insertTicket(t *testing.T, e *testEnv, protocol string, sectorID, contactID, assigneeID, orgID int64, status string) int64 {
+// insertPhotoTestTicket inserts a ticket of the sector for the contact with the
+// given status, enough for the lists and the detail of the photo version test.
+func insertPhotoTestTicket(t *testing.T, e *testEnv, protocol string, sectorID, contactID, assigneeID, orgID int64, status string) int64 {
 	t.Helper()
 	now := time.Now()
 	var id int64
@@ -55,9 +43,9 @@ func insertTicket(t *testing.T, e *testEnv, protocol string, sectorID, contactID
 	return id
 }
 
-// O chamado traz a versão da foto do contato: nula sem foto e igual ao
-// identificador no WhatsApp quando há foto, na fila, no pendente, no detalhe,
-// nos atendimentos encerrados e nas listas do Dashboard (spec #482).
+// The ticket carries the contact photo version: null without photo and equal to
+// the WhatsApp identifier when there is a photo, in the queue, the pending list,
+// the detail, the closed tickets and the Dashboard lists (spec #482).
 func TestTicketContactPhotoVersion(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
@@ -74,8 +62,8 @@ func TestTicketContactPhotoVersion(t *testing.T) {
 		"pendingPhoto":  e.Contact(token, "Ana Paula", "5511988880003", org, sector.ID),
 		"pendingNo":     e.Contact(token, "Carlos Dias", "5511988880004", org, sector.ID),
 	}
-	full := photoFile(t, e, "contatos/foto.jpg")
-	thumbnail := photoFile(t, e, "contatos/foto-miniatura.jpg")
+	full := e.MediaFile("contatos/foto.jpg")
+	thumbnail := e.MediaFile("contatos/foto-miniatura.jpg")
 	for _, key := range []string{"queuedPhoto", "pendingPhoto"} {
 		if _, err := e.Pool.Exec(t.Context(), `
 			update contacts set photo_media_id = $1, photo_thumbnail_media_id = $2,
@@ -85,12 +73,12 @@ func TestTicketContactPhotoVersion(t *testing.T) {
 		}
 	}
 
-	insertTicket(t, e, "2026-000001", sector.ID, contactIDs["queuedPhoto"], supervisor.ID, org, "queued")
-	insertTicket(t, e, "2026-000002", sector.ID, contactIDs["queuedNoPhoto"], supervisor.ID, org, "queued")
-	insertTicket(t, e, "2026-000003", sector.ID, contactIDs["pendingPhoto"], supervisor.ID, org, "pending")
-	insertTicket(t, e, "2026-000004", sector.ID, contactIDs["pendingNo"], supervisor.ID, org, "pending")
-	closedPhoto := insertTicket(t, e, "2026-000005", sector.ID, contactIDs["queuedPhoto"], supervisor.ID, org, "closed")
-	closedNoPhoto := insertTicket(t, e, "2026-000006", sector.ID, contactIDs["queuedNoPhoto"], supervisor.ID, org, "closed")
+	insertPhotoTestTicket(t, e, "2026-000001", sector.ID, contactIDs["queuedPhoto"], supervisor.ID, org, "queued")
+	insertPhotoTestTicket(t, e, "2026-000002", sector.ID, contactIDs["queuedNoPhoto"], supervisor.ID, org, "queued")
+	insertPhotoTestTicket(t, e, "2026-000003", sector.ID, contactIDs["pendingPhoto"], supervisor.ID, org, "pending")
+	insertPhotoTestTicket(t, e, "2026-000004", sector.ID, contactIDs["pendingNo"], supervisor.ID, org, "pending")
+	closedPhoto := insertPhotoTestTicket(t, e, "2026-000005", sector.ID, contactIDs["queuedPhoto"], supervisor.ID, org, "closed")
+	closedNoPhoto := insertPhotoTestTicket(t, e, "2026-000006", sector.ID, contactIDs["queuedNoPhoto"], supervisor.ID, org, "closed")
 
 	want := func(key string) any {
 		if key == "queuedPhoto" || key == "pendingPhoto" {
@@ -110,32 +98,44 @@ func TestTicketContactPhotoVersion(t *testing.T) {
 		}
 		return v
 	}
-	checkList := func(t *testing.T, items []map[string]any) {
+	// checkList requires the list to hold exactly the expected test contacts,
+	// each one with its photo version.
+	checkList := func(t *testing.T, items []map[string]any, keys ...string) {
 		t.Helper()
-		seen := 0
+		if len(items) != len(keys) {
+			t.Fatalf("list has %d tickets, want %d: %v", len(items), len(keys), items)
+		}
+		seen := make(map[string]bool, len(keys))
 		for _, item := range items {
-			contact := item["contact"].(map[string]any)
-			for key, id := range contactIDs {
-				if contact["id"] != float64(id) {
+			contact, ok := item["contact"].(map[string]any)
+			if !ok {
+				t.Fatalf("ticket without contact: %v", item)
+			}
+			for _, key := range keys {
+				if contact["id"] != float64(contactIDs[key]) {
 					continue
 				}
 				if got := version(t, item); got != want(key) {
 					t.Errorf("photoVersion of %s = %v, want %v", key, got, want(key))
 				}
-				seen++
+				seen[key] = true
 			}
 		}
-		if seen == 0 {
-			t.Fatalf("no test contacts in the list: %v", items)
+		for _, key := range keys {
+			if !seen[key] {
+				t.Fatalf("contact %s missing from the list: %v", key, items)
+			}
 		}
 	}
 
 	t.Run("fila", func(t *testing.T) {
-		checkList(t, e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", sector.ID), supToken))
+		checkList(t, e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/tickets", sector.ID), supToken),
+			"queuedPhoto", "queuedNoPhoto")
 	})
 
 	t.Run("pendentes", func(t *testing.T) {
-		checkList(t, e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/pending-tickets", sector.ID), supToken))
+		checkList(t, e.DoList(http.MethodGet, fmt.Sprintf("/api/sectors/%d/pending-tickets", sector.ID), supToken),
+			"pendingPhoto", "pendingNo")
 	})
 
 	t.Run("detalhe", func(t *testing.T) {
@@ -158,8 +158,7 @@ func TestTicketContactPhotoVersion(t *testing.T) {
 	})
 
 	t.Run("atendimentos encerrados", func(t *testing.T) {
-		items := e.DoPageItems("/api/closed-tickets", token)
-		checkList(t, items)
+		checkList(t, e.DoPageItems("/api/closed-tickets", token), "queuedPhoto", "queuedNoPhoto")
 	})
 
 	t.Run("dashboard", func(t *testing.T) {
@@ -167,12 +166,12 @@ func TestTicketContactPhotoVersion(t *testing.T) {
 		if resp.Status != http.StatusOK {
 			t.Fatalf("status %d: %v", resp.Status, resp.Body)
 		}
-		checkList(t, listOf(t, resp.Body["queued"]))
+		checkList(t, listPhotoTestTickets(t, resp.Body["queued"]), "queuedPhoto", "queuedNoPhoto")
 	})
 }
 
-// listOf reads a JSON array of objects from a response body.
-func listOf(t *testing.T, value any) []map[string]any {
+// listPhotoTestTickets reads a JSON array of objects from a response body.
+func listPhotoTestTickets(t *testing.T, value any) []map[string]any {
 	t.Helper()
 	items, ok := value.([]any)
 	if !ok {

@@ -283,6 +283,18 @@ func (e *Env) Contact(token, name, phone string, orgID, sectorID int64) int64 {
 	return ID(resp.Body)
 }
 
+// MediaFile stores a test image in media_files and returns its id.
+func (e *Env) MediaFile(key string) int64 {
+	e.T.Helper()
+	var id int64
+	if err := e.Pool.QueryRow(e.T.Context(), `
+		insert into media_files (storage_key, mime_type, size_bytes, sha256)
+		values ($1, 'image/jpeg', 10, repeat('a', 64)) returning id`, key).Scan(&id); err != nil {
+		e.T.Fatalf("media file %s: %v", key, err)
+	}
+	return id
+}
+
 // Count returns the number of rows of a table.
 func (e *Env) Count(table string) int {
 	e.T.Helper()

@@ -12,9 +12,9 @@ type ticketContactResponse struct {
 	Name       string  `json:"name"`
 	Phone      *string `json:"phone"`
 	Registered bool    `json:"registered"`
-	// PhotoVersion muda quando a foto do contato muda; as telas montam o
-	// endereço da imagem com ele para não mostrar a foto velha do cache.
-	// Nulo quando o contato não tem foto (spec #482).
+	// PhotoVersion changes when the contact photo changes; the screens build
+	// the image address with it so they do not show the stale photo from the
+	// cache. Null when the contact has no photo (spec #482).
 	PhotoVersion *string `json:"photoVersion"`
 }
 
