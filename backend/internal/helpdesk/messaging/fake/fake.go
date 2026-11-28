@@ -84,6 +84,8 @@ type Adapter struct {
 	pictureBase string
 	// Sectors whose next profile picture lookup fails with the error.
 	failPicture map[int64]error
+	// Sectors whose next contact resolution fails with the error.
+	failResolve map[int64]error
 }
 
 // sentEntry is one of what was handed to the provider, with the ID it returned
@@ -114,6 +116,7 @@ func New(handler messaging.EventHandler) *Adapter {
 		capabilities:   DefaultCapabilities,
 		pictures:       map[string]*profilePicture{},
 		failPicture:    map[int64]error{},
+		failResolve:    map[int64]error{},
 	}
 }
 
@@ -526,10 +529,24 @@ func (a *Adapter) UpdateStatus(ctx context.Context, sectorID int64, status messa
 }
 
 func (a *Adapter) ResolveContact(_ context.Context, sectorID int64, phone string) (string, error) {
-	if a.Status(sectorID) != messaging.StatusConnected {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.session(sectorID).status != messaging.StatusConnected {
 		return "", messaging.ErrNotConnected
 	}
+	if err := a.failResolve[sectorID]; err != nil {
+		delete(a.failResolve, sectorID)
+		return "", err
+	}
 	return phone + "@fake", nil
+}
+
+// FailNextResolveContact makes the next ResolveContact of the sector fail with
+// err; messaging.ErrContactNotFound stands for a phone without WhatsApp.
+func (a *Adapter) FailNextResolveContact(sectorID int64, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failResolve[sectorID] = err
 }
 
 // SetProfilePicture gives the contact a generated picture and returns its new
