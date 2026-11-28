@@ -186,6 +186,19 @@ update contacts
 set photo_media_id = null, photo_thumbnail_media_id = null, photo_external_id = null
 where id = @id;
 
+-- name: GetContactPhotoFile :one
+-- Reads one of the two files of the profile picture of the contact: the
+-- thumbnail (true) or the full picture (false). No row means the contact has
+-- no picture, or does not exist; either way there is nothing to serve
+-- (spec #482).
+select m.*
+from media_files m
+where m.id = (select case when @thumbnail::boolean
+                          then c.photo_thumbnail_media_id
+                          else c.photo_media_id end
+              from contacts c
+              where c.id = @id);
+
 -- name: DeleteMediaFile :one
 -- Removes a file without owner, such as the previous picture of a contact.
 -- Returns its storage key so the caller removes the stored file too.

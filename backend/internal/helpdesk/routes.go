@@ -110,4 +110,8 @@ func (h *Handler) Routes(r chi.Router) {
 	// Edição de contato: pelo serviço de chamados, porque o cadastro completa o órgão dos chamados abertos.
 	r.Put("/contacts/{contactID}", h.updateContact)
 	r.Put("/contacts/{contactID}/name", h.setContactName)
+	// Foto do contato, miniatura e foto completa: o cadastro é único para
+	// todos os setores, então qualquer usuário logado vê a foto (spec #482).
+	r.Get("/contacts/{contactID}/photo/thumbnail", h.getContactPhotoThumbnail)
+	r.Get("/contacts/{contactID}/photo", h.getContactPhoto)
 }
