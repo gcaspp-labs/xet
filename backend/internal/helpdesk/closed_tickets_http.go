@@ -120,7 +120,7 @@ func (h *Handler) listClosedTickets(w http.ResponseWriter, r *http.Request) {
 		item := closedTicketResponse{
 			ID: t.ID, Protocol: t.Protocol, Channel: t.Channel, ClosedAt: t.ClosedAt, Subject: t.Subject,
 			Contact: ticketContactResponse{
-				ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered,
+				ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered, PhotoVersion: t.ContactPhotoExternalID,
 			},
 			OrganizationName: t.OrganizationName, MunicipalityName: t.MunicipalityName,
 			Sector:  httpx.Ref{ID: t.SectorID, Name: t.SectorName},

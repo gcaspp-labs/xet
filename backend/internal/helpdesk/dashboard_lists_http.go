@@ -47,7 +47,7 @@ func (h *Handler) dashboardTickets(w http.ResponseWriter, r *http.Request) {
 		ticket := dashboardTicketResponse{
 			ticketSummaryResponse: ticketSummaryResponse{
 				ID: row.ID, Protocol: row.Protocol, Status: row.Status, ArrivedAt: row.ArrivedAt, AssignedAt: row.AssignedAt,
-				Contact:          ticketContactResponse{ID: row.ContactID, Name: row.ContactName, Phone: row.ContactPhone, Registered: row.ContactRegistered},
+				Contact:          ticketContactResponse{ID: row.ContactID, Name: row.ContactName, Phone: row.ContactPhone, Registered: row.ContactRegistered, PhotoVersion: row.ContactPhotoExternalID},
 				OrganizationName: row.OrganizationName, MunicipalityName: row.MunicipalityName,
 			},
 			Sector: httpx.Ref{ID: row.SectorID, Name: row.SectorName},

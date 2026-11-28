@@ -11,18 +11,6 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
-// mediaFile stores a test image and returns its id.
-func mediaFile(t *testing.T, e *testEnv, key string) int64 {
-	t.Helper()
-	var id int64
-	if err := e.Pool.QueryRow(t.Context(), `
-		insert into media_files (storage_key, mime_type, size_bytes, sha256)
-		values ($1, 'image/jpeg', 10, repeat('a', 64)) returning id`, key).Scan(&id); err != nil {
-		t.Fatalf("media file %s: %v", key, err)
-	}
-	return id
-}
-
 func wantSQLState(t *testing.T, err error, code string) {
 	t.Helper()
 	var pgErr *pgconn.PgError
@@ -36,8 +24,8 @@ func wantSQLState(t *testing.T, err error, code string) {
 func TestContactPhotoColumns(t *testing.T) {
 	t.Parallel()
 	e := newTestEnv(t, nil)
-	full := mediaFile(t, e, "contatos/foto.jpg")
-	thumbnail := mediaFile(t, e, "contatos/foto-miniatura.jpg")
+	full := e.MediaFile("contatos/foto.jpg")
+	thumbnail := e.MediaFile("contatos/foto-miniatura.jpg")
 	externalID := func(s string) *string { return &s }
 
 	const checkViolation = "23514"
@@ -118,8 +106,8 @@ func TestContactPhotoVersion(t *testing.T) {
 		t.Fatalf("photoVersion in the list without photo = %v, want null", v)
 	}
 
-	full := mediaFile(t, e, "contatos/foto.jpg")
-	thumbnail := mediaFile(t, e, "contatos/foto-miniatura.jpg")
+	full := e.MediaFile("contatos/foto.jpg")
+	thumbnail := e.MediaFile("contatos/foto-miniatura.jpg")
 	if _, err := e.Pool.Exec(t.Context(), `
 		update contacts set photo_media_id = $1, photo_thumbnail_media_id = $2,
 			photo_external_id = 'PHOTO-1', photo_checked_at = now()

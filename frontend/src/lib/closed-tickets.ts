@@ -22,7 +22,13 @@ export type ClosedTicket = {
   channel: TicketChannel
   closedAt: string | null
   subject: string | null
-  contact: { id: number; name: string; phone: string | null; registered: boolean }
+  contact: {
+    id: number
+    name: string
+    phone: string | null
+    registered: boolean
+    photoVersion: string | null
+  }
   organizationName: string | null
   municipalityName: string | null
   sector: Ref

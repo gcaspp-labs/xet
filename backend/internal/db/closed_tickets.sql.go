@@ -113,6 +113,7 @@ const listClosedTicketsPage = `-- name: ListClosedTicketsPage :many
 select
     t.id, t.protocol, t.closure_type, t.channel, t.closed_at, t.subject,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     t.sector_id, s.name as sector_name,
     t.assignee_id, u.name as assignee_name,
@@ -184,28 +185,29 @@ type ListClosedTicketsPageParams struct {
 }
 
 type ListClosedTicketsPageRow struct {
-	ID                    int64
-	Protocol              string
-	ClosureType           NullClosureType
-	Channel               TicketChannel
-	ClosedAt              *time.Time
-	Subject               *string
-	ContactID             int64
-	ContactName           string
-	ContactPhone          *string
-	ContactRegistered     bool
-	OrganizationName      *string
-	MunicipalityName      *string
-	SectorID              int64
-	SectorName            string
-	AssigneeID            *int64
-	AssigneeName          *string
-	TransferredSectorID   *int64
-	TransferredSectorName *string
-	MergedIntoID          *int64
-	MergedIntoProtocol    *string
-	MergedIntoStatus      NullTicketStatus
-	ModuleNames           []string
+	ID                     int64
+	Protocol               string
+	ClosureType            NullClosureType
+	Channel                TicketChannel
+	ClosedAt               *time.Time
+	Subject                *string
+	ContactID              int64
+	ContactName            string
+	ContactPhone           *string
+	ContactRegistered      bool
+	ContactPhotoExternalID *string
+	OrganizationName       *string
+	MunicipalityName       *string
+	SectorID               int64
+	SectorName             string
+	AssigneeID             *int64
+	AssigneeName           *string
+	TransferredSectorID    *int64
+	TransferredSectorName  *string
+	MergedIntoID           *int64
+	MergedIntoProtocol     *string
+	MergedIntoStatus       NullTicketStatus
+	ModuleNames            []string
 }
 
 func (q *Queries) ListClosedTicketsPage(ctx context.Context, arg ListClosedTicketsPageParams) ([]ListClosedTicketsPageRow, error) {
@@ -241,6 +243,7 @@ func (q *Queries) ListClosedTicketsPage(ctx context.Context, arg ListClosedTicke
 			&i.ContactName,
 			&i.ContactPhone,
 			&i.ContactRegistered,
+			&i.ContactPhotoExternalID,
 			&i.OrganizationName,
 			&i.MunicipalityName,
 			&i.SectorID,

@@ -1029,6 +1029,7 @@ select
     t.id, t.protocol, t.status, t.sector_id, s.name as sector_name,
     t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     t.organization_id, o.name as organization_name, o.municipality_id, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name,
     t.closed_by_id, cb.name as closed_by_name, t.closure_type, t.channel,
@@ -1073,6 +1074,7 @@ type GetTicketDetailRow struct {
 	ContactName            string
 	ContactPhone           *string
 	ContactRegistered      bool
+	ContactPhotoExternalID *string
 	OrganizationID         *int64
 	OrganizationName       *string
 	MunicipalityID         *int64
@@ -1123,6 +1125,7 @@ func (q *Queries) GetTicketDetail(ctx context.Context, id int64) (GetTicketDetai
 		&i.ContactName,
 		&i.ContactPhone,
 		&i.ContactRegistered,
+		&i.ContactPhotoExternalID,
 		&i.OrganizationID,
 		&i.OrganizationName,
 		&i.MunicipalityID,
@@ -1297,6 +1300,7 @@ select t.id, t.protocol, t.status, t.arrived_at,
               where a.ticket_id = t.id and a.action in ('ticket_assigned', 'ticket_started')
               order by a.id desc limit 1), t.assigned_at) as assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name, s.id as sector_id, s.name as sector_name
 from tickets t
@@ -1319,21 +1323,22 @@ type ListDashboardTicketsParams struct {
 }
 
 type ListDashboardTicketsRow struct {
-	ID                int64
-	Protocol          string
-	Status            TicketStatus
-	ArrivedAt         time.Time
-	AssignedAt        *time.Time
-	ContactID         int64
-	ContactName       string
-	ContactPhone      *string
-	ContactRegistered bool
-	OrganizationName  *string
-	MunicipalityName  *string
-	AssigneeID        *int64
-	AssigneeName      *string
-	SectorID          int64
-	SectorName        string
+	ID                     int64
+	Protocol               string
+	Status                 TicketStatus
+	ArrivedAt              time.Time
+	AssignedAt             *time.Time
+	ContactID              int64
+	ContactName            string
+	ContactPhone           *string
+	ContactRegistered      bool
+	ContactPhotoExternalID *string
+	OrganizationName       *string
+	MunicipalityName       *string
+	AssigneeID             *int64
+	AssigneeName           *string
+	SectorID               int64
+	SectorName             string
 }
 
 // assigned_at on the ticket is the first assignment; after a return to the
@@ -1357,6 +1362,7 @@ func (q *Queries) ListDashboardTickets(ctx context.Context, arg ListDashboardTic
 			&i.ContactName,
 			&i.ContactPhone,
 			&i.ContactRegistered,
+			&i.ContactPhotoExternalID,
 			&i.OrganizationName,
 			&i.MunicipalityName,
 			&i.AssigneeID,
@@ -1409,6 +1415,7 @@ const listOpenTickets = `-- name: ListOpenTickets :many
 select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name, t.assignee_read_at,
     (select count(*)::integer from messages m
@@ -1425,21 +1432,22 @@ order by t.arrived_at, t.id
 `
 
 type ListOpenTicketsRow struct {
-	ID                int64
-	Protocol          string
-	Status            TicketStatus
-	ArrivedAt         time.Time
-	AssignedAt        *time.Time
-	ContactID         int64
-	ContactName       string
-	ContactPhone      *string
-	ContactRegistered bool
-	OrganizationName  *string
-	MunicipalityName  *string
-	AssigneeID        *int64
-	AssigneeName      *string
-	AssigneeReadAt    *time.Time
-	UnreadCount       int32
+	ID                     int64
+	Protocol               string
+	Status                 TicketStatus
+	ArrivedAt              time.Time
+	AssignedAt             *time.Time
+	ContactID              int64
+	ContactName            string
+	ContactPhone           *string
+	ContactRegistered      bool
+	ContactPhotoExternalID *string
+	OrganizationName       *string
+	MunicipalityName       *string
+	AssigneeID             *int64
+	AssigneeName           *string
+	AssigneeReadAt         *time.Time
+	UnreadCount            int32
 }
 
 // Open tickets of the sector with the contact and the assignee, oldest first,
@@ -1468,6 +1476,7 @@ func (q *Queries) ListOpenTickets(ctx context.Context, sectorID int64) ([]ListOp
 			&i.ContactName,
 			&i.ContactPhone,
 			&i.ContactRegistered,
+			&i.ContactPhotoExternalID,
 			&i.OrganizationName,
 			&i.MunicipalityName,
 			&i.AssigneeID,
@@ -1583,6 +1592,7 @@ const listPendingTickets = `-- name: ListPendingTickets :many
 select
     t.id, t.protocol, t.pending_reason, t.pending_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     co.name as contact_organization_name, cm.name as contact_municipality_name,
     t.pending_by_id, pu.name as pending_by_name,
@@ -1608,6 +1618,7 @@ type ListPendingTicketsRow struct {
 	ContactName             string
 	ContactPhone            *string
 	ContactRegistered       bool
+	ContactPhotoExternalID  *string
 	OrganizationName        *string
 	MunicipalityName        *string
 	ContactOrganizationName *string
@@ -1642,6 +1653,7 @@ func (q *Queries) ListPendingTickets(ctx context.Context, sectorID int64) ([]Lis
 			&i.ContactName,
 			&i.ContactPhone,
 			&i.ContactRegistered,
+			&i.ContactPhotoExternalID,
 			&i.OrganizationName,
 			&i.MunicipalityName,
 			&i.ContactOrganizationName,

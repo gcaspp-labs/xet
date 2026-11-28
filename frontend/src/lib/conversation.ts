@@ -35,7 +35,13 @@ export type TicketDetail = {
   closedAt: string | null
   subject: string | null
   resolution: string | null
-  contact: { id: number; name: string; phone: string | null; registered: boolean }
+  contact: {
+    id: number
+    name: string
+    phone: string | null
+    registered: boolean
+    photoVersion: string | null
+  }
   organization: { id: number; name: string; municipality: { id: number; name: string } } | null
   assignee: { id: number; name: string } | null
   closedBy: { id: number; name: string } | null

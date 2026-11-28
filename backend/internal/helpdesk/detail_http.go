@@ -105,7 +105,7 @@ func (h *Handler) getTicket(w http.ResponseWriter, r *http.Request) {
 		ArrivedAt: t.ArrivedAt, AssignedAt: t.AssignedAt,
 		StartedAt: t.StartedAt, EndedAt: t.EndedAt, ClosedAt: t.ClosedAt,
 		Subject: t.Subject, Resolution: t.Resolution,
-		Contact: ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered},
+		Contact: ticketContactResponse{ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered, PhotoVersion: t.ContactPhotoExternalID},
 	}
 	if t.OrganizationID != nil && t.OrganizationName != nil && t.MunicipalityID != nil && t.MunicipalityName != nil {
 		out.Organization = &httpx.OrganizationRef{

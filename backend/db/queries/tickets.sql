@@ -45,6 +45,7 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 select
     t.id, t.protocol, t.status, t.arrived_at, t.assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name, t.assignee_read_at,
     (select count(*)::integer from messages m
@@ -67,6 +68,7 @@ select t.id, t.protocol, t.status, t.arrived_at,
               where a.ticket_id = t.id and a.action in ('ticket_assigned', 'ticket_started')
               order by a.id desc limit 1), t.assigned_at) as assigned_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name, s.id as sector_id, s.name as sector_name
 from tickets t
@@ -105,6 +107,7 @@ select
     t.id, t.protocol, t.status, t.sector_id, s.name as sector_name,
     t.arrived_at, t.assigned_at, t.started_at, t.ended_at, t.closed_at, t.subject, t.resolution,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     t.organization_id, o.name as organization_name, o.municipality_id, m.name as municipality_name,
     t.assignee_id, u.name as assignee_name,
     t.closed_by_id, cb.name as closed_by_name, t.closure_type, t.channel,
@@ -253,6 +256,7 @@ returning id, protocol, sector_id, contact_id, organization_id, assignee_id, sta
 select
     t.id, t.protocol, t.pending_reason, t.pending_at,
     t.contact_id, c.name as contact_name, c.phone as contact_phone, c.registered as contact_registered,
+    c.photo_external_id as contact_photo_external_id,
     o.name as organization_name, m.name as municipality_name,
     co.name as contact_organization_name, cm.name as contact_municipality_name,
     t.pending_by_id, pu.name as pending_by_name,

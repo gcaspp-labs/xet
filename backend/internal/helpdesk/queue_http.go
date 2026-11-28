@@ -52,7 +52,7 @@ func toTicketSummaryResponse(t Summary) ticketSummaryResponse {
 		ArrivedAt:  t.ArrivedAt,
 		AssignedAt: t.AssignedAt,
 		Contact: ticketContactResponse{
-			ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered,
+			ID: t.ContactID, Name: t.ContactName, Phone: t.ContactPhone, Registered: t.ContactRegistered, PhotoVersion: t.ContactPhotoExternalID,
 		},
 		OrganizationName: t.OrganizationName,
 		MunicipalityName: t.MunicipalityName,
