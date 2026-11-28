@@ -35,6 +35,8 @@ func (h *Handler) ticketError(w http.ResponseWriter, r *http.Request, err error)
 		httpx.WriteError(w, http.StatusNotFound, "Mensagem não encontrada.")
 	case errors.Is(err, ErrMediaNotFound):
 		httpx.WriteError(w, http.StatusNotFound, "Arquivo não encontrado.")
+	case errors.Is(err, ErrPhotoNotFound):
+		httpx.WriteError(w, http.StatusNotFound, "Foto não encontrada.")
 	case errors.Is(err, ErrForbidden):
 		httpx.WriteError(w, http.StatusForbidden, "Você não tem acesso a este setor.")
 	case errors.Is(err, ErrNotAssignee):
