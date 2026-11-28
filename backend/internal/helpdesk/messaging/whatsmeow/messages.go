@@ -350,7 +350,7 @@ func sharedContacts(msg *messaging.Message, contacts []*waE2E.ContactMessage) {
 func linkPreview(ext *waE2E.ExtendedTextMessage) *messaging.Preview {
 	title := strings.TrimSpace(ext.GetTitle())
 	url := strings.TrimSpace(ext.GetMatchedText())
-	if title == "" || !isHTTPAddress(url) {
+	if title == "" || !messaging.IsLinkAddress(url) {
 		return nil
 	}
 	return &messaging.Preview{
@@ -359,11 +359,6 @@ func linkPreview(ext *waE2E.ExtendedTextMessage) *messaging.Preview {
 		Description: ext.GetDescription(),
 		Thumbnail:   ext.GetJPEGThumbnail(),
 	}
-}
-
-// isHTTPAddress tells an address the panel opens as a link.
-func isHTTPAddress(url string) bool {
-	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
 // quote reads the message a reply cites, from the context of a text or media

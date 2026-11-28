@@ -10,6 +10,7 @@ package messaging
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -95,6 +96,14 @@ type Preview struct {
 	Description string
 	// Thumbnail is the JPEG image of the card, when the provider sends one.
 	Thumbnail []byte
+}
+
+// IsLinkAddress tells an address the panel opens as a link: http or https, the
+// same rule of the links in the text (spec #483). It is the single copy of the
+// rule, used by the provider when it reads the card and by the service when it
+// records (spec #511).
+func IsLinkAddress(address string) bool {
+	return strings.HasPrefix(address, "http://") || strings.HasPrefix(address, "https://")
 }
 
 // Message is a message that passed through the sector number.

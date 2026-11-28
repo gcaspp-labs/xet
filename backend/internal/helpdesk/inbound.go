@@ -60,7 +60,7 @@ const (
 func normalizePreview(p *messaging.Preview) *messaging.Preview {
 	title := cutRunes(strings.TrimSpace(p.Title), maxPreviewTitleLength)
 	url := strings.TrimSpace(p.URL)
-	if title == "" || !isLinkAddress(url) {
+	if title == "" || !messaging.IsLinkAddress(url) {
 		return nil
 	}
 	preview := &messaging.Preview{
@@ -72,12 +72,6 @@ func normalizePreview(p *messaging.Preview) *messaging.Preview {
 		preview.Thumbnail = p.Thumbnail
 	}
 	return preview
-}
-
-// isLinkAddress tells an address the panel opens as a link, the same rule of
-// the links in the text (spec #483).
-func isLinkAddress(url string) bool {
-	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
 // cutRunes cuts a text at max characters, never splitting a character.
