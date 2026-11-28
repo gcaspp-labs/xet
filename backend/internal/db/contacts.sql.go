@@ -41,6 +41,52 @@ func (q *Queries) AddContactSectors(ctx context.Context, arg AddContactSectorsPa
 	return err
 }
 
+const claimContactPhotoCheck = `-- name: ClaimContactPhotoCheck :one
+update contacts
+set photo_checked_at = now()
+where id = $1
+  and (photo_checked_at is null or photo_checked_at < now() - interval '24 hours')
+returning phone, external_contact_id, photo_media_id, photo_thumbnail_media_id, photo_external_id
+`
+
+type ClaimContactPhotoCheckRow struct {
+	Phone                 *string
+	ExternalContactID     *string
+	PhotoMediaID          *int64
+	PhotoThumbnailMediaID *int64
+	PhotoExternalID       *string
+}
+
+// Claims the profile picture lookup of the contact for the next 24 hours and
+// returns the data the lookup needs. No row means the last attempt is less
+// than 24 hours old: nothing is looked up (spec #482). The attempt counts even
+// when the lookup fails, so a failure is retried only after the interval.
+func (q *Queries) ClaimContactPhotoCheck(ctx context.Context, id int64) (ClaimContactPhotoCheckRow, error) {
+	row := q.db.QueryRow(ctx, claimContactPhotoCheck, id)
+	var i ClaimContactPhotoCheckRow
+	err := row.Scan(
+		&i.Phone,
+		&i.ExternalContactID,
+		&i.PhotoMediaID,
+		&i.PhotoThumbnailMediaID,
+		&i.PhotoExternalID,
+	)
+	return i, err
+}
+
+const clearContactPhoto = `-- name: ClearContactPhoto :exec
+update contacts
+set photo_media_id = null, photo_thumbnail_media_id = null, photo_external_id = null
+where id = $1
+`
+
+// A lookup without a picture clears the three references: the contact goes
+// back to its initials.
+func (q *Queries) ClearContactPhoto(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, clearContactPhoto, id)
+	return err
+}
+
 const countContacts = `-- name: CountContacts :one
 select count(*)
 from contacts c
@@ -194,6 +240,19 @@ func (q *Queries) CreateUnregisteredContact(ctx context.Context, arg CreateUnreg
 	return i, err
 }
 
+const deleteMediaFile = `-- name: DeleteMediaFile :one
+delete from media_files where id = $1 returning storage_key
+`
+
+// Removes a file without owner, such as the previous picture of a contact.
+// Returns its storage key so the caller removes the stored file too.
+func (q *Queries) DeleteMediaFile(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRow(ctx, deleteMediaFile, id)
+	var storage_key string
+	err := row.Scan(&storage_key)
+	return storage_key, err
+}
+
 const getContactByExternalID = `-- name: GetContactByExternalID :one
 select id, name, phone, external_contact_id, organization_id, registered, created_at, updated_at, photo_media_id, photo_thumbnail_media_id, photo_external_id, photo_checked_at from contacts where external_contact_id = $1
 `
@@ -268,6 +327,41 @@ func (q *Queries) GetContactForShare(ctx context.Context, id int64) (Contact, er
 		&i.PhotoThumbnailMediaID,
 		&i.PhotoExternalID,
 		&i.PhotoCheckedAt,
+	)
+	return i, err
+}
+
+const getContactPhotoFile = `-- name: GetContactPhotoFile :one
+select m.id, m.storage_key, m.mime_type, m.size_bytes, m.file_name, m.sha256, m.duration_seconds, m.created_at
+from media_files m
+where m.id = (select case when $1::boolean
+                          then c.photo_thumbnail_media_id
+                          else c.photo_media_id end
+              from contacts c
+              where c.id = $2)
+`
+
+type GetContactPhotoFileParams struct {
+	Thumbnail bool
+	ID        int64
+}
+
+// Reads one of the two files of the profile picture of the contact: the
+// thumbnail (true) or the full picture (false). No row means the contact has
+// no picture, or does not exist; either way there is nothing to serve
+// (spec #482).
+func (q *Queries) GetContactPhotoFile(ctx context.Context, arg GetContactPhotoFileParams) (MediaFile, error) {
+	row := q.db.QueryRow(ctx, getContactPhotoFile, arg.Thumbnail, arg.ID)
+	var i MediaFile
+	err := row.Scan(
+		&i.ID,
+		&i.StorageKey,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.FileName,
+		&i.Sha256,
+		&i.DurationSeconds,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -591,6 +685,31 @@ type SetContactExternalIDParams struct {
 
 func (q *Queries) SetContactExternalID(ctx context.Context, arg SetContactExternalIDParams) error {
 	_, err := q.db.Exec(ctx, setContactExternalID, arg.ExternalContactID, arg.ID)
+	return err
+}
+
+const setContactPhoto = `-- name: SetContactPhoto :exec
+update contacts
+set photo_media_id = $1,
+    photo_thumbnail_media_id = $2,
+    photo_external_id = $3
+where id = $4
+`
+
+type SetContactPhotoParams struct {
+	PhotoMediaID          *int64
+	PhotoThumbnailMediaID *int64
+	PhotoExternalID       *string
+	ID                    int64
+}
+
+func (q *Queries) SetContactPhoto(ctx context.Context, arg SetContactPhotoParams) error {
+	_, err := q.db.Exec(ctx, setContactPhoto,
+		arg.PhotoMediaID,
+		arg.PhotoThumbnailMediaID,
+		arg.PhotoExternalID,
+		arg.ID,
+	)
 	return err
 }
 

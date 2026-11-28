@@ -14,7 +14,8 @@ import (
 // WhatsApp answers the profile picture query with the preview for the
 // thumbnail and with the full image for the rest. Both carry the existing
 // ID, so an unchanged picture comes back as an empty answer; "not set" and
-// "hidden" are no picture, and any other failure is an error.
+// "hidden" are no picture; an address without https is refused, and any other
+// failure is an error.
 func TestProfilePicture(t *testing.T) {
 	jid := types.NewJID("5511999999999", types.DefaultUserServer)
 	type call struct {
@@ -90,6 +91,20 @@ func TestProfilePicture(t *testing.T) {
 			preview:   preview,
 			fullErr:   fullErr,
 			wantErr:   fullErr,
+			wantCalls: []call{{true, ""}, {false, ""}},
+		},
+		{
+			name:      "thumbnail without https",
+			preview:   &types.ProfilePictureInfo{ID: "photo-2", URL: "http://cdn.example/preview", Type: "preview"},
+			full:      full,
+			wantErr:   errPictureURLNotHTTPS,
+			wantCalls: []call{{true, ""}, {false, ""}},
+		},
+		{
+			name:      "picture without https",
+			preview:   preview,
+			full:      &types.ProfilePictureInfo{ID: "photo-2", URL: "http://cdn.example/full", Type: "image"},
+			wantErr:   errPictureURLNotHTTPS,
 			wantCalls: []call{{true, ""}, {false, ""}},
 		},
 	}

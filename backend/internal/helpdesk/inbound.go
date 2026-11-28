@@ -112,6 +112,8 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 	}
 
 	var ticketID int64
+	var contactID int64
+	var opened bool
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
 		// Before any other lock, in the order of the changes received for
@@ -123,10 +125,12 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		if err != nil {
 			return err
 		}
-		ticket, err := openTicket(ctx, q, sectorID, contact, sentAt)
+		ticket, first, err := openTicket(ctx, q, sectorID, contact, sentAt)
 		if err != nil {
 			return err
 		}
+		contactID = contact.ID
+		opened = first
 		ticketID = ticket.ID
 		// The contact is written only after the ticket is locked, in the
 		// order of the closing (ticket, then contact), so the two never wait
@@ -196,6 +200,12 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		return err
 	}
 	s.hub.Publish(realtime.TicketChanged(sectorID, ticketID))
+	// The picture of the contact comes after the ticket opened by a received
+	// message, in the background (spec #482): it never delays the message nor
+	// fails the event.
+	if opened && origin == db.MessageOriginCustomer {
+		s.refreshContactPhoto(sectorID, contactID)
+	}
 	return nil
 }
 
@@ -337,19 +347,20 @@ func findOrCreateContact(ctx context.Context, q *db.Queries, msg messaging.Messa
 
 // openTicket locks the open ticket of the contact in the sector, or opens a
 // queued one with the next protocol. The row lock keeps the message from
-// entering a ticket that is being closed or transferred.
-func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.Contact, arrivedAt time.Time) (db.Ticket, error) {
-	ticket, err := db.AsTicket(q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contact.ID}))
+// entering a ticket that is being closed or transferred. created tells the
+// caller the ticket is new, for the work that runs once per ticket.
+func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.Contact, arrivedAt time.Time) (ticket db.Ticket, created bool, err error) {
+	ticket, err = db.AsTicket(q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contact.ID}))
 	if err == nil {
-		return ticket, nil
+		return ticket, false, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return db.Ticket{}, fmt.Errorf("get open ticket: %w", err)
+		return db.Ticket{}, false, fmt.Errorf("get open ticket: %w", err)
 	}
 
 	protocol, err := nextProtocol(ctx, q)
 	if err != nil {
-		return db.Ticket{}, err
+		return db.Ticket{}, false, err
 	}
 	ticket, err = db.AsTicket(q.CreateQueuedTicket(ctx, db.CreateQueuedTicketParams{
 		Protocol:       protocol,
@@ -359,17 +370,17 @@ func openTicket(ctx context.Context, q *db.Queries, sectorID int64, contact db.C
 		ArrivedAt:      arrivedAt,
 	}))
 	if err == nil {
-		return ticket, nil
+		return ticket, true, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return db.Ticket{}, fmt.Errorf("create ticket: %w", err)
+		return db.Ticket{}, false, fmt.Errorf("create ticket: %w", err)
 	}
 	// A concurrent message opened the ticket first and committed.
 	ticket, err = db.AsTicket(q.GetOpenTicketForUpdate(ctx, db.GetOpenTicketForUpdateParams{SectorID: sectorID, ContactID: contact.ID}))
 	if err != nil {
-		return db.Ticket{}, fmt.Errorf("get open ticket: %w", err)
+		return db.Ticket{}, false, fmt.Errorf("get open ticket: %w", err)
 	}
-	return ticket, nil
+	return ticket, false, nil
 }
 
 // nextProtocol takes the next protocol of the year, locking the counter

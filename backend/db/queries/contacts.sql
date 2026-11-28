@@ -160,3 +160,46 @@ select phone::text from contacts where phone = any(@phones::text[]);
 -- name: GetContactForShare :one
 -- Keeps the registration of the contact from changing until the transaction ends.
 select * from contacts where id = @id for share;
+
+-- name: ClaimContactPhotoCheck :one
+-- Claims the profile picture lookup of the contact for the next 24 hours and
+-- returns the data the lookup needs. No row means the last attempt is less
+-- than 24 hours old: nothing is looked up (spec #482). The attempt counts even
+-- when the lookup fails, so a failure is retried only after the interval.
+update contacts
+set photo_checked_at = now()
+where id = @id
+  and (photo_checked_at is null or photo_checked_at < now() - interval '24 hours')
+returning phone, external_contact_id, photo_media_id, photo_thumbnail_media_id, photo_external_id;
+
+-- name: SetContactPhoto :exec
+update contacts
+set photo_media_id = @photo_media_id,
+    photo_thumbnail_media_id = @photo_thumbnail_media_id,
+    photo_external_id = @photo_external_id
+where id = @id;
+
+-- name: ClearContactPhoto :exec
+-- A lookup without a picture clears the three references: the contact goes
+-- back to its initials.
+update contacts
+set photo_media_id = null, photo_thumbnail_media_id = null, photo_external_id = null
+where id = @id;
+
+-- name: GetContactPhotoFile :one
+-- Reads one of the two files of the profile picture of the contact: the
+-- thumbnail (true) or the full picture (false). No row means the contact has
+-- no picture, or does not exist; either way there is nothing to serve
+-- (spec #482).
+select m.*
+from media_files m
+where m.id = (select case when @thumbnail::boolean
+                          then c.photo_thumbnail_media_id
+                          else c.photo_media_id end
+              from contacts c
+              where c.id = @id);
+
+-- name: DeleteMediaFile :one
+-- Removes a file without owner, such as the previous picture of a contact.
+-- Returns its storage key so the caller removes the stored file too.
+delete from media_files where id = @id returning storage_key;
