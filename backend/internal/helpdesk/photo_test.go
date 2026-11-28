@@ -14,6 +14,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 )
@@ -273,6 +274,38 @@ func TestResolveFailureLeavesTheContactWithoutPicture(t *testing.T) {
 	}
 	if got := len(e.tickets(sector.ID)); got != 1 {
 		t.Fatalf("tickets = %d, want the ticket created", got)
+	}
+}
+
+// TestContactWithoutPhoneIsSkipped proves a contact with neither a phone nor a
+// provider id ends the lookup without error and without asking the provider;
+// only the attempt is recorded (spec #482). The API does not create a contact
+// in that state, so the row is inserted directly.
+func TestContactWithoutPhoneIsSkipped(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	e.connectSector(sector.ID)
+
+	var contactID int64
+	if err := e.Pool.QueryRow(e.T.Context(),
+		"insert into contacts (name) values ('Sem telefone') returning id").Scan(&contactID); err != nil {
+		t.Fatal(err)
+	}
+	// Both provider calls fail if reached: finishing without error proves
+	// neither one ran.
+	e.WhatsApp.FailNextResolveContact(sector.ID, errors.New("resolve must not run"))
+	e.WhatsApp.FailNextProfilePicture(sector.ID, errors.New("picture must not run"))
+
+	if err := helpdesk.LookupContactPhoto(e.TicketService, t.Context(), sector.ID, contactID); err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	e.wantNoPhoto(contactID)
+	if p := e.contactPhoto(contactID); p.CheckedAt == nil {
+		t.Fatal("the attempt was not recorded")
+	}
+	if got := e.Count("media_files"); got != 0 {
+		t.Fatalf("media files = %d, want none", got)
 	}
 }
 
