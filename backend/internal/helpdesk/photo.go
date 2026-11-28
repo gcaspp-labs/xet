@@ -26,7 +26,27 @@ const (
 	// maxProfilePictureSize is the limit of each profile picture file, the
 	// thumbnail and the full image.
 	maxProfilePictureSize = 5 << 20
+	// maxProfilePictureRedirects is how many redirects one download follows.
+	maxProfilePictureRedirects = 3
 )
+
+// profilePictureClient downloads the files of the picture, in place of the
+// default client: each download has a deadline, follows at most
+// maxProfilePictureRedirects redirects and never follows one that leaves
+// https, so a link from the provider cannot lead the backend to another
+// scheme. The address itself is the one the provider returned.
+var profilePictureClient = &http.Client{
+	Timeout: profilePictureDownloadTimeout,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxProfilePictureRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxProfilePictureRedirects)
+		}
+		if req.URL.Scheme != "https" {
+			return fmt.Errorf("redirect to %q is not https", req.URL.Scheme)
+		}
+		return nil
+	},
+}
 
 // refreshContactPhoto looks up the profile picture of the contact in the
 // provider and stores it, in the background: the ticket that brought the
@@ -224,7 +244,7 @@ func downloadProfilePicture(ctx context.Context, url string) (messaging.Media, e
 	if err != nil {
 		return messaging.Media{}, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := profilePictureClient.Do(req)
 	if err != nil {
 		return messaging.Media{}, err
 	}
