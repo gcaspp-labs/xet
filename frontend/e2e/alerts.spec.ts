@@ -27,6 +27,7 @@ declare global {
     }
     __requests: number
     __stored: Record<string, string | null>
+    __badge: { calls: ({ kind: 'set'; count?: number } | { kind: 'clear' })[] }
   }
 }
 
@@ -117,6 +118,48 @@ async function setHidden(page: Page, hidden: boolean) {
     }
     document.dispatchEvent(new Event('visibilitychange'))
   }, hidden)
+}
+
+// Troca a Badging API por um dublê antes de a página carregar, para conferir as chamadas do
+// ícone do app (spec #510) sem depender do sistema operacional. `clearAppBadge` vira `clear`.
+async function spyOnBadge(page: Page) {
+  await page.addInitScript(() => {
+    window.__badge = { calls: [] }
+    Object.defineProperty(Navigator.prototype, 'setAppBadge', {
+      configurable: true,
+      value(count?: number) {
+        window.__badge.calls.push({ kind: 'set', count })
+        return Promise.resolve()
+      },
+    })
+    Object.defineProperty(Navigator.prototype, 'clearAppBadge', {
+      configurable: true,
+      value() {
+        window.__badge.calls.push({ kind: 'clear' })
+        return Promise.resolve()
+      },
+    })
+  })
+}
+
+const lastBadge = async (page: Page) =>
+  (await page.evaluate(() => window.__badge.calls)).at(-1) ?? null
+
+// Liga o número do setor pela API, como a tela de Conexão faz.
+async function connectSector(baseURL: string, sectorId: number) {
+  const api = await apiRequest.newContext({ baseURL })
+  try {
+    expect(
+      (
+        await api.post('/api/auth/login', {
+          data: { email: admin.email, password: admin.password },
+        })
+      ).ok(),
+    ).toBeTruthy()
+    expect((await api.post(`/api/sectors/${sectorId}/connection`)).ok()).toBeTruthy()
+  } finally {
+    await api.dispose()
+  }
 }
 
 const notified = (page: Page) =>
@@ -787,4 +830,103 @@ test('título da aba conta o número desconectado e volta ao normal ao sair', as
   await page.getByRole('menuitem', { name: 'Sair' }).click()
   await expect(page).toHaveURL(/\/login$/)
   await expect(page).toHaveTitle('Central de Atendimento')
+})
+
+test('ícone do app acompanha a fila e limpa quando ela esvazia', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await spyOnBadge(page)
+  await signInWhenLive(page, agent, userPassword, sector.id)
+  // Zero limpa o ícone: com o sino montado e nada pendente, nunca aparece "0".
+  await expect(page).toHaveTitle('Central de Atendimento')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'clear' })
+
+  await receive(request, sector.id, 'Rodrigo Um')
+  await expect(page).toHaveTitle('(1) Central de Atendimento')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'set', count: 1 })
+
+  await receive(request, sector.id, 'Sofia Dois')
+  await expect(page).toHaveTitle('(2) Central de Atendimento')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'set', count: 2 })
+
+  const bell = page.getByRole('banner').getByRole('button', { name: /^Notificações/ })
+  await bell.click()
+  const popover = page.getByRole('dialog')
+  await popover.getByRole('button', { name: 'Assumir chamado de Rodrigo Um' }).click()
+  await expect(page).toHaveTitle('(1) Central de Atendimento')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'set', count: 1 })
+  await popover.getByRole('button', { name: 'Assumir chamado de Sofia Dois' }).click()
+  await expect(page).toHaveTitle('Central de Atendimento')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'clear' })
+})
+
+test('ícone do administrador conta só o número desconectado', async ({
+  page,
+  request,
+  baseURL,
+  onlySectors,
+}) => {
+  const connected = await connectedSector(baseURL!, request)
+  const { sector: down } = await seedSector(baseURL!)
+  await onlySectors(connected.sector.id, down.id)
+  await receive(request, connected.sector.id, 'Tiago Fila')
+  await spyOnBadge(page)
+  await signIn(page, admin.email, admin.password)
+  const bell = page.getByRole('banner').getByRole('button', { name: /^Notificações/ })
+  await expect(bell).toHaveAccessibleName('Notificações, 1 pendente')
+  // O 1 é o número desconectado; o chamado na fila não entra no ícone do administrador.
+  await expect(page).toHaveTitle('(1) Central de Atendimento')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'set', count: 1 })
+
+  // O número conecta: sem chamados para o administrador, o ícone limpa mesmo com a fila cheia.
+  await connectSector(baseURL!, down.id)
+  await phone(request, down.id, 'pair')
+  await expect(page).toHaveTitle('Central de Atendimento')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'clear' })
+})
+
+test('fechar a janela do app limpa o ícone', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  await spyOnBadge(page)
+  await signInWhenLive(page, agent, userPassword, sector.id)
+  await receive(request, sector.id, 'Vitor Fila')
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'set', count: 1 })
+
+  // O navegador dispara `pagehide` ao fechar a janela; com o app fechado o número não se atualiza.
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
+  await expect.poll(() => lastBadge(page)).toEqual({ kind: 'clear' })
+})
+
+test('sem a Badging API o app segue sem erro no console', async ({ page, request, baseURL }) => {
+  const { sector, agent } = await connectedSector(baseURL!, request)
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      errors.push(message.text())
+    }
+  })
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'setAppBadge', {
+      configurable: true,
+      value: undefined,
+    })
+    Object.defineProperty(Navigator.prototype, 'clearAppBadge', {
+      configurable: true,
+      value: undefined,
+    })
+  })
+  await signInWhenLive(page, agent, userPassword, sector.id)
+  // A conferência começa depois do login: a tela de entrada consulta a sessão antes de entrar.
+  errors.length = 0
+  await receive(request, sector.id, 'Wagner Fila')
+  // O resto do sino e do título continua igual, e nada quebra sem a API.
+  await expect(
+    page.getByRole('banner').getByRole('button', { name: /^Notificações/ }),
+  ).toHaveAccessibleName('Notificações, 1 pendente')
+  await expect(page).toHaveTitle('(1) Central de Atendimento')
+  expect(errors).toEqual([])
 })

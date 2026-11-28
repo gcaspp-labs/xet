@@ -15,6 +15,19 @@ import { cn } from '@/lib/utils'
 
 const appTitle = 'Central de Atendimento'
 
+// O ícone do app (Badging API) mostra o mesmo número do título (spec #510). Onde a API não
+// existe (Chrome no Android) ou a permissão não deixa (iPhone sem as notificações do
+// navegador), nada acontece: as chamadas são opcionais e a Promise é tratada para não deixar
+// erro no console. Zero limpa o ícone; nunca mostra "0".
+function showBadge(count: number) {
+  const call = count > 0 ? navigator.setAppBadge?.(count) : navigator.clearAppBadge?.()
+  void Promise.resolve(call).catch(() => {})
+}
+
+function clearBadge() {
+  void Promise.resolve(navigator.clearAppBadge?.()).catch(() => {})
+}
+
 // Sino do cabeçalho (spec.md › Notificações): números desconectados no topo, depois os
 // chamados na fila. O contador soma os dois; fica em alerta enquanto houver número caído.
 export function NotificationBell({ user }: { user: User }) {
@@ -36,6 +49,31 @@ export function NotificationBell({ user }: { user: User }) {
       document.title = appTitle
     }
   }, [titleCount])
+
+  // O ícone do app (Badging API) acompanha o título. Só o número muda o ícone: limpar a cada
+  // troca deixaria o ícone piscando.
+  useEffect(() => {
+    showBadge(titleCount)
+  }, [titleCount])
+
+  // Com a janela fechada o número não se atualiza, então o ícone é limpo ao sair. Ao voltar
+  // do cache do navegador (voltar/avançar), o efeito não roda de novo: o número volta aqui.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        showBadge(titleCount)
+      }
+    }
+    window.addEventListener('pagehide', clearBadge)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      window.removeEventListener('pagehide', clearBadge)
+      window.removeEventListener('pageshow', onPageShow)
+    }
+  }, [titleCount])
+
+  // Sem o sino na tela (sair da conta), o número antigo não pode ficar no ícone.
+  useEffect(() => clearBadge, [])
 
   return (
     <Popover
