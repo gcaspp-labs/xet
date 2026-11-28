@@ -883,6 +883,7 @@ test('ícone do administrador conta só o número desconectado', async ({
 
   // O número conecta: sem chamados para o administrador, o ícone limpa mesmo com a fila cheia.
   await connectSector(baseURL!, down.id)
+  await phone(request, down.id, 'pair')
   await expect(page).toHaveTitle('Central de Atendimento')
   await expect.poll(() => lastBadge(page)).toEqual({ kind: 'clear' })
 })
@@ -919,6 +920,8 @@ test('sem a Badging API o app segue sem erro no console', async ({ page, request
     })
   })
   await signInWhenLive(page, agent, userPassword, sector.id)
+  // A conferência começa depois do login: a tela de entrada consulta a sessão antes de entrar.
+  errors.length = 0
   await receive(request, sector.id, 'Wagner Fila')
   // O resto do sino e do título continua igual, e nada quebra sem a API.
   await expect(
