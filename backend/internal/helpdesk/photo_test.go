@@ -2,6 +2,7 @@ package helpdesk_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/storage"
 	"github.com/gcaspp-labs/xet/backend/internal/db"
+	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging"
 	"github.com/gcaspp-labs/xet/backend/internal/helpdesk/messaging/fake"
 )
 
@@ -205,6 +207,75 @@ func TestStartResolvesPhoneBeforePicture(t *testing.T) {
 	e.wantPhotoStored(contactID, providerID)
 }
 
+// TestResolveWithoutWhatsAppLeavesTheContactWithoutPicture proves a phone
+// without WhatsApp ends the lookup as "no picture", without failing the start
+// and still counting the attempt (spec #482).
+func TestResolveWithoutWhatsAppLeavesTheContactWithoutPicture(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	e.connectSector(sector.ID)
+	e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("ana@exemplo.com", testPassword)
+	adminToken := e.Login("admin@exemplo.com", testPassword)
+	org := e.Organization(adminToken, "Prefeitura de Santos", "")
+	contactID := e.Contact(adminToken, "Carla Souza", "5513988881111", org, sector.ID)
+
+	// The phone has no account in the provider.
+	e.WhatsApp.FailNextResolveContact(sector.ID, messaging.ErrContactNotFound)
+	resp := e.startConversation(sector.ID, contactID, token, requestC, "Bom dia, Carla.")
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("start: status %d, body %v", resp.Status, resp.Body)
+	}
+	e.TicketService.Wait()
+
+	e.wantNoPhoto(contactID)
+	if p := e.contactPhoto(contactID); p.CheckedAt == nil {
+		t.Fatal("the attempt was not recorded")
+	}
+	if got := e.Count("media_files"); got != 0 {
+		t.Fatalf("media files = %d, want none", got)
+	}
+	if got := len(e.tickets(sector.ID)); got != 1 {
+		t.Fatalf("tickets = %d, want the ticket created", got)
+	}
+}
+
+// TestResolveFailureLeavesTheContactWithoutPicture proves a failure to resolve
+// the phone changes nothing: no picture, no file, only the attempt; the start
+// is not affected (spec #482).
+func TestResolveFailureLeavesTheContactWithoutPicture(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Contabilidade")
+	e.connectSector(sector.ID)
+	e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	e.User("admin@exemplo.com", db.UserRoleAdmin, nil)
+	token := e.Login("ana@exemplo.com", testPassword)
+	adminToken := e.Login("admin@exemplo.com", testPassword)
+	org := e.Organization(adminToken, "Prefeitura de Santos", "")
+	contactID := e.Contact(adminToken, "Carla Souza", "5513988881111", org, sector.ID)
+
+	e.WhatsApp.FailNextResolveContact(sector.ID, errors.New("provider unavailable"))
+	resp := e.startConversation(sector.ID, contactID, token, requestC, "Bom dia, Carla.")
+	if resp.Status != http.StatusCreated {
+		t.Fatalf("start: status %d, body %v", resp.Status, resp.Body)
+	}
+	e.TicketService.Wait()
+
+	e.wantNoPhoto(contactID)
+	if p := e.contactPhoto(contactID); p.CheckedAt == nil {
+		t.Fatal("the attempt was not recorded")
+	}
+	if got := e.Count("media_files"); got != 0 {
+		t.Fatalf("media files = %d, want none", got)
+	}
+	if got := len(e.tickets(sector.ID)); got != 1 {
+		t.Fatalf("tickets = %d, want the ticket created", got)
+	}
+}
+
 // TestPictureLookupAtMostOncePerDay proves a second ticket of the same contact
 // before 24 hours does not ask the provider again, even after the picture
 // changed; and a message entering an open ticket does not look it up either
@@ -245,6 +316,50 @@ func TestPictureLookupAtMostOncePerDay(t *testing.T) {
 	}
 }
 
+// TestPictureUnchangedKeepsTheStoredOne proves a lookup the provider reports
+// as unchanged keeps the stored picture and its files and only counts the new
+// attempt (spec #482).
+func TestPictureUnchangedKeepsTheStoredOne(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	e.serveProfilePictures()
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.connectSector(contab.ID)
+	e.connectSector(rh.ID)
+
+	const phone = "5511988887777"
+	contact := phone + "@s.whatsapp.net"
+	providerID := e.WhatsApp.SetProfilePicture(contact)
+
+	e.receive(contab.ID, text("MSG-1", contact, phone, "Bom dia"))
+	e.TicketService.Wait()
+	contactID := e.contactIDByPhone(phone)
+	e.wantPhotoStored(contactID, providerID)
+	stored := e.contactPhoto(contactID)
+	before := *stored.CheckedAt
+
+	// The same picture, with the interval over: the provider says unchanged.
+	e.backdatePhotoCheck(contactID)
+	e.receive(rh.ID, text("MSG-2", contact, phone, "Bom dia de novo"))
+	e.TicketService.Wait()
+
+	kept := e.contactPhoto(contactID)
+	if kept.ExternalID == nil || *kept.ExternalID != providerID {
+		t.Fatalf("picture id = %v, want %q", kept.ExternalID, providerID)
+	}
+	if kept.MediaID == nil || *kept.MediaID != *stored.MediaID ||
+		kept.ThumbnailMediaID == nil || *kept.ThumbnailMediaID != *stored.ThumbnailMediaID {
+		t.Fatalf("picture files = %v/%v, want the stored ones", kept.MediaID, kept.ThumbnailMediaID)
+	}
+	if kept.CheckedAt == nil || !kept.CheckedAt.After(before) {
+		t.Fatalf("attempt = %v, want it advanced", kept.CheckedAt)
+	}
+	if got := e.Count("media_files"); got != 2 {
+		t.Fatalf("media files = %d, want the 2 of the stored picture", got)
+	}
+}
+
 // TestPictureNoneClearsThePhoto proves a lookup without a picture clears the
 // three references and deletes the files, with the ticket untouched
 // (spec #482).
@@ -275,7 +390,7 @@ func TestPictureNoneClearsThePhoto(t *testing.T) {
 
 	e.wantNoPhoto(contactID)
 	if p := e.contactPhoto(contactID); p.CheckedAt == nil {
-		t.Fatal("the failed attempt was not recorded")
+		t.Fatal("the attempt was not recorded")
 	}
 	if got := e.Count("media_files"); got != 0 {
 		t.Fatalf("media files = %d, want the old picture files removed", got)
@@ -324,6 +439,47 @@ func TestPictureFailureKeepsThePreviousOne(t *testing.T) {
 	}
 	if got := len(e.tickets(rh.ID)); got != 1 {
 		t.Fatalf("tickets in the second sector = %d, want the ticket created", got)
+	}
+}
+
+// TestReceiveOverHTTPWithPictureFailureStays2xx proves the receive route of
+// the fake still answers 2xx when the picture lookup fails: the failure never
+// reaches the route (spec #482).
+func TestReceiveOverHTTPWithPictureFailureStays2xx(t *testing.T) {
+	t.Parallel()
+	e := newTestEnv(t, nil)
+	e.serveProfilePictures()
+	contab := e.Sector("Contabilidade")
+	rh := e.Sector("RH")
+	e.connectSector(contab.ID)
+	e.connectSector(rh.ID)
+
+	const phone = "5511988887777"
+	contact := phone + "@s.whatsapp.net"
+	providerID := e.WhatsApp.SetProfilePicture(contact)
+
+	e.receive(contab.ID, text("MSG-1", contact, phone, "Bom dia"))
+	e.TicketService.Wait()
+	contactID := e.contactIDByPhone(phone)
+	e.wantPhotoStored(contactID, providerID)
+
+	// The next lookup fails, in a ticket opened through the HTTP route.
+	e.WhatsApp.FailNextProfilePicture(rh.ID, fake.ErrProfilePictureUnreachable)
+	e.backdatePhotoCheck(contactID)
+	body := fmt.Sprintf(`{"externalMessageId":"MSG-HTTP","phone":%q,"body":"Bom dia de novo"}`, phone)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost,
+		fmt.Sprintf("/messaging/sectors/%d/receive", rh.ID), strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	e.WhatsApp.Handler().ServeHTTP(rec, req)
+	if rec.Code < 200 || rec.Code >= 300 {
+		t.Fatalf("receive = %d %s, want 2xx", rec.Code, rec.Body)
+	}
+	e.TicketService.Wait()
+
+	e.wantPhotoStored(contactID, providerID)
+	tickets := e.tickets(rh.ID)
+	if len(tickets) != 1 || len(e.messages(tickets[0].ID)) != 1 {
+		t.Fatalf("tickets = %+v, messages = %+v", tickets, e.messages(tickets[0].ID))
 	}
 }
 
