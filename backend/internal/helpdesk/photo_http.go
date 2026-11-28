@@ -1,9 +1,9 @@
 package helpdesk
 
 import (
-	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/gcaspp-labs/xet/backend/internal/core/httpx"
 )
@@ -41,6 +41,6 @@ func (h *Handler) serveContactPhoto(w http.ResponseWriter, r *http.Request, thum
 	w.Header().Set("Content-Security-Policy", "sandbox")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-	w.Header().Set("Content-Length", fmt.Sprint(file.SizeBytes))
+	w.Header().Set("Content-Length", strconv.FormatInt(file.SizeBytes, 10))
 	_, _ = io.Copy(w, content)
 }

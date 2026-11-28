@@ -13,6 +13,16 @@ import (
 	"github.com/gcaspp-labs/xet/backend/internal/db"
 )
 
+// newPhotoEnv returns the environment and the session of an agent, for the
+// tests of the contact picture.
+func newPhotoEnv(t *testing.T) (*testEnv, string) {
+	t.Helper()
+	e := newTestEnv(t, nil)
+	sector := e.Sector("Atendimento")
+	user := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
+	return e, e.Login(user.Email, testPassword)
+}
+
 // storePhotoFile writes a generated picture file and records its media row, as
 // the profile picture lookup does.
 func (e *testEnv) storePhotoFile(data []byte, mimeType string) int64 {
@@ -68,10 +78,7 @@ func photoRoutes(contactID int64) (thumbnail, picture string) {
 // to any logged user, with the type of the file, inline and private caching
 // (spec #482).
 func TestContactPhotoRoutes(t *testing.T) {
-	e := newTestEnv(t, nil)
-	sector := e.Sector("Atendimento")
-	user := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
-	token := e.Login(user.Email, testPassword)
+	e, token := newPhotoEnv(t)
 
 	thumbnail := append([]byte("\x89PNG\r\n\x1a\n"), []byte("miniatura")...)
 	picture := append([]byte("\x89PNG\r\n\x1a\n"), []byte("foto completa")...)
@@ -133,10 +140,7 @@ func TestContactPhotoRoutes(t *testing.T) {
 // TestContactPhotoWithoutPicture proves a contact without a picture answers
 // 404 on both routes, as the expected case and not a failure of the server.
 func TestContactPhotoWithoutPicture(t *testing.T) {
-	e := newTestEnv(t, nil)
-	sector := e.Sector("Atendimento")
-	user := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
-	token := e.Login(user.Email, testPassword)
+	e, token := newPhotoEnv(t)
 
 	thumbnailPath, picturePath := photoRoutes(e.newContact("Sem Foto"))
 	for _, path := range []string{thumbnailPath, picturePath} {
@@ -158,10 +162,7 @@ func TestContactPhotoWithoutPicture(t *testing.T) {
 // TestContactPhotoFileMissing proves a contact whose stored file is gone
 // answers 404 for that file, while the other one still comes.
 func TestContactPhotoFileMissing(t *testing.T) {
-	e := newTestEnv(t, nil)
-	sector := e.Sector("Atendimento")
-	user := e.User("ana@exemplo.com", db.UserRoleAgent, &sector.ID)
-	token := e.Login(user.Email, testPassword)
+	e, token := newPhotoEnv(t)
 
 	thumbnail := append([]byte("\x89PNG\r\n\x1a\n"), []byte("miniatura")...)
 	picture := append([]byte("\x89PNG\r\n\x1a\n"), []byte("foto completa")...)
