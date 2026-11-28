@@ -83,6 +83,20 @@ type Media struct {
 	DurationSeconds int
 }
 
+// Preview is the card of a link, as the provider delivers it in a received
+// text (spec #511). The system never opens the site: the title, the
+// description and the thumbnail bytes are the ones of the message itself.
+type Preview struct {
+	// URL is the address of the card, always http or https.
+	URL string
+	// Title is the title of the page. Required: without it there is no card.
+	Title string
+	// Description is the summary of the page, when the provider sends one.
+	Description string
+	// Thumbnail is the JPEG image of the card, when the provider sends one.
+	Thumbnail []byte
+}
+
 // Message is a message that passed through the sector number.
 type Message struct {
 	ExternalMessageID string
@@ -106,6 +120,9 @@ type Message struct {
 	// ContactCards are the cards of a TypeContact message, in the order they
 	// came, at least one; empty in the other types.
 	ContactCards []ContactCard
+	// Preview is the card of a link of a received text, when the provider
+	// sends one; nil otherwise, and always nil in a sent message.
+	Preview *Preview
 }
 
 // ContactCard is a contact shared in a message, as it came: it has no link to
