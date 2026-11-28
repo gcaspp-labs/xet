@@ -5,8 +5,11 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { Toaster } from '@/components/ui/sonner'
+import { registerServiceWorker } from '@/lib/service-worker'
 
 const queryClient = new QueryClient()
+
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

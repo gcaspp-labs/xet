@@ -323,3 +323,18 @@ Acompanha a spec [#374](https://github.com/gcaspp-labs/xet/issues/374) (tarefa [
 | M15 | Passados os dois dias do WhatsApp, tentar excluir para todos | A opção fica indisponível, e "Excluir para mim" continua valendo | Pendente |
 | M16 | Desconectar o número, editar pelo painel e reconectar | A edição não é dada como feita: aparece o aviso de que não deu para confirmar, e a mensagem fica como estava; se o WhatsApp aplicar depois, o eco corrige a mensagem | Pendente |
 | M17 | Abrir o menu ⋯ de uma mensagem enviada pelo celular do setor | O menu não oferece as ações, porque a mensagem não foi enviada pelo XET | Pendente |
+
+## Roteiro manual: instalar como app
+
+Acompanha a spec [#510](https://github.com/gcaspp-labs/xet/issues/510) (tickets [#512](https://github.com/gcaspp-labs/xet/issues/512) e [#513](https://github.com/gcaspp-labs/xet/issues/513)). Depende do sistema publicado em `https://atendimento.gcaspp.com.br`, passando pelo Cloudflare Access; o manifest e o service worker são provados pelos testes, mas a instalação e a janela própria só o navegador de verdade mostra.
+
+| # | O que fazer | O que esperar | Data, versão e resultado |
+| --- | --- | --- | --- |
+| I1 | No Chrome do computador, abrir o sistema pelo Access e usar "Instalar app" | O app abre em janela própria, com o nome "Central de Atendimento" e o ícone do design system na barra de tarefas | Pendente |
+| I2 | No Edge do computador, repetir a instalação | Mesma janela própria, nome e ícone | Pendente |
+| I3 | No Chrome de um celular Android, usar "Adicionar à tela inicial" | O app aparece na tela inicial com o nome e o ícone (o maskable, sem borda cortada) e abre em tela cheia | Pendente |
+| I4 | No Safari de um iPhone, usar "Adicionar à Tela de Início" | O app aparece com o `apple-touch-icon` e abre em tela cheia | Pendente |
+| I5 | Abrir o app instalado, entrar pelo Access e pelo login, e usar o sistema | Login, Access e navegação iguais aos da aba | Pendente |
+| I6 | Depois de um deploy, abrir o app instalado | A versão nova aparece sem reinstalar e sem limpar nada | Pendente |
+| I7 | Com o app instalado, desligar a internet e abrir | O navegador mostra a mensagem dele de sem conexão; nenhuma tela nem dado antigo aparece | Pendente |
+| I8 | Numa aba comum, sem instalar, abrir e usar o sistema | Tudo como antes, sem botão "Instalar" dentro do sistema | Pendente |
