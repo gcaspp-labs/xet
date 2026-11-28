@@ -453,7 +453,7 @@ Restrições:
 - `preview_url` e `preview_title` são preenchidos juntos, só em mensagem `inbound`; `preview_description` e `preview_media_id` só existem com os dois; título nunca em branco (`messages_preview_fields`, `messages_preview_title_not_blank`).
 - Chave estrangeira `(quoted_message_id, ticket_id)` → `messages (id, ticket_id)` (`messages_quote_same_ticket`, com o único `messages_id_ticket_id_key`): a ligação só aponta para mensagem do mesmo chamado, para a citação nunca expor o conteúdo de outro chamado.
 
-Índice: `(ticket_id, sent_at)` para exibir a conversa.
+Índices: `(ticket_id, sent_at)` para exibir a conversa; `(media_id) where media_id is not null` e `(preview_media_id) where preview_media_id is not null` para achar o chamado de uma mídia — o anexo ou a miniatura da prévia do link — sem varrer a tabela a cada abertura de arquivo.
 
 Mensagens enviadas pelo celular fora do sistema (`origin = 'phone'`) são gravadas com `status = 'sent'`, sem autor.
 
