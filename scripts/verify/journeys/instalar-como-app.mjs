@@ -1,6 +1,9 @@
 // Instalar o sistema como app: ver features/instalar-como-app.md.
 import { expect, journey } from '../scripts/journey-lib.mjs'
 
+// Fim comum das mensagens de falha do service worker no estado final.
+const semServiceWorkerAtivo = 'o app não abriria como app instalado nem pegaria a versão nova'
+
 await journey('instalar-como-app', async (t) => {
   const sector = await t.step('Preparar um setor com um atendente', () =>
     t.seedSector({ agents: 1 }),
@@ -100,11 +103,11 @@ await journey('instalar-como-app', async (t) => {
     }))
     expect(
       stored.controlling,
-      'o service worker registrou mas não controla a página: o app não abriria como app instalado nem pegaria a versão nova',
+      `o service worker registrou mas não controla a página: ${semServiceWorkerAtivo}`,
     ).toBe(true)
     expect(
       stored.serviceWorkers,
-      'registro de service worker sem worker ativo: o app não abriria como app instalado nem pegaria a versão nova',
+      `registro de service worker sem worker ativo: ${semServiceWorkerAtivo}`,
     ).not.toContain(null)
     expect({ caches: stored.caches, serviceWorkers: stored.serviceWorkers }).toEqual({
       caches: [],
