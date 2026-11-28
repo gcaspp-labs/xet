@@ -37,6 +37,46 @@ export function NotificationBell({ user }: { user: User }) {
     }
   }, [titleCount])
 
+  // O ícone do app (Badging API) mostra o mesmo número do título (spec #510). Onde a API não
+  // existe (Chrome no Android) ou a permissão não deixa (iPhone sem as notificações do
+  // navegador), nada acontece: as chamadas são opcionais e a Promise é tratada para não deixar
+  // erro no console. Zero limpa o ícone; nunca mostra "0".
+  useEffect(() => {
+    const setBadge =
+      typeof navigator.setAppBadge === 'function'
+        ? navigator.setAppBadge.bind(navigator)
+        : undefined
+    const clearBadge =
+      typeof navigator.clearAppBadge === 'function'
+        ? navigator.clearAppBadge.bind(navigator)
+        : undefined
+    if (!setBadge && !clearBadge) {
+      return
+    }
+    const clear = () => {
+      void Promise.resolve(clearBadge?.()).catch(() => {})
+    }
+    const show = () => {
+      void Promise.resolve(titleCount > 0 ? setBadge?.(titleCount) : clearBadge?.()).catch(() => {})
+    }
+    show()
+    // Com a janela fechada o número não se atualiza, então o ícone é limpo ao sair. Ao voltar
+    // do cache do navegador (voltar/avançar), o efeito não roda de novo: o número volta aqui.
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        show()
+      }
+    }
+    window.addEventListener('pagehide', clear)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      window.removeEventListener('pagehide', clear)
+      window.removeEventListener('pageshow', onPageShow)
+      // Sem o sino na tela (sair da conta), o número antigo não pode ficar no ícone.
+      clear()
+    }
+  }, [titleCount])
+
   return (
     <Popover
       open={open}
