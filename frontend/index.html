@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <!-- Endereço com versão: um navegador que guardou o favicon antigo busca o novo (#462). -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <!-- Instalar como app (#512). O manifest leva o cookie do Cloudflare Access; sem
+         crossorigin="use-credentials" o navegador recebe a tela de login e a instalação falha. -->
+    <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Central de Atendimento</title>
     <script>
