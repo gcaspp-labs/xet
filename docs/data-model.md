@@ -564,7 +564,7 @@ Regras de gravação (`helpdesk/message_actions.go`):
 | `sha256` | text | Obrigatório |
 | `duration_seconds` | integer | Áudio e vídeo |
 
-O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banco. Também guarda a foto de perfil do contato (`contacts.photo_media_id` e `contacts.photo_thumbnail_media_id`), gravada antes de o contato ser atualizado.
+O arquivo é gravado no armazenamento antes de a mensagem ser confirmada no banco. Também guarda a foto de perfil do contato (`contacts.photo_media_id` e `contacts.photo_thumbnail_media_id`), gravada antes de o contato ser atualizado. Quando a foto é trocada ou o contato fica sem foto, as linhas antigas de `media_files` saem na mesma transação da troca, e os arquivos correspondentes são removidos depois do commit; uma falha nessa remoção só deixa um arquivo sem dono.
 
 ## Auditoria
 

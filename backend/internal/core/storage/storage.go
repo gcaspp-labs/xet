@@ -21,6 +21,9 @@ var ErrNotFound = errors.New("file not found")
 type Storage interface {
 	Put(ctx context.Context, key string, data []byte) error
 	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	// Delete removes a file. A missing file is not an error, so a repeated
+	// cleanup does nothing.
+	Delete(ctx context.Context, key string) error
 }
 
 // NewKey returns a random key grouped by year and month, such as 2026/10/<hex>.
@@ -89,4 +92,17 @@ func (d *Disk) Open(_ context.Context, key string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
 	return f, nil
+}
+
+// Delete removes a file. A missing file is not an error, so a cleanup
+// repeated after a failure does nothing.
+func (d *Disk) Delete(_ context.Context, key string) error {
+	path, err := d.path(key)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("delete file: %w", err)
+	}
+	return nil
 }

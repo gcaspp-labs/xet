@@ -158,6 +158,9 @@ func (s *Service) Start(ctx context.Context, provider messaging.Provider, actor 
 	case err != nil:
 		return Started{}, err
 	}
+	// The picture of the contact comes after the ticket, in the background
+	// (spec #482): it never delays the start nor fails the request.
+	s.refreshContactPhoto(sectorID, contactID)
 	s.hub.Publish(realtime.TicketChanged(msg.SectorID, msg.TicketID))
 	sent := s.deliver(ctx, provider, msg)
 	return Started{TicketID: sent.TicketID, Message: &sent}, nil

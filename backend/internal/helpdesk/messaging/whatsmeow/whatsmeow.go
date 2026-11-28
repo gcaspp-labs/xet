@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -321,12 +322,38 @@ func profilePicture(ctx context.Context, lookup profilePictureInfo, jid types.JI
 		// just waits for the next fetch.
 		return profilePictureEmpty(existingID)
 	}
+	// The backend downloads these addresses, and WhatsApp is their only
+	// source: one without https is a defect and the result stays unknown, so
+	// the previous picture is kept.
+	if err := pictureURL("thumbnail", preview.URL); err != nil {
+		return messaging.ProfilePicture{}, err
+	}
+	if err := pictureURL("picture", full.URL); err != nil {
+		return messaging.ProfilePicture{}, err
+	}
 	return messaging.ProfilePicture{
 		Kind:         messaging.ProfilePictureFound,
 		ID:           full.ID,
 		ThumbnailURL: preview.URL,
 		FullURL:      full.URL,
 	}, nil
+}
+
+// errPictureURLNotHTTPS refuses a picture address the backend would download
+// from a scheme other than https.
+var errPictureURLNotHTTPS = errors.New("picture url is not https")
+
+// pictureURL accepts one address of the picture only when it is https. The
+// error names the file and the scheme, never the address.
+func pictureURL(name, raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("%s url: %w", name, err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("%s url scheme %q: %w", name, u.Scheme, errPictureURLNotHTTPS)
+	}
+	return nil
 }
 
 // profilePictureEmpty reads an empty answer of WhatsApp: with an existing ID
