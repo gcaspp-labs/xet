@@ -331,6 +331,41 @@ func (q *Queries) GetContactForShare(ctx context.Context, id int64) (Contact, er
 	return i, err
 }
 
+const getContactPhotoFile = `-- name: GetContactPhotoFile :one
+select m.id, m.storage_key, m.mime_type, m.size_bytes, m.file_name, m.sha256, m.duration_seconds, m.created_at
+from media_files m
+where m.id = (select case when $1::boolean
+                          then c.photo_thumbnail_media_id
+                          else c.photo_media_id end
+              from contacts c
+              where c.id = $2)
+`
+
+type GetContactPhotoFileParams struct {
+	Thumbnail bool
+	ID        int64
+}
+
+// Reads one of the two files of the profile picture of the contact: the
+// thumbnail (true) or the full picture (false). No row means the contact has
+// no picture, or does not exist; either way there is nothing to serve
+// (spec #482).
+func (q *Queries) GetContactPhotoFile(ctx context.Context, arg GetContactPhotoFileParams) (MediaFile, error) {
+	row := q.db.QueryRow(ctx, getContactPhotoFile, arg.Thumbnail, arg.ID)
+	var i MediaFile
+	err := row.Scan(
+		&i.ID,
+		&i.StorageKey,
+		&i.MimeType,
+		&i.SizeBytes,
+		&i.FileName,
+		&i.Sha256,
+		&i.DurationSeconds,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getContactWithOrganization = `-- name: GetContactWithOrganization :one
 select c.id, c.name, c.phone, c.external_contact_id, c.organization_id, c.registered, c.created_at, c.updated_at, c.photo_media_id, c.photo_thumbnail_media_id, c.photo_external_id, c.photo_checked_at, o.name as organization_name, o.cnpj as organization_cnpj,
     o.municipality_id, m.name as municipality_name
