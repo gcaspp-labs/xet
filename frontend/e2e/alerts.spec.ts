@@ -27,7 +27,7 @@ declare global {
     }
     __requests: number
     __stored: Record<string, string | null>
-    __badge: { calls: { kind: 'set'; count?: number } | { kind: 'clear' }[] }
+    __badge: { calls: ({ kind: 'set'; count?: number } | { kind: 'clear' })[] }
   }
 }
 
