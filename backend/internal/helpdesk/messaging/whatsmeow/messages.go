@@ -266,7 +266,13 @@ func (s *session) translate(ctx context.Context, evt *events.Message) (messaging
 	case m.GetConversation() != "":
 		msg.Type, msg.Body = messaging.TypeText, m.GetConversation()
 	case m.GetExtendedTextMessage() != nil:
-		msg.Type, msg.Body = messaging.TypeText, m.GetExtendedTextMessage().GetText()
+		ext := m.GetExtendedTextMessage()
+		msg.Type, msg.Body = messaging.TypeText, ext.GetText()
+		// The card of a link comes only from the contact: a text sent from
+		// the phone of the sector, or by the system, has no preview (spec #511).
+		if !info.IsFromMe {
+			msg.Preview = linkPreview(ext)
+		}
 	case m.GetImageMessage() != nil:
 		img := m.GetImageMessage()
 		msg.Type, msg.Body = messaging.TypeImage, img.GetCaption()
@@ -335,6 +341,24 @@ func sharedContacts(msg *messaging.Message, contacts []*waE2E.ContactMessage) {
 		return
 	}
 	msg.Type, msg.ContactCards = messaging.TypeContact, cards
+}
+
+// linkPreview reads the card of a link of a received text (spec #511). The
+// address is MatchedText, the URL the provider matched in the text: the proto
+// of this Whatsmeow version carries no canonicalUrl field. Without a title or
+// an http(s) address there is no card, and the message shows only the text.
+func linkPreview(ext *waE2E.ExtendedTextMessage) *messaging.Preview {
+	title := strings.TrimSpace(ext.GetTitle())
+	url := strings.TrimSpace(ext.GetMatchedText())
+	if title == "" || !messaging.IsLinkAddress(url) {
+		return nil
+	}
+	return &messaging.Preview{
+		URL:         url,
+		Title:       title,
+		Description: ext.GetDescription(),
+		Thumbnail:   ext.GetJPEGThumbnail(),
+	}
 }
 
 // quote reads the message a reply cites, from the context of a text or media

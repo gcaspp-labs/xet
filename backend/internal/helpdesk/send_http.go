@@ -42,6 +42,18 @@ type messageResponse struct {
 	// ContactCards are the cards of a contact message, in order; null in the
 	// other types.
 	ContactCards []contactCardResponse `json:"contactCards"`
+	// Preview is the card of a link of a received message; null in the other
+	// messages.
+	Preview *previewResponse `json:"preview"`
+}
+
+// previewResponse is the card of a link of a received message: the title and
+// the description come from WhatsApp, and the thumbnail opens at /api/media.
+type previewResponse struct {
+	URL              string  `json:"url"`
+	Title            string  `json:"title"`
+	Description      *string `json:"description"`
+	ThumbnailMediaID *int64  `json:"thumbnailMediaId"`
 }
 
 // quoteResponse is the message a reply cites; null when there is no quote.
@@ -120,6 +132,12 @@ func toMessageResponse(m db.ListTicketMessagesRow) (messageResponse, error) {
 		out.Quote = &quoteResponse{MessageID: m.QuotedMessageID, Text: m.QuotedBody}
 		if m.QuotedType.Valid {
 			out.Quote.Type = &m.QuotedType.MessageType
+		}
+	}
+	if m.PreviewUrl != nil && m.PreviewTitle != nil {
+		out.Preview = &previewResponse{
+			URL: *m.PreviewUrl, Title: *m.PreviewTitle,
+			Description: m.PreviewDescription, ThumbnailMediaID: m.PreviewMediaID,
 		}
 	}
 	return out, nil

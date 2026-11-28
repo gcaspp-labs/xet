@@ -50,7 +50,8 @@ func (a *Adapter) Handler() http.Handler {
 	// and media (content in base64), an image, video, audio or document. An
 	// optional quote cites another message by its provider ID, with or
 	// without the snippet (type, text by default). Type "contact" takes the
-	// cards in contactCards, in order.
+	// cards in contactCards, in order. An optional preview (url, title,
+	// description and thumbnail in base64) is the card of a link of the text.
 	r.Post("/messaging/sectors/{sectorID}/receive", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			ExternalMessageID string                `json:"externalMessageId"`
@@ -79,6 +80,12 @@ func (a *Adapter) Handler() http.Handler {
 					WhatsAppID string `json:"whatsAppId"`
 				} `json:"phones"`
 			} `json:"contactCards"`
+			Preview *struct {
+				URL         string `json:"url"`
+				Title       string `json:"title"`
+				Description string `json:"description"`
+				Thumbnail   []byte `json:"thumbnail"`
+			} `json:"preview"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ExternalMessageID == "" || body.Phone == "" {
 			http.Error(w, "externalMessageId and phone are required", http.StatusBadRequest)
@@ -117,6 +124,12 @@ func (a *Adapter) Handler() http.Handler {
 				card.Phones = append(card.Phones, messaging.ContactPhone{Phone: p.Phone, WhatsAppID: p.WhatsAppID})
 			}
 			msg.ContactCards = append(msg.ContactCards, card)
+		}
+		if body.Preview != nil {
+			msg.Preview = &messaging.Preview{
+				URL: body.Preview.URL, Title: body.Preview.Title,
+				Description: body.Preview.Description, Thumbnail: body.Preview.Thumbnail,
+			}
 		}
 		a.control(w, r, func(sectorID int64) error { return a.Receive(r.Context(), sectorID, msg) })
 	})

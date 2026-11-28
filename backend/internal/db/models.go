@@ -1128,6 +1128,10 @@ type Message struct {
 	DeletionScope           NullMessageDeletionScope
 	DeletionOrigin          NullMessageOrigin
 	ContactCards            []byte
+	PreviewUrl              *string
+	PreviewTitle            *string
+	PreviewDescription      *string
+	PreviewMediaID          *int64
 }
 
 type MessageAction struct {

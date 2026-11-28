@@ -17,14 +17,17 @@ where sector_id = @sector_id and external_message_id = @external_message_id and 
 
 -- name: CreateProviderMessage :one
 -- Message that came from the provider (received, or sent from the phone).
--- A message already recorded returns no row.
+-- The preview of a link comes only with a received message. A message already
+-- recorded returns no row.
 insert into messages (
     ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at,
-    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards,
+    preview_url, preview_title, preview_description, preview_media_id
 )
 values (
     @ticket_id, @sector_id, @contact_id, @direction, @origin, @type, @body, @media_id, @external_message_id, @status, @sent_at,
-    @quoted_external_message_id, @quoted_message_id, @quoted_type, @quoted_body, @contact_cards
+    @quoted_external_message_id, @quoted_message_id, @quoted_type, @quoted_body, @contact_cards,
+    @preview_url, @preview_title, @preview_description, @preview_media_id
 )
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
 returning *;
@@ -125,7 +128,8 @@ select
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
     rs.via_phone as sector_reaction_via_phone,
     m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body,
-    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin, m.contact_cards
+    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin, m.contact_cards,
+    m.preview_url, m.preview_title, m.preview_description, m.preview_media_id
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
@@ -140,10 +144,11 @@ select * from media_files
 where id = @id;
 
 -- name: GetMediaFileTicket :one
--- Ticket whose message holds the file, to check the access.
+-- Ticket whose message holds the file, to check the access: the file is an
+-- attachment or the thumbnail of a preview of a link.
 select m.ticket_id
 from messages m
-where m.media_id = @media_id
+where m.media_id = @media_id or m.preview_media_id = @media_id
 limit 1;
 
 -- name: LockMessageExternalID :exec

@@ -60,7 +60,7 @@ values (
     $9, $10, $11, $12, $13
 )
 on conflict (client_request_id) where client_request_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards, preview_url, preview_title, preview_description, preview_media_id
 `
 
 type CreateAgentMessageParams struct {
@@ -127,6 +127,10 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 		&i.DeletionScope,
 		&i.DeletionOrigin,
 		&i.ContactCards,
+		&i.PreviewUrl,
+		&i.PreviewTitle,
+		&i.PreviewDescription,
+		&i.PreviewMediaID,
 	)
 	return i, err
 }
@@ -237,14 +241,16 @@ func (q *Queries) CreateOriginalVersion(ctx context.Context, messageID int64) er
 const createProviderMessage = `-- name: CreateProviderMessage :one
 insert into messages (
     ticket_id, sector_id, contact_id, direction, origin, type, body, media_id, external_message_id, status, sent_at,
-    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards
+    quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, contact_cards,
+    preview_url, preview_title, preview_description, preview_media_id
 )
 values (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-    $12, $13, $14, $15, $16
+    $12, $13, $14, $15, $16,
+    $17, $18, $19, $20
 )
 on conflict (sector_id, external_message_id) where external_message_id is not null do nothing
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards, preview_url, preview_title, preview_description, preview_media_id
 `
 
 type CreateProviderMessageParams struct {
@@ -264,10 +270,15 @@ type CreateProviderMessageParams struct {
 	QuotedType              NullMessageType
 	QuotedBody              *string
 	ContactCards            []byte
+	PreviewUrl              *string
+	PreviewTitle            *string
+	PreviewDescription      *string
+	PreviewMediaID          *int64
 }
 
 // Message that came from the provider (received, or sent from the phone).
-// A message already recorded returns no row.
+// The preview of a link comes only with a received message. A message already
+// recorded returns no row.
 func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderMessageParams) (Message, error) {
 	row := q.db.QueryRow(ctx, createProviderMessage,
 		arg.TicketID,
@@ -286,6 +297,10 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 		arg.QuotedType,
 		arg.QuotedBody,
 		arg.ContactCards,
+		arg.PreviewUrl,
+		arg.PreviewTitle,
+		arg.PreviewDescription,
+		arg.PreviewMediaID,
 	)
 	var i Message
 	err := row.Scan(
@@ -315,6 +330,10 @@ func (q *Queries) CreateProviderMessage(ctx context.Context, arg CreateProviderM
 		&i.DeletionScope,
 		&i.DeletionOrigin,
 		&i.ContactCards,
+		&i.PreviewUrl,
+		&i.PreviewTitle,
+		&i.PreviewDescription,
+		&i.PreviewMediaID,
 	)
 	return i, err
 }
@@ -414,11 +433,12 @@ func (q *Queries) GetMediaFile(ctx context.Context, id int64) (MediaFile, error)
 const getMediaFileTicket = `-- name: GetMediaFileTicket :one
 select m.ticket_id
 from messages m
-where m.media_id = $1
+where m.media_id = $1 or m.preview_media_id = $1
 limit 1
 `
 
-// Ticket whose message holds the file, to check the access.
+// Ticket whose message holds the file, to check the access: the file is an
+// attachment or the thumbnail of a preview of a link.
 func (q *Queries) GetMediaFileTicket(ctx context.Context, mediaID *int64) (int64, error) {
 	row := q.db.QueryRow(ctx, getMediaFileTicket, mediaID)
 	var ticket_id int64
@@ -427,7 +447,7 @@ func (q *Queries) GetMediaFileTicket(ctx context.Context, mediaID *int64) (int64
 }
 
 const getMessage = `-- name: GetMessage :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards, preview_url, preview_title, preview_description, preview_media_id from messages
 where id = $1
 `
 
@@ -461,12 +481,16 @@ func (q *Queries) GetMessage(ctx context.Context, id int64) (Message, error) {
 		&i.DeletionScope,
 		&i.DeletionOrigin,
 		&i.ContactCards,
+		&i.PreviewUrl,
+		&i.PreviewTitle,
+		&i.PreviewDescription,
+		&i.PreviewMediaID,
 	)
 	return i, err
 }
 
 const getMessageByClientRequestID = `-- name: GetMessageByClientRequestID :one
-select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards from messages
+select id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards, preview_url, preview_title, preview_description, preview_media_id from messages
 where client_request_id = $1
 `
 
@@ -500,6 +524,10 @@ func (q *Queries) GetMessageByClientRequestID(ctx context.Context, clientRequest
 		&i.DeletionScope,
 		&i.DeletionOrigin,
 		&i.ContactCards,
+		&i.PreviewUrl,
+		&i.PreviewTitle,
+		&i.PreviewDescription,
+		&i.PreviewMediaID,
 	)
 	return i, err
 }
@@ -736,7 +764,8 @@ select
     rs.author_id as sector_reaction_author_id, ru.name as sector_reaction_author_name,
     rs.via_phone as sector_reaction_via_phone,
     m.quoted_external_message_id, m.quoted_message_id, m.quoted_type, m.quoted_body,
-    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin, m.contact_cards
+    m.edited_at, m.deleted_at, m.deletion_scope, m.deletion_origin, m.contact_cards,
+    m.preview_url, m.preview_title, m.preview_description, m.preview_media_id
 from messages m
 left join users u on u.id = m.author_id
 left join media_files f on f.id = m.media_id
@@ -780,6 +809,10 @@ type ListTicketMessagesRow struct {
 	DeletionScope            NullMessageDeletionScope
 	DeletionOrigin           NullMessageOrigin
 	ContactCards             []byte
+	PreviewUrl               *string
+	PreviewTitle             *string
+	PreviewDescription       *string
+	PreviewMediaID           *int64
 }
 
 func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]ListTicketMessagesRow, error) {
@@ -824,6 +857,10 @@ func (q *Queries) ListTicketMessages(ctx context.Context, ticketID int64) ([]Lis
 			&i.DeletionScope,
 			&i.DeletionOrigin,
 			&i.ContactCards,
+			&i.PreviewUrl,
+			&i.PreviewTitle,
+			&i.PreviewDescription,
+			&i.PreviewMediaID,
 		); err != nil {
 			return nil, err
 		}
@@ -891,7 +928,7 @@ const markMessageFailed = `-- name: MarkMessageFailed :one
 update messages
 set status = 'failed', failure_reason = $1
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards, preview_url, preview_title, preview_description, preview_media_id
 `
 
 type MarkMessageFailedParams struct {
@@ -929,6 +966,10 @@ func (q *Queries) MarkMessageFailed(ctx context.Context, arg MarkMessageFailedPa
 		&i.DeletionScope,
 		&i.DeletionOrigin,
 		&i.ContactCards,
+		&i.PreviewUrl,
+		&i.PreviewTitle,
+		&i.PreviewDescription,
+		&i.PreviewMediaID,
 	)
 	return i, err
 }
@@ -937,7 +978,7 @@ const markMessageSent = `-- name: MarkMessageSent :one
 update messages
 set status = 'sent', external_message_id = $1, failure_reason = null
 where id = $2 and status = 'pending'
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards, preview_url, preview_title, preview_description, preview_media_id
 `
 
 type MarkMessageSentParams struct {
@@ -975,6 +1016,10 @@ func (q *Queries) MarkMessageSent(ctx context.Context, arg MarkMessageSentParams
 		&i.DeletionScope,
 		&i.DeletionOrigin,
 		&i.ContactCards,
+		&i.PreviewUrl,
+		&i.PreviewTitle,
+		&i.PreviewDescription,
+		&i.PreviewMediaID,
 	)
 	return i, err
 }
@@ -1079,7 +1124,7 @@ const retryMessage = `-- name: RetryMessage :one
 update messages
 set status = 'pending', failure_reason = null
 where id = $1 and status = 'failed' and deleted_at is null
-returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards
+returning id, ticket_id, sector_id, contact_id, direction, origin, author_id, type, body, media_id, external_message_id, client_request_id, status, failure_reason, sent_at, created_at, updated_at, quoted_external_message_id, quoted_message_id, quoted_type, quoted_body, edited_at, deleted_at, deletion_scope, deletion_origin, contact_cards, preview_url, preview_title, preview_description, preview_media_id
 `
 
 // Only a failed message goes back to pending, so a double click retries once.
@@ -1114,6 +1159,10 @@ func (q *Queries) RetryMessage(ctx context.Context, id int64) (Message, error) {
 		&i.DeletionScope,
 		&i.DeletionOrigin,
 		&i.ContactCards,
+		&i.PreviewUrl,
+		&i.PreviewTitle,
+		&i.PreviewDescription,
+		&i.PreviewMediaID,
 	)
 	return i, err
 }

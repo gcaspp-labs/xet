@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -41,6 +43,45 @@ func (s *Service) HandleEvent(ctx context.Context, ev messaging.Event) error {
 
 // Name of a contact known only by LID, without phone nor profile name.
 const unnamedContact = "Contato sem telefone"
+
+// Limits of the card of a link, applied when the message is recorded
+// (spec #511): the texts are cut without splitting a character, and a
+// thumbnail above the limit leaves the card without image.
+const (
+	maxPreviewTitleLength       = 200
+	maxPreviewDescriptionLength = 500
+	maxPreviewThumbnailBytes    = 64 << 10
+	previewThumbnailMimeType    = "image/jpeg"
+)
+
+// normalizePreview cuts the card to its limits and drops it when it has no
+// title or no address the panel may open as a link (http or https), as a
+// message without a card. nil means the message shows only the text.
+func normalizePreview(p *messaging.Preview) *messaging.Preview {
+	title := cutRunes(strings.TrimSpace(p.Title), maxPreviewTitleLength)
+	url := strings.TrimSpace(p.URL)
+	if title == "" || !messaging.IsLinkAddress(url) {
+		return nil
+	}
+	preview := &messaging.Preview{
+		URL:         url,
+		Title:       title,
+		Description: cutRunes(strings.TrimSpace(p.Description), maxPreviewDescriptionLength),
+	}
+	if len(p.Thumbnail) <= maxPreviewThumbnailBytes {
+		preview.Thumbnail = p.Thumbnail
+	}
+	return preview
+}
+
+// cutRunes cuts a text at max characters, never splitting a character.
+func cutRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max])
+}
 
 // Protocol years and the day of the closed tickets follow the office clock, not UTC.
 
@@ -103,12 +144,33 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 		}
 	}
 
+	// The card of a link is written only with a message received from the
+	// contact, within the limits of the spec (#511).
+	var preview *messaging.Preview
+	if origin == db.MessageOriginCustomer && msg.Preview != nil {
+		preview = normalizePreview(msg.Preview)
+	}
+
 	// The file is saved before the message is committed (docs/data-model.md). If
 	// the transaction fails or loses to a concurrent delivery, the file is
 	// left without a message.
 	media, err := s.saveMedia(ctx, msg, sentAt)
 	if err != nil {
 		return err
+	}
+
+	// The thumbnail of the card is a media file like the others, saved before
+	// the message is committed. A card without image is better than a message
+	// lost over the picture: a failure in the storage leaves it out.
+	var thumbnail *db.CreateMediaFileParams
+	if preview != nil && len(preview.Thumbnail) > 0 {
+		file, err := s.storeMedia(ctx, messaging.Media{Data: preview.Thumbnail, MimeType: previewThumbnailMimeType}, sentAt)
+		if err != nil {
+			slog.Warn("store link preview thumbnail", "external_message_id", msg.ExternalMessageID, "error", err)
+			preview.Thumbnail = nil
+		} else {
+			thumbnail = file
+		}
 	}
 
 	var ticketID int64
@@ -156,6 +218,15 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 			mediaID = &m.ID
 		}
 
+		var previewMediaID *int64
+		if thumbnail != nil {
+			m, err := q.CreateMediaFile(ctx, *thumbnail)
+			if err != nil {
+				return fmt.Errorf("create preview media file: %w", err)
+			}
+			previewMediaID = &m.ID
+		}
+
 		params := db.CreateProviderMessageParams{
 			TicketID:          ticket.ID,
 			SectorID:          sectorID,
@@ -168,6 +239,12 @@ func (s *Service) record(ctx context.Context, sectorID int64, msg messaging.Mess
 			ExternalMessageID: &msg.ExternalMessageID,
 			SentAt:            sentAt,
 			ContactCards:      cards,
+		}
+		if preview != nil {
+			params.PreviewUrl = &preview.URL
+			params.PreviewTitle = &preview.Title
+			params.PreviewDescription = optional(preview.Description)
+			params.PreviewMediaID = previewMediaID
 		}
 		if err := setQuote(ctx, q, &params, msg.Quote); err != nil {
 			return err
