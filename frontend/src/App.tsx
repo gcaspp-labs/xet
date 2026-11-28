@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import AtendimentosPage from '@/pages/AtendimentosPage'
 import ConversasPage from '@/pages/ConversasPage'
+import Prototype515 from '@/pages/Prototype515'
 import ModulesPage from '@/pages/admin/ModulesPage'
 import SubjectsPage from '@/pages/admin/SubjectsPage'
 import SectorsPage from '@/pages/admin/SectorsPage'
@@ -42,6 +43,14 @@ function RequireRole({ roles }: { roles: Role[] }) {
 }
 
 export default function App() {
+  // PROTÓTIPO #515: o cartão da prévia do link na mensagem recebida. Descartável;
+  // não vai para a main.
+  if (
+    import.meta.env.DEV &&
+    window.location.pathname === '/chamados' &&
+    new URLSearchParams(window.location.search).get('prototype') === '515'
+  )
+    return <Prototype515 />
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />

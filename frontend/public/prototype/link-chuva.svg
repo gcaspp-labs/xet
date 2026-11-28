@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">
+  <!-- Miniatura fictícia do protótipo #515: chuva forte sobre a cidade. -->
+  <defs>
+    <linearGradient id="ceu" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b6b7a"/>
+      <stop offset="0.6" stop-color="#8b98a3"/>
+      <stop offset="1" stop-color="#b9c0c5"/>
+    </linearGradient>
+    <linearGradient id="rua" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5f6a72"/>
+      <stop offset="1" stop-color="#3c454c"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#ceu)"/>
+  <g fill="#4d5a65" opacity="0.85">
+    <rect x="30" y="180" width="90" height="150"/>
+    <rect x="140" y="140" width="70" height="190"/>
+    <rect x="230" y="200" width="110" height="130"/>
+    <rect x="360" y="120" width="80" height="210"/>
+    <rect x="460" y="170" width="120" height="160"/>
+    <rect x="600" y="145" width="70" height="185"/>
+    <rect x="690" y="195" width="90" height="135"/>
+  </g>
+  <g fill="#a7b4bf" opacity="0.55">
+    <rect x="48" y="198" width="14" height="18"/>
+    <rect x="78" y="198" width="14" height="18"/>
+    <rect x="48" y="230" width="14" height="18"/>
+    <rect x="78" y="230" width="14" height="18"/>
+    <rect x="155" y="160" width="12" height="16"/>
+    <rect x="180" y="160" width="12" height="16"/>
+    <rect x="155" y="190" width="12" height="16"/>
+    <rect x="378" y="145" width="12" height="16"/>
+    <rect x="402" y="145" width="12" height="16"/>
+    <rect x="378" y="175" width="12" height="16"/>
+    <rect x="480" y="190" width="14" height="16"/>
+    <rect x="510" y="190" width="14" height="16"/>
+    <rect x="480" y="220" width="14" height="16"/>
+    <rect x="618" y="165" width="12" height="16"/>
+    <rect x="642" y="165" width="12" height="16"/>
+    <rect x="708" y="215" width="14" height="16"/>
+  </g>
+  <rect y="330" width="800" height="120" fill="url(#rua)"/>
+  <g stroke="#d5dde3" stroke-width="3" stroke-linecap="round" opacity="0.5">
+    <line x1="40" y1="40" x2="20" y2="120"/>
+    <line x1="120" y1="20" x2="100" y2="100"/>
+    <line x1="200" y1="50" x2="180" y2="130"/>
+    <line x1="290" y1="25" x2="270" y2="105"/>
+    <line x1="370" y1="55" x2="350" y2="135"/>
+    <line x1="450" y1="20" x2="430" y2="100"/>
+    <line x1="540" y1="45" x2="520" y2="125"/>
+    <line x1="620" y1="25" x2="600" y2="105"/>
+    <line x1="700" y1="55" x2="680" y2="135"/>
+    <line x1="760" y1="30" x2="740" y2="110"/>
+    <line x1="90" y1="120" x2="70" y2="200"/>
+    <line x1="250" y1="110" x2="230" y2="190"/>
+    <line x1="420" y1="135" x2="400" y2="215"/>
+    <line x1="580" y1="105" x2="560" y2="185"/>
+    <line x1="730" y1="130" x2="710" y2="210"/>
+  </g>
+  <g fill="#c8d3da" opacity="0.25">
+    <ellipse cx="150" cy="390" rx="90" ry="8"/>
+    <ellipse cx="420" cy="410" rx="130" ry="10"/>
+    <ellipse cx="670" cy="385" rx="80" ry="7"/>
+  </g>
+</svg>

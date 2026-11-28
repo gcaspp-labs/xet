@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">
+  <!-- Miniatura fictícia do protótipo #515: edital publicado no portal. -->
+  <defs>
+    <linearGradient id="fundo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9e2df"/>
+      <stop offset="1" stop-color="#b3c4bf"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#fundo)"/>
+  <rect x="170" y="52" width="460" height="346" rx="8" fill="#f7f9f8" stroke="#9fb0aa" stroke-width="2"/>
+  <rect x="170" y="52" width="460" height="54" rx="8" fill="#2f5d57"/>
+  <rect x="170" y="94" width="460" height="12" fill="#2f5d57"/>
+  <rect x="198" y="70" width="150" height="16" rx="3" fill="#e8f0ee"/>
+  <g fill="#c3cfcb">
+    <rect x="204" y="136" width="300" height="10" rx="4"/>
+    <rect x="204" y="158" width="392" height="8" rx="4"/>
+    <rect x="204" y="176" width="372" height="8" rx="4"/>
+    <rect x="204" y="194" width="384" height="8" rx="4"/>
+    <rect x="204" y="212" width="260" height="8" rx="4"/>
+    <rect x="204" y="244" width="200" height="10" rx="4"/>
+    <rect x="204" y="266" width="384" height="8" rx="4"/>
+    <rect x="204" y="284" width="356" height="8" rx="4"/>
+    <rect x="204" y="302" width="372" height="8" rx="4"/>
+    <rect x="204" y="320" width="230" height="8" rx="4"/>
+  </g>
+  <rect x="204" y="352" width="120" height="26" rx="13" fill="#2f5d57" opacity="0.85"/>
+  <rect x="228" y="361" width="72" height="8" rx="4" fill="#e8f0ee"/>
+  <g stroke="#2f5d57" stroke-width="12" fill="none" stroke-linecap="round">
+    <circle cx="620" cy="330" r="54"/>
+    <line x1="660" y1="370" x2="700" y2="410"/>
+  </g>
+  <circle cx="620" cy="330" r="44" fill="#f7f9f8" opacity="0.6"/>
+</svg>
